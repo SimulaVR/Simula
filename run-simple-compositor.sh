@@ -1,0 +1,1 @@
+LD_LIBRARY_PATH=/home/kane/simula/SimulaHS/simula_cpp/lib:/home/kane/simula/SimulaHS/simula_cpp/dependencies/build/qt5/lib/ /home/kane/simula/SimulaHS/.stack-work/install/x86_64-linux/lts-8.9/8.0.2/bin/simple-compositor

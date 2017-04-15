@@ -1,0 +1,59 @@
+name: SimulaHS
+version: 0.0.0
+synopsis: Haskell/C++ implementation of simula_cpp
+author: David Kraeutmann <kane@kane.cx>
+
+default-extensions:
+  - ForeignFunctionInterface
+  - QuasiQuotes
+  - TemplateHaskell
+
+dependencies:
+  - base >= 4.9 && < 5
+  - inline-c
+  - inline-c-cpp
+  - vector
+
+_cpp_options: &cpp_options
+  include-dirs:
+    - include
+    - simula_cpp/src/protocol
+    - simula_cpp/src/compositor
+    - simula_cpp/src/device
+    - simula_cpp/dependencies/qt5/qtwayland
+
+  extra-lib-dirs:
+    - simula_cpp/lib
+    
+  include-dirs:
+    - simula_cpp/src/compositor
+    - simula_cpp/src/protocol
+    - simula_cpp/src/device
+        
+  extra-libraries:
+    - stdc++
+    - motorcar-compositor
+    
+  ghc-options:
+    - -pgmlg++
+            
+  cc-options:
+    - -fPIC
+    - -std=c++11
+
+_executable_options: &executable_options
+  dependencies: [base, SimulaHS]
+    
+library:
+  source-dirs: src
+  exposed-modules:
+    - Simula.Utils
+  
+executables:
+  simple-compositor:
+    <<: *cpp_options
+    <<: *executable_options
+    main: SimpleCompositor.hs
+    source-dirs: app
+    c-sources: app/SimpleCompositor.cpp
+  
