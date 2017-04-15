@@ -56,4 +56,3 @@ executables:
     main: SimpleCompositor.hs
     source-dirs: app
     c-sources: app/SimpleCompositor.cpp
-  
