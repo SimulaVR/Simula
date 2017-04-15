@@ -16,7 +16,6 @@ dependencies:
 
 _cpp_options: &cpp_options
   include-dirs:
-    - include
     - simula_cpp/src/protocol
     - simula_cpp/src/compositor
     - simula_cpp/src/device
@@ -33,6 +32,8 @@ _cpp_options: &cpp_options
   extra-libraries:
     - stdc++
     - motorcar-compositor
+    - osvrClientKit
+    - osvrRenderManager
     
   ghc-options:
     - -pgmlg++
@@ -56,3 +57,13 @@ executables:
     main: SimpleCompositor.hs
     source-dirs: app
     c-sources: app/SimpleCompositor.cpp
+
+  osvr-compositor:
+    <<: *cpp_options
+    <<: *executable_options
+    main: OsvrCompositor.hs
+    source-dirs: app
+    c-sources:
+      - app/OsvrCompositor.cpp
+      - simula_cpp/src/device/osvr_hmd.cpp
+      - simula_cpp/src/device/osvr_controller.cpp
