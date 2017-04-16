@@ -68,6 +68,7 @@ executable osvr-compositor
     , vector
     , base
     , SimulaHS
+  buildable: False
   other-modules:
       Main
       SimpleCompositor

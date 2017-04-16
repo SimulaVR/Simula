@@ -69,6 +69,8 @@ executables:
     <<: *cpp_options
     <<: *executable_options
 
+    buildable: false
+
     extra-libraries:
       - stdc++
       - motorcar-compositor
