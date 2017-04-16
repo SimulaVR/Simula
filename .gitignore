@@ -10,4 +10,4 @@ cabal.sandbox.config
 *.dyn_o
 *.dyn_hi
 app/*.cpp
-src/*.cpp
+src/**/*.cpp

@@ -10,10 +10,14 @@ import Foreign.C.String
 
 import System.Environment
 
-withCArgs :: (VM.IOVector CString -> IO ()) -> IO ()
-withCArgs act = do
-  cargs <- getArgs >>= mapM newCString
+--todo: bracket pattern
+withCStringVector :: [String] -> (VM.IOVector CString -> IO a) -> IO a
+withCStringVector args act = do
+  cargs <- mapM newCString args
   vec <- V.thaw $ V.fromList cargs
-  act vec
+  res <- act vec
   mapM_ free cargs
+  return res
   
+withCArgs :: (VM.IOVector CString -> IO ()) -> IO ()
+withCArgs act = getArgs >>= \args -> withCStringVector args act

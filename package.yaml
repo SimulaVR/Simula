@@ -10,6 +10,7 @@ default-extensions:
 
 dependencies:
   - base >= 4.9 && < 5
+  - containers
   - inline-c
   - inline-c-cpp
   - vector
@@ -34,8 +35,11 @@ _executable_options: &executable_options
   dependencies: [base, SimulaHS]
     
 library:
+  <<: *cpp_options
   source-dirs: src
   exposed-modules:
+    - Simula.Compositor
+    - Simula.Context
     - Simula.Utils
 
 executables:
@@ -69,3 +73,5 @@ executables:
       - app/OsvrCompositor.cpp
       - simula_cpp/src/device/osvr_hmd.cpp
       - simula_cpp/src/device/osvr_controller.cpp
+
+  
