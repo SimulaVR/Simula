@@ -19,5 +19,9 @@ simulaCtx = Cpp.cppCtx <> C.vecCtx <> mempty {
       (TypeName "WindowManager", [t|WindowManager|]),
       (TypeName "OpenGLContext", [t|OpenGLContext|]),
       (TypeName "Skeleton", [t|Skeleton|]),
-      (TypeName "Seat", [t|Seat|])
+      (TypeName "Seat", [t|Seat|]),
+      (TypeName "ViewPoint", [t|ViewPoint|]),
+      (TypeName "vec2", [t|Vec2|]),
+      (TypeName "vec3", [t|Vec3|]),
+      (TypeName "mat4", [t|Mat4|])
       ] }

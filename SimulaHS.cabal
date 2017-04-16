@@ -15,13 +15,14 @@ library
       src
   default-extensions: ForeignFunctionInterface QuasiQuotes TemplateHaskell
   ghc-options: -pgmlg++
-  cc-options: -fPIC -std=c++11
+  cc-options: -Lsimula_cpp/lib -fPIC -std=c++11
   include-dirs:
       simula_cpp/src/protocol
       simula_cpp/src/compositor
       simula_cpp/src/device
-  extra-lib-dirs:
-      simula_cpp/lib
+  c-sources:
+      src/Simula/Compositor.cpp
+  ld-options: -Lsimula_cpp/lib
   build-depends:
       base >= 4.9 && < 5
     , containers
@@ -30,11 +31,11 @@ library
     , vector
   exposed-modules:
       Simula.Compositor
+      Simula.Compositor.Types
       Simula.Context
       Simula.Utils
   other-modules:
       Simula.Compositor.Events
-      Simula.Compositor.Types
       Paths_SimulaHS
   default-language: Haskell2010
 
@@ -44,7 +45,7 @@ executable osvr-compositor
       app
   default-extensions: ForeignFunctionInterface QuasiQuotes TemplateHaskell
   ghc-options: -pgmlg++
-  cc-options: -fPIC -std=c++11
+  cc-options: -Lsimula_cpp/lib -fPIC -std=c++11
   include-dirs:
       simula_cpp/src/protocol
       simula_cpp/src/compositor
@@ -53,13 +54,12 @@ executable osvr-compositor
       app/OsvrCompositor.cpp
       simula_cpp/src/device/osvr_controller.cpp
       simula_cpp/src/device/osvr_hmd.cpp
-  extra-lib-dirs:
-      simula_cpp/lib
   extra-libraries:
       stdc++
       motorcar-compositor
       osvrClientKit
       osvrRenderManager
+  ld-options: -Lsimula_cpp/lib
   build-depends:
       base >= 4.9 && < 5
     , containers
@@ -79,18 +79,17 @@ executable simple-compositor
       app
   default-extensions: ForeignFunctionInterface QuasiQuotes TemplateHaskell
   ghc-options: -pgmlg++
-  cc-options: -fPIC -std=c++11
+  cc-options: -Lsimula_cpp/lib -fPIC -std=c++11
   include-dirs:
       simula_cpp/src/protocol
       simula_cpp/src/compositor
       simula_cpp/src/device
   c-sources:
       app/SimpleCompositor.cpp
-  extra-lib-dirs:
-      simula_cpp/lib
   extra-libraries:
       stdc++
       motorcar-compositor
+  ld-options: -Lsimula_cpp/lib
   build-depends:
       base >= 4.9 && < 5
     , containers

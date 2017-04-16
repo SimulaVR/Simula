@@ -20,25 +20,33 @@ _cpp_options: &cpp_options
     - simula_cpp/src/protocol
     - simula_cpp/src/compositor
     - simula_cpp/src/device
-    
-  extra-lib-dirs:
-    - simula_cpp/lib
+
+# hack: library won't link with this
+#  extra-lib-dirs:
+#    - simula_cpp/lib
 
   ghc-options:
     - -pgmlg++
             
   cc-options:
+# hack: see above
+    - -Lsimula_cpp/lib
     - -fPIC
     - -std=c++11
 
+  ld-options:
+    - -Lsimula_cpp/lib
+    
 _executable_options: &executable_options
   dependencies: [base, SimulaHS]
     
 library:
   <<: *cpp_options
   source-dirs: src
+  c-sources: src/**/*.cpp
   exposed-modules:
     - Simula.Compositor
+    - Simula.Compositor.Types
     - Simula.Context
     - Simula.Utils
 
