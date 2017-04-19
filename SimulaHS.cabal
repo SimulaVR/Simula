@@ -39,15 +39,16 @@ library
       Simula.Context
       Simula.Utils
   other-modules:
-      Simula.Compositor.Compositor
-      Simula.Compositor.Events
-      Simula.Compositor.Geometry
-      Simula.Compositor.OpenGL
-      Simula.Compositor.SceneGraph.Output.Display
-      Simula.Compositor.SceneGraph.PhysicalNode
-      Simula.Compositor.SceneGraph.Scene
-      Simula.Compositor.SceneGraph.SceneGraphNode
-      Simula.Compositor.SceneGraph.Types
+      Simula.NewCompositor.Compositor
+      Simula.NewCompositor.Event
+      Simula.NewCompositor.Geometry
+      Simula.NewCompositor.SceneGraph
+      Simula.NewCompositor.SceneGraph.Scene
+      Simula.NewCompositor.Shell
+      Simula.NewCompositor.Types
+      Simula.NewCompositor.Wayland.Input
+      Simula.NewCompositor.Wayland.Output
+      Simula.NewCompositor.WindowManager
       Paths_SimulaHS
   default-language: Haskell2010
 
@@ -119,6 +120,7 @@ executable simple-compositor
     , vector
     , base
     , SimulaHS
+  buildable: False
   other-modules:
       Main
       OsvrCompositor

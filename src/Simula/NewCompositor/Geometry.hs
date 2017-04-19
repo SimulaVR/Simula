@@ -1,4 +1,4 @@
-module Simula.Compositor.Geometry where
+module Simula.NewCompositor.Geometry where
 
 import Control.Lens
 import Linear
