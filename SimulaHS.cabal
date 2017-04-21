@@ -22,6 +22,7 @@ library
       simula_cpp/src/device
   c-sources:
       src/Simula/Compositor.cpp
+      src/Simula/NewCompositor/SceneGraph.cpp
   ld-options: -Lsimula_cpp/lib
   build-depends:
       base >= 4.9 && < 5
@@ -42,11 +43,13 @@ library
       Simula.Utils
   other-modules:
       Simula.NewCompositor.Compositor
+      Simula.NewCompositor.CUtils
       Simula.NewCompositor.Event
       Simula.NewCompositor.Geometry
+      Simula.NewCompositor.OpenGL
       Simula.NewCompositor.SceneGraph
-      Simula.NewCompositor.SceneGraph.Output.Display
-      Simula.NewCompositor.SceneGraph.Scene
+      Simula.NewCompositor.SceneGraph.Input
+      Simula.NewCompositor.SceneGraph.Output.ViewPoint
       Simula.NewCompositor.Shell
       Simula.NewCompositor.Types
       Simula.NewCompositor.Utils
