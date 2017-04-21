@@ -13,7 +13,7 @@ cabal-version:  >= 1.10
 library
   hs-source-dirs:
       src
-  default-extensions: GADTs ConstraintKinds KindSignatures StandaloneDeriving FlexibleInstances FlexibleContexts ForeignFunctionInterface QuasiQuotes TemplateHaskell
+  default-extensions: GADTs ConstraintKinds KindSignatures StandaloneDeriving FlexibleInstances FlexibleContexts ScopedTypeVariables LambdaCase ForeignFunctionInterface QuasiQuotes TemplateHaskell
   ghc-options: -pgmlg++
   cc-options: -Lsimula_cpp/lib -fPIC -std=c++11
   include-dirs:
@@ -30,7 +30,9 @@ library
     , inline-c-cpp
     , lens
     , linear
+    , monad-loops
     , mtl
+    , primitive
     , transformers
     , vector
   exposed-modules:
@@ -43,9 +45,11 @@ library
       Simula.NewCompositor.Event
       Simula.NewCompositor.Geometry
       Simula.NewCompositor.SceneGraph
+      Simula.NewCompositor.SceneGraph.Output.Display
       Simula.NewCompositor.SceneGraph.Scene
       Simula.NewCompositor.Shell
       Simula.NewCompositor.Types
+      Simula.NewCompositor.Utils
       Simula.NewCompositor.Wayland.Input
       Simula.NewCompositor.Wayland.Output
       Simula.NewCompositor.WindowManager
@@ -56,7 +60,7 @@ executable osvr-compositor
   main-is: OsvrCompositor.hs
   hs-source-dirs:
       app
-  default-extensions: GADTs ConstraintKinds KindSignatures StandaloneDeriving FlexibleInstances FlexibleContexts ForeignFunctionInterface QuasiQuotes TemplateHaskell
+  default-extensions: GADTs ConstraintKinds KindSignatures StandaloneDeriving FlexibleInstances FlexibleContexts ScopedTypeVariables LambdaCase ForeignFunctionInterface QuasiQuotes TemplateHaskell
   ghc-options: -pgmlg++
   cc-options: -Lsimula_cpp/lib -fPIC -std=c++11
   include-dirs:
@@ -80,7 +84,9 @@ executable osvr-compositor
     , inline-c-cpp
     , lens
     , linear
+    , monad-loops
     , mtl
+    , primitive
     , transformers
     , vector
     , base
@@ -95,7 +101,7 @@ executable simple-compositor
   main-is: SimpleCompositor.hs
   hs-source-dirs:
       app
-  default-extensions: GADTs ConstraintKinds KindSignatures StandaloneDeriving FlexibleInstances FlexibleContexts ForeignFunctionInterface QuasiQuotes TemplateHaskell
+  default-extensions: GADTs ConstraintKinds KindSignatures StandaloneDeriving FlexibleInstances FlexibleContexts ScopedTypeVariables LambdaCase ForeignFunctionInterface QuasiQuotes TemplateHaskell
   ghc-options: -pgmlg++
   cc-options: -Lsimula_cpp/lib -fPIC -std=c++11
   include-dirs:
@@ -115,7 +121,9 @@ executable simple-compositor
     , inline-c-cpp
     , lens
     , linear
+    , monad-loops
     , mtl
+    , primitive
     , transformers
     , vector
     , base

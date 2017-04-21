@@ -10,6 +10,8 @@ default-extensions:
   - StandaloneDeriving
   - FlexibleInstances
   - FlexibleContexts
+  - ScopedTypeVariables
+  - LambdaCase
   - ForeignFunctionInterface
   - QuasiQuotes
   - TemplateHaskell
@@ -21,7 +23,9 @@ dependencies:
   - inline-c-cpp
   - lens
   - linear
+  - monad-loops
   - mtl
+  - primitive
   - transformers
   - vector
 
