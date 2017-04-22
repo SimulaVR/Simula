@@ -8,9 +8,9 @@ import Data.IORef
 import Data.Typeable
 import Data.Word
 import Linear
+import Linear.OpenGL
 
-import qualified Language.C.Inline as C
-import qualified Language.C.Inline.Cpp as Cpp
+import Graphics.Rendering.OpenGL.GL hiding (normalize)
 import Foreign
 import Foreign.C
 
@@ -19,14 +19,6 @@ import Simula.NewCompositor.Geometry
 import Simula.NewCompositor.OpenGL
 import Simula.NewCompositor.WindowManager
 import Simula.NewCompositor.Types
-
-Cpp.context Cpp.cppCtx
-
-Cpp.verbatim "#define GL_GLEXT_PROTOTYPES"
-Cpp.include "<GL/gl.h>"
-Cpp.include "<GL/glext.h>"
-Cpp.include "<glm/glm.hpp>"
-Cpp.include "<iostream>"
 
 class (Eq a, Typeable a) => SceneGraphNode a where
   nodeOnFrameBegin :: a -> Maybe Scene -> IO ()
@@ -272,16 +264,16 @@ viewPointFov this dp = do
   let ctdVector = (dpTrans !* origin - vpTrans !* origin) ^. _xyz
   let displayNormal = normalize $ (dpTrans !* V4 0 0 1 0) ^. _xyz
   let eyeToScreenDis = abs $ dot ctdVector displayNormal
-  dims <- readIORef $ _displayDimensions dp
+  let dims = _displayDimensions dp
   return $ 2 * atan ((dims ^. _y)/(2*eyeToScreenDis))
 
 data Display = Display {
   _displayBase :: BaseSceneGraphNode,
   _displayGlContext :: IORef (Some OpenGLContext),
-  _displayDimensions :: IORef (V2 Float),
-  _displayScratchFrameBuffer :: IORef Word32,
-  _displayScratchColorBufferTexture :: IORef Word32,
-  _displayScratchDepthBufferTexture :: IORef Word32,
+  _displayDimensions :: V2 Float,
+  _displayScratchFrameBuffer :: FramebufferObject,
+  _displayScratchColorBufferTexture :: TextureObject,
+  _displayScratchDepthBufferTexture :: TextureObject,
   _displayViewpoints :: IORef [ViewPoint]
   } deriving (Eq, Typeable)
 
@@ -294,20 +286,18 @@ instance SceneGraphNode Display where
 
 newDisplay :: (PhysicalNode a, OpenGLContext b) => b -> V2 Float -> a -> M44 Float -> IO Display
 newDisplay glctx dims parent tf = do
-  dp <- mkDisplay
   glCtxMakeCurrent glctx
-  size <- displaySize dp
-  createOrUpdateFBO "Display Scratch Frame Buffer" (_displayScratchFrameBuffer dp) (_displayScratchColorBufferTexture dp) True (_displayScratchDepthBufferTexture dp) True size
-  return dp
-  where
-    mkDisplay = Display
-                <$> newBaseNode (Just (Some parent)) tf
-                <*> newIORef (Some glctx)
-                <*> newIORef dims
-                <*> newIORef 0
-                <*> newIORef 0
-                <*> newIORef 0
-                <*> newIORef []
+  size <- glCtxDefaultFramebufferSize glctx
+  (fbo, fboCb, fboDb) <- createFBO size
+  Display
+    <$> newBaseNode (Just (Some parent)) tf
+    <*> newIORef (Some glctx)
+    <*> pure dims
+    <*> pure fbo
+    <*> pure fboCb
+    <*> pure fboDb
+    <*> newIORef []
+  
 
 displayWorldRayAtDisplayPosition :: Display -> V2 Float -> IO Ray
 displayWorldRayAtDisplayPosition this pixel = do
@@ -318,116 +308,46 @@ displayWorldPositionAtDisplayPosition :: Display -> V2 Float -> IO (V3 Float)
 displayWorldPositionAtDisplayPosition this pixel = do
   worldTf <- nodeWorldTransform this
   size <- (fmap . fmap) fromIntegral $ displaySize this
-  dims <- readIORef $ _displayDimensions this
+  let dims = _displayDimensions this
   let scaled = liftI2 (*) (liftI2 (/) pixel (size - V2 0.5 0.5)) dims
   let s4 = worldTf !* V4 (scaled ^. _x) (scaled ^. _y) 0 1
   return $ s4 ^. _xyz
 
 
-createOrUpdateFBO :: String -> IORef Word32 -> IORef Word32 -> Bool -> IORef Word32 -> Bool -> V2 Int -> IO ()
-createOrUpdateFBO fboName fboRef fboColorBufferRef useColorTexture fboDepthBufferRef useDepthTexture resolution = do
-  let useColorTexture' = fromBool useColorTexture
-  let useDepthTexture' = fromBool useDepthTexture
+createFBO :: V2 Int -> IO (FramebufferObject, TextureObject, TextureObject)
+createFBO resolution = do
   let resX = fromIntegral $ resolution ^. _x
   let resY = fromIntegral $ resolution ^. _y
-  let resXPow2 = nextPow2 resX
-  let resYPow2 = nextPow2 resY
-  withCString fboName $ \fboName -> withRef fboRef $ \fboPtr -> withRef fboColorBufferRef $ \fboColorBufferPtr -> withRef fboDepthBufferRef $ \fboDepthBufferPtr ->
-    [Cpp.block| void {
-    const char* fboName = $(char* fboName);
-    GLuint* fbo = $(uint32_t* fboPtr);
-    GLuint* fboColorBuffer = $(uint32_t* fboColorBufferPtr);
-    GLuint* fboDepthBuffer = $(uint32_t* fboDepthBufferPtr);
-    glm::ivec2 resolution = glm::ivec2($(int resX), $(int resY));
-    bool useColorTexture = (bool) $(int useColorTexture');
-    bool useDepthTexture = (bool) $(int useDepthTexture');
-    bool create = !*fbo; //if fbo is null create all objects
-    if(create){
-        glGenFramebuffers(1, fbo);
+
+  fbo <- genObjectName
+  fboColorBuffer <- genObjectName
+  textureBinding Texture2D $= Just fboColorBuffer
+  textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
+  textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
+  textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
         
-        if(useColorTexture){
-            glGenTextures(1, fboColorBuffer);
-            glBindTexture(GL_TEXTURE_2D, *fboColorBuffer);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        }else{
-            glGenRenderbuffers(1, fboColorBuffer);
-        }
-        
-        if(useDepthTexture){
-            glGenTextures(1, fboDepthBuffer);
-            glBindTexture(GL_TEXTURE_2D, *fboDepthBuffer);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        }else{
-            glGenRenderbuffers(1, fboDepthBuffer);
-        }
-        
-    }
+  fboDepthBuffer <- genObjectName
+  textureBinding Texture2D $= Just fboDepthBuffer
+  textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
+  textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
+  textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
 
-    glBindFramebuffer(GL_FRAMEBUFFER, *fbo);
+  bindFramebuffer Framebuffer $= fbo
 
-    /* calculate the next power of two in both dimensions and use that as a texture size */
-    glm::ivec2 fboTexRes = glm::ivec2($(int resXPow2), $(int resYPow2));
-    fboTexRes=resolution;
+  let size = TextureSize2D resX resY
 
-    if(useColorTexture){
-        glBindTexture(GL_TEXTURE_2D, *fboColorBuffer);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, fboTexRes.x, fboTexRes.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, *fboColorBuffer, 0);
-    }else{
-        glBindRenderbuffer(GL_RENDERBUFFER, *fboColorBuffer);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, fboTexRes.x, fboTexRes.y);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, *fboColorBuffer);
-    }
-    if(useDepthTexture){
-        glBindTexture(GL_TEXTURE_2D, *fboDepthBuffer);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, fboTexRes.x, fboTexRes.y, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 0);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, *fboDepthBuffer, 0);
-    }else{
-        glBindRenderbuffer(GL_RENDERBUFFER, *fboDepthBuffer);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, fboTexRes.x, fboTexRes.y);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, *fboDepthBuffer);
-    }
-   
-    std::cout << "Checking Framebuffer \"" << std::string(fboName) << "\": ";
-    switch(glCheckFramebufferStatus(GL_FRAMEBUFFER)){
-            case(GL_FRAMEBUFFER_COMPLETE):
-                std::cout << "Framebuffer Complete" << std::endl;
-                break;
-            case(GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT):
-                std::cout << "Framebuffer Attachment Incomplete" << std::endl;
-                break;
-            case(GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT):
-                std::cout << "Framebuffer Attachment Incomplete/Missing" << std::endl;
-                break;
-            case(GL_FRAMEBUFFER_UNSUPPORTED):
-                std::cout << "Framebuffer Unsupported" << std::endl;
-                break;
-            default:
-                std::cout << "Framebuffer is Incomplete for Unknown Reasons" << std::endl;
-                break;
-    }
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  textureBinding Texture2D $= Just fboColorBuffer
+  texImage2D Texture2D NoProxy 0 RGBA' size 0 (PixelData RGBA UnsignedByte nullPtr)
+  framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D fboColorBuffer 0
 
-    printf("Successfully %s framebuffer \"%s\": %dx%d (texture size: %dx%d)\n", create ? "created" : "resized",
-             fboName, resolution.x, resolution.y, fboTexRes.x, fboTexRes.y);
-    } |]
+  textureBinding Texture2D $= Just fboDepthBuffer
+  -- UPSTREAM TODO: Depth24Stencil8
+  texImage2D Texture2D NoProxy 0 Depth32fStencil8 size 0 (PixelData DepthStencil Float32UnsignedInt248Rev nullPtr)
+  framebufferTexture2D Framebuffer DepthStencilAttachment Texture2D fboDepthBuffer 0
+  bindFramebuffer Framebuffer $= defaultFramebufferObject
 
-  where
-    nextPow2 n
-      | countTrailingZeros n + countLeadingZeros n < finiteBitSize n - 1
-      =  2^(finiteBitSize n - countLeadingZeros n)
-      | otherwise = n
+  return (fbo, fboColorBuffer, fboDepthBuffer)
 
-    withRef ref act = do
-      val <- readIORef ref
-      with val $ \ptr -> act ptr >> peek ptr >>= writeIORef ref
-  
   
 displaySize :: Display -> IO (V2 Int)
 displaySize this = do
@@ -438,14 +358,112 @@ displayPrepareForDraw :: Display -> IO ()
 displayPrepareForDraw this = do
   Some glctx <- readIORef $ _displayGlContext this
   glCtxMakeCurrent glctx
-  [Cpp.block| void {
-    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-    glClearStencil(0.0);
-    glStencilMask(0xFF);
-    glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-    glEnable(GL_BLEND);
-    glBlendFunc (GL_ONE,GL_ONE_MINUS_SRC_ALPHA);
-  } |]
+  clearColor $= Color4 1 1 1 1
+  clearStencil $= 1
+  stencilMask $= 0xff
+  clear [ColorBuffer, DepthBuffer, StencilBuffer]
+  blend $= Enabled
+  blendFunc $= (One, OneMinusSrcAlpha)
+
 
 displayFinishDraw :: Display -> IO ()
 displayFinishDraw _ = return ()
+
+
+
+
+class VirtualNode a => Drawable a where
+  drawableDraw :: a -> Scene -> Display -> IO ()
+  drawableVisible :: a -> IO Bool
+  setDrawableVisible :: a -> Bool -> IO ()
+
+drawableOnFrameDraw :: Drawable a => a -> Maybe Scene -> IO ()
+drawableOnFrameDraw this (Just scene) = do
+  visible <- drawableVisible this
+  -- display is always activated beforehand
+  Just display <- readIORef $ _sceneActiveDisplay scene
+  when visible $ drawableDraw this scene display
+drawableOnFrameDraw _ _ = return ()
+
+data BaseDrawable = BaseDrawable {
+  _baseDrawableBase :: BaseSceneGraphNode,
+  _baseDrawableVisible :: IORef Bool
+  } deriving (Eq, Typeable)
+
+newBaseDrawable :: Maybe (Some SceneGraphNode) -> M44 Float -> IO BaseDrawable
+newBaseDrawable parent tf = BaseDrawable <$> newBaseNode parent tf <*> newIORef True
+
+baseDrawableVisible :: BaseDrawable -> IO Bool
+baseDrawableVisible = readIORef . _baseDrawableVisible
+
+setBaseDrawableVisible :: BaseDrawable -> Bool -> IO ()
+setBaseDrawableVisible = writeIORef . _baseDrawableVisible
+
+data WireframeNode = WireframeNode {
+  _wireFrameNodeBase :: BaseDrawable,
+  _wireFrameNodeLineColor :: IORef (Color3 Float),
+  _wireFrameNodeSegments :: ForeignPtr Float,
+  _wireFrameNodeNumSegments :: Int,
+  _wireFrameNodeLineShader :: Program,
+  _wireFrameNodeLineVertexCoordinates :: BufferObject,
+  _wireFrameNodeAPositionLine :: AttribLocation,
+  _wireFrameNodeUMVPMatrixLine, _wireFrameNodeUColorLine :: UniformLocation
+  } deriving (Eq, Typeable)
+
+instance SceneGraphNode WireframeNode where
+  nodeParent = baseNodeParent . _baseDrawableBase . _wireFrameNodeBase
+  setNodeParent' = setBaseNodeParent . _baseDrawableBase . _wireFrameNodeBase
+  nodeTransform = baseNodeTransform . _baseDrawableBase . _wireFrameNodeBase
+  setNodeTransform' = setBaseNodeTransform . _baseDrawableBase . _wireFrameNodeBase
+  nodeChildren = _graphNodeChildren . _baseDrawableBase . _wireFrameNodeBase
+
+  nodeOnFrameDraw = drawableOnFrameDraw
+
+instance VirtualNode WireframeNode
+
+instance Drawable WireframeNode where
+  drawableVisible = baseDrawableVisible . _wireFrameNodeBase
+  setDrawableVisible = setBaseDrawableVisible . _wireFrameNodeBase
+
+  drawableDraw this scene display = withForeignPtr (_wireFrameNodeSegments this) $ \segPtr -> do
+    currentProgram $= Just (_wireFrameNodeLineShader this)
+    vertexAttribArray (_wireFrameNodeAPositionLine this) $= Enabled
+    bindBuffer ArrayBuffer $= Just (_wireFrameNodeLineVertexCoordinates this)
+    vertexAttribPointer (_wireFrameNodeAPositionLine this) $= (ToFloat, VertexArrayDescriptor 3 Float 0 nullPtr)
+    bufferData ArrayBuffer $= (fromIntegral $ _wireFrameNodeNumSegments this * 6 * sizeOf (undefined :: Float), segPtr, DynamicDraw)
+
+    lineColor <- readIORef $ _wireFrameNodeLineColor this
+    
+    uniform (_wireFrameNodeUColorLine this) $= lineColor
+
+    viewpoints <- readIORef $ _displayViewpoints display
+    forM_ viewpoints $ \vp -> do
+      projMatrix <- readIORef $ _viewPointProjectionMatrix vp
+      viewMatrix <- readIORef $ _viewPointViewMatrix vp
+      worldTf <- nodeWorldTransform this
+      
+      let mat = (projMatrix !*! viewMatrix !*! worldTf) ^. m44GLmatrix
+      uniform (_wireFrameNodeUMVPMatrixLine this) $= mat
+
+      port <- readIORef $ _viewPointViewPort vp
+      setViewPort port
+
+      drawArrays Lines 0 (fromIntegral $ 2 * _wireFrameNodeNumSegments this)
+
+    vertexAttribArray (_wireFrameNodeAPositionLine this) $= Disabled
+    currentProgram $= Nothing
+
+newWireframeNode :: SceneGraphNode a => [Float] -> Color3 Float -> a -> M44 Float -> IO WireframeNode
+newWireframeNode segs lineColor parent transform = do
+  drawable <- newBaseDrawable (Just (Some parent)) transform
+  lineColorRef <- newIORef lineColor
+  segArray <- newArray segs >>= newForeignPtr finalizerFree
+  let numSegments = length segs `div` 6
+  coordsBuffer <- genObjectName
+  prog <- getProgram ShaderMotorcarLine
+  aPos <- get $ attribLocation prog "aPosition"
+  uMVP <- get $ uniformLocation prog "uMVPMatrix"
+  uColor <- get $ uniformLocation prog "uColor"
+  return $ WireframeNode drawable lineColorRef segArray numSegments prog coordsBuffer aPos uMVP uColor
+
+
