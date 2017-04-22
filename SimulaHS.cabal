@@ -13,7 +13,7 @@ cabal-version:  >= 1.10
 library
   hs-source-dirs:
       src
-  default-extensions: GADTs ConstraintKinds KindSignatures StandaloneDeriving FlexibleInstances FlexibleContexts ScopedTypeVariables LambdaCase ForeignFunctionInterface QuasiQuotes TemplateHaskell
+  default-extensions: GADTs ConstraintKinds KindSignatures StandaloneDeriving FlexibleInstances FlexibleContexts ScopedTypeVariables RankNTypes RecursiveDo LambdaCase ForeignFunctionInterface QuasiQuotes TemplateHaskell
   ghc-options: -pgmlg++
   cc-options: -Lsimula_cpp/lib -fPIC -std=c++11
   include-dirs:
@@ -66,7 +66,7 @@ executable osvr-compositor
   main-is: OsvrCompositor.hs
   hs-source-dirs:
       app
-  default-extensions: GADTs ConstraintKinds KindSignatures StandaloneDeriving FlexibleInstances FlexibleContexts ScopedTypeVariables LambdaCase ForeignFunctionInterface QuasiQuotes TemplateHaskell
+  default-extensions: GADTs ConstraintKinds KindSignatures StandaloneDeriving FlexibleInstances FlexibleContexts ScopedTypeVariables RankNTypes RecursiveDo LambdaCase ForeignFunctionInterface QuasiQuotes TemplateHaskell
   ghc-options: -pgmlg++
   cc-options: -Lsimula_cpp/lib -fPIC -std=c++11
   include-dirs:
@@ -112,7 +112,7 @@ executable simple-compositor
   main-is: SimpleCompositor.hs
   hs-source-dirs:
       app
-  default-extensions: GADTs ConstraintKinds KindSignatures StandaloneDeriving FlexibleInstances FlexibleContexts ScopedTypeVariables LambdaCase ForeignFunctionInterface QuasiQuotes TemplateHaskell
+  default-extensions: GADTs ConstraintKinds KindSignatures StandaloneDeriving FlexibleInstances FlexibleContexts ScopedTypeVariables RankNTypes RecursiveDo LambdaCase ForeignFunctionInterface QuasiQuotes TemplateHaskell
   ghc-options: -pgmlg++
   cc-options: -Lsimula_cpp/lib -fPIC -std=c++11
   include-dirs:

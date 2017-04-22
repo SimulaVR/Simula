@@ -5,6 +5,8 @@ import Data.Word
 import Data.Typeable
 import Linear
 
+import Graphics.Rendering.OpenGL
+
 import Simula.NewCompositor.Event
 import Simula.NewCompositor.Types
 
@@ -15,7 +17,7 @@ data WaylandSurfaceClippingMode = None | Cuboid | Portal
   deriving (Show, Eq, Ord, Enum)
 
 class (Eq a, Typeable a) => WaylandSurface a where
-  wsTexture :: a -> IO (Word32)
+  wsTexture :: a -> IO TextureObject
   wsSize :: a -> IO (V2 Int)
   setWsSize :: a -> V2 Int -> IO ()
   wsPosition :: a -> IO (V2 Int)

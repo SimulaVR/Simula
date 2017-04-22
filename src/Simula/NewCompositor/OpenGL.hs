@@ -42,12 +42,16 @@ class OpenGLContext a where
   glCtxMakeCurrent :: a -> IO ()
 
 
-data MotorcarShader = ShaderMotorcarLine
+data MotorcarShader
+  = ShaderMotorcarLine
+  | ShaderMotorcarSurface
   deriving (Show, Eq, Ord, Enum)
 
 vertexSource, fragSource :: MotorcarShader -> ByteString
 vertexSource ShaderMotorcarLine =  $(embedFile "shaders/motorcarline.vert")
+vertexSource ShaderMotorcarSurface =  $(embedFile "shaders/motorcarsurface.vert")
 fragSource ShaderMotorcarLine = $(embedFile "shaders/motorcarline.frag")
+fragSource ShaderMotorcarSurface =  $(embedFile "shaders/motorcarsurface.frag")
 
 getProgram :: MotorcarShader -> IO Program
 getProgram shader = do

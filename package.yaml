@@ -11,6 +11,8 @@ default-extensions:
   - FlexibleInstances
   - FlexibleContexts
   - ScopedTypeVariables
+  - RankNTypes
+  - RecursiveDo
   - LambdaCase
   - ForeignFunctionInterface
   - QuasiQuotes

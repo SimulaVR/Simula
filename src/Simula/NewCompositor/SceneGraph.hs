@@ -370,8 +370,6 @@ displayFinishDraw :: Display -> IO ()
 displayFinishDraw _ = return ()
 
 
-
-
 class VirtualNode a => Drawable a where
   drawableDraw :: a -> Scene -> Display -> IO ()
   drawableVisible :: a -> IO Bool
@@ -400,41 +398,41 @@ setBaseDrawableVisible :: BaseDrawable -> Bool -> IO ()
 setBaseDrawableVisible = writeIORef . _baseDrawableVisible
 
 data WireframeNode = WireframeNode {
-  _wireFrameNodeBase :: BaseDrawable,
-  _wireFrameNodeLineColor :: IORef (Color3 Float),
-  _wireFrameNodeSegments :: ForeignPtr Float,
-  _wireFrameNodeNumSegments :: Int,
-  _wireFrameNodeLineShader :: Program,
-  _wireFrameNodeLineVertexCoordinates :: BufferObject,
-  _wireFrameNodeAPositionLine :: AttribLocation,
-  _wireFrameNodeUMVPMatrixLine, _wireFrameNodeUColorLine :: UniformLocation
+  _wireframeNodeBase :: BaseDrawable,
+  _wireframeNodeLineColor :: IORef (Color3 Float),
+  _wireframeNodeSegments :: ForeignPtr Float,
+  _wireframeNodeNumSegments :: Int,
+  _wireframeNodeLineShader :: Program,
+  _wireframeNodeLineVertexCoordinates :: BufferObject,
+  _wireframeNodeAPositionLine :: AttribLocation,
+  _wireframeNodeUMVPMatrixLine, _wireframeNodeUColorLine :: UniformLocation
   } deriving (Eq, Typeable)
 
 instance SceneGraphNode WireframeNode where
-  nodeParent = baseNodeParent . _baseDrawableBase . _wireFrameNodeBase
-  setNodeParent' = setBaseNodeParent . _baseDrawableBase . _wireFrameNodeBase
-  nodeTransform = baseNodeTransform . _baseDrawableBase . _wireFrameNodeBase
-  setNodeTransform' = setBaseNodeTransform . _baseDrawableBase . _wireFrameNodeBase
-  nodeChildren = _graphNodeChildren . _baseDrawableBase . _wireFrameNodeBase
+  nodeParent = baseNodeParent . _baseDrawableBase . _wireframeNodeBase
+  setNodeParent' = setBaseNodeParent . _baseDrawableBase . _wireframeNodeBase
+  nodeTransform = baseNodeTransform . _baseDrawableBase . _wireframeNodeBase
+  setNodeTransform' = setBaseNodeTransform . _baseDrawableBase . _wireframeNodeBase
+  nodeChildren = _graphNodeChildren . _baseDrawableBase . _wireframeNodeBase
 
   nodeOnFrameDraw = drawableOnFrameDraw
 
 instance VirtualNode WireframeNode
 
 instance Drawable WireframeNode where
-  drawableVisible = baseDrawableVisible . _wireFrameNodeBase
-  setDrawableVisible = setBaseDrawableVisible . _wireFrameNodeBase
+  drawableVisible = baseDrawableVisible . _wireframeNodeBase
+  setDrawableVisible = setBaseDrawableVisible . _wireframeNodeBase
 
-  drawableDraw this scene display = withForeignPtr (_wireFrameNodeSegments this) $ \segPtr -> do
-    currentProgram $= Just (_wireFrameNodeLineShader this)
-    vertexAttribArray (_wireFrameNodeAPositionLine this) $= Enabled
-    bindBuffer ArrayBuffer $= Just (_wireFrameNodeLineVertexCoordinates this)
-    vertexAttribPointer (_wireFrameNodeAPositionLine this) $= (ToFloat, VertexArrayDescriptor 3 Float 0 nullPtr)
-    bufferData ArrayBuffer $= (fromIntegral $ _wireFrameNodeNumSegments this * 6 * sizeOf (undefined :: Float), segPtr, DynamicDraw)
+  drawableDraw this scene display = withForeignPtr (_wireframeNodeSegments this) $ \segPtr -> do
+    currentProgram $= Just (_wireframeNodeLineShader this)
+    vertexAttribArray (_wireframeNodeAPositionLine this) $= Enabled
+    bindBuffer ArrayBuffer $= Just (_wireframeNodeLineVertexCoordinates this)
+    vertexAttribPointer (_wireframeNodeAPositionLine this) $= (ToFloat, VertexArrayDescriptor 3 Float 0 nullPtr)
+    bufferData ArrayBuffer $= (fromIntegral $ _wireframeNodeNumSegments this * 6 * sizeOf (undefined :: Float), segPtr, DynamicDraw)
 
-    lineColor <- readIORef $ _wireFrameNodeLineColor this
+    lineColor <- readIORef $ _wireframeNodeLineColor this
     
-    uniform (_wireFrameNodeUColorLine this) $= lineColor
+    uniform (_wireframeNodeUColorLine this) $= lineColor
 
     viewpoints <- readIORef $ _displayViewpoints display
     forM_ viewpoints $ \vp -> do
@@ -443,14 +441,14 @@ instance Drawable WireframeNode where
       worldTf <- nodeWorldTransform this
       
       let mat = (projMatrix !*! viewMatrix !*! worldTf) ^. m44GLmatrix
-      uniform (_wireFrameNodeUMVPMatrixLine this) $= mat
+      uniform (_wireframeNodeUMVPMatrixLine this) $= mat
 
       port <- readIORef $ _viewPointViewPort vp
       setViewPort port
 
-      drawArrays Lines 0 (fromIntegral $ 2 * _wireFrameNodeNumSegments this)
+      drawArrays Lines 0 (fromIntegral $ 2 * _wireframeNodeNumSegments this)
 
-    vertexAttribArray (_wireFrameNodeAPositionLine this) $= Disabled
+    vertexAttribArray (_wireframeNodeAPositionLine this) $= Disabled
     currentProgram $= Nothing
 
 newWireframeNode :: SceneGraphNode a => [Float] -> Color3 Float -> a -> M44 Float -> IO WireframeNode
