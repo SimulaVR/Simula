@@ -26,14 +26,19 @@ library
   ld-options: -Lsimula_cpp/lib
   build-depends:
       base >= 4.9 && < 5
+    , bytestring
     , containers
+    , file-embed
     , inline-c
     , inline-c-cpp
     , lens
     , linear
+    , linear-opengl
     , monad-loops
     , mtl
+    , OpenGL
     , primitive
+    , template-haskell
     , transformers
     , vector
   exposed-modules:
@@ -43,13 +48,11 @@ library
       Simula.Utils
   other-modules:
       Simula.NewCompositor.Compositor
-      Simula.NewCompositor.CUtils
       Simula.NewCompositor.Event
       Simula.NewCompositor.Geometry
       Simula.NewCompositor.OpenGL
       Simula.NewCompositor.SceneGraph
-      Simula.NewCompositor.SceneGraph.Input
-      Simula.NewCompositor.SceneGraph.Output.ViewPoint
+      Simula.NewCompositor.SceneGraph.Wayland
       Simula.NewCompositor.Shell
       Simula.NewCompositor.Types
       Simula.NewCompositor.Utils
@@ -82,14 +85,19 @@ executable osvr-compositor
   ld-options: -Lsimula_cpp/lib
   build-depends:
       base >= 4.9 && < 5
+    , bytestring
     , containers
+    , file-embed
     , inline-c
     , inline-c-cpp
     , lens
     , linear
+    , linear-opengl
     , monad-loops
     , mtl
+    , OpenGL
     , primitive
+    , template-haskell
     , transformers
     , vector
     , base
@@ -119,14 +127,19 @@ executable simple-compositor
   ld-options: -Lsimula_cpp/lib
   build-depends:
       base >= 4.9 && < 5
+    , bytestring
     , containers
+    , file-embed
     , inline-c
     , inline-c-cpp
     , lens
     , linear
+    , linear-opengl
     , monad-loops
     , mtl
+    , OpenGL
     , primitive
+    , template-haskell
     , transformers
     , vector
     , base

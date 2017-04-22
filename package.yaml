@@ -18,14 +18,19 @@ default-extensions:
 
 dependencies:
   - base >= 4.9 && < 5
+  - bytestring
   - containers
+  - file-embed
   - inline-c
   - inline-c-cpp
   - lens
   - linear
+  - linear-opengl
   - monad-loops
   - mtl
+  - OpenGL
   - primitive
+  - template-haskell
   - transformers
   - vector
 
