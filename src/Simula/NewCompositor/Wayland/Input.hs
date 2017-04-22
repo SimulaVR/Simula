@@ -5,9 +5,8 @@ import Data.IORef
 import Linear
 
 import Simula.NewCompositor.Types
+import {-# SOURCE #-} Simula.NewCompositor.SceneGraph.Wayland
 import Simula.NewCompositor.Wayland.Output
-
-data WaylandSurfaceNode
 
 
 data Keyboard = Keyboard {

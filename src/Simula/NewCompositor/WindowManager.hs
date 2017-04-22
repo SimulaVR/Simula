@@ -3,7 +3,8 @@ module Simula.NewCompositor.WindowManager where
 import Data.IORef
 
 import Simula.NewCompositor.Event
-import {-# SOURCE #-} Simula.NewCompositor.SceneGraph
+import Simula.NewCompositor.SceneGraph
+import Simula.NewCompositor.SceneGraph.Wayland
 import Simula.NewCompositor.Wayland.Input
 import Simula.NewCompositor.Wayland.Output
 import Simula.NewCompositor.Types

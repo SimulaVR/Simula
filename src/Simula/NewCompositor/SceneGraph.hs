@@ -14,10 +14,12 @@ import Graphics.Rendering.OpenGL.GL hiding (normalize)
 import Foreign
 import Foreign.C
 
-import Simula.NewCompositor.Compositor
+import Simula.Wayland
+
+import {-# SOURCE #-} Simula.NewCompositor.Compositor
 import Simula.NewCompositor.Geometry
 import Simula.NewCompositor.OpenGL
-import Simula.NewCompositor.WindowManager
+import {-# SOURCE #-} Simula.NewCompositor.WindowManager
 import Simula.NewCompositor.Types
 
 class (Eq a, Typeable a) => SceneGraphNode a where
@@ -187,7 +189,6 @@ sceneLatestTimestampChange this = do
   curr <- readIORef $ _sceneCurrentTimestamp this
   return $ curr - last
 
-data C'wl_global
 data C'motorcar_viewpoint
 
 

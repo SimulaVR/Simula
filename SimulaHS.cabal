@@ -59,6 +59,7 @@ library
       Simula.NewCompositor.Wayland.Input
       Simula.NewCompositor.Wayland.Output
       Simula.NewCompositor.WindowManager
+      Simula.Wayland
       Paths_SimulaHS
   default-language: Haskell2010
 

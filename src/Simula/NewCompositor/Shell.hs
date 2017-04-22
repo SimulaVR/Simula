@@ -4,13 +4,9 @@ import Data.IORef
 import Foreign
 import Foreign.C
 
+import Simula.Wayland
 
 import Simula.NewCompositor.SceneGraph
-
-data C'wl_client
-data C'wl_display
-data C'wl_resource
-data C'wl_pointer
 
 data Shell = Shell {
   _shellScene :: IORef Scene,
