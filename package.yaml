@@ -16,6 +16,7 @@ default-extensions:
   - RankNTypes
   - RecursiveDo
   - DefaultSignatures
+  - PatternSynonyms
   - LambdaCase
   - ForeignFunctionInterface
   - QuasiQuotes
@@ -34,6 +35,7 @@ dependencies:
   - monad-loops
   - mtl
   - OpenGL
+  - OpenGLRaw
   - primitive
   - template-haskell
   - transformers

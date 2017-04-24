@@ -19,6 +19,8 @@ data ViewPort = ViewPort {
   _viewPortSize :: IORef (V2 Float)
   } deriving (Eq, Typeable)
 
+makeLenses ''ViewPort
+
 viewPortWidth, viewPortHeight :: ViewPort -> IO Float
 viewPortWidth this = view _x <$> readIORef (_viewPortSize this) 
 viewPortHeight this = view _y <$> readIORef (_viewPortSize this)

@@ -1,3 +1,4 @@
+{-# LANGUAGE PatternSynonyms #-}
 module Simula.NewCompositor.SceneGraph.Wayland where
 
 import Control.Lens
@@ -10,6 +11,7 @@ import Linear
 import Linear.OpenGL
 
 import Graphics.Rendering.OpenGL hiding (scale, Plane)
+import Graphics.GL (glEnable, glDisable, pattern GL_DEPTH_TEST) -- workaround, probably a user error
 import Foreign
 
 import Simula.NewCompositor.Geometry
@@ -46,7 +48,7 @@ data MotorcarSurfaceNode = MotorcarSurfaceNode {
   
   _motorcarSurfaceNodeAPositionDepthComposite:: AttribLocation,
   _motorcarSurfaceNodeAColorTexCoordDepthComposite:: AttribLocation,
-  _motorcarSurfaceNodeADepthCoordDepthComposite:: AttribLocation,
+  _motorcarSurfaceNodeADepthTexCoordDepthComposite:: AttribLocation,
 
   _motorcarSurfaceNodeAPositionBlit :: AttribLocation,
   _motorcarSurfaceNodeATexCoordBlit :: AttribLocation,
@@ -103,16 +105,16 @@ class Drawable a => WaylandSurfaceNode a where
     setNodeTransform (this ^. waylandSurfaceNodeDecorations) $ scaleM !*! mkTransformation rotQ (V3 0 0 0) !*! scale identity (V3 1.04 1.04 0)
 
 instance HasBaseSceneGraphNode BaseWaylandSurfaceNode where
-  baseSceneGraphNode = baseDrawable.baseSceneGraphNode
+  baseSceneGraphNode = baseSceneGraphNode
 
 instance HasBaseDrawable BaseWaylandSurfaceNode where
   baseDrawable = waylandSurfaceNodeBase
 
 instance HasBaseSceneGraphNode MotorcarSurfaceNode where
-  baseSceneGraphNode = baseDrawable.baseSceneGraphNode
+  baseSceneGraphNode = baseSceneGraphNode
 
 instance HasBaseDrawable MotorcarSurfaceNode where
-  baseDrawable = baseWaylandSurfaceNode.baseDrawable
+  baseDrawable = baseDrawable
 
 instance HasBaseWaylandSurfaceNode MotorcarSurfaceNode where
   baseWaylandSurfaceNode = motorcarSurfaceNodeBase
@@ -179,11 +181,11 @@ instance Drawable BaseWaylandSurfaceNode where
     viewpoints <- readIORef $ _displayViewpoints display
     forM_ viewpoints $ \vp -> do
       --TODO compare w/ order in draw for WireFrameNode 
-      port <- readIORef $ _viewPointViewPort vp
+      port <- readIORef (vp ^. viewPointViewPort)
       setViewPort port
       
-      projMatrix <- readIORef $ _viewPointProjectionMatrix vp
-      viewMatrix <- readIORef $ _viewPointViewMatrix vp
+      projMatrix <- readIORef (vp ^. viewPointProjectionMatrix)
+      viewMatrix <- readIORef (vp ^. viewPointViewMatrix)
       worldTf <- nodeWorldTransform this
     
       let mat = (projMatrix !*! viewMatrix !*! worldTf !*! surfaceTf) ^. m44GLmatrix
@@ -197,11 +199,15 @@ instance Drawable BaseWaylandSurfaceNode where
 
 instance WaylandSurfaceNode BaseWaylandSurfaceNode
 
+instance SceneGraphNode MotorcarSurfaceNode where
+  nodeOnWorldTransformChange this scene = sendTransformToClient this
+
+instance VirtualNode MotorcarSurfaceNode
+
 instance Drawable MotorcarSurfaceNode where
   drawableDraw this scene display = do
     stencilTest $= Enabled
-    scratchFb <- readIORef (display ^. displayScratchFrameBuffer)
-    bindFramebuffer DrawFramebuffer $= scratchFb
+    bindFramebuffer DrawFramebuffer $= display ^. displayScratchFrameBuffer
     clearColor $= Color4 0 0 0 0
     clearDepth $= 1
     clearStencil $= 0
@@ -210,153 +216,267 @@ instance Drawable MotorcarSurfaceNode where
 
     drawWindowBoundsStencil this display
 
-    {-
-    if(surface()->depthCompositingEnabled()){
-        glUseProgram(m_depthCompositedSurfaceShader->handle());
+    Some surface <- readIORef (this ^. waylandSurfaceNodeSurface)
+    dce <- wsDepthCompositingEnabled surface
+    
+    let surfaceCoords = this ^. motorcarSurfaceNodeSurfaceTextureCoords
 
-        glEnableVertexAttribArray(h_aPosition_depthcomposite);
-        glBindBuffer(GL_ARRAY_BUFFER, m_surfaceVertexCoordinates);
-        glVertexAttribPointer(h_aPosition_depthcomposite, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    case dce of
+      True -> do
+        currentProgram $= Just (this ^. motorcarSurfaceNodeDepthCompositedSurfaceShader)
+        let aPosition = this ^. motorcarSurfaceNodeAPositionDepthComposite
+        let aColorTexCoord = this ^. motorcarSurfaceNodeAColorTexCoordDepthComposite
+        let aDepthTexCoord = this ^. motorcarSurfaceNodeADepthTexCoordDepthComposite
 
-        glEnableVertexAttribArray(h_aColorTexCoord_depthcomposite);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glEnableVertexAttribArray(h_aDepthTexCoord_depthcomposite);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-    }else{
-        glUseProgram(m_surfaceShader->handle());
+        vertexAttribArray aPosition $= Enabled
+        bindBuffer ArrayBuffer $= Just surfaceCoords
+        vertexAttribPointer aPosition $= (ToFloat, VertexArrayDescriptor 3 Float 0 nullPtr)
+  
+        vertexAttribArray aColorTexCoord $= Enabled
+        bindBuffer ArrayBuffer $= Nothing
+        vertexAttribArray aDepthTexCoord $= Enabled
+        bindBuffer ArrayBuffer $= Nothing
+      _ -> do
+        currentProgram $= Just (this ^. waylandSurfaceNodeShader)
+        let aPosition = this ^. waylandSurfaceNodeAPosition
+        let aTexCoord = this ^. waylandSurfaceNodeATexCoord
+        let uMVPMatrix = this ^. waylandSurfaceNodeUMVPMatrix
 
-        glEnableVertexAttribArray(h_aPosition_surface);
-        glBindBuffer(GL_ARRAY_BUFFER, m_surfaceVertexCoordinates);
-        glVertexAttribPointer(h_aPosition_surface, 3, GL_FLOAT, GL_FALSE, 0, 0);
+        vertexAttribArray aPosition $= Enabled
+        bindBuffer ArrayBuffer $= Just surfaceCoords
+        vertexAttribPointer aPosition $= (ToFloat, VertexArrayDescriptor 3 Float 0 nullPtr)
 
-        glEnableVertexAttribArray(h_aTexCoord_surface);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        vertexAttribArray aTexCoord $= Enabled
+        bindBuffer ArrayBuffer $= Nothing
+        uniform uMVPMatrix $= (identity ^. m44GLmatrix :: GLmatrix Float)
+        glDisable GL_DEPTH_TEST
+        depthMask $= Disabled
+        
+    tex <- wsTexture surface
+    textureBinding Texture2D $= Just tex
+    textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
 
-        glUniformMatrix4fv(h_uMVPMatrix_surface, 1, GL_FALSE, glm::value_ptr(glm::mat4(1)));
+    vps <- readIORef (display ^. displayViewpoints)
 
-        glDisable(GL_DEPTH_TEST);
-        glDepthMask(GL_FALSE);
-    }
+    forM_ vps $ \vp -> do
+      readIORef (vp ^. viewPointViewPort) >>= setViewPort
+      case dce of
+        True -> do
+          ccvp <- readIORef (vp ^. viewPointClientColorViewPort)
+          ccvpCoords <- vpCoords ccvp
+          let aColorTexCoord = this ^. motorcarSurfaceNodeAColorTexCoordDepthComposite
+          
+          withArrayLen ccvpCoords $ \len coordPtr ->
+            vertexAttribPointer aColorTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 coordPtr)
 
+          cdvp <- readIORef (vp ^. viewPointClientDepthViewPort)
+          cdvpCoords <- vpCoords cdvp
+          let aDepthTexCoord = this ^. motorcarSurfaceNodeADepthTexCoordDepthComposite
+          
+          withArrayLen cdvpCoords $ \len coordPtr ->
+            vertexAttribPointer aDepthTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 coordPtr)
+        False -> do
+          vport <- readIORef (vp ^. viewPointViewPort)
+          vportCoords <- vpCoords vport
+          let aTexCoord = this ^. waylandSurfaceNodeATexCoord
+          
+          withArrayLen vportCoords $ \len coordPtr ->
+            vertexAttribPointer aTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 coordPtr)
+      drawArrays TriangleFan 0 4
 
+    when (not dce) $ do
+      glEnable GL_DEPTH_TEST
+      depthMask $= Enabled
 
-    GLuint texture = this->surface()->texture();
+    clipWindowBounds this display
+    drawFrameBufferContents this display
 
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    bindFramebuffer Framebuffer $= defaultFramebufferObject
+    vertexAttribArray (this ^. motorcarSurfaceNodeAPositionDepthComposite) $= Disabled
+    vertexAttribArray (this ^. motorcarSurfaceNodeAColorTexCoordDepthComposite) $= Disabled
+    activeTexture $= TextureUnit 1
+    textureBinding Texture2D $= Nothing
+  
+    activeTexture $= TextureUnit 0
+    textureBinding Texture2D $= Nothing
+  
+    currentProgram $= Nothing
+    stencilTest $= Disabled
+  
+      where
+        vpCoords :: ViewPort -> IO [Float]
+        vpCoords vp = do
+          vpOffset <- readIORef (vp ^. viewPortOffset)
+          vpSize <- readIORef (vp ^. viewPortSize)
+          return $ [ vpOffset ^. _x, 1 - vpOffset ^. _y
+                   , vpOffset ^. _x + vpSize ^. _x, 1 - vpOffset ^. _y
+                   , vpOffset ^. _x + vpSize ^. _x, 1 - vpOffset ^. _y - vpSize ^. _y
+                   , vpOffset ^. _x, 1 - vpOffset ^. _y - vpSize ^. _y ]
 
+        drawWindowBoundsStencil this display = do
+          colorMask $= Color4 Disabled Disabled Disabled Disabled
+          depthMask $= Disabled
+          stencilFunc $= (Never, 1, 0xff)
+          stencilOp $= (OpReplace, OpKeep, OpKeep)
 
-    glm::vec4 vp;
-    for(ViewPoint *viewpoint : display->viewpoints()){
+          currentProgram $= Just (this ^. motorcarSurfaceNodeClippingShader)
+          let aPosition = this ^. motorcarSurfaceNodeAPositionClipping
+          let uMVPMatrix = this ^. motorcarSurfaceNodeUMVPMatrixClipping
+          let uColor = this ^. motorcarSurfaceNodeUColorClipping
 
-        viewpoint->viewport()->set();
+          vertexAttribArray aPosition $= Enabled
+          bindBuffer ArrayBuffer $= Just (this ^. motorcarSurfaceNodeCuboidClippingVertices)
+          vertexAttribPointer aPosition $= (ToFloat, VertexArrayDescriptor 3 Float 0 nullPtr)
 
-        if(surface()->depthCompositingEnabled()){
-            vp = viewpoint->clientColorViewport()->viewportParams();
-            const GLfloat clientColorTextureCoordinates[] = {
-                vp.x, 1 - vp.y,
-                vp.x + vp.z, 1 - vp.y,
-                vp.x + vp.z, 1 - (vp.y + vp.w),
-                vp.x, 1 - (vp.y + vp.w),
-            };
-            glVertexAttribPointer(h_aColorTexCoord_depthcomposite, 2, GL_FLOAT, GL_FALSE, 0, clientColorTextureCoordinates);
-            vp = viewpoint->clientDepthViewport()->viewportParams();
+          uniform uColor $= (Color3 1 1 0 :: Color3 Float)
 
-            const GLfloat clientDepthTextureCoordinates[] = {
-                vp.x, 1 - vp.y,
-                vp.x + vp.z, 1 - vp.y,
-                vp.x + vp.z, 1 - (vp.y + vp.w),
-                vp.x, 1 - (vp.y + vp.w),
-            };
-            glVertexAttribPointer(h_aDepthTexCoord_depthcomposite, 2, GL_FLOAT, GL_FALSE, 0, clientDepthTextureCoordinates);
+          bindBuffer ElementArrayBuffer $= Just (this ^. motorcarSurfaceNodeCuboidClippingIndices)
 
-        }else {
-            vp = viewpoint->viewport()->viewportParams();
-            const GLfloat clientColorTextureCoordinates[] = {
-                vp.x, 1 - vp.y,
-                vp.x + vp.z, 1 - vp.y,
-                vp.x + vp.z, 1 - (vp.y + vp.w),
-                vp.x, 1 - (vp.y + vp.w),
-            };
-            glVertexAttribPointer(h_aTexCoord_surface, 2, GL_FLOAT, GL_FALSE, 0, clientColorTextureCoordinates);
-        }
+          wt <- nodeWorldTransform this
+          let modelMat = wt !*! scale identity (this ^. motorcarSurfaceNodeDimensions)
 
-        glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+          vps <- readIORef (display ^. displayViewpoints)
+          forM_ vps $ \vp -> do
+            port <- readIORef (vp ^. viewPointViewPort)
+            setViewPort port
 
-    }
+            projMatrix <- readIORef (vp ^. viewPointProjectionMatrix)
+            viewMatrix <- readIORef (vp ^. viewPointViewMatrix)
+            let mvp = (projMatrix !*! viewMatrix !*! modelMat) ^. m44GLmatrix
+            uniform uMVPMatrix $= mvp
+            let numElements = 36 --TODO eliminate this
+            drawElements Triangles numElements UnsignedInt nullPtr
+  
+          vertexAttribArray aPosition $= Disabled
+          currentProgram $= Nothing
+          colorMask $= Color4 Enabled Enabled Enabled Enabled
+          depthMask $= Enabled
+          stencilMask $= 0
+          stencilFunc $= (Equal, 1, 0xff)
 
-    if(!this->surface()->depthCompositingEnabled()){
-        glEnable(GL_DEPTH_TEST);
-        glDepthMask(GL_TRUE);
-    }
+        clipWindowBounds :: MotorcarSurfaceNode -> Display -> IO ()
+        clipWindowBounds this display = do
+          colorMask $= Color4 Disabled Disabled Disabled Disabled
+          depthMask $= Disabled
+          stencilMask $= 0xff
+          stencilFunc $= (Always, 0, 0xff)
+          stencilOp $= (OpKeep, OpKeep, OpReplace)
 
-    clipWindowBounds(display);
+          currentProgram $= Just (this ^. motorcarSurfaceNodeClippingShader)
+          let aPosition = this ^. motorcarSurfaceNodeAPositionClipping
+          let uMVPMatrix = this ^. motorcarSurfaceNodeUMVPMatrixClipping
+          let uColor = this ^. motorcarSurfaceNodeUColorClipping
 
-    this->drawFrameBufferContents(display);
+          vertexAttribArray aPosition $= Enabled
+          bindBuffer ArrayBuffer $= Just (this ^. motorcarSurfaceNodeCuboidClippingVertices)
+          vertexAttribPointer aPosition $= (ToFloat, VertexArrayDescriptor 3 Float 0 nullPtr)
 
+          uniform uColor $= (Color3 1 0 0 :: Color3 Float)
 
+          bindBuffer ElementArrayBuffer $= Just (this ^. motorcarSurfaceNodeCuboidClippingIndices)
 
-    glBindFramebuffer(GL_FRAMEBUFFER, display->activeFrameBuffer());
+          wt <- nodeWorldTransform this
+          let modelMat = wt !*! scale identity (this ^. motorcarSurfaceNodeDimensions)
 
-    glDisableVertexAttribArray(h_aPosition_depthcomposite);
-    glDisableVertexAttribArray(h_aColorTexCoord_depthcomposite);
+          vps <- readIORef (display ^. displayViewpoints)
+          
+          Some surface <- readIORef (this ^. waylandSurfaceNodeSurface)
+          cmode <- wsClippingMode surface
+          dce <- wsDepthCompositingEnabled surface
 
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, 0);
+          when (cmode == Cuboid && dce) $ do
+            cullFace $= Just Front
+            forM_ vps $ \vp -> do
+              port <- readIORef (vp ^. viewPointViewPort)
+              setViewPort port
+              
+              projMatrix <- readIORef (vp ^. viewPointProjectionMatrix)
+              viewMatrix <- readIORef (vp ^. viewPointViewMatrix)
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, 0);
+              let mvp = (projMatrix !*! viewMatrix !*! modelMat) ^. m44GLmatrix
+              uniform uMVPMatrix $= mvp
+              let numElements = 36
+              drawElements Triangles numElements UnsignedInt nullPtr
+              
+            cullFace $= Just Back
 
-    glUseProgram(0);
+          if dce
+            then depthFunc $= Just Greater
+            else depthMask $= Enabled >> stencilMask $= 0
+            
+          forM_ vps $ \vp -> do
+            port <- readIORef (vp ^. viewPointViewPort)
+            setViewPort port
+            
+            projMatrix <- readIORef (vp ^. viewPointProjectionMatrix)
+            viewMatrix <- readIORef (vp ^. viewPointViewMatrix)
 
-    glDisable(GL_STENCIL_TEST); -}
+            let mvp = (projMatrix !*! viewMatrix !*! modelMat) ^. m44GLmatrix
+            uniform uMVPMatrix $= mvp
+            let numElements = 36
+            drawElements Triangles numElements UnsignedInt nullPtr
 
-    where
-      drawWindowBoundsStencil this display = _
-      {- void MotorcarSurfaceNode::drawWindowBoundsStencil(Display *display)
-{
-    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-    glDepthMask(GL_FALSE);
-    glStencilFunc(GL_NEVER, 1, 0xFF);
-    glStencilOp(GL_REPLACE, GL_KEEP, GL_KEEP);
+          depthFunc $= Just Less
+          vertexAttribArray aPosition $= Disabled
+          currentProgram $= Nothing
+          colorMask $= Color4 Enabled Enabled Enabled Enabled
+          depthMask $= Enabled
+          stencilMask $= 0
+          stencilFunc $= (Equal, 1, 0xff)
+          
+        drawFrameBufferContents this display = do
+          depthFunc $= Just Lequal
+          bindFramebuffer DrawFramebuffer $= defaultFramebufferObject
+          bindFramebuffer ReadFramebuffer $= display ^. displayScratchFrameBuffer
+          stencilMask $= 0xff
 
+          res <- displaySize display
+          let s0 = Position 0 0
+          let s1 = Position (fromIntegral $ res ^. _x - 1) (fromIntegral $ res ^. _y - 1)
+          blitFramebuffer s0 s1 s0 s1 [StencilBuffer'] Nearest
 
+          stencilMask $= 0
+          stencilFunc $= (Equal, 1, 0xff)
 
-    glUseProgram(m_clippingShader->handle());
+          currentProgram $= Just (this ^. motorcarSurfaceNodeDepthCompositedSurfaceBlitterShader)
+          
+          activeTexture $= TextureUnit 0
+          texture Texture2D $= Enabled
+          textureBinding Texture2D $= Just (display ^. displayScratchColorBufferTexture)
+          textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
 
-    glEnableVertexAttribArray(h_aPosition_clipping);
-    glBindBuffer(GL_ARRAY_BUFFER, m_cuboidClippingVertices);
-    glVertexAttribPointer(h_aPosition_clipping, 3, GL_FLOAT, GL_FALSE, 0, 0);
+          activeTexture $= TextureUnit 1
+          texture Texture2D $= Enabled
+          textureBinding Texture2D $= Just (display ^. displayScratchDepthBufferTexture)
+          textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
 
-    glUniform3f(h_uColor_clipping, 1.f, 0.f, 0.f);
+          let aPosition = this ^. motorcarSurfaceNodeAPositionBlit
+          let aTexCoord = this ^. motorcarSurfaceNodeATexCoordBlit
+          let surfaceCoords = this ^. motorcarSurfaceNodeSurfaceTextureCoords
 
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_cuboidClippingIndices);
+          vertexAttribArray aPosition $= Enabled
+          bindBuffer ArrayBuffer $= Just surfaceCoords
+          vertexAttribPointer aPosition $= (ToFloat, VertexArrayDescriptor 3 Float 0 nullPtr)
+          vertexAttribArray aTexCoord $= Enabled
+          bindBuffer ArrayBuffer $= Nothing
 
-    glm::mat4 modelMatrix = this->worldTransform() * glm::scale(glm::mat4(), this->dimensions());
+          vps <- readIORef (display ^. displayViewpoints)
+          forM_ vps $ \vp -> do
+            vport <- readIORef (vp ^. viewPointViewPort)
+            setViewPort vport
+            
+            vpOffset <- readIORef (vport ^. viewPortOffset)
+            vpSize <- readIORef (vport ^. viewPortSize)
+            let textureBlitCoords = [ vpOffset ^. _x, vpOffset ^. _y
+                                    , vpOffset ^. _x + vpSize ^. _x, vpOffset ^. _y
+                                    , vpOffset ^. _x + vpSize ^. _x, vpOffset ^. _y + vpSize  ^. _y
+                                    , vpOffset ^. _x, vpOffset ^. _y + vpSize ^. _y ] :: [Float]
 
-    int numElements = 36;
+            withArrayLen textureBlitCoords $ \len coordPtr ->
+              vertexAttribPointer aTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 coordPtr)
 
-    for(ViewPoint *viewpoint : display->viewpoints()){
-        viewpoint->viewport()->set();
-
-        glm::mat4 mvp = viewpoint->projectionMatrix() * viewpoint->viewMatrix() * modelMatrix;
-        glUniformMatrix4fv(h_uMVPMatrix_clipping, 1, GL_FALSE, glm::value_ptr(mvp));
-        glDrawElements(GL_TRIANGLES, numElements,GL_UNSIGNED_INT, 0);
-    }
-
-    glDisableVertexAttribArray(h_aPosition_clipping);
-
-    glUseProgram(0);
-
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    glDepthMask(GL_TRUE);
-
-
-    glStencilMask(0x00);
-
-    glStencilFunc(GL_EQUAL, 1, 0xFF);
-} -}
+            drawArrays TriangleFan 0 4
+     
       
 
 instance WaylandSurfaceNode MotorcarSurfaceNode where
@@ -501,5 +621,5 @@ newMotorcarSurfaceNode ws prt tf dims = do
     cuboidClippingInds = [0,2,1,1,2,3,4,5,6,5,7,6,0,1,4,1,5,4,2,6,3,3,6,7,0,4,2,2,4,6,1,3,5,3,7,5] :: [Word32]
     
 
-
-  
+sendTransformToClient :: MotorcarSurfaceNode -> IO ()
+sendTransformToClient = undefined
