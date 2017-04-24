@@ -10,9 +10,12 @@ default-extensions:
   - StandaloneDeriving
   - FlexibleInstances
   - FlexibleContexts
+  - MultiParamTypeClasses
+  - FunctionalDependencies
   - ScopedTypeVariables
   - RankNTypes
   - RecursiveDo
+  - DefaultSignatures
   - LambdaCase
   - ForeignFunctionInterface
   - QuasiQuotes
@@ -35,6 +38,7 @@ dependencies:
   - template-haskell
   - transformers
   - vector
+  - StateVar
 
 _cpp_options: &cpp_options
   include-dirs:

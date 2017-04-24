@@ -45,13 +45,20 @@ class OpenGLContext a where
 data MotorcarShader
   = ShaderMotorcarLine
   | ShaderMotorcarSurface
+  | ShaderDepthCompositedSurface
+  | ShaderDepthCompositedSurfaceBlitter
   deriving (Show, Eq, Ord, Enum)
 
 vertexSource, fragSource :: MotorcarShader -> ByteString
 vertexSource ShaderMotorcarLine =  $(embedFile "shaders/motorcarline.vert")
 vertexSource ShaderMotorcarSurface =  $(embedFile "shaders/motorcarsurface.vert")
+vertexSource ShaderDepthCompositedSurface = $(embedFile "shaders/depthcompositedsurface.vert")
+vertexSource ShaderDepthCompositedSurfaceBlitter = $(embedFile "shaders/depthcompositedsurfaceblitter.vert")
+
 fragSource ShaderMotorcarLine = $(embedFile "shaders/motorcarline.frag")
 fragSource ShaderMotorcarSurface =  $(embedFile "shaders/motorcarsurface.frag")
+fragSource ShaderDepthCompositedSurface = $(embedFile "shaders/depthcompositedsurface.frag")
+fragSource ShaderDepthCompositedSurfaceBlitter = $(embedFile "shaders/depthcompositedsurfaceblitter.frag")
 
 getProgram :: MotorcarShader -> IO Program
 getProgram shader = do

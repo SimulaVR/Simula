@@ -1,3 +1,3 @@
 module Simula.NewCompositor.SceneGraph.Wayland where
 
-data WaylandSurfaceNode
+class WaylandSurfaceNode a

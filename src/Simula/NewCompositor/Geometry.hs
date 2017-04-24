@@ -3,10 +3,15 @@ module Simula.NewCompositor.Geometry where
 import Control.Lens
 import Linear
 
+import {-# SOURCE #-} Simula.NewCompositor.SceneGraph.Wayland
+import Simula.NewCompositor.Types
+
 data Ray = Ray {
   _rayPos :: V3 Float,
   _rayDir :: V3 Float
   } deriving (Show, Eq, Ord)
+
+makeLenses ''Ray
 
 transformRay :: Ray -> M44 Float -> Ray
 transformRay (Ray p d) t = Ray (p' ^. _xyz) (d' ^. _xyz)
@@ -14,13 +19,15 @@ transformRay (Ray p d) t = Ray (p' ^. _xyz) (d' ^. _xyz)
     p' = t !* point p
     d' = t !* vector d
 
-drawRay = undefined
-
+solveRay :: Ray -> Float -> V3 Float
+solveRay (Ray p d) t = p ^+^ (t *^ d)
 
 data Plane = Plane {
   _planePos :: V3 Float,
   _planeNorm :: V3 Float
   } deriving (Show, Eq, Ord)
+
+makeLenses ''Plane
 
 intersectPlane :: Plane -> Ray -> Float
 intersectPlane (Plane pp pn) (Ray rp rd) = ((pp - rp) `dot` pn) / (rd `dot` pn)
@@ -28,6 +35,8 @@ intersectPlane (Plane pp pn) (Ray rp rd) = ((pp - rp) `dot` pn) / (rd `dot` pn)
 data AxisAlignedBox = AxisAlignedBox {
   _axisAlignedBoxDimensions :: V3 Float
   } deriving (Show, Eq, Ord)
+
+makeLenses ''AxisAlignedBox
 
 intersectBox :: AxisAlignedBox -> Ray -> Float -> Float -> Float
 intersectBox (AxisAlignedBox bd) (Ray rp rd) t0 t1
@@ -54,3 +63,14 @@ intersectBox (AxisAlignedBox bd) (Ray rp rd) t0 t1
 data Rectangle = Rectangle {
   _rectangleSize :: V2 Int
   } deriving (Show, Eq, Ord)
+
+makeLenses ''Rectangle
+
+data RaySurfaceIntersection = RaySurfaceIntersection {
+  _rsiSurfaceNode :: Some WaylandSurfaceNode,
+  _rsiSurfaceCoordinates :: V2 Float,
+  _rsiRay :: Ray,
+  _rsiT :: Float
+}
+
+makeLenses ''RaySurfaceIntersection

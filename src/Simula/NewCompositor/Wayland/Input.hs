@@ -18,7 +18,7 @@ data Pointer = Pointer {
   _pointerSeat :: Some Seat,
   _pointerLocalPosition :: IORef (Maybe (V2 Float)),
   _pointerFocus :: IORef (Maybe (Some WaylandSurface)),
-  _pointerCursorNode :: IORef (Maybe WaylandSurfaceNode),
+  _pointerCursorNode :: IORef (Maybe (Some WaylandSurfaceNode)),
   _pointerCursorHotspot :: IORef (Maybe (V2 Int))
   }
   

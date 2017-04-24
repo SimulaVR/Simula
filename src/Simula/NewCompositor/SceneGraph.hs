@@ -3,16 +3,13 @@ module Simula.NewCompositor.SceneGraph where
 import Control.Lens
 import Control.Monad
 import Control.Monad.Loops
-import Data.Bits
 import Data.IORef
 import Data.Typeable
-import Data.Word
 import Linear
 import Linear.OpenGL
 
 import Graphics.Rendering.OpenGL.GL hiding (normalize)
 import Foreign
-import Foreign.C
 
 import Simula.Wayland
 
@@ -21,6 +18,84 @@ import Simula.NewCompositor.Geometry
 import Simula.NewCompositor.OpenGL
 import {-# SOURCE #-} Simula.NewCompositor.WindowManager
 import Simula.NewCompositor.Types
+
+data BaseSceneGraphNode = BaseSceneGraphNode {
+  _graphNodeChildren :: IORef [Some SceneGraphNode],
+  _graphNodeParent :: IORef (Maybe (Some SceneGraphNode)),
+  _graphNodeTransform :: IORef (M44 Float)
+  } deriving (Eq, Typeable)
+
+--manually generated classy lenses due to TH constraint. probably going to be gone during refactor
+class HasBaseSceneGraphNode a where
+  baseSceneGraphNode :: Lens' a BaseSceneGraphNode
+  graphNodeChildren :: Lens' a (IORef [Some SceneGraphNode])
+  graphNodeChildren = baseSceneGraphNode . go
+    where go f (BaseSceneGraphNode c p t) = (\c' -> BaseSceneGraphNode c' p t) <$> f c
+    
+  graphNodeParent :: Lens' a (IORef (Maybe (Some SceneGraphNode)))
+  graphNodeParent = baseSceneGraphNode . go
+    where go f (BaseSceneGraphNode c p t) = (\p' -> BaseSceneGraphNode c p' t) <$> f p
+    
+  graphNodeTransform :: Lens' a (IORef (M44 Float))
+  graphNodeTransform = baseSceneGraphNode . go
+    where go f (BaseSceneGraphNode c p t) = (\t' -> BaseSceneGraphNode c p t') <$> f t
+
+data Scene = Scene {
+  _sceneBase :: BaseSceneGraphNode,
+  _sceneCurrentTimestamp :: IORef Int,
+  _sceneLastTimestamp :: IORef Int,
+  _sceneWindowManager :: IORef (Some WindowManager),
+  _sceneCompositor :: IORef (Some Compositor),
+  _sceneTrash :: IORef Scene,
+  _sceneDisplays :: IORef [Display],
+  _sceneActiveDisplay :: IORef (Maybe Display)
+  } deriving (Eq, Typeable)
+
+data ViewPoint = ViewPoint {
+  _viewPointBase :: BaseSceneGraphNode,
+  _viewPointDisplay :: IORef Display,
+  _viewPointNear :: IORef Float,
+  _viewPointFar :: IORef Float,
+  _viewPointViewPort :: IORef ViewPort,
+  _viewPointClientColorViewPort :: IORef ViewPort,
+  _viewPointClientDepthViewPort :: IORef ViewPort,
+  _viewPointCenterOfFocus :: IORef (V4 Float),
+  _viewPointCOFTransform :: IORef (M44 Float),
+  _viewPointBufferGeometry :: IORef Rectangle,
+  _viewPointViewMatrix :: IORef (M44 Float),
+  _viewPointProjectionMatrix :: IORef (M44 Float),
+  _viewPointViewProjectionMatrix :: IORef (M44 Float),
+  _viewPointProjectionMatrixOverriden :: IORef Bool,
+  _viewPointViewpointHandle :: IORef (Ptr C'motorcar_viewpoint),
+  _viewPointGlobal :: IORef (Ptr C'wl_global),
+  _viewPointResources :: IORef [Ptr C'wl_resource]
+  } deriving (Eq, Typeable)
+
+data Display = Display {
+  _displayBase :: BaseSceneGraphNode,
+  _displayGlContext :: IORef (Some OpenGLContext),
+  _displayDimensions :: V2 Float,
+  _displayScratchFrameBuffer :: FramebufferObject,
+  _displayScratchColorBufferTexture :: TextureObject,
+  _displayScratchDepthBufferTexture :: TextureObject,
+  _displayViewpoints :: IORef [ViewPoint]
+  } deriving (Eq, Typeable)
+
+data BaseDrawable = BaseDrawable {
+  _baseDrawableBase :: BaseSceneGraphNode,
+  _baseDrawableVisible :: IORef Bool
+  } deriving (Eq, Typeable)
+
+data WireframeNode = WireframeNode {
+  _wireframeNodeBase :: BaseDrawable,
+  _wireframeNodeLineColor :: IORef (Color3 Float),
+  _wireframeNodeSegments :: ForeignPtr Float,
+  _wireframeNodeNumSegments :: Int,
+  _wireframeNodeLineShader :: Program,
+  _wireframeNodeLineVertexCoordinates :: BufferObject,
+  _wireframeNodeAPositionLine :: AttribLocation,
+  _wireframeNodeUMVPMatrixLine, _wireframeNodeUColorLine :: UniformLocation
+  } deriving (Eq, Typeable)
 
 class (Eq a, Typeable a) => SceneGraphNode a where
   nodeOnFrameBegin :: a -> Maybe Scene -> IO ()
@@ -36,36 +111,100 @@ class (Eq a, Typeable a) => SceneGraphNode a where
   nodeOnWorldTransformChange _ _ = return ()
 
   nodeParent :: a -> IO (Maybe (Some SceneGraphNode))
+  default nodeParent :: HasBaseSceneGraphNode a  => a -> IO (Maybe (Some SceneGraphNode))
+  nodeParent = views graphNodeParent readIORef
+  
   setNodeParent' :: a -> Maybe (Some SceneGraphNode) -> IO ()
+  default setNodeParent' :: HasBaseSceneGraphNode a => a -> Maybe (Some SceneGraphNode) -> IO ()
+  setNodeParent' = views graphNodeParent writeIORef
+  
   nodeChildren :: a -> IORef [Some SceneGraphNode]
+  default nodeChildren :: HasBaseSceneGraphNode a  => a -> IORef [Some SceneGraphNode]
+  nodeChildren = view graphNodeChildren
+  
+  nodeTransform :: a -> IO (M44 Float)
+  default nodeTransform :: HasBaseSceneGraphNode a => a -> IO (M44 Float)
+  nodeTransform = views graphNodeTransform readIORef
+  
+  setNodeTransform' :: a -> M44 Float -> IO ()
+  default setNodeTransform' :: HasBaseSceneGraphNode a => a -> M44 Float -> IO ()
+  setNodeTransform' = views graphNodeTransform writeIORef
+  
   nodeScene :: a -> IO (Maybe Scene)
   nodeScene this = nodeParent this >>= \case
     Just (Some prt) -> nodeScene prt
     Nothing -> return Nothing
-
-  nodeTransform :: a -> IO (M44 Float)
-  setNodeTransform' :: a -> M44 Float -> IO ()
   
   isSurfaceNode :: a -> Bool
   isSurfaceNode _ = False
 
-  {- virtual Geometry::RaySurfaceIntersection *intersectWithSurfaces(const Geometry::Ray &ray); -}
-  {- Geometry::RaySurfaceIntersection *SceneGraphNode::intersectWithSurfaces(const Geometry::Ray &ray)
-{
-    Geometry::RaySurfaceIntersection *closestIntersection = NULL, *currentIntersection;
-    Geometry::Ray transformedRay = ray.transform(inverseTransform());
-    for (SceneGraphNode *child : m_childNodes) {
-        if (child != NULL){
-            currentIntersection = child->intersectWithSurfaces(transformedRay);
-            if(closestIntersection == NULL || (currentIntersection != NULL && currentIntersection->t < closestIntersection->t)){
-                delete closestIntersection;
-                closestIntersection = currentIntersection;
-            }
-        }
-    }
-    return closestIntersection;
-}
- -}
+  nodeIntersectWithSurfaces :: a -> Ray -> IO (Maybe RaySurfaceIntersection)
+  default nodeIntersectWithSurfaces :: HasBaseSceneGraphNode a => a -> Ray -> IO (Maybe RaySurfaceIntersection)
+  nodeIntersectWithSurfaces = defaultNodeIntersectWithSurfaces
+      
+
+defaultNodeIntersectWithSurfaces :: (SceneGraphNode a, HasBaseSceneGraphNode a) => a -> Ray -> IO (Maybe RaySurfaceIntersection)
+defaultNodeIntersectWithSurfaces this ray = do
+  tf <- nodeTransform this
+  let tfRay = transformRay ray (inv44 tf)
+  cs <- readIORef $ nodeChildren this
+  foldM (findMinIntersection tfRay) Nothing cs
+
+  where
+    findMinIntersection :: Ray -> Maybe RaySurfaceIntersection -> Some SceneGraphNode -> IO (Maybe RaySurfaceIntersection)
+    findMinIntersection tfRay Nothing (Some node) = nodeIntersectWithSurfaces node tfRay
+    findMinIntersection tfRay prev@(Just closest) (Some node) = do
+      current <- nodeIntersectWithSurfaces node tfRay
+      case current of
+        Just current | current ^. rsiT < closest ^. rsiT -> return $ Just current
+        _ -> return prev
+
+class SceneGraphNode a => PhysicalNode a
+
+class SceneGraphNode a => VirtualNode a where
+  nodeAnimate :: a -> Int -> IO ()
+  nodeAnimate _ _ = return ()
+
+makeClassy ''BaseDrawable
+
+class VirtualNode a => Drawable a where
+  drawableDraw :: a -> Scene -> Display -> IO ()
+  drawableVisible :: a -> IO Bool
+  default drawableVisible :: HasBaseDrawable a => a -> IO Bool
+  drawableVisible = views baseDrawableVisible readIORef
+
+  setDrawableVisible :: a -> Bool -> IO ()
+  default setDrawableVisible :: HasBaseDrawable a => a -> Bool -> IO ()
+  setDrawableVisible = views baseDrawableVisible writeIORef
+
+-- collate all data structures at the top for proper TH splice scope
+makeClassy ''Scene
+makeClassy ''ViewPoint
+makeClassy ''Display
+makeClassy ''WireframeNode
+
+-- classy lens instances
+instance HasBaseSceneGraphNode BaseDrawable where
+  baseSceneGraphNode = baseDrawableBase
+
+instance HasBaseSceneGraphNode Scene where
+  baseSceneGraphNode = sceneBase
+
+instance HasBaseSceneGraphNode ViewPoint where
+  baseSceneGraphNode = viewPointBase
+
+instance HasBaseSceneGraphNode Display where
+  baseSceneGraphNode = displayBase
+
+instance HasBaseSceneGraphNode WireframeNode where
+  baseSceneGraphNode = baseDrawable.baseSceneGraphNode
+
+instance HasBaseDrawable WireframeNode where
+  baseDrawable = wireframeNodeBase
+
+
+
+  
 
 setNodeParent :: SceneGraphNode a => a -> Maybe (Some SceneGraphNode) -> IO ()
 setNodeParent this Nothing = setNodeParent' this Nothing
@@ -100,56 +239,14 @@ nodeMapOntoSubtree this func scene = do
   func (Some this) scene
   readIORef (nodeChildren this) >>= mapM_ (\(Some child) -> nodeMapOntoSubtree child func scene)
 
-data BaseSceneGraphNode = BaseSceneGraphNode {
-  _graphNodeChildren :: IORef [Some SceneGraphNode],
-  _graphNodeParent :: IORef (Maybe (Some SceneGraphNode)),
-  _graphNodeTransform :: IORef (M44 Float)
-  }
-  deriving (Eq, Typeable)
-
-baseNodeParent :: BaseSceneGraphNode -> IO (Maybe (Some SceneGraphNode))
-baseNodeParent = readIORef . _graphNodeParent
-
-setBaseNodeParent :: BaseSceneGraphNode -> Maybe (Some SceneGraphNode) -> IO ()
-setBaseNodeParent = writeIORef . _graphNodeParent
-
-baseNodeTransform :: BaseSceneGraphNode -> IO (M44 Float)
-baseNodeTransform = readIORef . _graphNodeTransform
-
-setBaseNodeTransform :: BaseSceneGraphNode -> M44 Float -> IO ()
-setBaseNodeTransform = writeIORef . _graphNodeTransform
-
 newBaseNode :: Maybe (Some SceneGraphNode) -> M44 Float -> IO BaseSceneGraphNode
-newBaseNode parent tf = BaseSceneGraphNode <$> newIORef [] <*> newIORef parent <*> newIORef tf
-
-class SceneGraphNode a => PhysicalNode a
-
-class SceneGraphNode a => VirtualNode a where
-  nodeAnimate :: a -> Int -> IO ()
-  nodeAnimate _ _ = return ()
+newBaseNode prt tf = BaseSceneGraphNode <$> newIORef [] <*> newIORef prt <*> newIORef tf
 
 virtualNodeOnFrameBegin :: VirtualNode a => a -> Maybe Scene -> IO ()
 virtualNodeOnFrameBegin this (Just scene) = sceneLatestTimestampChange scene >>= nodeAnimate this
 virtualNodeOnFrameBegin _ _ = fail "Scene is Nothing"
 
-data Scene = Scene {
-  _sceneBase :: BaseSceneGraphNode,
-  _sceneCurrentTimestamp :: IORef Int,
-  _sceneLastTimestamp :: IORef Int,
-  _sceneWindowManager :: IORef (Some WindowManager),
-  _sceneCompositor :: IORef (Some Compositor),
-  _sceneTrash :: IORef Scene,
-  _sceneDisplays :: IORef [Display],
-  _sceneActiveDisplay :: IORef (Maybe Display)
-  }
-  deriving (Eq, Typeable)
-
-instance SceneGraphNode Scene where
-  nodeParent = baseNodeParent . _sceneBase
-  setNodeParent' = setBaseNodeParent . _sceneBase
-  nodeTransform = baseNodeTransform . _sceneBase
-  setNodeTransform' = setBaseNodeTransform . _sceneBase
-  nodeChildren = _graphNodeChildren . _sceneBase
+instance SceneGraphNode Scene
 
 setSceneTimestamp :: Scene -> Int -> IO ()
 setSceneTimestamp this ts = do
@@ -185,40 +282,11 @@ sceneFinishFrame this = do
 
 sceneLatestTimestampChange :: Scene -> IO Int
 sceneLatestTimestampChange this = do
-  last <- readIORef $ _sceneLastTimestamp this
-  curr <- readIORef $ _sceneCurrentTimestamp this
+  last <- readIORef $ this ^. sceneLastTimestamp 
+  curr <- readIORef $ this ^. sceneCurrentTimestamp
   return $ curr - last
 
-data C'motorcar_viewpoint
-
-
-data ViewPoint = ViewPoint {
-  _viewPointBase :: BaseSceneGraphNode,
-  _viewPointDisplay :: IORef Display,
-  _viewPointNear :: IORef Float,
-  _viewPointFar :: IORef Float,
-  _viewPointViewPort :: IORef ViewPort,
-  _viewPointClientColorViewPort :: IORef ViewPort,
-  _viewPointClientDepthViewPort :: IORef ViewPort,
-  _viewPointCenterOfFocus :: IORef (V4 Float),
-  _viewPointCOFTransform :: IORef (M44 Float),
-  _viewPointBufferGeometry :: IORef Rectangle,
-  _viewPointViewMatrix :: IORef (M44 Float),
-  _viewPointProjectionMatrix :: IORef (M44 Float),
-  _viewPointViewProjectionMatrix :: IORef (M44 Float),
-  _viewPointProjectionMatrixOverriden :: IORef Bool,
-  _viewPointViewpointHandle :: IORef (Ptr C'motorcar_viewpoint),
-  _viewPointGlobal :: IORef (Ptr C'wl_global),
-  _viewPointResources :: IORef [Ptr C'wl_resource]
-  } deriving (Eq, Typeable)
-
-instance SceneGraphNode ViewPoint where
-  nodeParent = baseNodeParent . _viewPointBase
-  setNodeParent' = setBaseNodeParent . _viewPointBase
-  nodeTransform = baseNodeTransform . _viewPointBase
-  setNodeTransform' = setBaseNodeTransform . _viewPointBase
-  nodeChildren = _graphNodeChildren . _viewPointBase
-
+instance SceneGraphNode ViewPoint
 instance VirtualNode ViewPoint
 
 viewPointUpdateViewMatrix :: ViewPoint -> IO ()
@@ -268,22 +336,7 @@ viewPointFov this dp = do
   let dims = _displayDimensions dp
   return $ 2 * atan ((dims ^. _y)/(2*eyeToScreenDis))
 
-data Display = Display {
-  _displayBase :: BaseSceneGraphNode,
-  _displayGlContext :: IORef (Some OpenGLContext),
-  _displayDimensions :: V2 Float,
-  _displayScratchFrameBuffer :: FramebufferObject,
-  _displayScratchColorBufferTexture :: TextureObject,
-  _displayScratchDepthBufferTexture :: TextureObject,
-  _displayViewpoints :: IORef [ViewPoint]
-  } deriving (Eq, Typeable)
-
-instance SceneGraphNode Display where
-  nodeParent = baseNodeParent . _displayBase
-  setNodeParent' = setBaseNodeParent . _displayBase
-  nodeTransform = baseNodeTransform . _displayBase
-  setNodeTransform' = setBaseNodeTransform . _displayBase
-  nodeChildren = _graphNodeChildren . _displayBase
+instance SceneGraphNode Display
 
 newDisplay :: (PhysicalNode a, OpenGLContext b) => b -> V2 Float -> a -> M44 Float -> IO Display
 newDisplay glctx dims parent tf = do
@@ -370,12 +423,6 @@ displayPrepareForDraw this = do
 displayFinishDraw :: Display -> IO ()
 displayFinishDraw _ = return ()
 
-
-class VirtualNode a => Drawable a where
-  drawableDraw :: a -> Scene -> Display -> IO ()
-  drawableVisible :: a -> IO Bool
-  setDrawableVisible :: a -> Bool -> IO ()
-
 drawableOnFrameDraw :: Drawable a => a -> Maybe Scene -> IO ()
 drawableOnFrameDraw this (Just scene) = do
   visible <- drawableVisible this
@@ -384,47 +431,16 @@ drawableOnFrameDraw this (Just scene) = do
   when visible $ drawableDraw this scene display
 drawableOnFrameDraw _ _ = return ()
 
-data BaseDrawable = BaseDrawable {
-  _baseDrawableBase :: BaseSceneGraphNode,
-  _baseDrawableVisible :: IORef Bool
-  } deriving (Eq, Typeable)
-
 newBaseDrawable :: Maybe (Some SceneGraphNode) -> M44 Float -> IO BaseDrawable
 newBaseDrawable parent tf = BaseDrawable <$> newBaseNode parent tf <*> newIORef True
 
-baseDrawableVisible :: BaseDrawable -> IO Bool
-baseDrawableVisible = readIORef . _baseDrawableVisible
-
-setBaseDrawableVisible :: BaseDrawable -> Bool -> IO ()
-setBaseDrawableVisible = writeIORef . _baseDrawableVisible
-
-data WireframeNode = WireframeNode {
-  _wireframeNodeBase :: BaseDrawable,
-  _wireframeNodeLineColor :: IORef (Color3 Float),
-  _wireframeNodeSegments :: ForeignPtr Float,
-  _wireframeNodeNumSegments :: Int,
-  _wireframeNodeLineShader :: Program,
-  _wireframeNodeLineVertexCoordinates :: BufferObject,
-  _wireframeNodeAPositionLine :: AttribLocation,
-  _wireframeNodeUMVPMatrixLine, _wireframeNodeUColorLine :: UniformLocation
-  } deriving (Eq, Typeable)
-
 instance SceneGraphNode WireframeNode where
-  nodeParent = baseNodeParent . _baseDrawableBase . _wireframeNodeBase
-  setNodeParent' = setBaseNodeParent . _baseDrawableBase . _wireframeNodeBase
-  nodeTransform = baseNodeTransform . _baseDrawableBase . _wireframeNodeBase
-  setNodeTransform' = setBaseNodeTransform . _baseDrawableBase . _wireframeNodeBase
-  nodeChildren = _graphNodeChildren . _baseDrawableBase . _wireframeNodeBase
-
   nodeOnFrameDraw = drawableOnFrameDraw
 
 instance VirtualNode WireframeNode
 
 instance Drawable WireframeNode where
-  drawableVisible = baseDrawableVisible . _wireframeNodeBase
-  setDrawableVisible = setBaseDrawableVisible . _wireframeNodeBase
-
-  drawableDraw this scene display = withForeignPtr (_wireframeNodeSegments this) $ \segPtr -> do
+  drawableDraw this _ display = withForeignPtr (_wireframeNodeSegments this) $ \segPtr -> do
     currentProgram $= Just (_wireframeNodeLineShader this)
     vertexAttribArray (_wireframeNodeAPositionLine this) $= Enabled
     bindBuffer ArrayBuffer $= Just (_wireframeNodeLineVertexCoordinates this)
@@ -464,5 +480,3 @@ newWireframeNode segs lineColor parent transform = do
   uMVP <- get $ uniformLocation prog "uMVPMatrix"
   uColor <- get $ uniformLocation prog "uColor"
   return $ WireframeNode drawable lineColorRef segArray numSegments prog coordsBuffer aPos uMVP uColor
-
-
