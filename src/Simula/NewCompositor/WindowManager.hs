@@ -11,8 +11,8 @@ import Simula.NewCompositor.Types
 
 
 class WindowManager a where
-  wmCreateSurface :: WaylandSurface ws => a -> IORef ws -> IO (Some WaylandSurfaceNode)
-  wmMapSurface :: WaylandSurface ws => a -> ws-> WaylandSurfaceType -> IO (Some WaylandSurfaceNode)
+  wmCreateSurface :: WaylandSurface ws => a -> ws -> IO (Some WaylandSurfaceNode)
+  wmMapSurface :: WaylandSurface ws => a -> ws -> WaylandSurfaceType -> IO (Some WaylandSurfaceNode)
   wmUnmapSurface :: WaylandSurface ws => a -> ws -> IO ()
   wmSendEvent :: Event ev => a -> ev -> IO ()
 

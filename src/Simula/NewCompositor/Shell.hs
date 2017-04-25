@@ -1,103 +1,88 @@
 module Simula.NewCompositor.Shell where
 
+import Control.Lens
 import Data.IORef
+import Data.Typeable
 import Foreign
 import Foreign.C
 
-import Simula.Wayland
+import Simula.MotorcarServer
+import Simula.WaylandServer
 
+import Simula.NewCompositor.Compositor
 import Simula.NewCompositor.SceneGraph
+import Simula.NewCompositor.Types
+import Simula.NewCompositor.Wayland.Output
+import Simula.NewCompositor.WindowManager
+import Simula.NewCompositor.Utils
+
+
 
 data Shell = Shell {
   _shellScene :: IORef Scene,
-  _shellDisplay :: IORef (Ptr C'wl_display)
+  _shellDisplay :: IORef WlDisplay,
+  _shellGlobal :: WlGlobal,
+  _shellPtr :: StablePtr Shell,
+  _shellBindFunc :: FunPtr GlobalBindFunc
   }
 
-newShell :: IORef Scene -> IO Shell
-newShell = undefined
-{-
-Shell::Shell(Scene *scene)
-    :m_scene(scene)
-{
-    m_display = scene->compositor()->wlDisplay();
-    wl_global_create(m_display,
-                     &motorcar_shell_interface,
-                      motorcar_shell_interface.version,
-                     this,
-                     Shell::bind_func);
-}
--}
+makeLenses ''Shell
 
-bindFunc :: Ptr C'wl_client -> Ptr () -> CUInt -> CUInt -> IO ()
-bindFunc = undefined
-{-
-    struct wl_resource *resource = wl_resource_create(client, &motorcar_shell_interface, version, id);
-    wl_resource_set_implementation(resource, &motorcarShellInterface, data, 0);
--}
+newShell :: Scene -> IO Shell
+newShell scene = do
+  Some comp <- readIORef (scene ^. sceneCompositor)
+  let dp = compositorWlDisplay comp
+  rec shell <- Shell <$> newIORef scene <*> newIORef dp
+        <*> pure global <*> pure shellPtr <*> pure bindFuncPtr
+      shellPtr <- newStablePtr shell
 
+      shellIf <- motorcarShellInterface
+      shellVer <- motorcarShellVersion
 
+      bindFuncPtr <- createGlobalBindFuncPtr bindFunc
+  
+      global <- wl_global_create dp shellIf shellVer (castStablePtrToPtr shellPtr) bindFuncPtr
+  return shell
 
-{-
-void get_motorcar_surface(struct wl_client *client,
-                           struct wl_resource *resource,
-                           uint32_t id,
-                           struct wl_resource *surface_resource,
-                          uint32_t clipping_mode,
-                          uint32_t enable_depth_compositing)
-{
-    Shell *shell = static_cast<Shell*>(resource->data);
+  where
+    bindFunc client shell version ident = do
+      shellIf <- motorcarShellInterface
+      resource <- wl_resource_create client shellIf (fromIntegral version) (fromIntegral ident)
+      sFuncPtr <- createGetMotorcarSurfaceFuncPtr getMotorcarSurface
+      sFuncPtrPtr <- castPtr <$> new sFuncPtr
+      rec dFuncPtr <- createResourceDestroyFuncPtr (destroyFunc dFuncPtr sFuncPtrPtr)
+      wl_resource_set_implementation resource sFuncPtrPtr shell dFuncPtr
 
-    WaylandSurface *surface = shell->scene()->compositor()->getSurfaceFromResource(surface_resource);
+    destroyFunc dFuncPtr sFuncPtrPtr _ = do
+      peek (castPtr sFuncPtrPtr) >>= freeHaskellFunPtr 
+      freeHaskellFunPtr dFuncPtr
 
-    WaylandSurface::ClippingMode clippingMode;
+    getMotorcarSurface client resource ident surfaceResource clipmode dce = do
+      shellPtr <- castPtrToStablePtr <$> wlResourceData resource
+      shell <- deRefStablePtr shellPtr
+      
+      scene <- readIORef (shell ^. shellScene)
+      Some comp <- readIORef (scene ^. sceneCompositor)
+      Some surface <- compositorGetSurfaceFromResource comp surfaceResource
 
-    switch(clipping_mode){
-    case(MOTORCAR_SURFACE_CLIPPING_MODE_CUBOID):
-        clippingMode = WaylandSurface::ClippingMode::CUBOID;
-        break;
-    case(MOTORCAR_SURFACE_CLIPPING_MODE_PORTAL):
-        clippingMode = WaylandSurface::ClippingMode::PORTAL;
-        break;
-    default:
-        clippingMode = WaylandSurface::ClippingMode::CUBOID;
-        break;
-    }
+      let mode = case toEnum (fromIntegral clipmode) of
+                   MotorcarCuboid -> Cuboid
+                   MotorcarPortal -> Portal
 
-    //WaylandSurfaceNode * surfaceNode = shell->scene()->windowManager()->mapSurface(surface, type);
+      setWsClippingMode surface mode
+      setWsIsMotorcarSurface surface True
+      setWsDepthCompositingEnabled surface (toBool dce)
+      Some wm <- readIORef (scene ^. sceneWindowManager)
 
-    surface->setClippingMode(clippingMode);
-    surface->setIsMotorcarSurface(true);
-    surface->setDepthCompositingEnabled(enable_depth_compositing!=0);
+      Some wsn <- wmCreateSurface wm surface
+      --TODO this is silly, refactor
+      case cast wsn of
+        Just msn -> configureResource msn client ident
+        Nothing -> ioError $ userError "wmCreateSurface didn't return MotorcarSurface"
+      
+      
+destroyShell :: Shell -> IO ()
+destroyShell shell = do
+  freeHaskellFunPtr (shell ^. shellBindFunc)
+  freeStablePtr (shell ^. shellPtr)
 
-    std::cout << "depth compositing enabled = " << surface->depthCompositingEnabled() << std::endl;
-
-
-    MotorcarSurfaceNode *mcsn = static_cast<MotorcarSurfaceNode *> (shell->scene()->windowManager()->createSurface(surface));
-
-    mcsn->configureResource(client, id);
-
-
-}
-
-
-const static struct motorcar_shell_interface motorcarShellInterface = {
-    get_motorcar_surface
-};
-
-Shell::Shell(Scene *scene)
-    :m_scene(scene)
-{
-    m_display = scene->compositor()->wlDisplay();
-
-    struct wl_global *global =0;
-
-    global = wl_global_create(m_display,
-                     &motorcar_shell_interface,
-                      motorcar_shell_interface.version,
-                     this,
-                     Shell::bind_func);
-
-    std::cout << "creating global shell object" <<std::endl;
-    //struct motorcar_shell_interface *shell =
-}
--}

@@ -11,7 +11,7 @@ import Linear.OpenGL
 import Graphics.Rendering.OpenGL.GL hiding (normalize)
 import Foreign
 
-import Simula.Wayland
+import Simula.WaylandServer
 
 import {-# SOURCE #-} Simula.NewCompositor.Compositor
 import Simula.NewCompositor.Geometry
@@ -66,9 +66,8 @@ data ViewPoint = ViewPoint {
   _viewPointProjectionMatrix :: IORef (M44 Float),
   _viewPointViewProjectionMatrix :: IORef (M44 Float),
   _viewPointProjectionMatrixOverriden :: IORef Bool,
-  _viewPointViewpointHandle :: IORef (Ptr C'motorcar_viewpoint),
-  _viewPointGlobal :: IORef (Ptr C'wl_global),
-  _viewPointResources :: IORef [Ptr C'wl_resource]
+  _viewPointGlobal ::  WlGlobal,
+  _viewPointResources :: IORef [WlResource]
   } deriving (Eq, Typeable)
 
 data Display = Display {

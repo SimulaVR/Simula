@@ -15,7 +15,7 @@
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: lts-8.9
+resolver: lts-8.12
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -37,12 +37,9 @@ resolver: lts-8.9
 # will not be run. This is useful for tweaking upstream packages.
 packages:
 - '.'
-- simula-wayland
-- simula-motorcar
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
-extra-deps:
-- 'linear-opengl-0.3.0.0'
+extra-deps: []
 
 # Override default flag values for local packages and extra-deps
 flags: {}
@@ -50,7 +47,6 @@ flags: {}
 # Extra package databases containing global packages
 extra-package-dbs: []
 
-allow-newer: true
 # Control whether we use the GHC we find on the path
 # system-ghc: true
 #

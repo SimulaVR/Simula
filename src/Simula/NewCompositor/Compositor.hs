@@ -3,7 +3,7 @@ module Simula.NewCompositor.Compositor where
 import Data.IORef
 import Foreign
 
-import Simula.Wayland
+import Simula.WaylandServer
 
 import Simula.NewCompositor.SceneGraph
 import Simula.NewCompositor.OpenGL
@@ -23,6 +23,6 @@ class Compositor a where
   compositorDisplay :: a -> IO Display
   setCompositorDisplay :: a -> Display -> IO ()
 
-  compositorWlDisplay :: a -> Ptr C'wl_display
+  compositorWlDisplay :: a -> WlDisplay
 
-  compositorGetSurfaceFromResource :: a -> Ptr C'wl_resource -> IO (Some WaylandSurface)
+  compositorGetSurfaceFromResource :: a -> WlResource -> IO (Some WaylandSurface)

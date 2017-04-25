@@ -623,3 +623,13 @@ newMotorcarSurfaceNode ws prt tf dims = do
 
 sendTransformToClient :: MotorcarSurfaceNode -> IO ()
 sendTransformToClient = undefined
+
+configureResource :: MotorcarSurfaceNode -> WlClient -> CUInt -> IO ()
+configureResource this client ident = do
+  undefined
+  {-
+    m_resource = wl_resource_create(client, &motorcar_surface_interface, motorcar_surface_interface.version, id);
+    wl_resource_set_implementation(m_resource, &motorcarSurfaceInterface, this, 0);
+    sendTransformToClient();
+    requestSize3D(m_dimensions);
+}-}

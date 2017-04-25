@@ -11,3 +11,5 @@ cabal.sandbox.config
 *.dyn_hi
 app/*.cpp
 src/**/*.cpp
+src/**/*.c
+*.so

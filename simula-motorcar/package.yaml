@@ -1,0 +1,45 @@
+name: simula-motorcar
+version: 0.0.0
+synopsis: Haskell bindings for Wayland
+author: David Kraeutmann <kane@kane.cx>
+build-tools: 
+  - c2hs
+
+default-extensions:
+  - GADTs
+  - ConstraintKinds
+  - KindSignatures
+  - StandaloneDeriving
+  - FlexibleInstances
+  - FlexibleContexts
+  - MultiParamTypeClasses
+  - FunctionalDependencies
+  - ScopedTypeVariables
+  - RankNTypes
+  - RecursiveDo
+  - DefaultSignatures
+  - PatternSynonyms
+  - LambdaCase
+  - ForeignFunctionInterface
+  - QuasiQuotes
+  - TemplateHaskell
+  - OverloadedStrings
+
+dependencies:
+  - base >= 4.9 && < 5
+  - containers
+  - inline-c
+  - simula-wayland
+
+
+
+library:
+  source-dirs: src
+  include-dirs:
+    - cbits
+  c-sources:
+    - cbits/*.c
+
+  exposed-modules:
+    - Simula.MotorcarServer
+
