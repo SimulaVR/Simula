@@ -15,44 +15,52 @@ import qualified Language.C.Types as C
 
 {#typedef size_t CSize#}
 
-{#pointer *wl_array as WlArray_ foreign finalizer wl_array_release newtype #}
+{#pointer *wl_array as WlArray  newtype #}
 {#pointer *wl_resource as WlResource newtype #}
 {#pointer *wl_client as WlClient newtype #}
 {#pointer *wl_display as WlDisplay newtype #}
 {#pointer *wl_interface as WlInterface newtype #}
-{#pointer *wl_global as WlGlobal foreign finalizer wl_global_destroy newtype #}
+{#pointer *wl_global as WlGlobal newtype #}
 
+deriving instance Eq WlArray
 deriving instance Eq WlGlobal
+deriving instance Eq WlResource
 
-{#fun wl_array_init { `WlArray_' } -> `()' #}
 
-newtype WlArray a = WlArray WlArray_
+{#fun wl_array_init { `WlArray' } -> `()' #}
+{#fun wl_array_release { `WlArray' } -> `()' #}
 
-newWlArray :: IO (WlArray a)
+newWlArray :: IO WlArray
 newWlArray = do
-  ptr <- mallocBytes {#sizeof wl_array#} >>= newForeignPtr wl_array_release
-  let array = WlArray_ ptr
+  ptr <- mallocBytes {#sizeof wl_array#}
+  let array = WlArray ptr
   wl_array_init array
-  return $ WlArray array
+  return array
 
-{#fun wl_array_add { `WlArray_', `CSize' } -> `Ptr ()' #}
+{#fun wl_array_add { `WlArray', `CSize' } -> `Ptr ()' #}
 
-wlArrayAdd :: Int -> WlArray a -> IO ()
-wlArrayAdd size (WlArray arr) = do
+wlArrayAdd :: Int -> WlArray -> IO ()
+wlArrayAdd size arr = do
   res <- wl_array_add arr (fromIntegral size)
   if (res == nullPtr)
     then ioError $ userError "wl_array_add returned NULL"
     else return ()
 
-wlArrayOverwrite :: Storable a => [a] -> WlArray a -> IO ()
-wlArrayOverwrite xs arr@(WlArray arr_)
-  = withArrayLen xs $ \len xsPtr -> withWlArray_ arr_ $ \arrPtr -> do
-    size <- {#get wl_array->size#} arrPtr
-    let diff = (len - fromIntegral size)
+wlArrayOverwrite :: Storable a => WlArray -> a -> IO ()
+wlArrayOverwrite arr x
+  = with x $ \xPtr -> do
+    size <- wlArraySize arr
+    let diff = (sizeOf x - fromIntegral size)
     when (diff > 0) $ wlArrayAdd diff arr
-    datPtr <- castPtr <$> {#get wl_array->data#} arrPtr
-    copyArray datPtr xsPtr len
+    datPtr <- castPtr <$> wlArrayData arr
+    copyBytes datPtr xPtr (sizeOf x)
 
+wlArrayData :: WlArray -> IO (Ptr a)
+wlArrayData = {#get wl_array->data#} >=> (return . castPtr)
+
+wlArraySize :: WlArray -> IO CULong
+wlArraySize = {#get wl_array->size#} 
+  
 
 type GlobalBindFunc = WlClient -> Ptr () -> CUInt -> CUInt -> IO ()
 
@@ -61,6 +69,7 @@ foreign import ccall "wrapper" createGlobalBindFuncPtr :: GlobalBindFunc -> IO (
 {#fun wl_global_create {`WlDisplay', `WlInterface', `Int', `Ptr ()', id `FunPtr GlobalBindFunc'} -> `WlGlobal' #}
 
 {#fun wl_resource_create {`WlClient', `WlInterface', `Int', `Word32'} -> `WlResource' #}
+{#fun wl_resource_destroy { `WlResource' } -> `()' #}
 
 type ResourceDestroyFunc = WlResource -> IO ()
 foreign import ccall "wrapper" createResourceDestroyFuncPtr :: ResourceDestroyFunc -> IO (FunPtr ResourceDestroyFunc)

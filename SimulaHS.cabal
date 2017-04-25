@@ -15,9 +15,9 @@ library
       src
   default-extensions: GADTs ConstraintKinds KindSignatures StandaloneDeriving FlexibleInstances FlexibleContexts MultiParamTypeClasses FunctionalDependencies ScopedTypeVariables RankNTypes RecursiveDo DefaultSignatures PatternSynonyms LambdaCase ForeignFunctionInterface QuasiQuotes TemplateHaskell OverloadedStrings
   include-dirs:
-      simula-motorcar/cbits
+      simula-wayland/cbits
   c-sources:
-      simula-motorcar/cbits/motorcar-wayland-extensions.c
+      simula-wayland/cbits/motorcar-wayland-extensions.c
       src/Simula/NewCompositor/Shell.c
       src/Simula/NewCompositor/Utils.c
   build-depends:
@@ -39,7 +39,6 @@ library
     , vector
     , StateVar
     , simula-wayland
-    , simula-motorcar
   exposed-modules:
       Simula.NewCompositor.SceneGraph
       Simula.NewCompositor.SceneGraph.Wayland

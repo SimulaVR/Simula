@@ -13,6 +13,10 @@ import Linear.OpenGL
 import Graphics.Rendering.OpenGL hiding (scale, Plane)
 import Graphics.GL (glEnable, glDisable, pattern GL_DEPTH_TEST) -- workaround, probably a user error
 import Foreign
+import Foreign.C
+
+import Simula.WaylandServer
+import Simula.MotorcarServer
 
 import Simula.NewCompositor.Geometry
 import Simula.NewCompositor.Utils
@@ -59,7 +63,12 @@ data MotorcarSurfaceNode = MotorcarSurfaceNode {
   _motorcarSurfaceNodeUMVPMatrixClipping :: UniformLocation,
   _motorcarSurfaceNodeUColorClipping :: UniformLocation,
 
-  _motorcarSurfaceNodeDimensions :: V3 Float
+  _motorcarSurfaceNodeDimensions :: IORef (V3 Float),
+
+  _motorcarSurfaceNodeResource :: IORef (Maybe WlResource),
+  _motorcarSurfaceNodeDimensionsArray :: WlArray,
+  _motorcarSurfaceNodeTransformArray :: WlArray,
+  _motorcarSurfaceNodePtr :: StablePtr MotorcarSurfaceNode
   } deriving (Eq, Typeable)
 
 
@@ -333,7 +342,8 @@ instance Drawable MotorcarSurfaceNode where
           bindBuffer ElementArrayBuffer $= Just (this ^. motorcarSurfaceNodeCuboidClippingIndices)
 
           wt <- nodeWorldTransform this
-          let modelMat = wt !*! scale identity (this ^. motorcarSurfaceNodeDimensions)
+          dims <- readIORef (this ^. motorcarSurfaceNodeDimensions)
+          let modelMat = wt !*! scale identity dims
 
           vps <- readIORef (display ^. displayViewpoints)
           forM_ vps $ \vp -> do
@@ -376,7 +386,8 @@ instance Drawable MotorcarSurfaceNode where
           bindBuffer ElementArrayBuffer $= Just (this ^. motorcarSurfaceNodeCuboidClippingIndices)
 
           wt <- nodeWorldTransform this
-          let modelMat = wt !*! scale identity (this ^. motorcarSurfaceNodeDimensions)
+          dims <- readIORef (this ^. motorcarSurfaceNodeDimensions)
+          let modelMat = wt !*! scale identity dims
 
           vps <- readIORef (display ^. displayViewpoints)
           
@@ -480,11 +491,11 @@ instance Drawable MotorcarSurfaceNode where
       
 
 instance WaylandSurfaceNode MotorcarSurfaceNode where
-  computeLocalSurfaceIntersection this ray | t >= 0 = return $ Just (V2 0 0, t)
-                                           | otherwise = return Nothing
-    where
-      box = AxisAlignedBox (this ^. motorcarSurfaceNodeDimensions)
-      t = intersectBox box ray 0 100
+  computeLocalSurfaceIntersection this ray = do
+    dims <- readIORef (this ^. motorcarSurfaceNodeDimensions)
+    let box = AxisAlignedBox dims
+    let t = intersectBox box ray 0 100
+    return $ if t >= 0 then Just (V2 0 0, t) else Nothing
   
   computeSurfaceTransform this ppcm = writeIORef (this ^. baseWaylandSurfaceNode.waylandSurfaceNodeSurfaceTransform) identity
 
@@ -582,33 +593,38 @@ newMotorcarSurfaceNode ws prt tf dims = do
   
   setNodeTransform (wsn ^. waylandSurfaceNodeDecorations) $ scale identity dims
 
-  MotorcarSurfaceNode
-    <$> pure wsn
+  rec node <- MotorcarSurfaceNode
+              <$> pure wsn
 
-    <*> pure dcss
-    <*> pure dcsbs
+              <*> pure dcss
+              <*> pure dcsbs
 
-    <*> pure clipping
-    <*> genObjectName
-    <*> genObjectName
-    <*> pure surfaceTexCoords
-    <*> pure ccv
-    <*> pure cci
+              <*> pure clipping
+              <*> genObjectName
+              <*> genObjectName
+              <*> pure surfaceTexCoords
+              <*> pure ccv
+              <*> pure cci
 
-    <*> get (attribLocation dcss "aPosition")
-    <*> get (attribLocation dcss "aColorTexCoord")
-    <*> get (attribLocation dcss "aDepthTexCoord")
+              <*> get (attribLocation dcss "aPosition")
+              <*> get (attribLocation dcss "aColorTexCoord")
+              <*> get (attribLocation dcss "aDepthTexCoord")
 
-    <*> get (attribLocation dcsbs "aPosition")
-    <*> get (attribLocation dcsbs "aTexCoord")
-    <*> pure colorSamplerBlit
-    <*> pure depthSamplerBlit
+              <*> get (attribLocation dcsbs "aPosition")
+              <*> get (attribLocation dcsbs "aTexCoord")
+              <*> pure colorSamplerBlit
+              <*> pure depthSamplerBlit
 
-    <*> get (attribLocation clipping "aPosition")
-    <*> get (uniformLocation clipping "uMVPMatrix")
-    <*> get (uniformLocation clipping "uColor")
+              <*> get (attribLocation clipping "aPosition")
+              <*> get (uniformLocation clipping "uMVPMatrix")
+              <*> get (uniformLocation clipping "uColor")
 
-    <*> pure dims
+              <*> newIORef dims
+              <*> newIORef Nothing
+              <*> newWlArray
+              <*> newWlArray
+              <*> newStablePtr node
+  return node
     
     
   where
@@ -622,14 +638,87 @@ newMotorcarSurfaceNode ws prt tf dims = do
     
 
 sendTransformToClient :: MotorcarSurfaceNode -> IO ()
-sendTransformToClient = undefined
+sendTransformToClient this = do
+  resource <- readIORef (this ^. motorcarSurfaceNodeResource)
+  case resource of
+    Just resource -> do
+      worldTf <- nodeWorldTransform this
+      --TODO verify
+      let columnMajorMat = transpose worldTf
+      let array = this ^. motorcarSurfaceNodeTransformArray
+      wlArrayOverwrite array columnMajorMat
+      motorcar_surface_send_transform_matrix resource array
+    _ -> return ()
+      
+
+setMsnDimensions :: MotorcarSurfaceNode -> V3 Float -> IO ()
+setMsnDimensions this dims = do
+  Some surface <- readIORef (this ^. waylandSurfaceNodeSurface)
+  cmode <- wsClippingMode surface
+  let dims' = if cmode == Portal then dims & _z .~ 0 else dims
+
+  writeIORef (this ^. motorcarSurfaceNodeDimensions) dims'
+  let decoNode = this ^. waylandSurfaceNodeDecorations
+  setNodeTransform decoNode $ scale identity dims'
 
 configureResource :: MotorcarSurfaceNode -> WlClient -> CUInt -> IO ()
 configureResource this client ident = do
-  undefined
-  {-
-    m_resource = wl_resource_create(client, &motorcar_surface_interface, motorcar_surface_interface.version, id);
-    wl_resource_set_implementation(m_resource, &motorcarSurfaceInterface, this, 0);
-    sendTransformToClient();
-    requestSize3D(m_dimensions);
-}-}
+  surfaceIf <- motorcarSurfaceInterface
+  surfaceVer <- motorcarSurfaceVersion
+  res <- wl_resource_create client surfaceIf surfaceVer (fromIntegral ident)
+  writeIORef (this ^. motorcarSurfaceNodeResource) (Just res)
+
+  sFuncPtr <- createSetSize3DFuncPtr setSize3D
+  sFuncPtrPtr <- castPtr <$> new sFuncPtr
+  rec dFuncPtr <- createResourceDestroyFuncPtr (destroyFunc dFuncPtr sFuncPtrPtr)
+
+  let nodePtr = castStablePtrToPtr (this ^. motorcarSurfaceNodePtr)
+  
+  wl_resource_set_implementation res sFuncPtrPtr nodePtr dFuncPtr
+
+  sendTransformToClient this
+  readIORef (this ^. motorcarSurfaceNodeDimensions) >>= requestSize3D 
+
+  where
+    --TOOO duplicated code, fix it
+    destroyFunc dFuncPtr sFuncPtrPtr _ = do
+      peek (castPtr sFuncPtrPtr) >>= freeHaskellFunPtr 
+      freeHaskellFunPtr dFuncPtr
+
+    setSize3D client resource dimsArr = do
+      nodePtr <- castPtrToStablePtr <$> wlResourceData resource
+      node <- deRefStablePtr nodePtr
+      size <- wlArraySize dimsArr
+
+      when (fromIntegral size /= sizeOf (undefined :: V3 Float)) . ioError $ userError "Invalid dimensions array size"
+      
+      dims <- wlArrayData dimsArr >>= peek
+      
+      Some surface <- readIORef (node ^. waylandSurfaceNodeSurface)
+      cmode <- wsClippingMode surface
+      let dims' = if cmode == Portal then dims & _z .~ 0 else dims
+      setMsnDimensions node dims'
+
+    requestSize3D dims = do
+      Some surface <- readIORef (this ^. waylandSurfaceNodeSurface)
+      cmode <- wsClippingMode surface
+      let dims' = if cmode == Portal then dims & _z .~ 0 else dims
+
+      resource <- readIORef (this ^. motorcarSurfaceNodeResource)
+      case resource of
+        Just resource -> do
+          let array = this ^. motorcarSurfaceNodeDimensionsArray
+          wlArrayOverwrite array dims'
+          motorcar_surface_send_request_size_3d resource array
+        Nothing -> setMsnDimensions this dims'
+
+destroyMotorcarSurfaceNode :: MotorcarSurfaceNode -> IO ()
+destroyMotorcarSurfaceNode this = do
+  res <- readIORef (this ^. motorcarSurfaceNodeResource)
+  case res of
+    Just res -> wl_resource_destroy res
+    _ -> return ()
+
+  wl_array_release (this ^. motorcarSurfaceNodeDimensionsArray)
+  wl_array_release (this ^. motorcarSurfaceNodeTransformArray)
+  freeStablePtr (this ^. motorcarSurfaceNodePtr)

@@ -42,7 +42,6 @@ dependencies:
   - vector
   - StateVar
   - simula-wayland
-  - simula-motorcar
 
 
 
@@ -52,10 +51,10 @@ _executable_options: &executable_options
 library:
   source-dirs: src
   c-sources:
-    - simula-motorcar/cbits/*.c
+    - simula-wayland/cbits/*.c
     - src/**/*.c
   include-dirs:
-    - simula-motorcar/cbits
+    - simula-wayland/cbits
 
   exposed-modules:
     - Simula.NewCompositor.SceneGraph

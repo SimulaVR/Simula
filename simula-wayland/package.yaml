@@ -36,7 +36,10 @@ library:
   extra-libraries:
     - wayland-server
   source-dirs: src
+  c-sources: cbits/*.c
+  include-dirs: cbits
 
   exposed-modules:
     - Simula.WaylandServer
+    - Simula.MotorcarServer
 

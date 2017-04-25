@@ -11,6 +11,7 @@ import Simula.WaylandServer
 
 import Simula.NewCompositor.Compositor
 import Simula.NewCompositor.SceneGraph
+import Simula.NewCompositor.SceneGraph.Wayland
 import Simula.NewCompositor.Types
 import Simula.NewCompositor.Wayland.Output
 import Simula.NewCompositor.WindowManager
