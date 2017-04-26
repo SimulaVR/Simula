@@ -44,7 +44,7 @@ data Scene = Scene {
   _sceneBase :: BaseSceneGraphNode,
   _sceneCurrentTimestamp :: IORef Int,
   _sceneLastTimestamp :: IORef Int,
-  _sceneWindowManager :: IORef (Some WindowManager),
+  _sceneWindowManager :: IORef WindowManager,
   _sceneCompositor :: IORef (Some Compositor),
   _sceneTrash :: IORef Scene,
   _sceneDisplays :: IORef [Display],

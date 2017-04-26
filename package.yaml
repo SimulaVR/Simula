@@ -66,6 +66,5 @@ library:
     - Simula.NewCompositor.WindowManager
     - Simula.NewCompositor.Wayland.Input
     - Simula.NewCompositor.Wayland.Output
-    - Simula.NewCompositor.Shell
     - Simula.NewCompositor.Geometry
 

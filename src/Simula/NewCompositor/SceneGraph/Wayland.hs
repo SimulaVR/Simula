@@ -10,7 +10,7 @@ import Data.Word
 import Linear
 import Linear.OpenGL
 
-import Graphics.Rendering.OpenGL hiding (scale, Plane)
+import Graphics.Rendering.OpenGL hiding (scale, Plane, translate)
 import Graphics.GL (glEnable, glDisable, pattern GL_DEPTH_TEST) -- workaround, probably a user error
 import Foreign
 import Foreign.C
@@ -34,7 +34,8 @@ data BaseWaylandSurfaceNode = BaseWaylandSurfaceNode {
   _waylandSurfaceNodeVertexCoords :: BufferObject,
   _waylandSurfaceNodeShader :: Program,
   _waylandSurfaceNodeAPosition, _waylandSurfaceNodeATexCoord :: AttribLocation,
-  _waylandSurfaceNodeUMVPMatrix :: UniformLocation
+  _waylandSurfaceNodeUMVPMatrix :: UniformLocation,
+  _waylandSurfaceNodeMapped :: IORef Bool
   } deriving (Eq, Typeable)
 
 data MotorcarSurfaceNode = MotorcarSurfaceNode {
@@ -77,6 +78,23 @@ makeClassy ''BaseWaylandSurfaceNode
 makeClassy ''MotorcarSurfaceNode
 
 class Drawable a => WaylandSurfaceNode a where
+  wsnSurface :: a -> IO (Some WaylandSurface)
+  default wsnSurface :: HasBaseWaylandSurfaceNode a => a -> IO (Some WaylandSurface)
+  wsnSurface = views waylandSurfaceNodeSurface readIORef
+  
+  setWsnSurface :: a -> (Some WaylandSurface) -> IO ()
+  default setWsnSurface :: HasBaseWaylandSurfaceNode a => a -> (Some WaylandSurface) -> IO ()
+  setWsnSurface = views waylandSurfaceNodeSurface writeIORef
+
+  
+  wsnMapped :: a -> IO Bool
+  default wsnMapped :: HasBaseWaylandSurfaceNode a => a -> IO Bool
+  wsnMapped = views waylandSurfaceNodeMapped readIORef
+  
+  setWsnMapped :: a -> Bool -> IO ()
+  default setWsnMapped :: HasBaseWaylandSurfaceNode a => a -> Bool -> IO ()
+  setWsnMapped = views waylandSurfaceNodeMapped writeIORef
+  
   computeLocalSurfaceIntersection :: a -> Ray -> IO (Maybe (V2 Float, Float))
   default computeLocalSurfaceIntersection :: HasBaseWaylandSurfaceNode a => a -> Ray -> IO (Maybe (V2 Float, Float))
   computeLocalSurfaceIntersection this ray
@@ -100,18 +118,17 @@ class Drawable a => WaylandSurfaceNode a where
   default computeSurfaceTransform :: HasBaseWaylandSurfaceNode a => a -> Float -> IO ()
   computeSurfaceTransform this ppcm = when (ppcm > 0) $ do
     let ppm = 100*ppcm
-    let rotQ = axisAngle (V3 0 0 1) pi
-    -- TODO test if it's identical
-    let rotM = mkTransformation rotQ (V3 (negate 0.5) (negate 0.5) 0)
-      
+    let rotQ = axisAngle (V3 0 0 1) (radians 180)
+    let rotM = m33_to_m44 $ fromQuaternion rotQ
+    
     Some surface <- readIORef (this ^. waylandSurfaceNodeSurface)
     size <- (fmap . fmap) fromIntegral $ wsSize surface
-    
-    let scaleM = scale identity $ V3 (negate (size ^. _x) / ppm)  ((size ^. _y) / ppm) 1
+    let scaleM = scale (V3 (negate (size ^. _x) / ppm)  ((size ^. _y) / ppm) 1)
+    let offsetM = translate (V3 (negate 0.5) (negate 0.5) 0)
           
-    writeIORef (this ^. waylandSurfaceNodeSurfaceTransform) $ scaleM !*! rotM
+    writeIORef (this ^. waylandSurfaceNodeSurfaceTransform) $ rotM !*! scaleM !*! offsetM
     
-    setNodeTransform (this ^. waylandSurfaceNodeDecorations) $ scaleM !*! mkTransformation rotQ (V3 0 0 0) !*! scale identity (V3 1.04 1.04 0)
+    setNodeTransform (this ^. waylandSurfaceNodeDecorations) $ rotM !*! scaleM !*! scale (V3 1.04 1.04 0)
 
 instance HasBaseSceneGraphNode BaseWaylandSurfaceNode where
   baseSceneGraphNode = baseSceneGraphNode
@@ -343,7 +360,7 @@ instance Drawable MotorcarSurfaceNode where
 
           wt <- nodeWorldTransform this
           dims <- readIORef (this ^. motorcarSurfaceNodeDimensions)
-          let modelMat = wt !*! scale identity dims
+          let modelMat = wt !*! scale dims
 
           vps <- readIORef (display ^. displayViewpoints)
           forM_ vps $ \vp -> do
@@ -387,7 +404,7 @@ instance Drawable MotorcarSurfaceNode where
 
           wt <- nodeWorldTransform this
           dims <- readIORef (this ^. motorcarSurfaceNodeDimensions)
-          let modelMat = wt !*! scale identity dims
+          let modelMat = wt !*! scale dims
 
           vps <- readIORef (display ^. displayViewpoints)
           
@@ -532,6 +549,7 @@ newWaylandSurfaceNode ws parent tf = do
               <*> pure aPos
               <*> pure aTex
               <*> pure uMVP
+              <*> newIORef False
   return node
 
   where
@@ -591,7 +609,7 @@ newMotorcarSurfaceNode ws prt tf dims = do
     wl_array_add(&m_transformArray, sizeof(glm::mat4));
   -}
   
-  setNodeTransform (wsn ^. waylandSurfaceNodeDecorations) $ scale identity dims
+  setNodeTransform (wsn ^. waylandSurfaceNodeDecorations) $ scale dims
 
   rec node <- MotorcarSurfaceNode
               <$> pure wsn
@@ -659,7 +677,7 @@ setMsnDimensions this dims = do
 
   writeIORef (this ^. motorcarSurfaceNodeDimensions) dims'
   let decoNode = this ^. waylandSurfaceNodeDecorations
-  setNodeTransform decoNode $ scale identity dims'
+  setNodeTransform decoNode $ scale dims'
 
 configureResource :: MotorcarSurfaceNode -> WlClient -> CUInt -> IO ()
 configureResource this client ident = do
@@ -677,7 +695,7 @@ configureResource this client ident = do
   wl_resource_set_implementation res sFuncPtrPtr nodePtr dFuncPtr
 
   sendTransformToClient this
-  readIORef (this ^. motorcarSurfaceNodeDimensions) >>= requestSize3D 
+  readIORef (this ^. motorcarSurfaceNodeDimensions) >>= msnRequestSize3D this
 
   where
     --TOOO duplicated code, fix it
@@ -699,18 +717,19 @@ configureResource this client ident = do
       let dims' = if cmode == Portal then dims & _z .~ 0 else dims
       setMsnDimensions node dims'
 
-    requestSize3D dims = do
-      Some surface <- readIORef (this ^. waylandSurfaceNodeSurface)
-      cmode <- wsClippingMode surface
-      let dims' = if cmode == Portal then dims & _z .~ 0 else dims
+msnRequestSize3D :: MotorcarSurfaceNode -> V3 Float -> IO ()
+msnRequestSize3D this dims = do
+  Some surface <- readIORef (this ^. waylandSurfaceNodeSurface)
+  cmode <- wsClippingMode surface
+  let dims' = if cmode == Portal then dims & _z .~ 0 else dims
 
-      resource <- readIORef (this ^. motorcarSurfaceNodeResource)
-      case resource of
-        Just resource -> do
-          let array = this ^. motorcarSurfaceNodeDimensionsArray
-          wlArrayOverwrite array dims'
-          motorcar_surface_send_request_size_3d resource array
-        Nothing -> setMsnDimensions this dims'
+  resource <- readIORef (this ^. motorcarSurfaceNodeResource)
+  case resource of
+    Just resource -> do
+      let array = this ^. motorcarSurfaceNodeDimensionsArray
+      wlArrayOverwrite array dims'
+      motorcar_surface_send_request_size_3d resource array
+    Nothing -> setMsnDimensions this dims'
 
 destroyMotorcarSurfaceNode :: MotorcarSurfaceNode -> IO ()
 destroyMotorcarSurfaceNode this = do

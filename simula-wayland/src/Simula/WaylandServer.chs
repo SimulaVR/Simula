@@ -23,6 +23,7 @@ import qualified Language.C.Types as C
 {#pointer *wl_global as WlGlobal newtype #}
 
 deriving instance Eq WlArray
+deriving instance Eq WlDisplay
 deriving instance Eq WlGlobal
 deriving instance Eq WlResource
 

@@ -18,7 +18,6 @@ library
       simula-wayland/cbits
   c-sources:
       simula-wayland/cbits/motorcar-wayland-extensions.c
-      src/Simula/NewCompositor/Shell.c
       src/Simula/NewCompositor/Utils.c
   build-depends:
       base >= 4.9 && < 5
@@ -49,7 +48,6 @@ library
       Simula.NewCompositor.WindowManager
       Simula.NewCompositor.Wayland.Input
       Simula.NewCompositor.Wayland.Output
-      Simula.NewCompositor.Shell
       Simula.NewCompositor.Geometry
   other-modules:
       Simula.NewCompositor.Event

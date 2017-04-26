@@ -5,9 +5,9 @@ import Data.Word
 import Data.Typeable
 import Linear
 
-import Graphics.Rendering.OpenGL
+import Graphics.Rendering.OpenGL hiding (Proxy)
 
-import Simula.NewCompositor.Event
+import {-# SOURCE #-} Simula.NewCompositor.Event
 import Simula.NewCompositor.Types
 
 data WaylandSurfaceType = TopLevel | Transient | Popup | Cursor | NA
@@ -16,7 +16,7 @@ data WaylandSurfaceType = TopLevel | Transient | Popup | Cursor | NA
 data WaylandSurfaceClippingMode = None | Cuboid | Portal
   deriving (Show, Eq, Ord, Enum)
 
-class (Eq a, Typeable a) => WaylandSurface a where
+class (Eq a, Ord a, Typeable a) => WaylandSurface a where
   wsTexture :: a -> IO TextureObject
   wsSize :: a -> IO (V2 Int)
   setWsSize :: a -> V2 Int -> IO ()
@@ -24,7 +24,7 @@ class (Eq a, Typeable a) => WaylandSurface a where
   wsParentSurface :: a -> IORef (Some WaylandSurface)
   wsPrepare :: a -> IO ()
   wsValid :: a -> IO Bool
-  wsSendEvent :: a -> Some Event -> IO ()
+  wsSendEvent :: a -> InputEvent -> IO ()
 
   wsType :: a -> IO WaylandSurfaceType
   setWsType :: a -> WaylandSurfaceType -> IO ()
@@ -38,6 +38,11 @@ class (Eq a, Typeable a) => WaylandSurface a where
   setWsIsMotorcarSurface :: a -> Bool -> IO ()
   
 instance Eq (Some WaylandSurface) where
-  a == b = case cast a of
-    Just a' -> a' == b
-    Nothing -> False
+  Some a == Some b = case cast a of
+    Just a -> a == b
+    _ -> False
+
+instance Ord (Some WaylandSurface) where
+  Some (a :: a) <= Some (b :: b) = case cast a of
+    Just a -> a <= b
+    _ -> typeRep (Proxy :: Proxy a) <= typeRep (Proxy :: Proxy b)

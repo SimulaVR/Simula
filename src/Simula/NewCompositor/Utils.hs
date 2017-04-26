@@ -13,8 +13,14 @@ import Simula.WaylandServer
 C.context waylandCtx
 C.include "motorcar-server-protocol.h"
 
-scale :: Floating a => M44 a -> V3 a -> M44 a
-scale mat scale = fmap (liftI2 (*) (point scale)) mat
+radians :: Floating a => a -> a
+radians = (* (pi/180))
+
+translate :: Num a => V3 a -> M44 a
+translate = mkTransformationMat identity
+
+scale :: Num a => V3 a -> M44 a
+scale v = fmap (liftI2 (*) (point v)) identity
 
 motorcarShellInterface :: IO WlInterface
 motorcarShellInterface = WlInterface <$> [C.exp| struct wl_interface* { &motorcar_shell_interface } |]
