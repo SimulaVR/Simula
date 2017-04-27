@@ -688,21 +688,15 @@ configureResource this client ident = do
 
   sFuncPtr <- createSetSize3DFuncPtr setSize3D
   sFuncPtrPtr <- castPtr <$> new sFuncPtr
-  rec dFuncPtr <- createResourceDestroyFuncPtr (destroyFunc dFuncPtr sFuncPtrPtr)
 
   let nodePtr = castStablePtrToPtr (this ^. motorcarSurfaceNodePtr)
   
-  wl_resource_set_implementation res sFuncPtrPtr nodePtr dFuncPtr
+  wl_resource_set_implementation res sFuncPtrPtr nodePtr nullFunPtr
 
   sendTransformToClient this
   readIORef (this ^. motorcarSurfaceNodeDimensions) >>= msnRequestSize3D this
 
   where
-    --TOOO duplicated code, fix it
-    destroyFunc dFuncPtr sFuncPtrPtr _ = do
-      peek (castPtr sFuncPtrPtr) >>= freeHaskellFunPtr 
-      freeHaskellFunPtr dFuncPtr
-
     setSize3D client resource dimsArr = do
       nodePtr <- castPtrToStablePtr <$> wlResourceData resource
       node <- deRefStablePtr nodePtr

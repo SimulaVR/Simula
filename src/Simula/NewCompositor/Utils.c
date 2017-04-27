@@ -20,3 +20,13 @@ int inline_c_Simula_NewCompositor_Utils_3_639a8861d4b434587b09a4e0c101eff5e2a1ca
 return ( motorcar_surface_interface.version );
 }
 
+
+struct wl_interface * inline_c_Simula_NewCompositor_Utils_4_033b8e6048713ef0da321eb10f6209221c7cd8ba() {
+return ( &motorcar_viewpoint_interface );
+}
+
+
+int inline_c_Simula_NewCompositor_Utils_5_31e0e8847d0b35313475e4ad8c6f735d4ce2a124() {
+return ( motorcar_viewpoint_interface.version );
+}
+

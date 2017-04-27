@@ -1,7 +1,3 @@
--- This file has been generated from package.yaml by hpack version 0.17.0.
---
--- see: https://github.com/sol/hpack
-
 name:           simula-wayland
 version:        0.0.0
 synopsis:       Haskell bindings for Wayland
@@ -17,8 +13,6 @@ library
       cbits
   c-sources:
       cbits/motorcar-wayland-extensions.c
-  extra-libraries:
-      wayland-server
   build-depends:
       base >= 4.9 && < 5
     , containers
@@ -28,6 +22,8 @@ library
   exposed-modules:
       Simula.WaylandServer
       Simula.MotorcarServer
-  other-modules:
-      Paths_simula_wayland
+      Simula.Weston
   default-language: Haskell2010
+  pkgconfig-depends:
+      libweston-1
+    , wayland-server

@@ -8,16 +8,18 @@ import Data.Typeable
 import Linear
 import Linear.OpenGL
 
-import Graphics.Rendering.OpenGL.GL hiding (normalize)
+import Graphics.Rendering.OpenGL.GL hiding (normalize, translate)
 import Foreign
 
 import Simula.WaylandServer
+import Simula.MotorcarServer
 
-import {-# SOURCE #-} Simula.NewCompositor.Compositor
+import Simula.NewCompositor.Compositor
 import Simula.NewCompositor.Geometry
 import Simula.NewCompositor.OpenGL
 import {-# SOURCE #-} Simula.NewCompositor.WindowManager
 import Simula.NewCompositor.Types
+import Simula.NewCompositor.Utils
 
 data BaseSceneGraphNode = BaseSceneGraphNode {
   _graphNodeChildren :: IORef [Some SceneGraphNode],
@@ -53,21 +55,24 @@ data Scene = Scene {
 
 data ViewPoint = ViewPoint {
   _viewPointBase :: BaseSceneGraphNode,
-  _viewPointDisplay :: IORef Display,
-  _viewPointNear :: IORef Float,
-  _viewPointFar :: IORef Float,
+  _viewPointDisplay :: Display,
+  _viewPointNear :: Float,
+  _viewPointFar :: Float,
+  _viewPointCenterOfFocus :: V4 Float,
+  _viewPointCOFTransform :: M44 Float,
+  _viewPointBufferGeometry :: Rectangle,
+  _viewPointGlobal ::  WlGlobal,
+  _viewPointViewArray :: WlArray,
+  _viewPointProjectionArray :: WlArray,
+  _viewPointResources :: IORef [WlResource],
   _viewPointViewPort :: IORef ViewPort,
   _viewPointClientColorViewPort :: IORef ViewPort,
   _viewPointClientDepthViewPort :: IORef ViewPort,
-  _viewPointCenterOfFocus :: IORef (V4 Float),
-  _viewPointCOFTransform :: IORef (M44 Float),
-  _viewPointBufferGeometry :: IORef Rectangle,
   _viewPointViewMatrix :: IORef (M44 Float),
   _viewPointProjectionMatrix :: IORef (M44 Float),
-  _viewPointViewProjectionMatrix :: IORef (M44 Float),
   _viewPointProjectionMatrixOverriden :: IORef Bool,
-  _viewPointGlobal ::  WlGlobal,
-  _viewPointResources :: IORef [WlResource]
+  _viewPointPtr :: StablePtr ViewPoint,
+  _viewPointBindFunc :: FunPtr GlobalBindFunc
   } deriving (Eq, Typeable)
 
 data Display = Display {
@@ -288,6 +293,63 @@ sceneLatestTimestampChange this = do
 instance SceneGraphNode ViewPoint
 instance VirtualNode ViewPoint
 
+newViewPoint :: SceneGraphNode a => Float -> Float -> Display -> a -> M44 Float -> V4 Float -> V3 Float -> IO ViewPoint
+newViewPoint near far display parent transform viewPortParams centerOfProjection = do
+  size <- displaySize display
+  let bufferGeometry = Rectangle (size & _y *~ 2)
+  let vpOffset = viewPortParams ^. _xy
+  let vpSize = viewPortParams ^. _zw
+  let cofTf = translate centerOfProjection
+  let cof = point centerOfProjection
+
+  vport <- ViewPort <$> newIORef vpOffset <*> newIORef vpSize <*> newIORef (Rectangle size)
+  let cOff = vpOffset & _y //~ 2
+  let cSize = vpSize & _y //~ 2
+  ccvp <- ViewPort <$> newIORef cOff <*> newIORef cSize <*> newIORef bufferGeometry
+  cdvp <- ViewPort <$> newIORef (cOff & _y +~ (cSize ^. _y)) <*> newIORef cSize <*> newIORef bufferGeometry
+
+  Just scene <- nodeScene parent
+  Some comp <- readIORef (scene ^. sceneCompositor)
+  let wlDisplay = compositorWlDisplay comp
+
+  base <- newBaseNode (Just (Some parent)) transform
+
+  vpIf <- motorcarViewpointInterface
+  vpVer <- motorcarViewpointVersion
+  
+  rec global <- wl_global_create wlDisplay vpIf vpVer (castStablePtrToPtr vpPtr) bindFuncPtr
+      vp <- ViewPoint base display near far cof cofTf bufferGeometry global
+                   <$> newWlArray <*> newWlArray <*> newIORef []
+                   <*> newIORef vport <*> newIORef ccvp <*> newIORef cdvp
+                   <*> newIORef identity <*> newIORef identity
+                   <*> newIORef False <*> pure vpPtr <*> pure bindFuncPtr
+      vpPtr <- newStablePtr vp
+      bindFuncPtr <- createGlobalBindFuncPtr bindFunc
+
+  viewPointUpdateViewMatrix vp
+  viewPointUpdateProjectionMatrix vp
+  viewPointSendViewPortToClients vp
+  return vp
+
+  where
+    destroyFunc resource = do
+      vp :: ViewPoint <- wlResourceData resource >>= deRefStablePtr . castPtrToStablePtr
+      modifyIORef' (vp ^. viewPointResources) $ filter (/= resource)
+      
+    bindFunc client vpPtr version ident = do
+      vpIf <- motorcarViewpointInterface
+      vp :: ViewPoint <- deRefStablePtr $ castPtrToStablePtr vpPtr
+      res <- wl_resource_create client vpIf (fromIntegral version) (fromIntegral ident)
+      dFuncPtr <- createResourceDestroyFuncPtr destroyFunc
+      wl_resource_set_implementation res nullPtr vpPtr dFuncPtr
+
+      modifyIORef' (vp ^. viewPointResources) (res:)
+      viewPointSendCurrentStateToSingleClient vp res
+
+
+destroyViewPoint :: ViewPoint -> IO ()
+destroyViewPoint this = undefined
+
 viewPointUpdateViewMatrix :: ViewPoint -> IO ()
 viewPointUpdateViewMatrix this = do
   trans <- nodeWorldTransform this
@@ -295,14 +357,81 @@ viewPointUpdateViewMatrix this = do
   let target = (trans !* V4 0 0 (negate 1) 1) ^. _xyz
   let up = normalize $ (trans !* V4 0 1 0 0) ^. _xyz
   writeIORef (_viewPointViewMatrix this) $ lookAt center target up
-  sendViewMatrixToClients
+  viewPointSendViewMatrixToClients this
 
-  where
-    sendViewMatrixToClients = undefined {- std::memcpy(m_viewArray.data, glm::value_ptr(this->viewMatrix()), m_viewArray.size);
+viewPointUpdateProjectionMatrix :: ViewPoint -> IO ()
+viewPointUpdateProjectionMatrix this = do
+  pmo <- readIORef (this ^. viewPointProjectionMatrixOverriden)
+  when (not pmo) $ do
+    let cofTf = this ^. viewPointCOFTransform
+    let dp = this ^. viewPointDisplay
+    fov <- viewPointFov this dp
+    vport <- readIORef (this ^. viewPointViewPort)
+    vpSize <- readIORef (vport ^. viewPortSize)
+    let width = vpSize ^. _x
+    let height = vpSize ^. _x
+    let near = this ^. viewPointNear
+    let far = this ^. viewPointFar
+    let perM = perspective fov (width/height) near far
+    
+    writeIORef (this ^. viewPointProjectionMatrix) $ cofTf !*! perM
+  viewPointSendProjectionMatrixToClients this
 
-    for(struct wl_resource *resource : m_resources){
-        motorcar_viewpoint_send_view_matrix(resource, &m_viewArray);
-    } -}
+
+viewPointOverrideProjectionMatrix :: ViewPoint -> M44 Float -> IO ()
+viewPointOverrideProjectionMatrix this mat = do
+  writeIORef (this ^. viewPointProjectionMatrix) mat
+  writeIORef (this ^. viewPointProjectionMatrixOverriden) True
+  viewPointUpdateProjectionMatrix this
+
+
+--TODO refactor
+viewPointSendViewMatrixToClients :: ViewPoint -> IO ()
+viewPointSendViewMatrixToClients this = do
+  viewMatrix <- readIORef (this ^. viewPointViewMatrix)
+  let array = this ^. viewPointViewArray
+  wlArrayOverwrite array (transpose viewMatrix) -- column-major
+
+  resources <- readIORef (this ^. viewPointResources)
+  forM_ resources $ \res -> motorcar_viewpoint_send_view_matrix res array
+
+--TODO refactor
+viewPointSendProjectionMatrixToClients :: ViewPoint -> IO ()
+viewPointSendProjectionMatrixToClients this = do
+  projMatrix <- readIORef (this ^. viewPointProjectionMatrix)
+  let array = this ^. viewPointProjectionArray
+  wlArrayOverwrite array (transpose projMatrix) -- column-major
+
+  resources <- readIORef (this ^. viewPointResources)
+  forM_ resources $ \res -> motorcar_viewpoint_send_projection_matrix res array
+
+viewPointSendViewPortToClients :: ViewPoint -> IO ()
+viewPointSendViewPortToClients this
+  = readIORef (this ^. viewPointResources) >>= mapM_ (viewPointSendViewPortToSingleClient this)
+
+
+viewPointSendViewPortToSingleClient :: ViewPoint -> WlResource -> IO ()
+viewPointSendViewPortToSingleClient this res = do
+  ccvp <- readIORef (this ^. viewPointClientColorViewPort)
+  cdvp <- readIORef (this ^. viewPointClientDepthViewPort)
+  --TODO deal with Float
+  ccvpOff <- (fmap.fmap) truncate $ readIORef (ccvp ^. viewPortOffset)
+  cdvpOff <- (fmap.fmap) truncate $ readIORef (cdvp ^. viewPortOffset)
+  ccvpSize <- (fmap.fmap) truncate $ readIORef (ccvp ^. viewPortSize)
+  cdvpSize <- (fmap.fmap) truncate $ readIORef (cdvp ^. viewPortSize)
+  
+  motorcar_viewpoint_send_view_port res
+    (ccvpOff ^. _x) (ccvpOff ^. _y) (ccvpSize ^. _x) (ccvpSize ^. _y)
+    (cdvpOff ^. _x) (cdvpOff ^. _y) (cdvpSize ^. _x) (cdvpSize ^. _y)
+
+
+viewPointSendCurrentStateToSingleClient :: ViewPoint -> WlResource -> IO ()
+viewPointSendCurrentStateToSingleClient this res = do
+  motorcar_viewpoint_send_view_matrix res (this ^. viewPointViewArray)
+  motorcar_viewpoint_send_projection_matrix res (this ^. viewPointProjectionArray)
+  viewPointSendViewPortToSingleClient this res
+
+
 
 viewPointWorldRayAtDisplayPosition :: ViewPoint -> V2 Float -> IO Ray
 viewPointWorldRayAtDisplayPosition this pixel = do
@@ -314,7 +443,7 @@ viewPointWorldRayAtDisplayPosition this pixel = do
   width <- viewPortWidth port
   let h = height/width/2
 
-  display <- readIORef $ _viewPointDisplay this
+  let display = this ^. viewPointDisplay
   fov <- viewPointFov this display
   let theta = fov/2
   let d = h / tan theta

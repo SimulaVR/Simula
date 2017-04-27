@@ -25,3 +25,8 @@ foreign import ccall "wrapper" createSetSize3DFuncPtr :: SetSize3DFunc -> IO (Fu
 
 {#fun motorcar_surface_send_transform_matrix {`WlResource', `WlArray'} -> `()'#}
 {#fun motorcar_surface_send_request_size_3d {`WlResource', `WlArray'} -> `()'#}
+{#fun motorcar_viewpoint_send_view_matrix {`WlResource', `WlArray'} -> `()'#}
+{#fun motorcar_viewpoint_send_projection_matrix {`WlResource', `WlArray'} -> `()'#}
+{#fun motorcar_viewpoint_send_view_port {`WlResource'
+                                        , `CInt', `CInt', `CUInt', `CUInt'
+                                        , `CInt', `CInt', `CUInt', `CUInt'} -> `()' #}

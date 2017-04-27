@@ -14,9 +14,9 @@ import Foreign
 import Simula.NewCompositor.Geometry
 
 data ViewPort = ViewPort {
-  _viewPortBufferGeometry :: IORef Rectangle,
   _viewPortOffset :: IORef (V2 Float),
-  _viewPortSize :: IORef (V2 Float)
+  _viewPortSize :: IORef (V2 Float),
+  _viewPortBufferGeometry :: IORef Rectangle
   } deriving (Eq, Typeable)
 
 makeLenses ''ViewPort

@@ -51,6 +51,7 @@ library
       Simula.NewCompositor.Geometry
   other-modules:
       Simula.NewCompositor.Event
+      Simula.NewCompositor.Weston
       Simula.Utils
       Paths_SimulaHS
   default-language: Haskell2010

@@ -33,3 +33,9 @@ motorcarSurfaceInterface = WlInterface <$> [C.exp| struct wl_interface* { &motor
 
 motorcarSurfaceVersion :: IO Int
 motorcarSurfaceVersion = fromIntegral <$>  [C.exp| int { motorcar_surface_interface.version } |]
+
+motorcarViewpointInterface :: IO WlInterface
+motorcarViewpointInterface = WlInterface <$> [C.exp| struct wl_interface* { &motorcar_viewpoint_interface } |]
+
+motorcarViewpointVersion :: IO Int
+motorcarViewpointVersion = fromIntegral <$>  [C.exp| int { motorcar_viewpoint_interface.version } |]

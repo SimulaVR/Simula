@@ -5,7 +5,7 @@ import Foreign
 
 import Simula.WaylandServer
 
-import Simula.NewCompositor.SceneGraph
+import {-# SOURCE #-} Simula.NewCompositor.SceneGraph
 import Simula.NewCompositor.OpenGL
 import Simula.NewCompositor.Types
 import Simula.NewCompositor.Wayland.Input

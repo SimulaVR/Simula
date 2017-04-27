@@ -233,12 +233,7 @@ newShell scene = do
       resource <- wl_resource_create client shellIf (fromIntegral version) (fromIntegral ident)
       sFuncPtr <- createGetMotorcarSurfaceFuncPtr getMotorcarSurface
       sFuncPtrPtr <- castPtr <$> new sFuncPtr
-      rec dFuncPtr <- createResourceDestroyFuncPtr (destroyFunc dFuncPtr sFuncPtrPtr)
-      wl_resource_set_implementation resource sFuncPtrPtr shell dFuncPtr
-
-    destroyFunc dFuncPtr sFuncPtrPtr _ = do
-      peek (castPtr sFuncPtrPtr) >>= freeHaskellFunPtr 
-      freeHaskellFunPtr dFuncPtr
+      wl_resource_set_implementation resource sFuncPtrPtr shell nullFunPtr
 
     getMotorcarSurface client resource ident surfaceResource clipmode dce = do
       shellPtr <- castPtrToStablePtr <$> wlResourceData resource
