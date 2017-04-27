@@ -48,7 +48,6 @@ data Scene = Scene {
   _sceneLastTimestamp :: IORef Int,
   _sceneWindowManager :: IORef WindowManager,
   _sceneCompositor :: IORef (Some Compositor),
-  _sceneTrash :: IORef Scene,
   _sceneDisplays :: IORef [Display],
   _sceneActiveDisplay :: IORef (Maybe Display)
   } deriving (Eq, Typeable)
@@ -205,9 +204,6 @@ instance HasBaseSceneGraphNode WireframeNode where
 
 instance HasBaseDrawable WireframeNode where
   baseDrawable = wireframeNodeBase
-
-
-
   
 
 setNodeParent :: SceneGraphNode a => a -> Maybe (Some SceneGraphNode) -> IO ()

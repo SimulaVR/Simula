@@ -37,12 +37,12 @@ dependencies:
   - OpenGL
   - OpenGLRaw
   - primitive
+  - unordered-containers
   - template-haskell
   - transformers
   - vector
   - StateVar
   - simula-wayland
-
 
 
 _executable_options: &executable_options
@@ -67,4 +67,10 @@ library:
     - Simula.NewCompositor.Wayland.Input
     - Simula.NewCompositor.Wayland.Output
     - Simula.NewCompositor.Geometry
+    - Simula.NewCompositor.Weston
 
+executables:
+  simple-compositor:
+    main: SimpleCompositor.hs
+    source-dirs: app
+    dependencies: [SimulaHS]

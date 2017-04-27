@@ -182,7 +182,7 @@ instance VirtualNode BaseWaylandSurfaceNode
 instance Drawable BaseWaylandSurfaceNode where
   drawableDraw this scene display = do
     Some surface <- readIORef $ _waylandSurfaceNodeSurface this
-    texture <- wsTexture surface
+    Just texture <- wsTexture surface
 
     currentProgram $= Just (_waylandSurfaceNodeShader this)
 
@@ -277,8 +277,9 @@ instance Drawable MotorcarSurfaceNode where
         uniform uMVPMatrix $= (identity ^. m44GLmatrix :: GLmatrix Float)
         glDisable GL_DEPTH_TEST
         depthMask $= Disabled
-        
-    tex <- wsTexture surface
+
+    --TODO proper Nothing handling; this theoretically shouldn't happen
+    Just tex <- wsTexture surface
     textureBinding Texture2D $= Just tex
     textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
 

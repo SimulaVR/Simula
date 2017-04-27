@@ -13,10 +13,13 @@ library
       cbits
   c-sources:
       cbits/motorcar-wayland-extensions.c
+      cbits/stub.c
+      cbits/util.c      
   build-depends:
       base >= 4.9 && < 5
     , containers
     , inline-c
+    , linear
   build-tools:
       c2hs
   exposed-modules:

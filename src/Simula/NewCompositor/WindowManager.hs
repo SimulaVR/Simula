@@ -158,7 +158,7 @@ wmMapSurface this surface sty = do
             Just (Some focusNode) -> do
               localPos <- case sty of
                 Popup -> seatPointer seat >>= views pointerLocalPosition readIORef
-                _ -> (fmap . fmap) fromIntegral $ wsPosition surface
+                _ -> wsPosition surface
               tf <- nodeTransform focusNode
               size <- (fmap.fmap) fromIntegral $ wsSize surface
               Some parentSurface <- wsnSurface focusNode

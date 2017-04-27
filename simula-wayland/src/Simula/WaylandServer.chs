@@ -1,6 +1,7 @@
 module Simula.WaylandServer where
 
 import Control.Monad
+
 import qualified Data.Map as M
 import Data.Monoid
 import Data.Word
@@ -100,24 +101,22 @@ newtype WlList a = WlList {toWlListPtr :: WlListPtr}
 wlListNext :: WlList a -> IO (WlList a)
 wlListNext = {#get wl_list->next#} . toWlListPtr >=> (return . WlList)
 
-class WlListElement a where
+class WlListElement container element where
   -- |Offset to the link element
-  linkOffset :: proxy a -> Int
+  linkOffset :: proxy1 container -> proxy2 element -> Int
 
-wlListData :: WlListElement a => WlList a -> Ptr a
-wlListData list = let ptr = toWlListPtr list
-                  in castPtr $ plusPtr ptr (negate $ linkOffset list)
+wlListData :: WlListElement ct ele => proxy ct -> WlList ele -> Ptr ele
+wlListData proxy list = let ptr = toWlListPtr list
+                        in castPtr $ plusPtr ptr (negate $ linkOffset proxy list)
 
-wlListAll :: WlListElement a => WlList a -> IO [Ptr a]
-wlListAll init = go init
+wlListAll ::  WlListElement ct ele => proxy ct -> WlList ele -> IO [Ptr ele]
+wlListAll proxy init = wlListNext init >>= go -- skip first element, as that doesn't point to `ele'
   where
-    go curr = do
-      next <- wlListNext curr
-      if next == init
-        then return []
-        else do
-          let ptr = wlListData curr
-          ptrs <- go next
+    go curr
+      | curr == init = return []
+      | otherwise = do
+          let ptr = wlListData proxy curr
+          ptrs <- wlListNext curr >>= go
           return (ptr:ptrs)
           
 
@@ -130,12 +129,11 @@ newtype WlListener a = WlListener {toWlListenerPtr :: WlListenerPtr}
 type NotifyFunc a = Ptr (WlListener a) -> Ptr () -> IO ()
 foreign import ccall "wrapper" createNotifyFuncPtr :: NotifyFunc a -> IO (FunPtr (NotifyFunc a))
 
-instance WlListElement (WlListener a) where
-  linkOffset _ = {#offsetof wl_listener->link#}
+instance WlListElement any (WlListener a) where
+  linkOffset _ _ = {#offsetof wl_listener->link#}
 
-withWlListener :: NotifyFunc a -> (WlListener a -> IO b) -> IO b
-withWlListener nf act = do
-  nfPtr <- createNotifyFuncPtr nf
+withWlListener :: FunPtr (NotifyFunc a) -> (WlListener a -> IO b) -> IO b
+withWlListener nfPtr act = do
   allocaBytes {#sizeof wl_listener#} $ \ptr -> do
     {#set wl_listener->notify#} ptr (castFunPtr nfPtr)
     act (WlListener ptr)
@@ -149,11 +147,28 @@ class WlListenerContainer a where
 {#pointer *wl_signal as WlSignal newtype#}
 {#fun wl_signal_add {`WlSignal', `WlListenerPtr'} -> `()'#}
 
-addListenerToSignal :: WlListenerContainer a => WlSignal -> (Ptr a -> Ptr () -> IO ()) -> IO ()
-addListenerToSignal sig nf' = withWlListener nf $ \(WlListener ptr) -> wl_signal_add sig ptr
-  where
-    nf = nf' . castPtr
+addListenerToSignal :: WlSignal -> FunPtr (NotifyFunc a) -> IO ()
+addListenerToSignal sig nf = withWlListener nf $ \(WlListener ptr) -> wl_signal_add sig ptr
 
+
+{#pointer *wl_shm_buffer as WlShmBuffer newtype #}
+{#enum wl_shm_format as WlShmFormat {underscoreToCase} deriving (Show, Eq, Ord) #}
+{#fun wl_shm_buffer_get {`WlResource'} -> `WlShmBuffer' #}
+{#fun wl_shm_buffer_get_format {`WlShmBuffer'} -> `WlShmFormat' #}
+{#fun wl_shm_buffer_begin_access {`WlShmBuffer'} -> `()' #}
+{#fun wl_shm_buffer_end_access {`WlShmBuffer'} -> `()' #}
+{#fun wl_shm_buffer_get_data {`WlShmBuffer'} -> `Ptr ()' #}
+{#fun wl_shm_buffer_get_width {`WlShmBuffer'} -> `Int' #}
+{#fun wl_shm_buffer_get_height {`WlShmBuffer'} -> `Int' #}
+{#fun wl_shm_buffer_get_stride {`WlShmBuffer'} -> `Int' #}
+
+withShmBuffer :: WlShmBuffer -> (Ptr () -> IO b) -> IO b
+withShmBuffer buf act = do
+  wl_shm_buffer_begin_access buf
+  ptr <- wl_shm_buffer_get_data buf
+  res <- act ptr
+  wl_shm_buffer_end_access buf
+  return res
 
 waylandCtx :: C.Context
 waylandCtx = C.baseCtx <> mempty { C.ctxTypesTable = M.fromList [

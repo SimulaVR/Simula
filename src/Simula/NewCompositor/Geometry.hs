@@ -59,7 +59,8 @@ intersectBox (AxisAlignedBox bd) (Ray rp rd) t0 t1
 
     tminx'' = max tminx' (tmin _z)
     tmaxx'' = min tmaxx' (tmax _z)
-  
+
+--TODO not actually a rectangle, refactor
 data Rectangle = Rectangle {
   _rectangleSize :: V2 Int
   } deriving (Show, Eq, Ord)
@@ -71,6 +72,22 @@ data RaySurfaceIntersection = RaySurfaceIntersection {
   _rsiSurfaceCoordinates :: V2 Float,
   _rsiRay :: Ray,
   _rsiT :: Float
-}
+  }
 
 makeLenses ''RaySurfaceIntersection
+
+data Rect a = Rect {
+  _rectUpperLeft :: V2 a,
+  _rectSize :: V2 a
+  }
+
+makeLenses ''Rect
+
+rectFromPosSize :: V2 a -> V2 a -> Rect a
+rectFromPosSize = Rect
+
+rectTop, rectBottom, rectLeft, rectRight :: Num a => Rect a -> a
+rectTop = view (rectUpperLeft._y)
+rectLeft = view (rectUpperLeft._x)
+rectBottom rect = rectTop rect - (rect ^. rectSize._x)
+rectRight rect = rectLeft rect + (rect ^. rectSize._y)
