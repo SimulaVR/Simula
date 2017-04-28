@@ -24,6 +24,7 @@ library
   build-depends:
       base >= 4.9 && < 5
     , bytestring
+    , clock
     , containers
     , file-embed
     , inline-c
@@ -67,6 +68,7 @@ executable simple-compositor
   build-depends:
       base >= 4.9 && < 5
     , bytestring
+    , clock
     , containers
     , file-embed
     , inline-c

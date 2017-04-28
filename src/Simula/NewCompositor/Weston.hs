@@ -1,8 +1,8 @@
 module Simula.NewCompositor.Weston where
 
+import Control.Concurrent
 import Control.Lens
 import Control.Monad
-
 import qualified Data.Map as M
 import Data.IORef
 import Data.Word
@@ -12,16 +12,20 @@ import Foreign.C
 import Graphics.Rendering.OpenGL hiding (scale, translate, rotate, Rect)
 import Linear
 import Linear.OpenGL
+import System.Clock
 import System.Environment
 
 import Simula.WaylandServer
 import Simula.Weston
 
+import Simula.NewCompositor.Compositor
 import Simula.NewCompositor.Geometry
 import Simula.NewCompositor.OpenGL
 import Simula.NewCompositor.SceneGraph
+import Simula.NewCompositor.Wayland.Input
 import Simula.NewCompositor.Wayland.Output
 import Simula.NewCompositor.Utils
+import Simula.NewCompositor.Types
 
 data SimulaSurface = SimulaSurface {
   _simulaSurfaceBase :: BaseWaylandSurface,
@@ -31,12 +35,15 @@ data SimulaSurface = SimulaSurface {
   } deriving (Eq, Typeable)
 
 data SimulaCompositor = SimulaCompositor {
+  _simulaCompositorScene :: Scene,
   _simulaCompositorDisplay :: WlDisplay,
   _simulaCompositorWestonCompositor :: WestonCompositor,
   _simulaCompositorSurfaceCreatedFuncPtr :: FunPtr (NotifyFunc WestonSurface),
   _simulaCompositorSurfaceMap :: IORef (M.Map WestonSurface SimulaSurface),
   _simulaCompositorOpenGlData :: OpenGLData
   } deriving Eq
+
+data SimulaSeat = SimulaSeat
 
 data OpenGLData = OpenGLData {
   _openGlDataPpcm :: Float,
@@ -141,7 +148,21 @@ blitterDrawTexture tb tex targetRect targetSize depth targetInvertedY sourceInve
     transform = translateMat !*! scaleMat :: M44 Float
   
 
+setTimeout :: IO () -> Int -> IO ThreadId
+setTimeout ioOperation ms =
+  forkIO $ do
+    threadDelay (ms*1000)
+    ioOperation
+
 --BIG TODO: type safety for C bindings, e.g. WlSignal should encode the type of the NotifyFunc data.
+
+instance Compositor SimulaCompositor where
+  compositorWlDisplay = view simulaCompositorDisplay
+  compositorGetSurfaceFromResource comp resource = do
+    ptr <- wlResourceData resource
+    let surface = WestonSurface (castPtr ptr)
+    Some <$> newSimulaSurface surface comp NA
+    
 
 newSimulaCompositor :: Scene -> IO SimulaCompositor
 newSimulaCompositor scene = do
@@ -151,13 +172,13 @@ newSimulaCompositor scene = do
   setup_weston_log_handler
   westonCompositorSetEmptyRuleNames wcomp
 
-  with (WestonBackendConfig westonWaylandBackendConfigVersion 0) $ weston_compositor_load_backend wcomp WestonBackendWayland
+  with (WestonBackendConfig westonWaylandBackendConfigVersion 0) $ weston_compositor_load_backend wcomp WestonBackendX11
   
   socketName <- wl_display_add_socket_auto wldp
   setEnv "WAYLAND_DISPLAY" socketName
 
   rec surfaceCreatedPtr <- createNotifyFuncPtr (onSurfaceCreated compositor)
-      compositor <- SimulaCompositor wldp wcomp surfaceCreatedPtr
+      compositor <- SimulaCompositor scene wldp wcomp surfaceCreatedPtr
                     <$> newIORef M.empty <*> newOpenGlData
       
   let surfaceCreatedSignal = westonCompositorCreateSurfaceSignal wcomp
@@ -171,6 +192,16 @@ newSimulaCompositor scene = do
      let surface = WestonSurface (castPtr sfPtr)
      simulaSurface <- newSimulaSurface surface compositor NA
      modifyIORef' (compositor ^. simulaCompositorSurfaceMap) (M.insert surface simulaSurface)
+
+   onSurfaceDestroyed compositor _ sfPtr = do
+     let surface = WestonSurface (castPtr sfPtr)
+     --TODO destroy surface in wm
+     modifyIORef' (compositor ^. simulaCompositorSurfaceMap) (M.delete surface)
+
+   onSurfaceCommit = undefined
+
+
+
 
 instance WaylandSurface SimulaSurface where
   wsTexture = views simulaSurfaceTexture readIORef
@@ -270,10 +301,45 @@ paintChildren surface window windowSize gld = do
       deleteObjectName tex
     paintChildren subsurface window windowSize gld
     
-    {-
 
-        paintChildren(subSurface,window,windowSize, glData);
+compositorRender :: SimulaCompositor -> IO ()
+compositorRender comp = do
+  surfaceMap <- readIORef (comp ^. simulaCompositorSurfaceMap)
+  let surfaces = M.keys surfaceMap
+  let scene = comp ^. simulaCompositorScene
+
+  time <- getTime Realtime
+  
+  scenePrepareForFrame scene time
+  -- notify surfaces about frame? weston_output.frame_signal?
+  -- weston_surface_schedule_repaint?
+  
+  moveCamera
+  sceneDrawFrame scene
+  sceneFinishFrame scene
+
+  where
+    moveCamera = return ()
+{-
+    if(m_camIsMoving) {
+        glm::vec4 camPos;
+        camPos *= 0;
+        camPos.w = 1;
+        glm::vec4 delta = camPos;
+        delta.x = m_camMoveVec.x;
+        delta.y = m_camMoveVec.y;
+        delta.z = m_camMoveVec.z;
+
+        const float speed = 0.01;
+        delta *= speed;
+        delta.w /= speed;
+        glm::mat4 trans = display()->transform();
+        //camPos = trans * camPos;
+        //delta = trans * delta;
+        glm::vec3 move = glm::vec3(delta.x/delta.w - camPos.x/camPos.w, delta.y/delta.w - camPos.y/camPos.w,
+                                   delta.z/delta.w - camPos.z/camPos.w);
+        trans = glm::translate(trans, move);
+        display()->setTransform(trans);
     }
 -}
-    
-  
+      

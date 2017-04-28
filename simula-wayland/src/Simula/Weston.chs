@@ -87,6 +87,8 @@ westonCompositorSeats wc = do
 westonCompositorCreateSurfaceSignal :: WestonCompositor -> WlSignal
 westonCompositorCreateSurfaceSignal (WestonCompositor ptr) = WlSignal $ plusPtr (castPtr ptr) {#offsetof weston_compositor->create_surface_signal#}
 
+
+
 {#fun weston_seat_get_keyboard {`WestonSeat'} -> `WestonKeyboard' #}
 {#fun weston_seat_get_pointer {`WestonSeat'} -> `WestonPointer' #}
 
@@ -165,3 +167,11 @@ westonSurfaceIsYInverted = {#get weston_buffer->y_inverted#} . westonSurfaceBuff
 
 westonCompositorSetEmptyRuleNames :: WestonCompositor -> IO ()
 westonCompositorSetEmptyRuleNames comp = allocaBytes {#sizeof xkb_rule_names#} $ weston_compositor_set_xkb_rule_names comp . XkbRuleNames . castPtr
+
+
+westonSurfaceDestroySignal :: WestonSurface -> WlSignal
+westonSurfaceDestroySignal (WestonSurface ptr) = WlSignal $ plusPtr (castPtr ptr) {#offsetof weston_surface->destroy_signal#}
+
+westonSurfaceCommitSignal :: WestonSurface -> WlSignal
+westonSurfaceCommitSignal (WestonSurface ptr) = WlSignal $ plusPtr (castPtr ptr) {#offsetof weston_surface->commit_signal#}
+

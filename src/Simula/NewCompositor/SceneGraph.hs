@@ -11,6 +11,8 @@ import Linear.OpenGL
 import Graphics.Rendering.OpenGL.GL hiding (normalize, translate)
 import Foreign
 
+import System.Clock
+
 import Simula.WaylandServer
 import Simula.MotorcarServer
 
@@ -44,9 +46,9 @@ class HasBaseSceneGraphNode a where
 
 data Scene = Scene {
   _sceneBase :: BaseSceneGraphNode,
-  _sceneCurrentTimestamp :: IORef Int,
-  _sceneLastTimestamp :: IORef Int,
-  _sceneWindowManager :: IORef WindowManager,
+  _sceneCurrentTimestamp :: IORef TimeSpec,
+  _sceneLastTimestamp :: IORef TimeSpec,
+  _sceneWindowManager :: WindowManager,
   _sceneCompositor :: IORef (Some Compositor),
   _sceneDisplays :: IORef [Display],
   _sceneActiveDisplay :: IORef (Maybe Display)
@@ -165,7 +167,7 @@ defaultNodeIntersectWithSurfaces this ray = do
 class SceneGraphNode a => PhysicalNode a
 
 class SceneGraphNode a => VirtualNode a where
-  nodeAnimate :: a -> Int -> IO ()
+  nodeAnimate :: a -> TimeSpec -> IO ()
   nodeAnimate _ _ = return ()
 
 makeClassy ''BaseDrawable
@@ -248,13 +250,13 @@ virtualNodeOnFrameBegin _ _ = fail "Scene is Nothing"
 
 instance SceneGraphNode Scene
 
-setSceneTimestamp :: Scene -> Int -> IO ()
+setSceneTimestamp :: Scene -> TimeSpec -> IO ()
 setSceneTimestamp this ts = do
   prev <- readIORef $ _sceneCurrentTimestamp this
   writeIORef (_sceneLastTimestamp this) prev
   writeIORef (_sceneCurrentTimestamp this) ts
 
-scenePrepareForFrame :: Scene -> Int -> IO ()
+scenePrepareForFrame :: Scene -> TimeSpec -> IO ()
 scenePrepareForFrame this ts = do
   setSceneTimestamp this ts
   nodeMapOntoSubtree this (\(Some node) -> nodeOnFrameBegin node) (Just this)
@@ -280,7 +282,7 @@ sceneFinishFrame this = do
         std::cout <<  "OpenGL Error from frame: " << error <<std::endl;
     } -}
 
-sceneLatestTimestampChange :: Scene -> IO Int
+sceneLatestTimestampChange :: Scene -> IO TimeSpec
 sceneLatestTimestampChange this = do
   last <- readIORef $ this ^. sceneLastTimestamp 
   curr <- readIORef $ this ^. sceneCurrentTimestamp
