@@ -225,6 +225,7 @@ newShell scene = do
       bindFuncPtr <- createGlobalBindFuncPtr bindFunc
   
       global <- wl_global_create dp shellIf shellVer (castStablePtrToPtr shellPtr) bindFuncPtr
+  putStrLn "Created shell"
   return shell
 
   where
@@ -234,8 +235,10 @@ newShell scene = do
       sFuncPtr <- createGetMotorcarSurfaceFuncPtr getMotorcarSurface
       sFuncPtrPtr <- castPtr <$> new sFuncPtr
       wl_resource_set_implementation resource sFuncPtrPtr shell nullFunPtr
+      putStrLn "Bound resource"
 
     getMotorcarSurface client resource ident surfaceResource clipmode dce = do
+      putStrLn "Getting motorcar surface"
       shellPtr <- castPtrToStablePtr <$> wlResourceData resource
       shell <- deRefStablePtr shellPtr
       
@@ -250,9 +253,11 @@ newShell scene = do
       setWsClippingMode surface mode
       setWsIsMotorcarSurface surface True
       setWsDepthCompositingEnabled surface (toBool dce)
-      wm <- readIORef (scene ^. sceneWindowManager)
+      let wm = scene ^. sceneWindowManager
 
+      putStrLn "Creating motorcar surface"
       Some wsn <- wmCreateSurface wm surface
+      putStrLn "Created motorcar surface"
       --TODO this is silly, refactor
       case cast wsn of
         Just msn -> configureResource msn client ident

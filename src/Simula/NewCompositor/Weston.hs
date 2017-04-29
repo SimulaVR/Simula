@@ -164,6 +164,7 @@ instance Compositor SimulaCompositor where
     Some <$> newSimulaSurface surface comp NA
     
 
+--BUG TODO: need an actual wl_shell
 newSimulaCompositor :: Scene -> IO SimulaCompositor
 newSimulaCompositor scene = do
   wldp <- wl_display_create
@@ -304,6 +305,7 @@ paintChildren surface window windowSize gld = do
 
 compositorRender :: SimulaCompositor -> IO ()
 compositorRender comp = do
+  putStrLn "Render start"
   surfaceMap <- readIORef (comp ^. simulaCompositorSurfaceMap)
   let surfaces = M.keys surfaceMap
   let scene = comp ^. simulaCompositorScene
@@ -317,6 +319,8 @@ compositorRender comp = do
   moveCamera
   sceneDrawFrame scene
   sceneFinishFrame scene
+  putStrLn "Render end"
+  get errors >>= print
 
   where
     moveCamera = return ()

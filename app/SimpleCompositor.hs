@@ -7,8 +7,10 @@ import Simula.NewCompositor.Weston
 import Simula.NewCompositor.WindowManager
 import Simula.NewCompositor.SceneGraph
 import Simula.NewCompositor.Types
+import Simula.WestonDesktop
 import Simula.Weston
 import Simula.WaylandServer
+import Foreign
 import Linear
 
 data DummySeat = DummySeat
@@ -24,8 +26,26 @@ main = do
            <*> newIORef 0 <*> newIORef 0
            <*> pure wm <*> newIORef (Some comp) <*> newIORef [] <*> newIORef Nothing
     wm <- newWindowManager scene DummySeat
-  
+
+  let api = WestonDesktopApi {
+        apiPingTimeout = \  _ _ -> putStrLn "ping timeout",
+        apiPong = \  _ _ -> putStrLn "api pong",
+        apiSurfaceAdded = \  _ _ -> putStrLn "api surface added",
+        apiSurfaceRemoved = \  _ _ -> putStrLn "api surface removed",
+        apiCommitted = \  _ _ _ _ -> putStrLn "api committed",
+        apiShowWindowMenu = \  _ _ _ _ _ -> putStrLn "api show window menu",
+        apiSetParent = \  _ _ _ -> putStrLn "api set parent",
+        apiMove = \  _ _ _ _ -> putStrLn "api move",
+        apiResize = \  _ _ _ _ _ -> putStrLn "api resize",
+        apiFullscreenRequested = \  _ _ _ _ -> putStrLn "api fullscreen requested",
+        apiMaximizedRequested = \  _ _ _ -> putStrLn "api maximized requested",
+        apiMinimizedRequested = \  _ _ -> putStrLn "api minimized requested"
+        }
+
+  let wc = comp ^. simulaCompositorWestonCompositor
+  westonDesktopCreate wc api nullPtr
   setTimeout (compositorRender comp) 16
-  weston_compositor_wake $ comp ^. simulaCompositorWestonCompositor
+  putStrLn "Compositor start"
+  weston_compositor_wake wc
   wl_display_run $ comp ^. simulaCompositorDisplay
   

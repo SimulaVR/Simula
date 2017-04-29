@@ -131,16 +131,16 @@ class Drawable a => WaylandSurfaceNode a where
     setNodeTransform (this ^. waylandSurfaceNodeDecorations) $ rotM !*! scaleM !*! scale (V3 1.04 1.04 0)
 
 instance HasBaseSceneGraphNode BaseWaylandSurfaceNode where
-  baseSceneGraphNode = baseSceneGraphNode
+  baseSceneGraphNode = baseDrawable.baseSceneGraphNode
 
 instance HasBaseDrawable BaseWaylandSurfaceNode where
   baseDrawable = waylandSurfaceNodeBase
 
 instance HasBaseSceneGraphNode MotorcarSurfaceNode where
-  baseSceneGraphNode = baseSceneGraphNode
+  baseSceneGraphNode = baseDrawable.baseSceneGraphNode
 
 instance HasBaseDrawable MotorcarSurfaceNode where
-  baseDrawable = baseDrawable
+  baseDrawable = baseWaylandSurfaceNode.baseDrawable
 
 instance HasBaseWaylandSurfaceNode MotorcarSurfaceNode where
   baseWaylandSurfaceNode = motorcarSurfaceNodeBase
@@ -538,19 +538,19 @@ newWaylandSurfaceNode ws parent tf = do
   let decoVert = concat [ mkDeco i j k | i <- [-1,1], j <- [-1,1], k <- [-1,1] ]
   let decoColor = Color3 0.5 0.5 0.5
 
-  rec decoNode <- newWireframeNode decoVert decoColor node identity
-      node <- BaseWaylandSurfaceNode
-              <$> newBaseDrawable (Just (Some parent)) tf
-              <*> newIORef (Some ws)
-              <*> newIORef identity
-              <*> pure decoNode
-              <*> pure texCoords
-              <*> pure verCoords
-              <*> pure program
-              <*> pure aPos
-              <*> pure aTex
-              <*> pure uMVP
-              <*> newIORef False
+  decoNode <- newWireframeNode decoVert decoColor Nothing identity
+  node <- BaseWaylandSurfaceNode
+          <$> newBaseDrawable (Just (Some parent)) tf
+          <*> newIORef (Some ws)
+          <*> newIORef identity
+          <*> pure decoNode
+          <*> pure texCoords
+          <*> pure verCoords
+          <*> pure program
+          <*> pure aPos
+          <*> pure aTex
+          <*> pure uMVP
+          <*> newIORef False
   return node
 
   where
@@ -596,20 +596,11 @@ newMotorcarSurfaceNode ws prt tf dims = do
   withArrayLen cuboidClippingVerts $ \len coordPtr ->
     bufferData ArrayBuffer $= (fromIntegral (len * sizeOf (undefined :: Word32)), coordPtr, StaticDraw)
 
-
   cci <- genObjectName
   bindBuffer ArrayBuffer $= Just cci
   withArrayLen cuboidClippingInds $ \len coordPtr ->
     bufferData ElementArrayBuffer $= (fromIntegral (len * sizeOf (undefined :: Float)), coordPtr, StaticDraw)
 
-  {-
-    wl_array_init(&m_dimensionsArray);
-    wl_array_init(&m_transformArray);
-
-    wl_array_add(&m_dimensionsArray, sizeof(glm::vec3));
-    wl_array_add(&m_transformArray, sizeof(glm::mat4));
-  -}
-  
   setNodeTransform (wsn ^. waylandSurfaceNodeDecorations) $ scale dims
 
   rec node <- MotorcarSurfaceNode
@@ -617,7 +608,7 @@ newMotorcarSurfaceNode ws prt tf dims = do
 
               <*> pure dcss
               <*> pure dcsbs
-
+  
               <*> pure clipping
               <*> genObjectName
               <*> genObjectName
@@ -643,6 +634,8 @@ newMotorcarSurfaceNode ws prt tf dims = do
               <*> newWlArray
               <*> newWlArray
               <*> newStablePtr node
+
+  setNodeParent (node ^. waylandSurfaceNodeDecorations) (Just (Some node))
   return node
     
     
@@ -696,6 +689,7 @@ configureResource this client ident = do
 
   sendTransformToClient this
   readIORef (this ^. motorcarSurfaceNodeDimensions) >>= msnRequestSize3D this
+  putStrLn "Configured motorcar surface"
 
   where
     setSize3D client resource dimsArr = do

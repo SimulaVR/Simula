@@ -44,6 +44,9 @@ class HasBaseSceneGraphNode a where
   graphNodeTransform = baseSceneGraphNode . go
     where go f (BaseSceneGraphNode c p t) = (\t' -> BaseSceneGraphNode c p t') <$> f t
 
+instance HasBaseSceneGraphNode BaseSceneGraphNode where
+  baseSceneGraphNode = id
+
 data Scene = Scene {
   _sceneBase :: BaseSceneGraphNode,
   _sceneCurrentTimestamp :: IORef TimeSpec,
@@ -211,8 +214,10 @@ instance HasBaseDrawable WireframeNode where
 setNodeParent :: SceneGraphNode a => a -> Maybe (Some SceneGraphNode) -> IO ()
 setNodeParent this Nothing = setNodeParent' this Nothing
 setNodeParent this x@(Just (Some prt)) = case cast prt of
-  Just prt' | this == prt' -> setNodeParent' this Nothing
-  _ -> setNodeParent' this x >> modifyIORef' (nodeChildren prt) (++ [Some this])
+  Just prt' | this == prt' -> setNodeParent' this Nothing 
+  _ -> do
+    setNodeParent' this x
+    modifyIORef' (nodeChildren prt) (++ [Some this])
 
 nodeSubtreeContains :: (SceneGraphNode a, SceneGraphNode b) => a -> b -> IO Bool
 nodeSubtreeContains this node = case cast node of
@@ -314,6 +319,9 @@ newViewPoint near far display parent transform viewPortParams centerOfProjection
 
   vpIf <- motorcarViewpointInterface
   vpVer <- motorcarViewpointVersion
+
+  bindFuncPtr <- createGlobalBindFuncPtr bindFunc
+  putStrLn "creating new viewpoint"
   
   rec global <- wl_global_create wlDisplay vpIf vpVer (castStablePtrToPtr vpPtr) bindFuncPtr
       vp <- ViewPoint base display near far cof cofTf bufferGeometry global
@@ -322,8 +330,8 @@ newViewPoint near far display parent transform viewPortParams centerOfProjection
                    <*> newIORef identity <*> newIORef identity
                    <*> newIORef False <*> pure vpPtr <*> pure bindFuncPtr
       vpPtr <- newStablePtr vp
-      bindFuncPtr <- createGlobalBindFuncPtr bindFunc
 
+  putStrLn "created new viewpoint"
   viewPointUpdateViewMatrix vp
   viewPointUpdateProjectionMatrix vp
   viewPointSendViewPortToClients vp
@@ -594,9 +602,9 @@ instance Drawable WireframeNode where
     vertexAttribArray (_wireframeNodeAPositionLine this) $= Disabled
     currentProgram $= Nothing
 
-newWireframeNode :: SceneGraphNode a => [Float] -> Color3 Float -> a -> M44 Float -> IO WireframeNode
+newWireframeNode :: [Float] -> Color3 Float -> Maybe (Some SceneGraphNode) -> M44 Float -> IO WireframeNode
 newWireframeNode segs lineColor parent transform = do
-  drawable <- newBaseDrawable (Just (Some parent)) transform
+  drawable <- newBaseDrawable parent transform
   lineColorRef <- newIORef lineColor
   segArray <- newArray segs >>= newForeignPtr finalizerFree
   let numSegments = length segs `div` 6
