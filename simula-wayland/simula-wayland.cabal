@@ -8,7 +8,7 @@ cabal-version:  >= 1.10
 library
   hs-source-dirs:
       src
-  default-extensions: GADTs ConstraintKinds KindSignatures StandaloneDeriving FlexibleInstances FlexibleContexts MultiParamTypeClasses FunctionalDependencies ScopedTypeVariables RankNTypes RecursiveDo DefaultSignatures PatternSynonyms LambdaCase ForeignFunctionInterface QuasiQuotes TemplateHaskell OverloadedStrings TypeInType TypeFamilies TypeFamilyDependencies AllowAmbiguousTypes
+  default-extensions: GADTs ConstraintKinds KindSignatures StandaloneDeriving FlexibleInstances FlexibleContexts MultiParamTypeClasses FunctionalDependencies ScopedTypeVariables RankNTypes RecursiveDo DefaultSignatures PatternSynonyms LambdaCase ForeignFunctionInterface QuasiQuotes TemplateHaskell OverloadedStrings TypeInType TypeFamilies TypeFamilyDependencies AllowAmbiguousTypes RecordWildCards
   include-dirs:
       cbits
   c-sources:
@@ -20,6 +20,7 @@ library
     , containers
     , inline-c
     , linear
+    , unix
   build-tools:
       c2hs
   exposed-modules:
@@ -29,6 +30,7 @@ library
       Simula.WestonDesktop                  
   default-language: Haskell2010
   pkgconfig-depends:
-      libweston-1
-    , libweston-desktop-1
+      libweston-2
+    , libweston-desktop-2
     , wayland-server
+    , egl

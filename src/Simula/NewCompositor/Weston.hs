@@ -17,6 +17,8 @@ import System.Environment
 
 import Simula.WaylandServer
 import Simula.Weston
+import Simula.WestonDesktop
+
 
 import Simula.NewCompositor.Compositor
 import Simula.NewCompositor.Geometry
@@ -29,7 +31,7 @@ import Simula.NewCompositor.Types
 
 data SimulaSurface = SimulaSurface {
   _simulaSurfaceBase :: BaseWaylandSurface,
-  _simulaSurfaceWestonSurface :: WestonSurface,
+  _simulaSurfaceWestonDesktopSurface :: WestonDesktopSurface,
   _simulaSurfaceCompositor :: SimulaCompositor,
   _simulaSurfaceTexture :: IORef (Maybe TextureObject)
   } deriving (Eq, Typeable)
@@ -38,8 +40,7 @@ data SimulaCompositor = SimulaCompositor {
   _simulaCompositorScene :: Scene,
   _simulaCompositorDisplay :: WlDisplay,
   _simulaCompositorWestonCompositor :: WestonCompositor,
-  _simulaCompositorSurfaceCreatedFuncPtr :: FunPtr (NotifyFunc WestonSurface),
-  _simulaCompositorSurfaceMap :: IORef (M.Map WestonSurface SimulaSurface),
+  _simulaCompositorSurfaceMap :: IORef (M.Map WestonDesktopSurface SimulaSurface),
   _simulaCompositorOpenGlData :: OpenGLData
   } deriving Eq
 
@@ -66,7 +67,7 @@ makeLenses ''TextureBlitter
 instance HasBaseWaylandSurface SimulaSurface where
   baseWaylandSurface = simulaSurfaceBase
 
-newSimulaSurface :: WestonSurface -> SimulaCompositor -> WaylandSurfaceType -> IO SimulaSurface
+newSimulaSurface :: WestonDesktopSurface -> SimulaCompositor -> WaylandSurfaceType -> IO SimulaSurface
 newSimulaSurface ws comp ty = SimulaSurface
                               <$> newBaseWaylandSurface ty
                               <*> pure ws <*> pure comp
@@ -160,7 +161,7 @@ instance Compositor SimulaCompositor where
   compositorWlDisplay = view simulaCompositorDisplay
   compositorGetSurfaceFromResource comp resource = do
     ptr <- wlResourceData resource
-    let surface = WestonSurface (castPtr ptr)
+    let surface = WestonDesktopSurface (castPtr ptr)
     Some <$> newSimulaSurface surface comp NA
     
 
@@ -173,33 +174,57 @@ newSimulaCompositor scene = do
   setup_weston_log_handler
   westonCompositorSetEmptyRuleNames wcomp
 
-  with (WestonBackendConfig westonWaylandBackendConfigVersion 0) $ weston_compositor_load_backend wcomp WestonBackendX11
+  --todo hack; make this into a proper withXXX function
+  with (WestonX11BackendConfig (WestonBackendConfig westonX11BackendConfigVersion (sizeOf (undefined :: WestonX11BackendConfig)))
+           False
+           False
+           False) $ weston_compositor_load_backend wcomp WestonBackendX11 . castPtr
   
   socketName <- wl_display_add_socket_auto wldp
   setEnv "WAYLAND_DISPLAY" socketName
 
-  rec surfaceCreatedPtr <- createNotifyFuncPtr (onSurfaceCreated compositor)
-      compositor <- SimulaCompositor scene wldp wcomp surfaceCreatedPtr
-                    <$> newIORef M.empty <*> newOpenGlData
-      
-  let surfaceCreatedSignal = westonCompositorCreateSurfaceSignal wcomp
+  compositor <- SimulaCompositor scene wldp wcomp
+                <$> newIORef M.empty <*> newOpenGlData
 
-  addListenerToSignal surfaceCreatedSignal surfaceCreatedPtr
+  let api = defaultWestonDesktopApi {
+        apiSurfaceAdded = onSurfaceCreated compositor,
+        apiSurfaceRemoved = onSurfaceDestroyed compositor
+        }
 
+  westonDesktopCreate wcomp api nullPtr
+
+  windowedApi <- weston_windowed_output_get_api wcomp
+
+  let outputPendingSignal = westonCompositorOutputPendingSignal wcomp
+  outputPendingPtr <- createNotifyFuncPtr (onOutputPending windowedApi compositor)
+
+  addListenerToSignal outputPendingSignal outputPendingPtr
+ 
+  westonWindowedOutputCreate windowedApi wcomp ""
+  
   return compositor
 
  where
-   onSurfaceCreated compositor _ sfPtr = do
-     let surface = WestonSurface (castPtr sfPtr)
+   onSurfaceCreated compositor surface  _ = do
+     putStrLn "surface created"
      simulaSurface <- newSimulaSurface surface compositor NA
      modifyIORef' (compositor ^. simulaCompositorSurfaceMap) (M.insert surface simulaSurface)
 
-   onSurfaceDestroyed compositor _ sfPtr = do
-     let surface = WestonSurface (castPtr sfPtr)
+   onSurfaceDestroyed compositor surface _ = do
      --TODO destroy surface in wm
      modifyIORef' (compositor ^. simulaCompositorSurfaceMap) (M.delete surface)
 
    onSurfaceCommit = undefined
+
+   onOutputPending windowedApi compositor _ outputPtr = do
+     putStrLn "output created"
+     let output = WestonOutput $ castPtr outputPtr
+     --TODO hack
+     weston_output_set_scale output 1
+     weston_output_set_transform output 0
+     westonWindowedOutputSetSize windowedApi output 1280 720
+
+     Foreign.void $ weston_output_enable output
 
 
 
@@ -207,20 +232,19 @@ newSimulaCompositor scene = do
 instance WaylandSurface SimulaSurface where
   wsTexture = views simulaSurfaceTexture readIORef
   
-  wsSize surf = V2 <$> westonSurfaceWidth ws <*> westonSurfaceHeight ws
+  wsSize surf = V2 <$> weston_desktop_surface_get_width ws <*> weston_desktop_surface_get_height ws
     where
-      ws = surf ^. simulaSurfaceWestonSurface
+      ws = surf ^. simulaSurfaceWestonDesktopSurface
   
-  setWsSize surf (V2 x y) = setWestonSurfaceWidth ws x >> setWestonSurfaceHeight ws y
+  setWsSize surf (V2 x y) =  weston_desktop_surface_set_size ws x y
     where
-      ws = surf ^. simulaSurfaceWestonSurface
+      ws = surf ^. simulaSurfaceWestonDesktopSurface
   
-  wsPosition surf = do
-    (view:_) <- westonSurfaceViews ws
-    V2 <$> westonViewPosX view <*> westonViewPosY view
+  wsPosition surf = (fmap.fmap) fromIntegral $ 
+    V2 <$> weston_desktop_surface_get_position_x ws <*> weston_desktop_surface_get_position_y ws
 
     where
-      ws = surf ^. simulaSurfaceWestonSurface
+      ws = surf ^. simulaSurfaceWestonDesktopSurface
     
   wsPrepare surf = do
     texture <- composeSurface surf (surf ^. simulaSurfaceCompositor.simulaCompositorOpenGlData)
@@ -257,8 +281,8 @@ textureFromSurface ws = do
 
 composeSurface :: SimulaSurface -> OpenGLData -> IO TextureObject
 composeSurface surf gld = do
-  let ws = surf ^. simulaSurfaceWestonSurface
-  size <- V2 <$> westonSurfaceWidth ws <*> westonSurfaceHeight ws
+  ws <- weston_desktop_surface_get_surface $ surf ^. simulaSurfaceWestonDesktopSurface
+  size <- wsSize surf
 
   let fbo = gld ^. openGLDataSurfaceFbo
   bindFramebuffer Framebuffer $= fbo
@@ -305,7 +329,6 @@ paintChildren surface window windowSize gld = do
 
 compositorRender :: SimulaCompositor -> IO ()
 compositorRender comp = do
-  putStrLn "Render start"
   surfaceMap <- readIORef (comp ^. simulaCompositorSurfaceMap)
   let surfaces = M.keys surfaceMap
   let scene = comp ^. simulaCompositorScene
@@ -319,8 +342,9 @@ compositorRender comp = do
   moveCamera
   sceneDrawFrame scene
   sceneFinishFrame scene
-  putStrLn "Render end"
-  get errors >>= print
+
+  threadDelay 16000
+  compositorRender comp
 
   where
     moveCamera = return ()
@@ -346,4 +370,4 @@ compositorRender comp = do
         display()->setTransform(trans);
     }
 -}
-      
+

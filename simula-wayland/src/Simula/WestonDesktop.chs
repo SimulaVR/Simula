@@ -11,10 +11,13 @@ import Foreign
 import Foreign.C
 
 #include "libweston-desktop.h"
+#include "util.h"
 
 {#enum weston_desktop_surface_edge as WestonDesktopSurfaceEdge {underscoreToCase} #}
 {#pointer *weston_desktop_client as WestonDesktopClient newtype#}
 {#pointer *weston_desktop_surface as WestonDesktopSurface newtype#}
+deriving instance Eq WestonDesktopSurface
+deriving instance Ord WestonDesktopSurface
 
 
 type family AsC (a :: *) where
@@ -91,6 +94,22 @@ data WestonDesktopApi a = WestonDesktopApi {
   apiMinimizedRequested :: MinimizedRequestedFunc a
   }
 
+defaultWestonDesktopApi :: WestonDesktopApi a
+defaultWestonDesktopApi = WestonDesktopApi {
+  apiPingTimeout = \_ _ -> return (),
+  apiPong = \_ _ -> return (),
+  apiSurfaceAdded = \_ _ -> return (),
+  apiSurfaceRemoved = \_ _ -> return (),
+  apiCommitted = \_ _ _ _ -> return (),
+  apiShowWindowMenu = \_ _ _ _ _ -> return (),
+  apiSetParent = \_ _ _ -> return (),
+  apiMove = \_ _ _ _ -> return (),
+  apiResize = \_ _ _ _ _ -> return (),
+  apiFullscreenRequested = \_ _ _ _ -> return (),
+  apiMaximizedRequested = \_ _ _ -> return (),
+  apiMinimizedRequested = \_ _ -> return ()
+  }
+
 {#pointer *weston_desktop_api as WestonDesktopApiPtr -> `WestonDesktopApi ()'#}
 
 --TODO Template haskell this?
@@ -120,3 +139,13 @@ westonDesktopCreate :: WestonCompositor -> WestonDesktopApi a -> Ptr a -> IO Wes
 westonDesktopCreate wc api udPtr = with api $ \apiPtr -> weston_desktop_create wc (castPtr apiPtr) (castPtr udPtr)
 
 {#fun weston_desktop_destroy {`WestonDesktop'} -> `()'#}
+
+{#fun weston_desktop_surface_get_surface {`WestonDesktopSurface'} -> `WestonSurface' #}
+{#fun weston_desktop_surface_set_size {`WestonDesktopSurface', `Int', `Int'} -> `()' #}
+
+ 
+{#fun weston_desktop_surface_get_position_x {`WestonDesktopSurface'} -> `Int' #}
+{#fun weston_desktop_surface_get_position_y {`WestonDesktopSurface'} -> `Int' #}
+{#fun weston_desktop_surface_get_width {`WestonDesktopSurface'} -> `Int' #}
+{#fun weston_desktop_surface_get_height {`WestonDesktopSurface'} -> `Int' #}
+

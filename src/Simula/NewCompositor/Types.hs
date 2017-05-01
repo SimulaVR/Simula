@@ -4,6 +4,6 @@ import GHC.Exts (Constraint)
 
 -- |Existential wrapper 
 data Some :: (* -> Constraint) -> * where
-  Some :: f a => { unSome :: a } -> Some f
+  Some :: f a => a -> Some f
 
 

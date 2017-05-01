@@ -46,6 +46,7 @@ dependencies:
   - simula-wayland
 
 
+
 _executable_options: &executable_options
   dependencies: [base, SimulaHS]
     
