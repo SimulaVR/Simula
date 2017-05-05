@@ -26,6 +26,7 @@ import Simula.NewCompositor.OpenGL
 import Simula.NewCompositor.SceneGraph
 import Simula.NewCompositor.Wayland.Input
 import Simula.NewCompositor.Wayland.Output
+import Simula.NewCompositor.WindowManager
 import Simula.NewCompositor.Utils
 import Simula.NewCompositor.Types
 
@@ -38,10 +39,13 @@ data SimulaSurface = SimulaSurface {
 
 data SimulaCompositor = SimulaCompositor {
   _simulaCompositorScene :: Scene,
-  _simulaCompositorDisplay :: WlDisplay,
+  _simulaCompositorDisplay :: Display,
+  _simulaCompositorWlDisplay :: WlDisplay,
   _simulaCompositorWestonCompositor :: WestonCompositor,
   _simulaCompositorSurfaceMap :: IORef (M.Map WestonDesktopSurface SimulaSurface),
-  _simulaCompositorOpenGlData :: OpenGLData
+  _simulaCompositorOpenGlData :: OpenGLData,
+  _simulaCompositorOutput :: IORef (Maybe WestonOutput),
+  _simulaCompositorGlContext :: IORef (Maybe SimulaOpenGLContext)
   } deriving Eq
 
 data SimulaSeat = SimulaSeat
@@ -49,8 +53,14 @@ data SimulaSeat = SimulaSeat
 data OpenGLData = OpenGLData {
   _openGlDataPpcm :: Float,
   _openGlDataTextureBlitter :: TextureBlitter,
-  _openGLDataSurfaceFbo :: FramebufferObject
+  _openGlDataSurfaceFbo :: FramebufferObject
   } deriving Eq
+
+data SimulaOpenGLContext = SimulaOpenGLContext {
+  _simulaOpenGlContextEglContext :: EGLContext,
+  _simulaOpenGlContextEglDisplay :: EGLDisplay,
+  _simulaOpenGlContextEglSurface :: EGLSurface
+  } deriving (Eq, Typeable)
 
 data TextureBlitter = TextureBlitter {
   _textureBlitterProgram :: Program,
@@ -62,7 +72,19 @@ data TextureBlitter = TextureBlitter {
 makeLenses ''SimulaSurface
 makeLenses ''SimulaCompositor
 makeLenses ''OpenGLData
+makeLenses ''SimulaOpenGLContext
 makeLenses ''TextureBlitter
+
+instance OpenGLContext SimulaOpenGLContext where
+  glCtxMakeCurrent this = do
+    eglMakeCurrent egldp eglsurf eglsurf eglctx
+
+    where
+      eglctx = this ^. simulaOpenGlContextEglContext
+      egldp = this ^. simulaOpenGlContextEglDisplay
+      eglsurf = this ^. simulaOpenGlContextEglSurface
+
+
 
 instance HasBaseWaylandSurface SimulaSurface where
   baseWaylandSurface = simulaSurfaceBase
@@ -116,6 +138,7 @@ blitterDrawTexture tb tex targetRect targetSize depth targetInvertedY sourceInve
 
   vertexAttribArray vertexCoordEntry $= Disabled
   vertexAttribArray textureCoordEntry $= Disabled
+  checkForErrors
 
   where
     z = fromIntegral depth / 1000
@@ -158,7 +181,12 @@ setTimeout ioOperation ms =
 --BIG TODO: type safety for C bindings, e.g. WlSignal should encode the type of the NotifyFunc data.
 
 instance Compositor SimulaCompositor where
-  compositorWlDisplay = view simulaCompositorDisplay
+  compositorDisplay = return . view simulaCompositorDisplay
+  compositorWlDisplay = view simulaCompositorWlDisplay
+  compositorOpenGLContext this = do
+    Just glctx <- readIORef (this ^. simulaCompositorGlContext)
+    return (Some glctx)
+    
   compositorGetSurfaceFromResource comp resource = do
     ptr <- wlResourceData resource
     let surface = WestonDesktopSurface (castPtr ptr)
@@ -166,8 +194,8 @@ instance Compositor SimulaCompositor where
     
 
 --BUG TODO: need an actual wl_shell
-newSimulaCompositor :: Scene -> IO SimulaCompositor
-newSimulaCompositor scene = do
+newSimulaCompositor :: Scene -> Display -> IO SimulaCompositor
+newSimulaCompositor scene display = do
   wldp <- wl_display_create
   wcomp <- weston_compositor_create wldp nullPtr
 
@@ -175,40 +203,76 @@ newSimulaCompositor scene = do
   westonCompositorSetEmptyRuleNames wcomp
 
   --todo hack; make this into a proper withXXX function
-  with (WestonX11BackendConfig (WestonBackendConfig westonX11BackendConfigVersion (sizeOf (undefined :: WestonX11BackendConfig)))
+  res <- with (WestonX11BackendConfig (WestonBackendConfig westonX11BackendConfigVersion (sizeOf (undefined :: WestonX11BackendConfig)))
            False
            False
            False) $ weston_compositor_load_backend wcomp WestonBackendX11 . castPtr
+
+  when (res > 0) $ ioError $ userError "Error when loading backend"
   
   socketName <- wl_display_add_socket_auto wldp
+  putStrLn $ "Socket: " ++ socketName
   setEnv "WAYLAND_DISPLAY" socketName
 
-  compositor <- SimulaCompositor scene wldp wcomp
+  compositor <- SimulaCompositor scene display wldp wcomp
                 <$> newIORef M.empty <*> newOpenGlData
+                <*> newIORef Nothing <*> newIORef Nothing
+
+  windowedApi <- weston_windowed_output_get_api wcomp
+
+  let outputPendingSignal = westonCompositorOutputPendingSignal wcomp
+  outputPendingPtr <- createNotifyFuncPtr (onOutputPending windowedApi compositor)
+  addListenerToSignal outputPendingSignal outputPendingPtr
+
+  let outputCreatedSignal = westonCompositorOutputCreatedSignal wcomp
+  outputCreatedPtr <- createNotifyFuncPtr (onOutputCreated compositor)
+  addListenerToSignal outputCreatedSignal outputCreatedPtr
+ 
+  westonWindowedOutputCreate windowedApi wcomp "X"
+
 
   let api = defaultWestonDesktopApi {
         apiSurfaceAdded = onSurfaceCreated compositor,
         apiSurfaceRemoved = onSurfaceDestroyed compositor
         }
 
+  mainLayer <- newWestonLayer wcomp
+  weston_layer_set_position mainLayer WestonLayerPositionNormal
+  bgLayer <- newWestonLayer wcomp
+  weston_layer_set_position mainLayer WestonLayerPositionBackground
+
+  bgSurface <- weston_surface_create wcomp
+  bgView <- weston_view_create bgSurface
+
+  weston_surface_set_color bgSurface 0.16 0.32 0.48 1
+  pixman_region32_fini (westonSurfaceOpaque bgSurface)
+  pixman_region32_init_rect (westonSurfaceOpaque bgSurface) 0 0 2000 2000
+
+  pixman_region32_fini (westonSurfaceInput bgSurface)
+  pixman_region32_init_rect (westonSurfaceInput bgSurface) 0 0 2000 2000
+
+  weston_surface_set_size bgSurface 2000 2000
+  weston_view_set_position bgView 0 0
+  weston_layer_entry_insert (westonLayerViewList bgLayer) (westonViewLayerEntry bgView)
+  weston_view_update_transform bgView
+  
+  
+  
   westonDesktopCreate wcomp api nullPtr
 
-  windowedApi <- weston_windowed_output_get_api wcomp
-
-  let outputPendingSignal = westonCompositorOutputPendingSignal wcomp
-  outputPendingPtr <- createNotifyFuncPtr (onOutputPending windowedApi compositor)
-
-  addListenerToSignal outputPendingSignal outputPendingPtr
- 
-  westonWindowedOutputCreate windowedApi wcomp ""
-  
   return compositor
 
  where
    onSurfaceCreated compositor surface  _ = do
      putStrLn "surface created"
+     view <- weston_desktop_surface_create_view surface
      simulaSurface <- newSimulaSurface surface compositor NA
      modifyIORef' (compositor ^. simulaCompositorSurfaceMap) (M.insert surface simulaSurface)
+
+     let wm = compositor ^. simulaCompositorScene.sceneWindowManager
+     -- need to figure out surface type
+     wmMapSurface wm simulaSurface TopLevel
+     return ()
 
    onSurfaceDestroyed compositor surface _ = do
      --TODO destroy surface in wm
@@ -217,17 +281,32 @@ newSimulaCompositor scene = do
    onSurfaceCommit = undefined
 
    onOutputPending windowedApi compositor _ outputPtr = do
-     putStrLn "output created"
+     putStrLn "output pending"
      let output = WestonOutput $ castPtr outputPtr
      --TODO hack
      weston_output_set_scale output 1
      weston_output_set_transform output 0
-     westonWindowedOutputSetSize windowedApi output 1280 720
+     westonWindowedOutputSetSize windowedApi output 2000 2000
 
-     Foreign.void $ weston_output_enable output
+     weston_output_enable output
+     return ()
 
 
+   onOutputCreated compositor _ outputPtr = do
+     let output = WestonOutput $ castPtr outputPtr
+     writeIORef (compositor ^. simulaCompositorOutput) $ Just output
+     let wc = compositor ^. simulaCompositorWestonCompositor
+     renderer <- westonCompositorGlRenderer wc
+     eglctx <- westonGlRendererContext renderer
+     egldp <- westonGlRendererDisplay renderer
+     eglsurf <- westonOutputRendererSurface output
+     let glctx = SimulaOpenGLContext eglctx egldp eglsurf
 
+     let (EGLDisplay egldpPtr) = egldp
+     putStrLn $ show egldpPtr
+     
+     writeIORef (compositor ^. simulaCompositorGlContext) (Just glctx)
+     
 
 instance WaylandSurface SimulaSurface where
   wsTexture = views simulaSurfaceTexture readIORef
@@ -276,15 +355,17 @@ textureFromSurface ws = do
     texImage2D Texture2D NoProxy 0 RGBA' (TextureSize2D width height) 0 (PixelData BGRA UnsignedInt8888Rev ptr)
 
   textureBinding Texture2D $= Nothing
+  checkForErrors
   return texture
 
 
 composeSurface :: SimulaSurface -> OpenGLData -> IO TextureObject
 composeSurface surf gld = do
+  putStrLn "composed surface"
   ws <- weston_desktop_surface_get_surface $ surf ^. simulaSurfaceWestonDesktopSurface
   size <- wsSize surf
 
-  let fbo = gld ^. openGLDataSurfaceFbo
+  let fbo = gld ^. openGlDataSurfaceFbo
   bindFramebuffer Framebuffer $= fbo
 
   texture <- textureFromSurface ws
@@ -295,7 +376,7 @@ composeSurface surf gld = do
   --TODO what does this do?
   framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D (TextureObject 0) 0
   bindFramebuffer Framebuffer $= defaultFramebufferObject
-
+  checkForErrors
   return texture
   
 
@@ -330,21 +411,33 @@ paintChildren surface window windowSize gld = do
 compositorRender :: SimulaCompositor -> IO ()
 compositorRender comp = do
   surfaceMap <- readIORef (comp ^. simulaCompositorSurfaceMap)
+  Just glctx <- readIORef (comp ^. simulaCompositorGlContext)
+  Just output <- readIORef (comp ^. simulaCompositorOutput)
+
+
+  glCtxMakeCurrent glctx
+  -- set up context
+  
   let surfaces = M.keys surfaceMap
   let scene = comp ^. simulaCompositorScene
 
   time <- getTime Realtime
   
   scenePrepareForFrame scene time
-  -- notify surfaces about frame? weston_output.frame_signal?
+  checkForErrors
   -- weston_surface_schedule_repaint?
   
   moveCamera
   sceneDrawFrame scene
+  checkForErrors
   sceneFinishFrame scene
+  checkForErrors
 
-  threadDelay 16000
-  compositorRender comp
+
+  emitOutputFrameSignal output
+  eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
+
+  putStrLn "Rendered"
 
   where
     moveCamera = return ()

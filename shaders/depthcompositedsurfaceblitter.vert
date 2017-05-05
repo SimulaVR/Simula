@@ -1,7 +1,10 @@
-attribute vec3 aPosition;
-attribute vec2 aTexCoord;
+#version 300 es
+precision highp float;
 
-varying vec2 vTexCoord;
+in highp vec3 aPosition;
+in highp vec2 aTexCoord;
+
+out highp vec2 vTexCoord;
 
 
 void main(void)

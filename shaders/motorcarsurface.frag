@@ -1,9 +1,14 @@
+#version 300 es
+precision highp float;
+
 //precision highp float;
 
 uniform sampler2D uTexSampler;
-varying vec2 vTexCoord;
+in highp vec2 vTexCoord;
+
+out highp vec4 fragmentColor;
 
 void main(void)
 {
-    gl_FragColor = texture2D(uTexSampler, vTexCoord);
+    fragmentColor = texture2D(uTexSampler, vTexCoord);
 }

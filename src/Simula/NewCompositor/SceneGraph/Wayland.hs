@@ -329,6 +329,7 @@ instance Drawable MotorcarSurfaceNode where
   
     currentProgram $= Nothing
     stencilTest $= Disabled
+    checkForErrors
   
       where
         vpCoords :: ViewPort -> IO [Float]
@@ -459,7 +460,7 @@ instance Drawable MotorcarSurfaceNode where
           bindFramebuffer ReadFramebuffer $= display ^. displayScratchFrameBuffer
           stencilMask $= 0xff
 
-          res <- displaySize display
+          let res = display ^. displaySize
           let s0 = Position 0 0
           let s1 = Position (fromIntegral $ res ^. _x - 1) (fromIntegral $ res ^. _y - 1)
           blitFramebuffer s0 s1 s0 s1 [StencilBuffer'] Nearest
@@ -551,6 +552,7 @@ newWaylandSurfaceNode ws parent tf = do
           <*> pure aTex
           <*> pure uMVP
           <*> newIORef False
+  checkForErrors
   return node
 
   where
@@ -583,6 +585,7 @@ newMotorcarSurfaceNode ws prt tf dims = do
   --TODO make this into an utility function
   withArrayLen surfaceVerts $ \len coordPtr ->
     bufferData ArrayBuffer $= (fromIntegral (len * sizeOf (undefined :: Float)), coordPtr, StaticDraw)
+  checkForErrors
 
   currentProgram $= Just dcsbs
   colorSamplerBlit <- get $ uniformLocation dcsbs "uColorSampler"
@@ -590,17 +593,20 @@ newMotorcarSurfaceNode ws prt tf dims = do
   uniform colorSamplerBlit $= TextureUnit 0
   uniform depthSamplerBlit $= TextureUnit 1
   currentProgram $= Nothing
+  checkForErrors
 
   ccv <- genObjectName
   bindBuffer ArrayBuffer $= Just ccv
   withArrayLen cuboidClippingVerts $ \len coordPtr ->
     bufferData ArrayBuffer $= (fromIntegral (len * sizeOf (undefined :: Word32)), coordPtr, StaticDraw)
+  checkForErrors
 
   cci <- genObjectName
-  bindBuffer ArrayBuffer $= Just cci
+  bindBuffer ElementArrayBuffer $= Just cci
   withArrayLen cuboidClippingInds $ \len coordPtr ->
     bufferData ElementArrayBuffer $= (fromIntegral (len * sizeOf (undefined :: Float)), coordPtr, StaticDraw)
-
+  checkForErrors
+  
   setNodeTransform (wsn ^. waylandSurfaceNodeDecorations) $ scale dims
 
   rec node <- MotorcarSurfaceNode

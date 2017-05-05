@@ -42,6 +42,7 @@ dependencies:
   - template-haskell
   - transformers
   - vector
+  - unix
   - StateVar
   - simula-wayland
 
@@ -49,6 +50,7 @@ dependencies:
 
 _executable_options: &executable_options
   dependencies: [base, SimulaHS]
+  ghc-options: [-threaded, -rtsopts, -with-rtsopts=-N]
     
 library:
   source-dirs: src
@@ -73,6 +75,8 @@ library:
 
 executables:
   simple-compositor:
+    <<: *executable_options
     main: SimpleCompositor.hs
     source-dirs: app
     dependencies: [SimulaHS]
+

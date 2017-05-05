@@ -81,7 +81,8 @@ data ViewPoint = ViewPoint {
 
 data Display = Display {
   _displayBase :: BaseSceneGraphNode,
-  _displayGlContext :: IORef (Some OpenGLContext),
+  _displayGlContext :: Some OpenGLContext,
+  _displaySize :: V2 Int,
   _displayDimensions :: V2 Float,
   _displayScratchFrameBuffer :: FramebufferObject,
   _displayScratchColorBufferTexture :: TextureObject,
@@ -253,7 +254,9 @@ virtualNodeOnFrameBegin :: VirtualNode a => a -> Maybe Scene -> IO ()
 virtualNodeOnFrameBegin this (Just scene) = sceneLatestTimestampChange scene >>= nodeAnimate this
 virtualNodeOnFrameBegin _ _ = fail "Scene is Nothing"
 
-instance SceneGraphNode Scene
+instance SceneGraphNode Scene where
+  nodeScene this = return $ Just this
+instance PhysicalNode Scene
 
 setSceneTimestamp :: Scene -> TimeSpec -> IO ()
 setSceneTimestamp this ts = do
@@ -276,8 +279,10 @@ sceneDrawFrame this = do
   forM_ dps $ \dp -> do
     writeIORef (_sceneActiveDisplay this) (Just dp)
     displayPrepareForDraw dp
-    nodeMapOntoSubtree this (\(Some node) -> nodeOnFrameDraw node) (Just this)
+    checkForErrors
+    nodeMapOntoSubtree this (\(Some node) scene -> nodeOnFrameDraw node scene >> checkForErrors) (Just this)
     displayFinishDraw dp
+    checkForErrors
 
 sceneFinishFrame :: Scene -> IO ()
 sceneFinishFrame this = do
@@ -298,7 +303,7 @@ instance VirtualNode ViewPoint
 
 newViewPoint :: SceneGraphNode a => Float -> Float -> Display -> a -> M44 Float -> V4 Float -> V3 Float -> IO ViewPoint
 newViewPoint near far display parent transform viewPortParams centerOfProjection = do
-  size <- displaySize display
+  let size = display ^. displaySize 
   let bufferGeometry = Rectangle (size & _y *~ 2)
   let vpOffset = viewPortParams ^. _xy
   let vpSize = viewPortParams ^. _zw
@@ -323,13 +328,13 @@ newViewPoint near far display parent transform viewPortParams centerOfProjection
   bindFuncPtr <- createGlobalBindFuncPtr bindFunc
   putStrLn "creating new viewpoint"
   
-  rec global <- wl_global_create wlDisplay vpIf vpVer (castStablePtrToPtr vpPtr) bindFuncPtr
-      vp <- ViewPoint base display near far cof cofTf bufferGeometry global
+  rec vp <- ViewPoint base display near far cof cofTf bufferGeometry global
                    <$> newWlArray <*> newWlArray <*> newIORef []
                    <*> newIORef vport <*> newIORef ccvp <*> newIORef cdvp
                    <*> newIORef identity <*> newIORef identity
                    <*> newIORef False <*> pure vpPtr <*> pure bindFuncPtr
       vpPtr <- newStablePtr vp
+      global <- wl_global_create wlDisplay vpIf vpVer (castStablePtrToPtr vpPtr) bindFuncPtr
 
   putStrLn "created new viewpoint"
   viewPointUpdateViewMatrix vp
@@ -472,14 +477,14 @@ viewPointFov this dp = do
 
 instance SceneGraphNode Display
 
-newDisplay :: (PhysicalNode a, OpenGLContext b) => b -> V2 Float -> a -> M44 Float -> IO Display
-newDisplay glctx dims parent tf = do
+newDisplay :: (PhysicalNode a, OpenGLContext ctx) => ctx -> V2 Int -> V2 Float -> a -> M44 Float -> IO Display
+newDisplay glctx size dims parent tf = do
   glCtxMakeCurrent glctx
-  size <- glCtxDefaultFramebufferSize glctx
   (fbo, fboCb, fboDb) <- createFBO size
   Display
     <$> newBaseNode (Just (Some parent)) tf
-    <*> newIORef (Some glctx)
+    <*> pure (Some glctx)
+    <*> pure size
     <*> pure dims
     <*> pure fbo
     <*> pure fboCb
@@ -495,7 +500,7 @@ displayWorldRayAtDisplayPosition this pixel = do
 displayWorldPositionAtDisplayPosition :: Display -> V2 Float -> IO (V3 Float)
 displayWorldPositionAtDisplayPosition this pixel = do
   worldTf <- nodeWorldTransform this
-  size <- (fmap . fmap) fromIntegral $ displaySize this
+  let size = fromIntegral <$> this ^. displaySize 
   let dims = _displayDimensions this
   let scaled = liftI2 (*) (liftI2 (/) pixel (size - V2 0.5 0.5)) dims
   let s4 = worldTf !* V4 (scaled ^. _x) (scaled ^. _y) 0 1
@@ -533,18 +538,14 @@ createFBO resolution = do
   texImage2D Texture2D NoProxy 0 Depth32fStencil8 size 0 (PixelData DepthStencil Float32UnsignedInt248Rev nullPtr)
   framebufferTexture2D Framebuffer DepthStencilAttachment Texture2D fboDepthBuffer 0
   bindFramebuffer Framebuffer $= defaultFramebufferObject
+  checkForErrors
 
   return (fbo, fboColorBuffer, fboDepthBuffer)
 
-  
-displaySize :: Display -> IO (V2 Int)
-displaySize this = do
-  Some glctx <- readIORef (_displayGlContext this)
-  glCtxDefaultFramebufferSize glctx
-  
+    
 displayPrepareForDraw :: Display -> IO ()
 displayPrepareForDraw this = do
-  Some glctx <- readIORef $ _displayGlContext this
+  Some glctx <- return $ this ^. displayGlContext
   glCtxMakeCurrent glctx
   clearColor $= Color4 1 1 1 1
   clearStencil $= 1
@@ -552,6 +553,7 @@ displayPrepareForDraw this = do
   clear [ColorBuffer, DepthBuffer, StencilBuffer]
   blend $= Enabled
   blendFunc $= (One, OneMinusSrcAlpha)
+  checkForErrors
 
 
 displayFinishDraw :: Display -> IO ()
@@ -563,6 +565,7 @@ drawableOnFrameDraw this (Just scene) = do
   -- display is always activated beforehand
   Just display <- readIORef $ _sceneActiveDisplay scene
   when visible $ drawableDraw this scene display
+  checkForErrors
 drawableOnFrameDraw _ _ = return ()
 
 newBaseDrawable :: Maybe (Some SceneGraphNode) -> M44 Float -> IO BaseDrawable
@@ -601,6 +604,7 @@ instance Drawable WireframeNode where
 
     vertexAttribArray (_wireframeNodeAPositionLine this) $= Disabled
     currentProgram $= Nothing
+    checkForErrors
 
 newWireframeNode :: [Float] -> Color3 Float -> Maybe (Some SceneGraphNode) -> M44 Float -> IO WireframeNode
 newWireframeNode segs lineColor parent transform = do
@@ -613,4 +617,5 @@ newWireframeNode segs lineColor parent transform = do
   aPos <- get $ attribLocation prog "aPosition"
   uMVP <- get $ uniformLocation prog "uMVPMatrix"
   uColor <- get $ uniformLocation prog "uColor"
+  checkForErrors
   return $ WireframeNode drawable lineColorRef segArray numSegments prog coordsBuffer aPos uMVP uColor

@@ -115,7 +115,7 @@ wmMapSurface this surface sty = do
       dce <- wsDepthCompositingEnabled surface
       Some comp <- readIORef (scene ^. sceneCompositor)
       dp <- compositorDisplay comp
-      size <- displaySize dp
+      let size = dp ^. displaySize
       
       setWsSize surface $ if dce then size & _y *~ 2 else size
     Nothing -> return ()
@@ -193,7 +193,6 @@ wmSendEvent this event = case event of
     case focus of
       Just (Some focus) -> wsSendEvent focus event
       _ -> return ()
-  _ -> return ()
 
 wmEnsureKeyboardFocusIsValid :: WaylandSurface ws => WindowManager -> ws -> IO ()
 wmEnsureKeyboardFocusIsValid this oldSurface = do

@@ -1,17 +1,20 @@
+#version 300 es
+precision highp float;
+
 //precision highp float;
 
-uniform vec2 uEyeToSourceUVScale;
-uniform vec2 uEyeToSourceUVOffset;
+uniform highp vec2 uEyeToSourceUVScale;
+uniform highp vec2 uEyeToSourceUVOffset;
 
-attribute vec4 aPosition;    	  ///< [-1,+1],[-1,+1] over the entire framebuffer. Lerp factor in Pos.z. Vignette fade factorin Pos.w.
-attribute vec2 aTanEyeAnglesR;   ///< The tangents of the horizontal and vertical eye angles for the red channel.
-attribute vec2 aTanEyeAnglesG;   ///< The tangents of the horizontal and vertical eye angles for the green channel.
-attribute vec2 aTanEyeAnglesB;   ///< The tangents of the horizontal and vertical eye angles for the blue channel.
+in highp vec4 aPosition;    	  ///< [-1,+1],[-1,+1] over the entire framebuffer. Lerp factor in Pos.z. Vignette fade factorin Pos.w.
+in highp vec2 aTanEyeAnglesR;   ///< The tangents of the horizontal and vertical eye angles for the red channel.
+in highp vec2 aTanEyeAnglesG;   ///< The tangents of the horizontal and vertical eye angles for the green channel.
+in highp vec2 aTanEyeAnglesB;   ///< The tangents of the horizontal and vertical eye angles for the blue channel.
 
-varying vec4 vPosition; 
-varying vec2 vTexCoordR; 
-varying vec2 vTexCoordG; 
-varying vec2 vTexCoordB; 
+out highp vec4 vPosition; 
+out highp vec2 vTexCoordR; 
+out highp vec2 vTexCoordG; 
+out highp vec2 vTexCoordB; 
 
 void main(void)
 {

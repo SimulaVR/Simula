@@ -1,8 +1,11 @@
+#version 300 es
+precision highp float;
+
 //precision highp float;
-attribute vec3 aPosition;
-//attribute vec2 aTexCoord;
-//varying vec2 vTexCoord;
-varying vec2 vUDCPos;
+in highp vec3 aPosition;
+//in highp vec2 aTexCoord;
+//out highp vec2 vTexCoord;
+out highp vec2 vUDCPos;
 void main(void)
 {
     //vTexCoord = aTexCoord;

@@ -1,6 +1,7 @@
 module Simula.NewCompositor.OpenGL where
 
 import Control.Applicative
+import Control.Monad
 import Control.Lens
 import Data.ByteString (ByteString)
 import Data.IORef
@@ -8,10 +9,12 @@ import Data.FileEmbed
 import Data.Typeable
 import Linear
 
+import GHC.Stack
 import Graphics.Rendering.OpenGL
 import Foreign
 
 import Simula.NewCompositor.Geometry
+import Simula.NewCompositor.Types
 
 data ViewPort = ViewPort {
   _viewPortOffset :: IORef (V2 Float),
@@ -39,10 +42,14 @@ setViewPort this = do
   size <- readIORef $ _viewPortSize this
   viewport $= (Position (truncate $ offset ^. _x) (truncate (offset ^. _y)), Size (truncate $ size ^. _x) (truncate $ size ^. _y))
 
-class OpenGLContext a where
+class (Eq a, Typeable a) => OpenGLContext a where
   glCtxDefaultFramebufferSize :: a -> IO (V2 Int)
   glCtxMakeCurrent :: a -> IO ()
 
+instance Eq (Some OpenGLContext) where
+  Some a == Some b = case cast a of
+    Just a -> a == b
+    _ -> False
 
 data MotorcarShader
   = ShaderMotorcarLine
@@ -72,11 +79,38 @@ getProgram shader = do
   shaderSourceBS vert $= vertexSource shader
   shaderSourceBS frag $= fragSource shader
   compileShader vert
+  checkCompileStatus vert
   compileShader frag
-
+  checkCompileStatus frag
+  
   program <- createProgram
   attachShader program vert
   attachShader program frag
   linkProgram program
+  isLinked <- get $ linkStatus program
+  when (not isLinked) $ do
+    get (programInfoLog program) >>= putStrLn
+    ioError . userError $ "Failed linking " ++ show shader
+
 
   return program
+
+  where
+    checkCompileStatus shader = do
+      isCompiled <- get $ compileStatus shader
+      when (not isCompiled) $ do
+        get (shaderInfoLog shader) >>= putStrLn
+        ioError . userError $ "Failed compiling shader " ++ show shader
+
+
+checkForErrors :: HasCallStack => IO ()
+checkForErrors = do
+  errs <- get errors
+  when (not (null errs)) $ do
+    fbStatus <- get $ framebufferStatus Framebuffer
+    dfbStatus <- get $ framebufferStatus DrawFramebuffer
+    rfbStatus <- get $ framebufferStatus ReadFramebuffer
+    putStrLn $ "Framebuffer status: " ++ show fbStatus
+    putStrLn $ "Draw framebuffer status: " ++ show dfbStatus
+    putStrLn $ "Read framebuffer status: " ++ show rfbStatus
+    error $ show errs

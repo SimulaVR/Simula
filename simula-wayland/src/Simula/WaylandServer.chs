@@ -146,6 +146,7 @@ class WlListenerContainer a where
 
 {#pointer *wl_signal as WlSignal newtype#}
 {#fun wl_signal_add {`WlSignal', `WlListenerPtr'} -> `()'#}
+{#fun wl_signal_emit {`WlSignal', `Ptr ()'} -> `()'#}
 
 addListenerToSignal :: WlSignal -> FunPtr (NotifyFunc a) -> IO ()
 addListenerToSignal sig nf = withWlListener nf $ \(WlListener ptr) -> wl_signal_add sig ptr

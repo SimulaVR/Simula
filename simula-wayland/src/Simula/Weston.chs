@@ -124,6 +124,9 @@ westonCompositorCreateSurfaceSignal (WestonCompositor ptr) = WlSignal $ plusPtr 
 westonCompositorOutputPendingSignal :: WestonCompositor -> WlSignal
 westonCompositorOutputPendingSignal (WestonCompositor ptr) = WlSignal $ plusPtr (castPtr ptr) {#offsetof weston_compositor->output_pending_signal#}
 
+westonCompositorOutputCreatedSignal :: WestonCompositor -> WlSignal
+westonCompositorOutputCreatedSignal (WestonCompositor ptr) = WlSignal $ plusPtr (castPtr ptr) {#offsetof weston_compositor->output_created_signal#}
+
 {#fun weston_seat_get_keyboard {`WestonSeat'} -> `WestonKeyboard' #}
 {#fun weston_seat_get_pointer {`WestonSeat'} -> `WestonPointer' #}
 
@@ -211,7 +214,9 @@ westonSurfaceCommitSignal :: WestonSurface -> WlSignal
 westonSurfaceCommitSignal (WestonSurface ptr) = WlSignal $ plusPtr (castPtr ptr) {#offsetof weston_surface->commit_signal#}
 
 {#pointer EGLDisplay newtype#}
+deriving instance Eq EGLDisplay
 {#pointer EGLSurface newtype#}
+deriving instance Eq EGLSurface
 
 {#pointer *weston_windowed_output_api as WestonWindowedOutputApi newtype#}
 {#fun weston_windowed_output_get_api {`WestonCompositor'} -> `WestonWindowedOutputApi' #}
@@ -237,12 +242,103 @@ westonWindowedOutputSetSize api outp w h = do
 
 
 {#pointer EGLContext newtype#}
-{#fun eglGetCurrentContext {} -> `EGLContext'#}
+deriving instance Eq EGLContext
 {#fun eglMakeCurrent {`EGLDisplay', `EGLSurface', `EGLSurface', `EGLContext'} -> `()'#}
 
+{#pointer *weston_gl_output_state as WestonGlOutputState newtype#}
+{#pointer *weston_gl_renderer as WestonGlRenderer newtype#}
 
+westonOutputRendererSurface :: WestonOutput -> IO EGLSurface
+westonOutputRendererSurface output = do
+  ptr <- castPtr <$> {#get weston_output->renderer_state#} output
+  surfPtr <- {#get weston_gl_output_state->egl_surface#} $ WestonGlOutputState ptr
+  return $ EGLSurface (castPtr surfPtr)
+
+westonCompositorGlRenderer :: WestonCompositor -> IO WestonGlRenderer
+westonCompositorGlRenderer wc = do
+  ptr <- castPtr <$> {#get weston_compositor->renderer#} wc
+  return $ WestonGlRenderer ptr
+
+westonGlRendererContext :: WestonGlRenderer -> IO EGLContext
+westonGlRendererContext rend = do
+  ptr <- {#get weston_gl_renderer->egl_context#} rend
+  return $ EGLContext (castPtr ptr)
+
+westonGlRendererDisplay :: WestonGlRenderer -> IO EGLDisplay
+westonGlRendererDisplay rend = do
+  ptr <- {#get weston_gl_renderer->egl_display#} rend
+  return $ EGLDisplay (castPtr ptr)
+
+{#pointer *pixman_region32_t as PixmanRegion32 newtype#}
+
+type RepaintOutputFunc = WestonOutput -> PixmanRegion32 -> IO ()
+foreign import ccall "wrapper" createRendererRepaintOutputFunc :: RepaintOutputFunc -> IO (FunPtr RepaintOutputFunc)
+foreign import ccall "dynamic" fromRendererRepaintOutputFunc :: FunPtr RepaintOutputFunc -> RepaintOutputFunc
+
+{#pointer *weston_layer as WestonLayer newtype#}
+{#enum weston_layer_position as WestonLayerPosition {underscoreToCase} #}
+{#fun weston_layer_init {`WestonLayer', `WestonCompositor'} -> `()' #}
+
+newWestonLayer :: WestonCompositor -> IO WestonLayer
+newWestonLayer wc = do
+  ptr <- WestonLayer <$> mallocBytes {#sizeof weston_layer#}
+  weston_layer_init ptr wc
+  return ptr
+  
+
+{#fun weston_layer_set_position {`WestonLayer', `WestonLayerPosition'} -> `()' #}
+
+{#fun weston_surface_create {`WestonCompositor'} -> `WestonSurface' #}
+{#fun weston_view_create {`WestonSurface'} -> `WestonView' #}
+
+{#fun weston_surface_set_color {`WestonSurface', `Float', `Float', `Float', `Float'} -> `()'#}
+{#fun weston_surface_set_size {`WestonSurface', `Int', `Int'} -> `()'#}
+{#fun weston_view_set_position {`WestonView', `Float', `Float'} -> `()'#}
+{#fun weston_view_update_transform {`WestonView'} -> `()'#}
+
+{#fun pixman_region32_fini {`PixmanRegion32'} -> `()' #}
+{#fun pixman_region32_init_rect {`PixmanRegion32', `Int', `Int', `Int', `Int'} -> `()' #}
+
+{#pointer *weston_layer_entry as WestonLayerEntry newtype#}
+{#fun weston_layer_entry_insert {`WestonLayerEntry', `WestonLayerEntry'} -> `()'#}
+
+westonSurfaceOpaque :: WestonSurface -> PixmanRegion32
+westonSurfaceOpaque (WestonSurface ptr) = PixmanRegion32 $ plusPtr (castPtr ptr) {#offsetof weston_surface->opaque#}
+
+westonSurfaceInput :: WestonSurface -> PixmanRegion32
+westonSurfaceInput (WestonSurface ptr) = PixmanRegion32 $ plusPtr (castPtr ptr) {#offsetof weston_surface->opaque#}
+
+westonLayerViewList :: WestonLayer -> WestonLayerEntry
+westonLayerViewList (WestonLayer ptr) = WestonLayerEntry $ plusPtr (castPtr ptr) {#offsetof weston_layer->view_list#}
+
+westonViewLayerEntry :: WestonView -> WestonLayerEntry
+westonViewLayerEntry (WestonView ptr) = WestonLayerEntry $ plusPtr (castPtr ptr) {#offsetof weston_view->layer_link#}
+
+
+getRepaintOutput :: WestonCompositor -> IO RepaintOutputFunc
+getRepaintOutput wc = fromRendererRepaintOutputFunc <$> {#get weston_compositor->renderer->repaint_output#} wc
+
+setRepaintOutput :: WestonCompositor -> FunPtr RepaintOutputFunc -> IO ()
+setRepaintOutput wc new = {#set weston_compositor->renderer->repaint_output#} wc new
+
+
+emitOutputFrameSignal :: WestonOutput -> IO ()
+emitOutputFrameSignal (WestonOutput ptr) = let signal = WlSignal $ plusPtr (castPtr ptr) {#offsetof weston_output->frame_signal#}
+                                           in wl_signal_emit signal $ castPtr ptr
+  
+
+{#fun eglSwapBuffers {`EGLDisplay', `EGLSurface'} -> `()'#}
+{#fun eglGetError {} -> `Int'#}
+{#fun eglInitialize {`EGLDisplay', id `Ptr CInt', id `Ptr CInt'} -> `()'#}
 {-
-	void render_manager::paint(pixman_region32_t *damage)
+void wayfire_core::hijack_renderer()
+{
+    weston_renderer_repaint = core->ec->renderer->repaint_output;
+    core->ec->renderer->repaint_output = repaint_output_callback;
+}
+
+
+void render_manager::paint(pixman_region32_t *damage)
 {
     if (dirty_context)
         load_context();
@@ -291,18 +387,6 @@ void repaint_output_callback(weston_output *o, pixman_region32_t *damage)
         output->render->paint(damage);
     }
 }
-
-void wayfire_core::hijack_renderer()
-{
-    weston_renderer_repaint = core->ec->renderer->repaint_output;
-    core->ec->renderer->repaint_output = repaint_output_callback;
-}
-
-	struct weston_gl_surface_state {
-    GLfloat color[4];
-    void *shader;
-    GLuint textures[3];
-};
 
 
 void render_surface(weston_surface *surface, int x, int y, glm::mat4 transform, glm::vec4 color)

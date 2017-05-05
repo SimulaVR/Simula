@@ -1,9 +1,12 @@
-attribute vec3 aPosition;
-attribute vec2 aColorTexCoord;
-attribute vec2 aDepthTexCoord;
+#version 300 es
+precision highp float;
 
-varying vec2 vColorTexCoord;
-varying vec2 vDepthTexCoord;
+in highp vec3 aPosition;
+in highp vec2 aColorTexCoord;
+in highp vec2 aDepthTexCoord;
+
+out highp vec2 vColorTexCoord;
+out highp vec2 vDepthTexCoord;
 
 void main(void)
 {

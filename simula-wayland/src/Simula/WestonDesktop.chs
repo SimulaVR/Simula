@@ -149,3 +149,5 @@ westonDesktopCreate wc api udPtr = with api $ \apiPtr -> weston_desktop_create w
 {#fun weston_desktop_surface_get_width {`WestonDesktopSurface'} -> `Int' #}
 {#fun weston_desktop_surface_get_height {`WestonDesktopSurface'} -> `Int' #}
 
+{#fun weston_desktop_surface_create_view {`WestonDesktopSurface'} -> `WestonView' #}
+{#fun weston_desktop_surface_set_activated {`WestonDesktopSurface', `Bool'} -> `()' #}

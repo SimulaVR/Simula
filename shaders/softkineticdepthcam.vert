@@ -1,10 +1,13 @@
-uniform mat4 uMVPMatrix;
-attribute vec3 aPosition;
-attribute float aConfidence;
-attribute vec2 aTexCoord;
+#version 300 es
+precision highp float;
 
-varying vec2 vTexCoord;
-varying float vIsValid;
+uniform mat4 uMVPMatrix;
+in highp vec3 aPosition;
+in float aConfidence;
+in highp vec2 aTexCoord;
+
+out highp vec2 vTexCoord;
+out float vIsValid;
 
 void main(void)
 {

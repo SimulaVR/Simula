@@ -34,3 +34,4 @@ library
     , libweston-desktop-2
     , wayland-server
     , egl
+    , pixman-1              

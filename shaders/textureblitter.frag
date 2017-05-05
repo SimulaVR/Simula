@@ -1,5 +1,10 @@
+#version 300 es
+precision highp float;
+
 uniform sampler2D texture;
-varying highp vec2 textureCoord;
+in highp vec2 textureCoord;
+out highp vec4 fragmentColor;
+
 void main() {
-   gl_FragColor = texture2D(texture, textureCoord);
+   fragmentColor = texture2D(texture, textureCoord);
 }

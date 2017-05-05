@@ -21,7 +21,6 @@ class Compositor a where
   compositorSeat :: a -> IO (Some Seat)
 
   compositorDisplay :: a -> IO Display
-  setCompositorDisplay :: a -> Display -> IO ()
 
   compositorWlDisplay :: a -> WlDisplay
 

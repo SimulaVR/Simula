@@ -40,6 +40,7 @@ library
     , template-haskell
     , transformers
     , vector
+    , unix
     , StateVar
     , simula-wayland
   exposed-modules:
@@ -65,6 +66,7 @@ executable simple-compositor
   hs-source-dirs:
       app
   default-extensions: GADTs ConstraintKinds KindSignatures StandaloneDeriving FlexibleInstances FlexibleContexts MultiParamTypeClasses FunctionalDependencies ScopedTypeVariables RankNTypes RecursiveDo DefaultSignatures PatternSynonyms LambdaCase ForeignFunctionInterface QuasiQuotes TemplateHaskell OverloadedStrings
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >= 4.9 && < 5
     , bytestring
@@ -84,6 +86,7 @@ executable simple-compositor
     , template-haskell
     , transformers
     , vector
+    , unix
     , StateVar
     , simula-wayland
     , SimulaHS

@@ -1,6 +1,9 @@
+#version 300 es
+precision highp float;
+
 //precision highp float;
 uniform mat4 uMVPMatrix;
-attribute vec3 aPosition;
+in highp vec3 aPosition;
 
 void main(void)
 {
