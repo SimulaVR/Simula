@@ -7,6 +7,7 @@ import qualified Foreign.Storable as C2HSImp
 
 import Control.Monad
 import Data.Proxy
+import Data.Word
 import System.Posix.DynamicLinker
 import Foreign
 import Foreign.C
@@ -175,11 +176,24 @@ westonViewPos view = V2 <$> westonViewPosX view <*> westonViewPosY view
 {#pointer *weston_buffer_reference as WestonBufferReference newtype#}
 {#pointer *weston_subsurface as WestonSubsurface newtype#}
 
-westonSurfaceBuffer :: WestonSurface -> WestonBuffer
-westonSurfaceBuffer (WestonSurface ptr) = WestonBuffer $ plusPtr (castPtr ptr) {#offsetof weston_surface->buffer_ref.buffer#}
+westonSurfaceBuffer :: WestonSurface -> IO WestonBuffer
+westonSurfaceBuffer ws = do
+  buffer_ref <- {#get weston_surface->buffer_ref#} ws
+  return $ WestonBuffer $ plusPtr (castPtr buffer_ref) {#offsetof weston_buffer_reference->buffer#}
 
-westonBufferResource :: WestonBuffer -> WlResource
-westonBufferResource (WestonBuffer ptr) = WlResource $ plusPtr (castPtr ptr) {#offsetof weston_buffer->resource#}
+-- bug with c2hs?
+westonBufferResource :: WestonBuffer -> IO WlResource
+westonBufferResource (WestonBuffer ptr) = do
+  resourcePtr <- peekByteOff ptr 0 
+  return $ WlResource resourcePtr
+
+{#fun weston_buffer_get_shm_buffer {`WestonBuffer'} -> `WlShmBuffer'#}
+{#fun weston_buffer_get_legacy_buffer {`WestonBuffer'} -> `Ptr ()'#}
+
+westonBufferWidth :: WestonBuffer -> IO CInt
+westonBufferWidth = {#get weston_buffer->width#} 
+westonBufferHeight :: WestonBuffer -> IO CInt
+westonBufferHeight = {#get weston_buffer->height#}
 
 instance WlListElement WestonSurface WestonSubsurface where
   linkOffset _ _ = {#offsetof weston_subsurface->parent_link#}
@@ -194,7 +208,7 @@ westonSubsurfaceSurface :: WestonSubsurface -> WestonSurface
 westonSubsurfaceSurface (WestonSubsurface ptr) = WestonSurface $ plusPtr (castPtr ptr) {#offsetof weston_subsurface->surface#}
 
 westonSurfaceIsYInverted :: WestonSurface -> IO Bool
-westonSurfaceIsYInverted = {#get weston_buffer->y_inverted#} . westonSurfaceBuffer >=> (return . toBool)
+westonSurfaceIsYInverted surf =  westonSurfaceBuffer surf >>= ({#get weston_buffer->y_inverted#} >=> (return . toBool))
 
 {#fun weston_compositor_wake {`WestonCompositor'} -> `()'#}
 
@@ -330,7 +344,23 @@ emitOutputFrameSignal (WestonOutput ptr) = let signal = WlSignal $ plusPtr (cast
 {#fun eglSwapBuffers {`EGLDisplay', `EGLSurface'} -> `()'#}
 {#fun eglGetError {} -> `Int'#}
 {#fun eglInitialize {`EGLDisplay', id `Ptr CInt', id `Ptr CInt'} -> `()'#}
+
+{#pointer *weston_gl_surface_state as WestonGlSurfaceState newtype#}
+westonSurfaceGlState :: WestonSurface -> IO WestonGlSurfaceState
+westonSurfaceGlState surf = do
+  ptr <- {#get weston_surface->renderer_state#} surf
+  return $ WestonGlSurfaceState (castPtr ptr)
+
+westonGlStateNumTextures :: WestonGlSurfaceState -> IO CInt
+westonGlStateNumTextures = {#get weston_gl_surface_state->num_textures#}
+
+westonGlStateTextureIds :: WestonGlSurfaceState -> IO [Word32]
+westonGlStateTextureIds st@(WestonGlSurfaceState ptr) = do
+  num <- westonGlStateNumTextures st
+  peekArray (fromIntegral num) (plusPtr (castPtr ptr) {#offsetof weston_gl_surface_state->textures#})
+
 {-
+
 void wayfire_core::hijack_renderer()
 {
     weston_renderer_repaint = core->ec->renderer->repaint_output;

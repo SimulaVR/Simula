@@ -48,7 +48,9 @@ data SimulaCompositor = SimulaCompositor {
   _simulaCompositorGlContext :: IORef (Maybe SimulaOpenGLContext)
   } deriving Eq
 
-data SimulaSeat = SimulaSeat
+data SimulaSeat = SimulaSeat {
+  _simulaSeatBase :: BaseSeat
+  } deriving (Eq, Typeable)
 
 data OpenGLData = OpenGLData {
   _openGlDataPpcm :: Float,
@@ -74,6 +76,12 @@ makeLenses ''SimulaCompositor
 makeLenses ''OpenGLData
 makeLenses ''SimulaOpenGLContext
 makeLenses ''TextureBlitter
+makeLenses ''SimulaSeat
+
+instance HasBaseSeat SimulaSeat where
+  baseSeat = simulaSeatBase
+
+instance Seat SimulaSeat
 
 instance OpenGLContext SimulaOpenGLContext where
   glCtxMakeCurrent this = do
@@ -88,6 +96,9 @@ instance OpenGLContext SimulaOpenGLContext where
 
 instance HasBaseWaylandSurface SimulaSurface where
   baseWaylandSurface = simulaSurfaceBase
+
+newSimulaSeat :: IO SimulaSeat
+newSimulaSeat = SimulaSeat <$> newBaseSeat
 
 newSimulaSurface :: WestonDesktopSurface -> SimulaCompositor -> WaylandSurfaceType -> IO SimulaSurface
 newSimulaSurface ws comp ty = SimulaSurface
@@ -204,7 +215,7 @@ newSimulaCompositor scene display = do
 
   --todo hack; make this into a proper withXXX function
   res <- with (WestonX11BackendConfig (WestonBackendConfig westonX11BackendConfigVersion (sizeOf (undefined :: WestonX11BackendConfig)))
-           False
+           True
            False
            False) $ weston_compositor_load_backend wcomp WestonBackendX11 . castPtr
 
@@ -236,6 +247,7 @@ newSimulaCompositor scene display = do
         apiSurfaceRemoved = onSurfaceDestroyed compositor
         }
 
+  {-
   mainLayer <- newWestonLayer wcomp
   weston_layer_set_position mainLayer WestonLayerPositionNormal
   bgLayer <- newWestonLayer wcomp
@@ -255,7 +267,7 @@ newSimulaCompositor scene display = do
   weston_view_set_position bgView 0 0
   weston_layer_entry_insert (westonLayerViewList bgLayer) (westonViewLayerEntry bgView)
   weston_view_update_transform bgView
-  
+  -}
   
   
   westonDesktopCreate wcomp api nullPtr
@@ -286,7 +298,7 @@ newSimulaCompositor scene display = do
      --TODO hack
      weston_output_set_scale output 1
      weston_output_set_transform output 0
-     westonWindowedOutputSetSize windowedApi output 2000 2000
+     westonWindowedOutputSetSize windowedApi output 1280 720
 
      weston_output_enable output
      return ()
@@ -339,24 +351,9 @@ instance WaylandSurface SimulaSurface where
 
 textureFromSurface :: WestonSurface -> IO TextureObject
 textureFromSurface ws = do
-  texture <- genObjectName
-  textureBinding Texture2D $= Just texture
-
-  buffer <- wl_shm_buffer_get . westonBufferResource $ westonSurfaceBuffer ws
-
-  format <- wl_shm_buffer_get_format buffer
-  width <- fromIntegral <$> wl_shm_buffer_get_width buffer
-  height <- fromIntegral <$> wl_shm_buffer_get_height buffer
-
-  --TODO support more formats
-  when (format `notElem` [WlShmFormatArgb8888, WlShmFormatXrgb8888]) . ioError . userError $ "Unsupported pixel format " ++ show format
-  
-  withShmBuffer buffer $ \ptr -> do
-    texImage2D Texture2D NoProxy 0 RGBA' (TextureSize2D width height) 0 (PixelData BGRA UnsignedInt8888Rev ptr)
-
-  textureBinding Texture2D $= Nothing
-  checkForErrors
-  return texture
+  glState <- westonSurfaceGlState ws
+  texIds <- westonGlStateTextureIds glState
+  return . head $ map TextureObject texIds
 
 
 composeSurface :: SimulaSurface -> OpenGLData -> IO TextureObject

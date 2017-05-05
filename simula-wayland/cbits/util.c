@@ -34,3 +34,12 @@ int32_t weston_desktop_surface_get_width(struct weston_desktop_surface* surface)
 int32_t weston_desktop_surface_get_height(struct weston_desktop_surface* surface) {
   return weston_desktop_surface_get_geometry(surface).height;
 }
+
+struct wl_shm_buffer* weston_buffer_get_shm_buffer(struct weston_buffer* buffer) {
+  return buffer->shm_buffer;
+}
+
+void* weston_buffer_get_legacy_buffer(struct weston_buffer* buffer) {
+  return buffer->legacy_buffer;
+}
+  
