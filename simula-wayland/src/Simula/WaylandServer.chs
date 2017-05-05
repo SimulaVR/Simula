@@ -171,6 +171,21 @@ withShmBuffer buf act = do
   wl_shm_buffer_end_access buf
   return res
 
+
+type EventCallbackFunc = Ptr () -> IO ()
+foreign import ccall "wrapper" createEventCallbackFuncPtr :: EventCallbackFunc -> IO (FunPtr EventCallbackFunc)
+
+{#pointer *wl_event_loop as WlEventLoop newtype#}
+{#fun wl_event_loop_add_idle {`WlEventLoop', id `FunPtr EventCallbackFunc', `Ptr ()'} -> `()' #}
+{#fun wl_display_get_event_loop {`WlDisplay'} -> `WlEventLoop' #}
+
+
+wlDisplayAddIdleCallback :: WlDisplay -> Ptr () -> EventCallbackFunc -> IO ()
+wlDisplayAddIdleCallback dp userData func = do
+  loop <- wl_display_get_event_loop dp
+  funPtr <- createEventCallbackFuncPtr func
+  wl_event_loop_add_idle loop funPtr userData
+
 waylandCtx :: C.Context
 waylandCtx = C.baseCtx <> mempty { C.ctxTypesTable = M.fromList [
                                      (C.Struct "wl_interface", [t| WlInterface |])

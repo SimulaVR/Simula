@@ -147,6 +147,7 @@ instance HasBaseWaylandSurfaceNode MotorcarSurfaceNode where
 
 instance SceneGraphNode BaseWaylandSurfaceNode where
   nodeOnFrameBegin this _ = do
+    checkForErrors
     computeSurfaceTransform this 8
     Some surface <- readIORef $ _waylandSurfaceNodeSurface this
     wsPrepare surface

@@ -183,8 +183,8 @@ blitterDrawTexture tb tex targetRect targetSize depth targetInvertedY sourceInve
     transform = translateMat !*! scaleMat :: M44 Float
   
 
-setTimeout :: IO () -> Int -> IO ThreadId
-setTimeout ioOperation ms =
+setTimeout :: Int -> IO () -> IO ThreadId
+setTimeout ms ioOperation =
   forkIO $ do
     threadDelay (ms*1000)
     ioOperation
@@ -215,7 +215,7 @@ newSimulaCompositor scene display = do
 
   --todo hack; make this into a proper withXXX function
   res <- with (WestonX11BackendConfig (WestonBackendConfig westonX11BackendConfigVersion (sizeOf (undefined :: WestonX11BackendConfig)))
-           True
+           False
            False
            False) $ weston_compositor_load_backend wcomp WestonBackendX11 . castPtr
 
@@ -305,6 +305,7 @@ newSimulaCompositor scene display = do
 
 
    onOutputCreated compositor _ outputPtr = do
+     putStrLn "output created"
      let output = WestonOutput $ castPtr outputPtr
      writeIORef (compositor ^. simulaCompositorOutput) $ Just output
      let wc = compositor ^. simulaCompositorWestonCompositor
@@ -362,17 +363,23 @@ composeSurface surf gld = do
   ws <- weston_desktop_surface_get_surface $ surf ^. simulaSurfaceWestonDesktopSurface
   size <- wsSize surf
 
+  checkForErrors
   let fbo = gld ^. openGlDataSurfaceFbo
+  print fbo
   bindFramebuffer Framebuffer $= fbo
+  checkForErrors
 
   texture <- textureFromSurface ws
+  checkForErrors
 
   framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D texture 0
+  checkForErrors
   paintChildren ws ws size gld
+  checkForErrors
 
   --TODO what does this do?
-  framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D (TextureObject 0) 0
-  bindFramebuffer Framebuffer $= defaultFramebufferObject
+--  framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D (TextureObject 0) 0
+--  bindFramebuffer Framebuffer $= defaultFramebufferObject
   checkForErrors
   return texture
   
@@ -422,7 +429,7 @@ compositorRender comp = do
   
   scenePrepareForFrame scene time
   checkForErrors
-  -- weston_surface_schedule_repaint?
+  weston_output_schedule_repaint output
   
   moveCamera
   sceneDrawFrame scene
@@ -434,7 +441,6 @@ compositorRender comp = do
   emitOutputFrameSignal output
   eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
 
-  putStrLn "Rendered"
 
   where
     moveCamera = return ()

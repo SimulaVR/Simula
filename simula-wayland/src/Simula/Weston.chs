@@ -359,6 +359,10 @@ westonGlStateTextureIds st@(WestonGlSurfaceState ptr) = do
   num <- westonGlStateNumTextures st
   peekArray (fromIntegral num) (plusPtr (castPtr ptr) {#offsetof weston_gl_surface_state->textures#})
 
+
+{#fun weston_output_schedule_repaint {`WestonOutput'} -> `()'#}
+  
+
 {-
 
 void wayfire_core::hijack_renderer()
