@@ -624,7 +624,7 @@ newWaylandSurfaceNode maybeThis ws parent tf = do
       in concatMap (mkVertices corner direction) [ex, ey, ez]
 
     mkVertices corner@(V3 cx cy cz) direction (E coord) =
-      let V3 sx sy sz = corner & coord -~ (direction ^. coord)
+      let V3 sx sy sz = corner & coord -~ (0.25 * direction ^. coord)
       in [cx, cy, cz, sx, sy, sz]
 
 

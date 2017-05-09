@@ -364,6 +364,8 @@ newViewPoint near far display parent transform viewPortParams centerOfProjection
 destroyViewPoint :: ViewPoint -> IO ()
 destroyViewPoint this = undefined
 
+--TODO these might be wrong
+--TODO FIX WORLD TRANSFORM ===========>
 viewPointUpdateViewMatrix :: ViewPoint -> IO ()
 viewPointUpdateViewMatrix this = do
   trans <- nodeWorldTransform this
@@ -380,13 +382,15 @@ viewPointUpdateProjectionMatrix this = do
     let cofTf = this ^. viewPointCOFTransform
     let dp = this ^. viewPointDisplay
     fov <- viewPointFov this dp
+--    fov <- return $ radians 80
     vport <- readMVar (this ^. viewPointViewPort)
     vpSize <- viewPortSize vport
     let width = vpSize ^. _x
-    let height = vpSize ^. _x
+    let height = vpSize ^. _y
     let near = this ^. viewPointNear
     let far = this ^. viewPointFar
     let perM = perspective fov (width/height) near far
+    print fov >> print (width/height) >> print near >> print far >> print perM >> print cofTf
     
     writeMVar (this ^. viewPointProjectionMatrix) $ cofTf !*! perM
   viewPointSendProjectionMatrixToClients this
@@ -471,12 +475,16 @@ viewPointWorldRayAtDisplayPosition this pixel = do
 viewPointFov :: ViewPoint -> Display -> IO Float
 viewPointFov this dp = do
   vpTrans <- nodeWorldTransform this
+  print vpTrans
   dpTrans <- nodeWorldTransform dp
+  print dpTrans
   let origin = V4 0 0 0 1
-  let ctdVector = (dpTrans !* origin - vpTrans !* origin) ^. _xyz
+  let ctdVector = ((dpTrans !* origin) - (vpTrans !* origin)) ^. _xyz
   let displayNormal = normalize $ (dpTrans !* V4 0 0 1 0) ^. _xyz
   let eyeToScreenDis = abs $ dot ctdVector displayNormal
   let dims = _displayDimensions dp
+  print (dims ^. _y)
+  print (2*eyeToScreenDis)
   return $ 2 * atan ((dims ^. _y)/(2*eyeToScreenDis))
 
 instance SceneGraphNode Display
