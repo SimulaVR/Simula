@@ -1,3 +1,4 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Simula.Weston where
 
 import qualified Foreign.C.Types as C2HSImp
@@ -34,6 +35,7 @@ deriving instance Eq WestonSeat
 
 {#pointer *weston_output as WestonOutput newtype#}
 deriving instance Eq WestonOutput
+deriving instance Storable WestonOutput
 
 {#pointer *weston_keyboard as WestonKeyboard newtype#}
 deriving instance Eq WestonKeyboard
@@ -290,6 +292,7 @@ foreign import ccall "wrapper" createRendererRepaintOutputFunc :: RepaintOutputF
 foreign import ccall "dynamic" fromRendererRepaintOutputFunc :: FunPtr RepaintOutputFunc -> RepaintOutputFunc
 
 {#pointer *weston_layer as WestonLayer newtype#}
+deriving instance Eq WestonLayer
 {#enum weston_layer_position as WestonLayerPosition {underscoreToCase} #}
 {#fun weston_layer_init {`WestonLayer', `WestonCompositor'} -> `()' #}
 
@@ -361,103 +364,12 @@ westonGlStateTextureIds st@(WestonGlSurfaceState ptr) = do
 
 
 {#fun weston_output_schedule_repaint {`WestonOutput'} -> `()'#}
-  
 
-{-
+westonSurfaceSetMapped :: WestonSurface -> Bool -> IO ()
+westonSurfaceSetMapped = {#set weston_surface->is_mapped#}
 
-void wayfire_core::hijack_renderer()
-{
-    weston_renderer_repaint = core->ec->renderer->repaint_output;
-    core->ec->renderer->repaint_output = repaint_output_callback;
-}
+westonViewSetMapped :: WestonView -> Bool -> IO ()
+westonViewSetMapped = {#set weston_view->is_mapped#}
 
-
-void render_manager::paint(pixman_region32_t *damage)
-{
-    if (dirty_context)
-        load_context();
-
-    // This is a hack, weston renderer_state is a struct and the EGLSurface is the first field
-    // In the future this might change so we need to track changes in weston
-    EGLSurface surf = *(EGLSurface*)output->handle->renderer_state;
-    weston_gl_renderer *gr = (weston_gl_renderer*) core->ec->renderer;
-    eglMakeCurrent(gr->display, surf, surf, gr->context);
-
-    GL_CALL(glViewport(output->handle->x, output->handle->y,
-                output->handle->width, output->handle->height));
-
-    if (renderer) {
-        OpenGL::bind_context(ctx);
-        renderer();
-
-        wl_signal_emit(&output->handle->frame_signal, output->handle);
-        eglSwapBuffers(gr->display, surf);
-    } else {
-        core->weston_repaint(output->handle, damage);
-    }
-
-    if (constant_redraw) {
-        wl_event_loop_add_idle(wl_display_get_event_loop(core->ec->wl_display),
-                redraw_idle_cb, output);
-    }
-}
-
-void render_manager::pre_paint()
-{
-    std::vector<effect_hook_t*> active_effects;
-    for (auto effect : output_effects) {
-        active_effects.push_back(effect);
-    }
-
-    for (auto& effect : active_effects)
-        (*effect)();
-}
-
-void repaint_output_callback(weston_output *o, pixman_region32_t *damage)
-{
-    auto output = core->get_output(o);
-    if (output) {
-        output->render->pre_paint();
-        output->render->paint(damage);
-    }
-}
-
-
-void render_surface(weston_surface *surface, int x, int y, glm::mat4 transform, glm::vec4 color)
-{
-    if (!surface->is_mapped || !surface->renderer_state)
-        return;
-
-    auto gs = (weston_gl_surface_state *) surface->renderer_state;
-
-    wayfire_geometry geometry;
-    geometry.origin = {x, y};
-    geometry.size = {surface->width, surface->height};
-
-    for (int i = 0; i < 3 && gs->textures[i]; i++) {
-        OpenGL::render_transformed_texture(gs->textures[i], geometry, transform,
-                                           color, TEXTURE_TRANSFORM_USE_COLOR);
-    }
-
-    weston_subsurface *sub;
-    if (!wl_list_empty(&surface->subsurface_list)) {
-        wl_list_for_each(sub, &surface->subsurface_list, parent_link) {
-            if (sub && sub->surface != surface)
-                render_surface(sub->surface, sub->position.x + x, sub->position.y + y, transform, color);
-        }
-    }
-}
-
-	
-    void render_transformed_texture(GLuint tex, const wayfire_geometry& g, glm::mat4 model, glm::vec4 color, uint32_t bits) {
-        GL_CALL(glUseProgram(bound->program));
-
-        GL_CALL(glUniformMatrix4fv(bound->mvpID, 1, GL_FALSE, &model[0][0]));
-        GL_CALL(glUniform4fv(bound->colorID, 1, &color[0]));
-
-        GL_CALL(glEnable(GL_BLEND));
-        GL_CALL(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
-        render_texture(tex, g, bits | DONT_RELOAD_PROGRAM);
-        GL_CALL(glDisable(GL_BLEND));
-
--}
+westonViewSetOutput :: WestonView -> WestonOutput -> IO ()
+westonViewSetOutput = {#set weston_view->output#}

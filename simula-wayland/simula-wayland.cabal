@@ -8,7 +8,7 @@ cabal-version:  >= 1.10
 library
   hs-source-dirs:
       src
-  default-extensions: GADTs ConstraintKinds KindSignatures StandaloneDeriving FlexibleInstances FlexibleContexts MultiParamTypeClasses FunctionalDependencies ScopedTypeVariables RankNTypes RecursiveDo DefaultSignatures PatternSynonyms LambdaCase ForeignFunctionInterface QuasiQuotes TemplateHaskell OverloadedStrings TypeInType TypeFamilies TypeFamilyDependencies AllowAmbiguousTypes RecordWildCards
+  default-extensions: GADTs ConstraintKinds KindSignatures StandaloneDeriving FlexibleInstances FlexibleContexts MultiParamTypeClasses FunctionalDependencies ScopedTypeVariables RankNTypes RecursiveDo DefaultSignatures PatternSynonyms LambdaCase ForeignFunctionInterface QuasiQuotes TemplateHaskell OverloadedStrings TypeInType TypeFamilies AllowAmbiguousTypes RecordWildCards
   include-dirs:
       cbits
   c-sources:

@@ -1,6 +1,6 @@
 module Simula.NewCompositor.Compositor where
 
-import Data.IORef
+import Control.Concurrent.MVar
 import Foreign
 
 import Simula.WaylandServer

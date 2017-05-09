@@ -1,11 +1,11 @@
 {-# LANGUAGE LambdaCase #-}
 module Simula.NewCompositor.WindowManager where
 
+import Control.Concurrent.MVar
 import Control.Lens
 import Control.Monad
 
 import qualified Data.Map as M
-import Data.IORef
 import Data.Typeable
 import Foreign
 import Foreign.C
@@ -27,8 +27,8 @@ data WindowManager = WindowManager {
   _windowManagerScene :: Scene,
   _windowManagerShell :: Shell,
   _windowManagerDefaultSeat :: Some Seat,
-  _windowManagerNumSurfacesMapped :: IORef Int,
-  _windowManagerSurfaceMap :: IORef (M.Map (Some WaylandSurface) (Some WaylandSurfaceNode))
+  _windowManagerNumSurfacesMapped :: MVar Int,
+  _windowManagerSurfaceMap :: MVar (M.Map (Some WaylandSurface) (Some WaylandSurfaceNode))
   } deriving (Eq, Typeable)
 
 data Shell = Shell {
@@ -44,7 +44,7 @@ makeLenses ''Shell
 
 newWindowManager :: Seat st => Scene -> st -> IO WindowManager
 newWindowManager scene seat = WindowManager scene <$> newShell scene
-                              <*> pure (Some seat) <*> newIORef 0 <*> newIORef M.empty
+                              <*> pure (Some seat) <*> newMVar 0 <*> newMVar M.empty
 
 destroyWindowManager :: WindowManager -> IO ()
 destroyWindowManager this = do
@@ -53,27 +53,29 @@ destroyWindowManager this = do
 
 wmCreateSurface :: WaylandSurface ws => WindowManager -> ws -> IO (Some WaylandSurfaceNode)
 wmCreateSurface this surface = do
+  putStrLn "creating surface"
   let ssurf = Some surface
-  surfaceMap <- readIORef (this ^. windowManagerSurfaceMap)
+  surfaceMap <- readMVar (this ^. windowManagerSurfaceMap) 
   case M.lookup ssurf surfaceMap of
-    Just snode@(Some node) -> setWsnSurface node ssurf >> return snode
+    Just snode@(Some node) ->  setWsnSurface node ssurf >>  return snode
     Nothing -> do
       isMSN <- wsIsMotorcarSurface surface
       let scene = this ^. windowManagerScene
       snode <- if isMSN
         then Some <$> newMotorcarSurfaceNode surface scene identity (V3 1 1 1)
-        else Some <$> newWaylandSurfaceNode surface scene identity
-      modifyIORef' (this ^. windowManagerSurfaceMap) (M.insert ssurf snode)
+        else Some <$> newWaylandSurfaceNode Nothing surface scene identity
+      modifyMVar' (this ^. windowManagerSurfaceMap) (M.insert ssurf snode)
+      putStrLn "created surface"
       return snode
 
 wmDestroySurface :: WaylandSurface ws => WindowManager -> ws -> IO ()
 wmDestroySurface this surface = do
-  surfaceMap <- readIORef (this ^. windowManagerSurfaceMap)
+  surfaceMap <- readMVar (this ^. windowManagerSurfaceMap)
   let ssurf = Some surface
   case M.lookup ssurf surfaceMap of
     Nothing -> return ()
     Just snode@(Some node) -> do
-      cds <- readIORef (nodeChildren node)
+      cds <- readMVar (nodeChildren node)
       forM_ cds $ \case
         Some child -> case cast child of --TODO hacky
           Just (msn :: MotorcarSurfaceNode) -> destroySurface msn
@@ -81,7 +83,7 @@ wmDestroySurface this surface = do
             Just (wsn :: BaseWaylandSurfaceNode) -> destroySurface wsn
             _ -> return ()
 
-      modifyIORef' (this ^. windowManagerSurfaceMap) (M.delete ssurf)
+      modifyMVar' (this ^. windowManagerSurfaceMap) (M.delete ssurf)
       case cast node of
         Just msn -> destroyMotorcarSurfaceNode msn
         _ -> return ()
@@ -89,7 +91,7 @@ wmDestroySurface this surface = do
       case this ^. windowManagerDefaultSeat of
         Some seat -> do
           ptr <- seatPointer seat
-          writeIORef (ptr ^. pointerCursorNode) Nothing
+          writeMVar (ptr ^. pointerCursorNode) Nothing
           wmEnsureKeyboardFocusIsValid this surface
   where
     destroySurface :: WaylandSurfaceNode a => a -> IO ()
@@ -112,24 +114,25 @@ wmMapSurface this surface sty = do
       case mode of
         Cuboid -> msnRequestSize3D msn (V3 0.5 0.5 0.5)
         Portal -> msnRequestSize3D msn (V3 0.7 0.5 0)
+      putStrLn "got size"
       dce <- wsDepthCompositingEnabled surface
-      Some comp <- readIORef (scene ^. sceneCompositor)
+      Some comp <- readMVar (scene ^. sceneCompositor)
       dp <- compositorDisplay comp
       let size = dp ^. displaySize
       
       setWsSize surface $ if dce then size & _y *~ 2 else size
-    Nothing -> return ()
+    Nothing -> ioError $ userError "Expected MotorcarSurfaceNode, but got something else"
 
   case sty of
     TopLevel -> do
       setNodeParent node (Just (Some scene))
 
-      numSurfaces <- readIORef (this ^. windowManagerNumSurfacesMapped)
+      numSurfaces <- readMVar (this ^. windowManagerNumSurfacesMapped)
       let rotQ = axisAngle (V3 0 1 0) (radians $ (fromIntegral $ numSurfaces - 1) * thetaOffset)
       let rotM = m33_to_m44 $ fromQuaternion rotQ
       
       setNodeTransform node $ translate (V3 0 0 1) !*! rotM !*! translate (V3 0 0 zOffset)
-      modifyIORef' (this ^. windowManagerNumSurfacesMapped) (+1)
+      modifyMVar' (this ^. windowManagerNumSurfacesMapped) (+1)
 
       Some seat <- pure (this ^. windowManagerDefaultSeat)
       setSeatPointerFocus seat surface (V2 0 0)
@@ -149,15 +152,15 @@ wmMapSurface this surface sty = do
     handlePopupTransient :: WaylandSurfaceNode a => a -> IO ()
     handlePopupTransient node = do
       Some seat <- pure (this ^. windowManagerDefaultSeat)
-      focus <- seatPointer seat >>= views pointerFocus readIORef
+      focus <- seatPointer seat >>= views pointerFocus readMVar
         
       case focus of
         Just focus -> do
-          focusNode <- M.lookup focus <$> readIORef (this ^. windowManagerSurfaceMap)
+          focusNode <- M.lookup focus <$> readMVar (this ^. windowManagerSurfaceMap)
           case focusNode of
             Just (Some focusNode) -> do
               localPos <- case sty of
-                Popup -> seatPointer seat >>= views pointerLocalPosition readIORef
+                Popup -> seatPointer seat >>= views pointerLocalPosition readMVar
                 _ -> wsPosition surface
               tf <- nodeTransform focusNode
               size <- (fmap.fmap) fromIntegral $ wsSize surface
@@ -176,7 +179,7 @@ wmMapSurface this surface sty = do
       
 wmUnmapSurface :: WaylandSurface ws => WindowManager -> ws -> IO ()
 wmUnmapSurface this surface = do
-  surfaceMap <- readIORef (this ^. windowManagerSurfaceMap)
+  surfaceMap <- readMVar (this ^. windowManagerSurfaceMap)
   case M.lookup (Some surface) surfaceMap of
     Just (Some node) -> setWsnMapped node False >> wmEnsureKeyboardFocusIsValid this surface
     Nothing -> return ()
@@ -184,19 +187,19 @@ wmUnmapSurface this surface = do
 wmSendEvent :: WindowManager -> InputEvent -> IO ()
 wmSendEvent this event = case event of
   MouseEvent (Some seat) _ -> do
-    focus <- seatPointer seat >>= views pointerFocus readIORef
+    focus <- seatPointer seat >>= views pointerFocus readMVar
     case focus of
       Just (Some focus) -> wsSendEvent focus event
       _ -> return ()
   KeyboardEvent (Some seat) _ -> do
-    focus <- seatKeyboard seat >>= views keyboardFocus readIORef
+    focus <- seatKeyboard seat >>= views keyboardFocus readMVar
     case focus of
       Just (Some focus) -> wsSendEvent focus event
       _ -> return ()
 
 wmEnsureKeyboardFocusIsValid :: WaylandSurface ws => WindowManager -> ws -> IO ()
 wmEnsureKeyboardFocusIsValid this oldSurface = do
-  surfaceMap <- readIORef (this ^. windowManagerSurfaceMap)
+  surfaceMap <- readMVar (this ^. windowManagerSurfaceMap)
   --TODO ensure this can't fail
   nextSurface <- foldM getToplevel Nothing (M.toList surfaceMap)
 
@@ -213,7 +216,7 @@ wmEnsureKeyboardFocusIsValid this oldSurface = do
 
 newShell :: Scene -> IO Shell
 newShell scene = do
-  Some comp <- readIORef (scene ^. sceneCompositor)
+  Some comp <- readMVar (scene ^. sceneCompositor)
   let dp = compositorWlDisplay comp
   rec let shell = Shell scene dp global shellPtr bindFuncPtr
       shellPtr <- newStablePtr shell
@@ -242,7 +245,7 @@ newShell scene = do
       shell <- deRefStablePtr shellPtr
       
       let scene = shell ^. shellScene
-      Some comp <- readIORef (scene ^. sceneCompositor)
+      Some comp <- readMVar (scene ^. sceneCompositor)
       Some surface <- compositorGetSurfaceFromResource comp surfaceResource
 
       let mode = case toEnum (fromIntegral clipmode) of

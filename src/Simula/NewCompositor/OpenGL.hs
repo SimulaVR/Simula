@@ -4,7 +4,7 @@ import Control.Applicative
 import Control.Monad
 import Control.Lens
 import Data.ByteString (ByteString)
-import Data.IORef
+import Control.Concurrent.MVar
 import Data.FileEmbed
 import Data.Typeable
 import Linear
@@ -17,29 +17,37 @@ import Simula.NewCompositor.Geometry
 import Simula.NewCompositor.Types
 
 data ViewPort = ViewPort {
-  _viewPortOffset :: IORef (V2 Float),
-  _viewPortSize :: IORef (V2 Float),
-  _viewPortBufferGeometry :: IORef Rectangle
+  _viewPortOffsetFactor :: MVar (V2 Float),
+  _viewPortSizeFactor :: MVar (V2 Float),
+  _viewPortBufferGeometry :: MVar Rectangle
   } deriving (Eq, Typeable)
 
 makeLenses ''ViewPort
 
-viewPortWidth, viewPortHeight :: ViewPort -> IO Float
-viewPortWidth this = view _x <$> readIORef (_viewPortSize this) 
-viewPortHeight this = view _y <$> readIORef (_viewPortSize this)
+viewPortSize :: ViewPort -> IO (V2 Float)
+viewPortSize vp = do
+  size <- readMVar (vp ^. viewPortSizeFactor)
+  geo <- readMVar (vp ^. viewPortBufferGeometry)
+  return $ liftI2 (*) size (fromIntegral <$> geo ^. rectangleSize)
+
+viewPortOffset :: ViewPort -> IO (V2 Float)
+viewPortOffset vp = do
+  offset <- readMVar (vp ^. viewPortOffsetFactor)
+  geo <- readMVar (vp ^. viewPortBufferGeometry)
+  return $ liftI2 (*) offset (fromIntegral <$> geo ^. rectangleSize)
 
 viewPortDisplayCoordsToViewportCoords :: ViewPort -> V2 Float -> IO (V2 Float)
 viewPortDisplayCoordsToViewportCoords this pixel = do
-  offset <- readIORef $ _viewPortOffset this
-  size <- readIORef $ _viewPortSize this
+  offset <- viewPortOffset this
+  size <- viewPortSize this
   let res = liftA3 (\p o s -> (p - o)/s - 0.5) pixel offset size
   return $ liftA2 (*) res (V2 1 ((size ^. _y) / (size ^. _x)))
 
 
 setViewPort :: ViewPort -> IO ()
 setViewPort this = do
-  offset <- readIORef $ _viewPortOffset this
-  size <- readIORef $ _viewPortSize this
+  offset <- viewPortOffset this
+  size <- viewPortSize this
   viewport $= (Position (truncate $ offset ^. _x) (truncate (offset ^. _y)), Size (truncate $ size ^. _x) (truncate $ size ^. _y))
 
 class (Eq a, Typeable a) => OpenGLContext a where
@@ -104,7 +112,7 @@ getProgram shader = do
 
 
 checkForErrors :: HasCallStack => IO ()
-checkForErrors = do
+checkForErrors = return () {-do
   errs <- get errors
   when (not (null errs)) $ do
     fbStatus <- get $ framebufferStatus Framebuffer
@@ -114,3 +122,4 @@ checkForErrors = do
     putStrLn $ "Draw framebuffer status: " ++ show dfbStatus
     putStrLn $ "Read framebuffer status: " ++ show rfbStatus
     error $ show errs
+-}

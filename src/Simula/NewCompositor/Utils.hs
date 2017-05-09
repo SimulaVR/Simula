@@ -1,6 +1,10 @@
 module Simula.NewCompositor.Utils where
 
-import Foreign
+import Control.Concurrent.MVar
+import Control.Exception.Base
+import Control.Monad
+
+import Foreign hiding (void)
 import Foreign.C
 
 import qualified Language.C.Inline as C
@@ -21,6 +25,12 @@ translate = mkTransformationMat identity
 
 scale :: Num a => V3 a -> M44 a
 scale v = fmap (liftI2 (*) (point v)) identity
+
+writeMVar :: MVar a -> a -> IO ()
+writeMVar mv x = void $ swapMVar mv x
+
+modifyMVar' :: MVar a -> (a -> a) -> IO ()
+modifyMVar' mv f = modifyMVar_ mv (\x -> f <$> evaluate x)
 
 motorcarShellInterface :: IO WlInterface
 motorcarShellInterface = WlInterface <$> [C.exp| struct wl_interface* { &motorcar_shell_interface } |]
