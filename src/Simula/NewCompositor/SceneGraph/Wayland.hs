@@ -182,6 +182,7 @@ instance VirtualNode BaseWaylandSurfaceNode
 
 instance Drawable BaseWaylandSurfaceNode where
   drawableDraw this scene display = do
+    putStrLn "this shouldn't be drawing"
     Some surface <- readMVar $ _waylandSurfaceNodeSurface this
     Just texture <- wsTexture surface
 
@@ -691,9 +692,9 @@ newMotorcarSurfaceNode ws prt tf dims = do
               <*> newWlArray
               <*> newWlArray
               <*> newStablePtr node
-      wsn <- newWaylandSurfaceNode (Just (Some node)) ws prt tf              
+      wsn <- newWaylandSurfaceNode (Just (Some node)) ws prt tf
 
-  setNodeTransform (wsn ^. waylandSurfaceNodeDecorations) $ scale dims
+  setNodeTransform (node ^. waylandSurfaceNodeDecorations) $ scale dims
   setNodeParent (node ^. waylandSurfaceNodeDecorations) (Just (Some node))
   return node
     

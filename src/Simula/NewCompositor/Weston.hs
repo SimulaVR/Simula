@@ -43,7 +43,7 @@ data SimulaCompositor = SimulaCompositor {
   _simulaCompositorDisplay :: Display,
   _simulaCompositorWlDisplay :: WlDisplay,
   _simulaCompositorWestonCompositor :: WestonCompositor,
-  _simulaCompositorSurfaceMap :: MVar (M.Map WestonDesktopSurface SimulaSurface),
+  _simulaCompositorSurfaceMap :: MVar (M.Map WestonSurface SimulaSurface),
   _simulaCompositorOpenGlData :: OpenGLData,
   _simulaCompositorOutput :: MVar (Maybe WestonOutput),
   _simulaCompositorGlContext :: MVar (Maybe SimulaOpenGLContext),
@@ -205,26 +205,35 @@ instance Compositor SimulaCompositor where
     ptr <- wlResourceData resource    
     let ws = WestonSurface (castPtr ptr)
     surface <- weston_surface_get_desktop_surface ws
-    simulaSurface <- M.lookup surface <$> readMVar (comp ^. simulaCompositorSurfaceMap)
+    putStr "resource ptr: "
+    print ptr
+    simulaSurface <- M.lookup ws <$> readMVar (comp ^. simulaCompositorSurfaceMap)
     case simulaSurface of
       Just simulaSurface -> return (Some simulaSurface)
       _ -> do
-        view <- weston_desktop_surface_create_view surface
-        simulaSurface <- newSimulaSurface surface view comp NA
-        modifyMVar' (comp ^. simulaCompositorSurfaceMap) (M.insert surface simulaSurface)
-        Just output <- readMVar (comp ^. simulaCompositorOutput)
-        westonViewSetOutput view output
-        let layer = comp  ^. simulaCompositorNormalLayer
-        --TODO infinite list????
---        weston_layer_entry_insert  (westonLayerViewList layer) (westonViewLayerEntry view)
-        weston_view_update_transform view
-        westonViewSetMapped view True
-        
-        ws <- weston_desktop_surface_get_surface surface
-        westonSurfaceSetMapped ws True
+        simulaSurface <- createSurface comp surface
         return (Some simulaSurface)
     
     
+
+createSurface :: SimulaCompositor -> WestonDesktopSurface  -> IO SimulaSurface
+createSurface compositor surface = do
+  view <- weston_desktop_surface_create_view surface
+  ws <- weston_desktop_surface_get_surface surface
+  simulaSurface <- M.lookup ws <$> readMVar (compositor ^. simulaCompositorSurfaceMap)
+  case simulaSurface of
+    Just s -> return s
+    _ -> do
+      simulaSurface <- newSimulaSurface surface view compositor NA
+      modifyMVar' (compositor ^. simulaCompositorSurfaceMap) (M.insert ws simulaSurface)
+  
+      Just output <- readMVar (compositor ^. simulaCompositorOutput)
+      westonViewSetOutput view output
+      let layer = compositor ^. simulaCompositorNormalLayer
+            
+      weston_layer_entry_insert  (westonLayerViewList layer) (westonViewLayerEntry view)
+      
+      return simulaSurface
 
 --BUG TODO: need an actual wl_shell
 newSimulaCompositor :: Scene -> Display -> IO SimulaCompositor
@@ -285,36 +294,26 @@ newSimulaCompositor scene display = do
   where
     onSurfaceCreated compositor surface  _ = do
       putStrLn "surface created"
-      view <- weston_desktop_surface_create_view surface
-      simulaSurface <- newSimulaSurface surface view compositor NA
-      modifyMVar' (compositor ^. simulaCompositorSurfaceMap) (M.insert surface simulaSurface)
-  
-      let wm = compositor ^. simulaCompositorScene.sceneWindowManager
-      wmMapSurface wm simulaSurface TopLevel
-
-      Just output <- readMVar (compositor ^. simulaCompositorOutput)
-      westonViewSetOutput view output
-      let layer = compositor ^. simulaCompositorNormalLayer
-            
-      weston_layer_entry_insert  (westonLayerViewList layer) (westonViewLayerEntry view)
-      
+      createSurface compositor surface
       return ()
+
 
     onSurfaceDestroyed compositor surface _ = do
       --TODO destroy surface in wm
-      simulaSurface <- M.lookup surface <$> readMVar (compositor ^. simulaCompositorSurfaceMap) 
+      ws <- weston_desktop_surface_get_surface surface
+      simulaSurface <- M.lookup ws <$> readMVar (compositor ^. simulaCompositorSurfaceMap) 
       case simulaSurface of
         Just simulaSurface -> do
-          modifyMVar' (compositor ^. simulaCompositorSurfaceMap) (M.delete surface)
+          modifyMVar' (compositor ^. simulaCompositorSurfaceMap) (M.delete ws)
           let wm = compositor ^. simulaCompositorScene.sceneWindowManager
           wmDestroySurface wm simulaSurface
         _ -> return ()
   
     onSurfaceCommit compositor surface x y _ = do
-      simulaSurface <- M.lookup surface <$> readMVar (compositor ^. simulaCompositorSurfaceMap)
+      ws <- weston_desktop_surface_get_surface surface
+      simulaSurface <- M.lookup ws <$> readMVar (compositor ^. simulaCompositorSurfaceMap)
       case simulaSurface of
         Just simulaSurface -> do
-          ws <- weston_desktop_surface_get_surface surface
           let view = simulaSurface ^. simulaSurfaceView
           westonSurfaceSetMapped ws True
           westonViewSetMapped view True
@@ -322,6 +321,8 @@ newSimulaCompositor scene display = do
 
           Just output <- readMVar (compositor ^. simulaCompositorOutput)
           weston_output_schedule_repaint output
+          let wm = compositor ^. simulaCompositorScene.sceneWindowManager
+--          wmMapSurface wm simulaSurface TopLevel
           -- need to figure out surface type
           return ()
         _ -> return ()
@@ -385,7 +386,6 @@ textureFromSurface ws = do
 
 composeSurface :: SimulaSurface -> OpenGLData -> IO TextureObject
 composeSurface surf gld = do
-  let (WestonDesktopSurface wdsPtr) =  surf ^. simulaSurfaceWestonDesktopSurface
   ws <- weston_desktop_surface_get_surface $ surf ^. simulaSurfaceWestonDesktopSurface
   size <- wsSize surf
 
