@@ -3,9 +3,11 @@ module Simula.NewCompositor.Wayland.Output where
 import Control.Lens
 import Control.Concurrent.MVar
 import Data.Word
-import Data.Unique
+import Data.Hashable
 import Data.Typeable
 import Linear
+
+import Debug.Trace
 
 import Graphics.Rendering.OpenGL hiding (Proxy)
 
@@ -20,7 +22,6 @@ data WaylandSurfaceClippingMode = None | Cuboid | Portal
   deriving (Show, Eq, Ord, Enum)
 
 data BaseWaylandSurface = BaseWaylandSurface {
-  _baseWaylandSurfaceId :: Unique, -- hack for ord instance
   _baseWaylandSurfaceType :: MVar WaylandSurfaceType,
   _baseWaylandSurfaceClippingMode :: MVar WaylandSurfaceClippingMode,
   _baseWaylandSurfaceDepthCompositingEnabled :: MVar Bool,
@@ -29,15 +30,13 @@ data BaseWaylandSurface = BaseWaylandSurface {
 
 makeClassy ''BaseWaylandSurface
 
-instance Ord BaseWaylandSurface where
-  x <= y = (x ^. baseWaylandSurfaceId) <= (y ^. baseWaylandSurfaceId)
 
 newBaseWaylandSurface :: WaylandSurfaceType -> IO BaseWaylandSurface
-newBaseWaylandSurface ty = BaseWaylandSurface <$> newUnique
-                           <*> newMVar ty <*> newMVar None
+newBaseWaylandSurface ty = BaseWaylandSurface 
+                           <$> newMVar ty <*> newMVar None
                            <*> newMVar False <*> newMVar False
 
-class (Eq a, Typeable a) => WaylandSurface a where
+class (Eq a, Hashable a, Typeable a) => WaylandSurface a where
   wsTexture :: a -> IO (Maybe TextureObject)
   wsSize :: a -> IO (V2 Int)
   setWsSize :: a -> V2 Int -> IO ()
@@ -78,14 +77,10 @@ class (Eq a, Typeable a) => WaylandSurface a where
   default setWsIsMotorcarSurface :: HasBaseWaylandSurface a => a -> Bool -> IO ()
   setWsIsMotorcarSurface = views baseWaylandSurfaceIsMotorcarSurface writeMVar
 
-  wsId :: a -> Unique
-  default wsId :: HasBaseWaylandSurface a => a -> Unique
-  wsId = view baseWaylandSurfaceId
-  
 instance Eq (Some WaylandSurface) where
   Some a == Some b = case cast a of
     Just a -> a == b
     _ -> False
 
-instance Ord (Some WaylandSurface) where
-  Some a <= Some b = wsId a <= wsId b
+instance Hashable (Some WaylandSurface) where
+  hashWithSalt s (Some x) = hashWithSalt s x

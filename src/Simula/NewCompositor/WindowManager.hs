@@ -5,7 +5,7 @@ import Control.Concurrent.MVar
 import Control.Lens
 import Control.Monad
 
-import qualified Data.Map as M
+import qualified Data.HashMap.Strict as HM
 import Data.Typeable
 import Foreign
 import Foreign.C
@@ -28,7 +28,7 @@ data WindowManager = WindowManager {
   _windowManagerShell :: Shell,
   _windowManagerDefaultSeat :: Some Seat,
   _windowManagerNumSurfacesMapped :: MVar Int,
-  _windowManagerSurfaceMap :: MVar (M.Map (Some WaylandSurface) (Some WaylandSurfaceNode))
+  _windowManagerSurfaceMap :: MVar (HM.HashMap (Some WaylandSurface) (Some WaylandSurfaceNode))
   } deriving (Eq, Typeable)
 
 data Shell = Shell {
@@ -44,7 +44,7 @@ makeLenses ''Shell
 
 newWindowManager :: Seat st => Scene -> st -> IO WindowManager
 newWindowManager scene seat = WindowManager scene <$> newShell scene
-                              <*> pure (Some seat) <*> newMVar 0 <*> newMVar M.empty
+                              <*> pure (Some seat) <*> newMVar 0 <*> newMVar HM.empty
 
 destroyWindowManager :: WindowManager -> IO ()
 destroyWindowManager this = do
@@ -56,7 +56,7 @@ wmCreateSurface this surface = do
   putStrLn "creating surface"
   let ssurf = Some surface
   surfaceMap <- readMVar (this ^. windowManagerSurfaceMap) 
-  case M.lookup ssurf surfaceMap of
+  case HM.lookup ssurf surfaceMap of
     Just snode@(Some node) ->  setWsnSurface node ssurf >>  return snode
     Nothing -> do
       isMSN <- wsIsMotorcarSurface surface
@@ -64,7 +64,7 @@ wmCreateSurface this surface = do
       snode <- if isMSN
         then Some <$> newMotorcarSurfaceNode surface scene identity (V3 1 1 1)
         else Some <$> newWaylandSurfaceNode Nothing surface scene identity
-      modifyMVar' (this ^. windowManagerSurfaceMap) (M.insert ssurf snode)
+      modifyMVar' (this ^. windowManagerSurfaceMap) (HM.insert ssurf snode)
       putStrLn "created surface"
       return snode
 
@@ -72,7 +72,7 @@ wmDestroySurface :: WaylandSurface ws => WindowManager -> ws -> IO ()
 wmDestroySurface this surface = do
   surfaceMap <- readMVar (this ^. windowManagerSurfaceMap)
   let ssurf = Some surface
-  case M.lookup ssurf surfaceMap of
+  case HM.lookup ssurf surfaceMap of
     Nothing -> return ()
     Just snode@(Some node) -> do
       cds <- readMVar (nodeChildren node)
@@ -83,7 +83,7 @@ wmDestroySurface this surface = do
             Just (wsn :: BaseWaylandSurfaceNode) -> destroySurface wsn
             _ -> return ()
 
-      modifyMVar' (this ^. windowManagerSurfaceMap) (M.delete ssurf)
+      modifyMVar' (this ^. windowManagerSurfaceMap) (HM.delete ssurf)
       case cast node of
         Just msn -> destroyMotorcarSurfaceNode msn
         _ -> return ()
@@ -156,7 +156,7 @@ wmMapSurface this surface sty = do
         
       case focus of
         Just focus -> do
-          focusNode <- M.lookup focus <$> readMVar (this ^. windowManagerSurfaceMap)
+          focusNode <- HM.lookup focus <$> readMVar (this ^. windowManagerSurfaceMap)
           case focusNode of
             Just (Some focusNode) -> do
               localPos <- case sty of
@@ -180,7 +180,7 @@ wmMapSurface this surface sty = do
 wmUnmapSurface :: WaylandSurface ws => WindowManager -> ws -> IO ()
 wmUnmapSurface this surface = do
   surfaceMap <- readMVar (this ^. windowManagerSurfaceMap)
-  case M.lookup (Some surface) surfaceMap of
+  case HM.lookup (Some surface) surfaceMap of
     Just (Some node) -> setWsnMapped node False >> wmEnsureKeyboardFocusIsValid this surface
     Nothing -> return ()
 
@@ -201,7 +201,7 @@ wmEnsureKeyboardFocusIsValid :: WaylandSurface ws => WindowManager -> ws -> IO (
 wmEnsureKeyboardFocusIsValid this oldSurface = do
   surfaceMap <- readMVar (this ^. windowManagerSurfaceMap)
   --TODO ensure this can't fail
-  nextSurface <- foldM getToplevel Nothing (M.toList surfaceMap)
+  nextSurface <- foldM getToplevel Nothing (HM.toList surfaceMap)
 
   Some seat <- pure (this ^. windowManagerDefaultSeat)
   seatEnsureKeyboardFocusIsValid seat oldSurface nextSurface

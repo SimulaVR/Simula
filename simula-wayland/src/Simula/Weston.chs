@@ -368,6 +368,9 @@ westonGlStateTextureIds st@(WestonGlSurfaceState ptr) = do
 westonSurfaceSetMapped :: WestonSurface -> Bool -> IO ()
 westonSurfaceSetMapped = {#set weston_surface->is_mapped#}
 
+westonSurfaceMapped :: WestonSurface -> IO Bool
+westonSurfaceMapped = {#get weston_surface->is_mapped#}
+
 westonViewSetMapped :: WestonView -> Bool -> IO ()
 westonViewSetMapped = {#set weston_view->is_mapped#}
 

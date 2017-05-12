@@ -29,6 +29,7 @@ dependencies:
   - clock
   - containers
   - file-embed
+  - hashable
   - inline-c
   - lens
   - linear

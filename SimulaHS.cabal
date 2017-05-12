@@ -27,6 +27,7 @@ library
     , clock
     , containers
     , file-embed
+    , hashable
     , inline-c
     , lens
     , linear
@@ -73,6 +74,7 @@ executable simple-compositor
     , clock
     , containers
     , file-embed
+    , hashable
     , inline-c
     , lens
     , linear
