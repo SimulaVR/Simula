@@ -100,6 +100,14 @@ getProgram shader = do
     get (programInfoLog program) >>= putStrLn
     ioError . userError $ "Failed linking " ++ show shader
 
+  currentProgram $= Just program
+  texSampler <- get $ uniformLocation program "uTexSampler"
+  when (texSampler /= UniformLocation (negate 1)) $
+    uniform texSampler $= TextureUnit 0
+  currentProgram $= Nothing
+
+  checkForErrors
+
 
   return program
 
@@ -112,14 +120,16 @@ getProgram shader = do
 
 
 checkForErrors :: HasCallStack => IO ()
-checkForErrors = return () {-do
+checkForErrors = do
   errs <- get errors
   when (not (null errs)) $ do
     fbStatus <- get $ framebufferStatus Framebuffer
     dfbStatus <- get $ framebufferStatus DrawFramebuffer
+    
     rfbStatus <- get $ framebufferStatus ReadFramebuffer
     putStrLn $ "Framebuffer status: " ++ show fbStatus
     putStrLn $ "Draw framebuffer status: " ++ show dfbStatus
     putStrLn $ "Read framebuffer status: " ++ show rfbStatus
-    error $ show errs
--}
+    putStrLn $ show errs
+--     error $ show errs
+

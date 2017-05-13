@@ -409,7 +409,32 @@ textureFromSurface :: WestonSurface -> IO TextureObject
 textureFromSurface ws = do
   glState <- westonSurfaceGlState ws
   texIds <- westonGlStateTextureIds glState
-  return . head $ map TextureObject texIds
+
+  let tex = TextureObject $  head texIds
+  activeTexture $= TextureUnit 0
+  textureBinding Texture2D $= Just tex
+  textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
+  textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
+
+  textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
+  textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
+  textureBinding Texture2D $= Nothing
+  return tex
+  {-
+  tex <- genObjectName
+  textureBinding Texture2D $= Just tex
+  withArray texture $ \ptr ->
+    texImage2D Texture2D NoProxy 0 RGBA' (TextureSize2D 4 4) 0 (PixelData RGBA UnsignedByte ptr)
+  textureBinding Texture2D $= Nothing
+  return tex
+  where
+    texture = [255, 65535, 16777215, 4294967295
+              ,65535, 16777215, 4294967295, 255
+              ,16777215, 4294967295, 255, 65535
+              ,4294967295,255, 65535, 16777215] :: [Word32]
+-}
+
+
 
 
 composeSurface :: SimulaSurface -> OpenGLData -> IO TextureObject
@@ -432,8 +457,8 @@ composeSurface surf gld = do
   checkForErrors
 
   --TODO what does this do?
---  framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D (TextureObject 0) 0
---  bindFramebuffer Framebuffer $= defaultFramebufferObject
+  framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D (TextureObject 0) 0
+  bindFramebuffer Framebuffer $= defaultFramebufferObject
   checkForErrors
   return texture
   

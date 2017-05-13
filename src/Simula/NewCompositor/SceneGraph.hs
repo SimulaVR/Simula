@@ -547,8 +547,7 @@ createFBO resolution = do
   framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D fboColorBuffer 0
 
   textureBinding Texture2D $= Just fboDepthBuffer
-  -- UPSTREAM TODO: Depth24Stencil8
-  texImage2D Texture2D NoProxy 0 Depth32fStencil8 size 0 (PixelData DepthStencil Float32UnsignedInt248Rev nullPtr)
+  texImage2D Texture2D NoProxy 0 Depth24Stencil8 size 0 (PixelData DepthStencil UnsignedInt248 nullPtr)
   framebufferTexture2D Framebuffer DepthStencilAttachment Texture2D fboDepthBuffer 0
   bindFramebuffer Framebuffer $= defaultFramebufferObject
   checkForErrors
@@ -561,9 +560,9 @@ displayPrepareForDraw :: Display -> IO ()
 displayPrepareForDraw this = do
   Some glctx <- return $ this ^. displayGlContext
   glCtxMakeCurrent glctx
-  
-  clearColor $= Color4 1 0.9 1 1
-  clearStencil $= 1
+
+  clearColor $= Color4 1 1 1 1
+  clearStencil $= 0
   stencilMask $= 0xff
   clear [ColorBuffer, DepthBuffer, StencilBuffer]
   blend $= Enabled

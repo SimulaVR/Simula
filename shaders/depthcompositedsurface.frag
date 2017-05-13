@@ -14,9 +14,10 @@ float unpack_depth(highp vec4 rgba ) {
 
 void main(void)
 {
+    gl_FragDepth = unpack_depth(texture2D(uTexSampler, vDepthTexCoord));    
 
-    gl_FragDepth = unpack_depth(texture2D(uTexSampler, vDepthTexCoord));
     fragmentColor = texture2D(uTexSampler, vColorTexCoord);
+
 }
 
 

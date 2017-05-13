@@ -41,7 +41,7 @@ main = do
     wm <- newWindowManager scene seat
  
   let wc = comp ^. simulaCompositorWestonCompositor
-  
+
   oldFunc <- getRepaintOutput wc
   newFunc <- createRendererRepaintOutputFunc (onRender comp oldFunc)
   setRepaintOutput wc newFunc

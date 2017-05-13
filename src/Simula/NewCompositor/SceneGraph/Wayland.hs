@@ -47,7 +47,7 @@ data MotorcarSurfaceNode = MotorcarSurfaceNode {
     
   _motorcarSurfaceNodeColorTextureCoords :: BufferObject,
   _motorcarSurfaceNodeDepthTextureCoords :: BufferObject,
-  _motorcarSurfaceNodeSurfaceTextureCoords :: BufferObject,
+  _motorcarSurfaceNodeSurfaceVertexCoords :: BufferObject,
   _motorcarSurfaceNodeCuboidClippingVertices :: BufferObject,
   _motorcarSurfaceNodeCuboidClippingIndices :: BufferObject,
   
@@ -125,7 +125,7 @@ class Drawable a => WaylandSurfaceNode a where
     size <- (fmap . fmap) fromIntegral $ wsSize surface
     let scaleM = scale (V3 (negate (size ^. _x) / ppm)  ((size ^. _y) / ppm) 1)
     let offsetM = translate (V3 (negate 0.5) (negate 0.5) 0)
-          
+
     writeMVar (this ^. waylandSurfaceNodeSurfaceTransform) $ rotM !*! scaleM !*! offsetM
     
     setNodeTransform (this ^. waylandSurfaceNodeDecorations) $ rotM !*! scaleM !*! scale (V3 1.04 1.04 0)
@@ -182,7 +182,6 @@ instance VirtualNode BaseWaylandSurfaceNode
 
 instance Drawable BaseWaylandSurfaceNode where
   drawableDraw this scene display = do
-    putStrLn "this shouldn't be drawing"
     Some surface <- readMVar $ _waylandSurfaceNodeSurface this
     Just texture <- wsTexture surface
 
@@ -202,6 +201,7 @@ instance Drawable BaseWaylandSurfaceNode where
     bindBuffer ArrayBuffer $= Just textureCoords
     vertexAttribPointer aTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 nullPtr)
 
+
     textureBinding Texture2D $= Just texture
     textureFilter Texture2D $= ((Linear', Nothing), Linear')
 
@@ -215,7 +215,7 @@ instance Drawable BaseWaylandSurfaceNode where
       projMatrix <- readMVar (vp ^. viewPointProjectionMatrix)
       viewMatrix <- readMVar (vp ^. viewPointViewMatrix)
       worldTf <- nodeWorldTransform this
-    
+
       let mat = (projMatrix !*! viewMatrix !*! worldTf !*! surfaceTf) ^. m44GLmatrix
       uniform uMVPMatrix $= mat
       drawArrays TriangleFan 0 4
@@ -271,7 +271,7 @@ instance Drawable MotorcarSurfaceNode where
     Some surface <- readMVar (this ^. waylandSurfaceNodeSurface)
     dce <- wsDepthCompositingEnabled surface
     
-    let surfaceCoords = this ^. motorcarSurfaceNodeSurfaceTextureCoords
+    let surfaceCoords = this ^. motorcarSurfaceNodeSurfaceVertexCoords
 
     case dce of
       True -> do
@@ -283,11 +283,12 @@ instance Drawable MotorcarSurfaceNode where
         vertexAttribArray aPosition $= Enabled
         bindBuffer ArrayBuffer $= Just surfaceCoords
         vertexAttribPointer aPosition $= (ToFloat, VertexArrayDescriptor 3 Float 0 nullPtr)
-  
+
         vertexAttribArray aColorTexCoord $= Enabled
         bindBuffer ArrayBuffer $= Nothing
         vertexAttribArray aDepthTexCoord $= Enabled
         bindBuffer ArrayBuffer $= Nothing
+       
       _ -> do
         currentProgram $= Just (this ^. waylandSurfaceNodeShader)
         let aPosition = this ^. waylandSurfaceNodeAPosition
@@ -305,8 +306,11 @@ instance Drawable MotorcarSurfaceNode where
         depthMask $= Disabled
 
     checkForErrors
+
     --TODO proper Nothing handling; this theoretically shouldn't happen
     Just tex <- wsTexture surface
+    current <- get $ activeTexture
+    print current 
     textureBinding Texture2D $= Just tex
     textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
     checkForErrors
@@ -319,6 +323,7 @@ instance Drawable MotorcarSurfaceNode where
         True -> do
           ccvp <- readMVar (vp ^. viewPointClientColorViewPort)
           ccvpCoords <- vpCoords ccvp
+          print ccvpCoords
           let aColorTexCoord = this ^. motorcarSurfaceNodeAColorTexCoordDepthComposite
           
           withArrayLen ccvpCoords $ \len coordPtr ->
@@ -339,12 +344,11 @@ instance Drawable MotorcarSurfaceNode where
             vertexAttribPointer aTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 coordPtr)
 
       checkForErrors
+      putStrLn "wtf"
       drawArrays TriangleFan 0 4
       checkForErrors
 
     when (not dce) $ do
-      glEnable GL_DEPTH_TEST
-      checkForErrors
       depthMask $= Enabled
 
     checkForErrors
@@ -535,7 +539,7 @@ instance Drawable MotorcarSurfaceNode where
 
           let aPosition = this ^. motorcarSurfaceNodeAPositionBlit
           let aTexCoord = this ^. motorcarSurfaceNodeATexCoordBlit
-          let surfaceCoords = this ^. motorcarSurfaceNodeSurfaceTextureCoords
+          let surfaceCoords = this ^. motorcarSurfaceNodeSurfaceVertexCoords
 
           vertexAttribArray aPosition $= Enabled
           bindBuffer ArrayBuffer $= Just surfaceCoords
@@ -593,6 +597,7 @@ newWaylandSurfaceNode maybeThis ws parent tf = do
   let decoVert = concat [ mkDeco i j k | i <- [-1,1], j <- [-1,1], k <- [-1,1] ]
   let decoColor = Color3 0.5 0.5 0.5
 
+
   decoNode <- newWireframeNode decoVert decoColor Nothing identity
 
   rec node <- BaseWaylandSurfaceNode base
@@ -609,6 +614,9 @@ newWaylandSurfaceNode maybeThis ws parent tf = do
       base <- case maybeThis of
                 Just (Some this) -> newBaseDrawable this (Just (Some parent)) tf
                 _ -> newBaseDrawable node (Just (Some parent)) tf
+
+  setNodeParent decoNode (Just (Some node))
+
   checkForErrors
   return node
 
@@ -636,8 +644,8 @@ newMotorcarSurfaceNode ws prt tf dims = do
   dcsbs <-  getProgram ShaderDepthCompositedSurfaceBlitter
   clipping <- getProgram ShaderMotorcarLine
 
-  surfaceTexCoords <- genObjectName
-  bindBuffer ArrayBuffer $= Just surfaceTexCoords
+  surfaceVertexCoords <- genObjectName
+  bindBuffer ArrayBuffer $= Just surfaceVertexCoords
   --TODO make this into an utility function
   withArrayLen surfaceVerts $ \len coordPtr ->
     bufferData ArrayBuffer $= (fromIntegral (len * sizeOf (undefined :: Float)), coordPtr, StaticDraw)
@@ -651,6 +659,8 @@ newMotorcarSurfaceNode ws prt tf dims = do
   currentProgram $= Nothing
   checkForErrors
 
+
+
   ccv <- genObjectName
   bindBuffer ArrayBuffer $= Just ccv
   withArrayLen cuboidClippingVerts $ \len coordPtr ->
@@ -660,7 +670,7 @@ newMotorcarSurfaceNode ws prt tf dims = do
   cci <- genObjectName
   bindBuffer ElementArrayBuffer $= Just cci
   withArrayLen cuboidClippingInds $ \len coordPtr ->
-    bufferData ElementArrayBuffer $= (fromIntegral (len * sizeOf (undefined :: Float)), coordPtr, StaticDraw)
+    bufferData ElementArrayBuffer $= (fromIntegral (len * sizeOf (undefined :: Word32)), coordPtr, StaticDraw)
   checkForErrors
 
   rec node <- MotorcarSurfaceNode wsn
@@ -670,7 +680,7 @@ newMotorcarSurfaceNode ws prt tf dims = do
               <*> pure clipping
               <*> genObjectName
               <*> genObjectName
-              <*> pure surfaceTexCoords
+              <*> pure surfaceVertexCoords
               <*> pure ccv
               <*> pure cci
 

@@ -13,7 +13,7 @@ void main(void)
     vColorTexCoord = aColorTexCoord;
     vDepthTexCoord = aDepthTexCoord;
 
-    gl_Position =  vec4(aPosition, 1.);
+    gl_Position = vec4(aPosition, 1.);
 
 
 }
