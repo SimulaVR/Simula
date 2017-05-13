@@ -114,7 +114,6 @@ wmMapSurface this surface sty = do
       case mode of
         Cuboid -> msnRequestSize3D msn (V3 0.5 0.5 0.5)
         Portal -> msnRequestSize3D msn (V3 0.7 0.5 0)
-      putStrLn "got size"
       dce <- wsDepthCompositingEnabled surface
       Some comp <- readMVar (scene ^. sceneCompositor)
       dp <- compositorDisplay comp

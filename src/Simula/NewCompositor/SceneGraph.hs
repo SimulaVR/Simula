@@ -284,7 +284,7 @@ sceneDrawFrame this = do
     writeMVar (_sceneActiveDisplay this) (Just dp)
     displayPrepareForDraw dp
     checkForErrors
-    nodeMapOntoSubtree this (\(Some node) scene -> nodeOnFrameDraw node scene >> print (typeOf node) >> checkForErrors) (Just this)
+    nodeMapOntoSubtree this (\(Some node) scene -> nodeOnFrameDraw node scene >> checkForErrors) (Just this)
     displayFinishDraw dp
     checkForErrors
 
@@ -390,7 +390,6 @@ viewPointUpdateProjectionMatrix this = do
     let near = this ^. viewPointNear
     let far = this ^. viewPointFar
     let perM = perspective fov (width/height) near far
-    print fov >> print (width/height) >> print near >> print far >> print perM >> print cofTf
     
     writeMVar (this ^. viewPointProjectionMatrix) $ cofTf !*! perM
   viewPointSendProjectionMatrixToClients this
@@ -475,16 +474,12 @@ viewPointWorldRayAtDisplayPosition this pixel = do
 viewPointFov :: ViewPoint -> Display -> IO Float
 viewPointFov this dp = do
   vpTrans <- nodeWorldTransform this
-  print vpTrans
   dpTrans <- nodeWorldTransform dp
-  print dpTrans
   let origin = V4 0 0 0 1
   let ctdVector = ((dpTrans !* origin) - (vpTrans !* origin)) ^. _xyz
   let displayNormal = normalize $ (dpTrans !* V4 0 0 1 0) ^. _xyz
   let eyeToScreenDis = abs $ dot ctdVector displayNormal
   let dims = _displayDimensions dp
-  print (dims ^. _y)
-  print (2*eyeToScreenDis)
   return $ 2 * atan ((dims ^. _y)/(2*eyeToScreenDis))
 
 instance SceneGraphNode Display

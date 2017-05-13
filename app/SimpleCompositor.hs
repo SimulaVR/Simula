@@ -54,5 +54,4 @@ main = do
   where
     onRender comp oldFunc output damage = do
       compositorRender comp
-      putStrLn "rendered"
 

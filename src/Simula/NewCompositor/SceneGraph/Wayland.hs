@@ -231,7 +231,6 @@ instance WaylandSurfaceNode BaseWaylandSurfaceNode
 instance SceneGraphNode MotorcarSurfaceNode where
   nodeOnWorldTransformChange this scene = sendTransformToClient this
   nodeOnFrameBegin this _ = do
-    putStrLn "on frame begin"
     computeSurfaceTransform this 8
     Some surface <- readMVar $ this ^. waylandSurfaceNodeSurface
     wsPrepare surface
@@ -242,7 +241,6 @@ instance VirtualNode MotorcarSurfaceNode
 
 instance Drawable MotorcarSurfaceNode where
   drawableDraw this scene display = do
-    putStrLn "drawing"
     checkForErrors
     stencilTest $= Enabled
     checkForErrors
@@ -309,8 +307,6 @@ instance Drawable MotorcarSurfaceNode where
 
     --TODO proper Nothing handling; this theoretically shouldn't happen
     Just tex <- wsTexture surface
-    current <- get $ activeTexture
-    print current 
     textureBinding Texture2D $= Just tex
     textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
     checkForErrors
@@ -323,7 +319,6 @@ instance Drawable MotorcarSurfaceNode where
         True -> do
           ccvp <- readMVar (vp ^. viewPointClientColorViewPort)
           ccvpCoords <- vpCoords ccvp
-          print ccvpCoords
           let aColorTexCoord = this ^. motorcarSurfaceNodeAColorTexCoordDepthComposite
           
           withArrayLen ccvpCoords $ \len coordPtr ->
@@ -344,7 +339,6 @@ instance Drawable MotorcarSurfaceNode where
             vertexAttribPointer aTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 coordPtr)
 
       checkForErrors
-      putStrLn "wtf"
       drawArrays TriangleFan 0 4
       checkForErrors
 
