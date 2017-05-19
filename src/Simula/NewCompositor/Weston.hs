@@ -203,6 +203,18 @@ setTimeout ms ioOperation =
 --BIG TODO: type safety for C bindings, e.g. WlSignal should encode the type of the NotifyFunc data.
 
 instance Compositor SimulaCompositor where
+  startCompositor comp = do
+    let wc = comp ^. simulaCompositorWestonCompositor
+    oldFunc <- getRepaintOutput wc
+    newFunc <- createRendererRepaintOutputFunc (onRender comp oldFunc)
+    setRepaintOutput wc newFunc
+    weston_compositor_wake wc
+    putStrLn "Compositor start"
+    wl_display_run $ comp ^. simulaCompositorWlDisplay
+
+    where
+      onRender comp oldFunc output damage = compositorRender comp
+
   compositorDisplay = return . view simulaCompositorDisplay
   compositorWlDisplay = view simulaCompositorWlDisplay
   compositorOpenGLContext this = do

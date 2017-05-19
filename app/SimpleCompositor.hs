@@ -2,6 +2,7 @@ import Control.Lens
 import Control.Concurrent.MVar
 import Data.Typeable
 
+import Simula.NewCompositor.Compositor
 import Simula.NewCompositor.Wayland.Input
 import Simula.NewCompositor.Weston
 import Simula.NewCompositor.WindowManager
@@ -16,11 +17,6 @@ import Foreign.C
 import Linear
 
 import Graphics.Rendering.OpenGL hiding (translate, scale, rotate)
-import System.Posix.DynamicLinker
-
-
-
-foreign import ccall "dynamic" fromShellInit :: FunPtr (WestonCompositor -> CInt -> Ptr CChar -> IO ()) -> WestonCompositor -> CInt -> Ptr CChar -> IO ()
 
 main :: IO ()
 main = do
@@ -39,19 +35,5 @@ main = do
     modifyMVar' (scene ^. sceneDisplays) (disp:)
     
     wm <- newWindowManager scene seat
+  startCompositor comp
  
-  let wc = comp ^. simulaCompositorWestonCompositor
-
-  oldFunc <- getRepaintOutput wc
-  newFunc <- createRendererRepaintOutputFunc (onRender comp oldFunc)
-  setRepaintOutput wc newFunc
-
-  
-  putStrLn "Compositor start"
-  weston_compositor_wake wc
-  wl_display_run $ comp ^. simulaCompositorWlDisplay
-
-  where
-    onRender comp oldFunc output damage = do
-      compositorRender comp
-

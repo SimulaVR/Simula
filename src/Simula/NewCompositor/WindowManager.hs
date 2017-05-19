@@ -75,6 +75,7 @@ wmDestroySurface this surface = do
   case HM.lookup ssurf surfaceMap of
     Nothing -> return ()
     Just snode@(Some node) -> do
+      nodeDestroy node
       cds <- readMVar (nodeChildren node)
       forM_ cds $ \case
         Some child -> case cast child of --TODO hacky

@@ -107,6 +107,13 @@ data WireframeNode = WireframeNode {
   } deriving (Eq, Typeable)
 
 class (Eq a, Typeable a) => SceneGraphNode a where
+  nodeDestroy :: a -> IO ()
+  nodeDestroy this = do
+    prt <- nodeParent this
+    case prt of
+      Nothing -> return ()
+      Just (Some prt) -> modifyMVar' (nodeChildren prt) (filter (/= Some this))
+  
   nodeOnFrameBegin :: a -> Maybe Scene -> IO ()
   nodeOnFrameBegin _ _ = return ()
   
@@ -192,7 +199,12 @@ makeClassy ''ViewPoint
 makeClassy ''Display
 makeClassy ''WireframeNode
 
--- classy lens instances
+instance Eq (Some SceneGraphNode) where
+  Some a == Some b = case cast a of
+    Just a -> a == b
+    _ -> False
+
+-- classy lens instance
 instance HasBaseSceneGraphNode BaseDrawable where
   baseSceneGraphNode = baseDrawableBase
 
@@ -210,7 +222,7 @@ instance HasBaseSceneGraphNode WireframeNode where
 
 instance HasBaseDrawable WireframeNode where
   baseDrawable = wireframeNodeBase
-  
+
 
 setNodeParent :: SceneGraphNode a => a -> Maybe (Some SceneGraphNode) -> IO ()
 setNodeParent this Nothing = setNodeParent' this Nothing
