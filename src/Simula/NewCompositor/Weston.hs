@@ -400,44 +400,33 @@ instance WaylandSurface SimulaSurface where
   wsPrepare surf = do
     comp <- readMVar (surf ^. simulaSurfaceCompositor)
     texture <- composeSurface surf (comp^.simulaCompositorOpenGlData)
-    writeMVar (surf ^. simulaSurfaceTexture) (Just texture)
+    writeMVar (surf ^. simulaSurfaceTexture) texture
   
   wsSendEvent surf event = undefined
 
 
-textureFromSurface :: WestonSurface -> IO TextureObject
+textureFromSurface :: WestonSurface -> IO (Maybe TextureObject)
 textureFromSurface ws = do
   glState <- westonSurfaceGlState ws
-  texIds <- westonGlStateTextureIds glState
+  case glState of
+    Nothing -> return Nothing
+    Just glState -> do
+      texIds <- westonGlStateTextureIds glState
 
-  let tex = TextureObject $  head texIds
-  activeTexture $= TextureUnit 0
-  textureBinding Texture2D $= Just tex
-  textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
-  textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
+      let tex = TextureObject $  head texIds
+      activeTexture $= TextureUnit 0
+      textureBinding Texture2D $= Just tex
+      textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
+      textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
 
-  textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
-  textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
-  textureBinding Texture2D $= Nothing
-  return tex
-  {-
-  tex <- genObjectName
-  textureBinding Texture2D $= Just tex
-  withArray texture $ \ptr ->
-    texImage2D Texture2D NoProxy 0 RGBA' (TextureSize2D 4 4) 0 (PixelData RGBA UnsignedByte ptr)
-  textureBinding Texture2D $= Nothing
-  return tex
-  where
-    texture = [255, 65535, 16777215, 4294967295
-              ,65535, 16777215, 4294967295, 255
-              ,16777215, 4294967295, 255, 65535
-              ,4294967295,255, 65535, 16777215] :: [Word32]
--}
+      textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
+      textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
+      textureBinding Texture2D $= Nothing
+      return (Just tex)
 
 
 
-
-composeSurface :: SimulaSurface -> OpenGLData -> IO TextureObject
+composeSurface :: SimulaSurface -> OpenGLData -> IO (Maybe TextureObject)
 composeSurface surf gld = do
   ws <- weston_desktop_surface_get_surface $ surf ^. simulaSurfaceWestonDesktopSurface
   size <- wsSize surf
@@ -448,18 +437,19 @@ composeSurface surf gld = do
   checkForErrors
 
   texture <- textureFromSurface ws
-  checkForErrors
-
-  framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D texture 0
-  checkForErrors
+  case texture of
+    Just texture -> do
+      framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D texture 0
+      checkForErrors
   
-  paintChildren ws ws size gld
-  checkForErrors
+      paintChildren ws ws size gld
+      checkForErrors
 
-  --TODO what does this do?
-  framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D (TextureObject 0) 0
-  bindFramebuffer Framebuffer $= defaultFramebufferObject
-  checkForErrors
+      -- needed for textures to properly render
+      framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D (TextureObject 0) 0
+      bindFramebuffer Framebuffer $= defaultFramebufferObject
+      checkForErrors
+    _ -> return ()
   return texture
   
 
@@ -482,7 +472,8 @@ paintChildren surface window windowSize gld = do
 
     -- .isValid() checks for all (>)
     when (all (>0) subSize) $ do
-      tex <- textureFromSurface subsurface
+      -- if we're in this code, we should have a texture
+      Just tex <- textureFromSurface subsurface
       let geo = Rect p (fromIntegral <$> subSize)
       windowInverted <- westonSurfaceIsYInverted window
       subsurfaceInverted <- westonSurfaceIsYInverted subsurface

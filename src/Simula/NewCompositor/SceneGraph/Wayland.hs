@@ -183,48 +183,48 @@ instance VirtualNode BaseWaylandSurfaceNode
 instance Drawable BaseWaylandSurfaceNode where
   drawableDraw this scene display = do
     Some surface <- readMVar $ _waylandSurfaceNodeSurface this
-    Just texture <- wsTexture surface
+    maybeTex <- wsTexture surface
+    case maybeTex of
+      Nothing -> return ()
+      Just texture -> do
+        currentProgram $= Just (_waylandSurfaceNodeShader this)
 
-    currentProgram $= Just (_waylandSurfaceNodeShader this)
-
-    let aPosition = _waylandSurfaceNodeAPosition this
-    let aTexCoord = _waylandSurfaceNodeATexCoord this
-    let uMVPMatrix = _waylandSurfaceNodeUMVPMatrix this
-    let vertexCoords = _waylandSurfaceNodeVertexCoords this
-    let textureCoords = _waylandSurfaceNodeTextureCoords this
+        let aPosition = _waylandSurfaceNodeAPosition this
+        let aTexCoord = _waylandSurfaceNodeATexCoord this
+        let uMVPMatrix = _waylandSurfaceNodeUMVPMatrix this
+        let vertexCoords = _waylandSurfaceNodeVertexCoords this
+        let textureCoords = _waylandSurfaceNodeTextureCoords this
     
-    vertexAttribArray aPosition $= Enabled
-    bindBuffer ArrayBuffer $= Just vertexCoords
-    vertexAttribPointer aPosition $= (ToFloat, VertexArrayDescriptor 3 Float 0 nullPtr)
+        vertexAttribArray aPosition $= Enabled
+        bindBuffer ArrayBuffer $= Just vertexCoords
+        vertexAttribPointer aPosition $= (ToFloat, VertexArrayDescriptor 3 Float 0 nullPtr)
 
-    vertexAttribArray aTexCoord $= Enabled
-    bindBuffer ArrayBuffer $= Just textureCoords
-    vertexAttribPointer aTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 nullPtr)
+        vertexAttribArray aTexCoord $= Enabled
+        bindBuffer ArrayBuffer $= Just textureCoords
+        vertexAttribPointer aTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 nullPtr)
 
+        textureBinding Texture2D $= Just texture
+        textureFilter Texture2D $= ((Linear', Nothing), Linear')
 
-    textureBinding Texture2D $= Just texture
-    textureFilter Texture2D $= ((Linear', Nothing), Linear')
-
-    surfaceTf <- readMVar $ _waylandSurfaceNodeSurfaceTransform this
-    viewpoints <- readMVar $ _displayViewpoints display
-    forM_ viewpoints $ \vp -> do
-      --TODO compare w/ order in draw for WireFrameNode 
-      port <- readMVar (vp ^. viewPointViewPort)
-      setViewPort port
+        surfaceTf <- readMVar $ _waylandSurfaceNodeSurfaceTransform this
+        viewpoints <- readMVar $ _displayViewpoints display
+        forM_ viewpoints $ \vp -> do
+          port <- readMVar (vp ^. viewPointViewPort)
+          setViewPort port
       
-      projMatrix <- readMVar (vp ^. viewPointProjectionMatrix)
-      viewMatrix <- readMVar (vp ^. viewPointViewMatrix)
-      worldTf <- nodeWorldTransform this
+          projMatrix <- readMVar (vp ^. viewPointProjectionMatrix)
+          viewMatrix <- readMVar (vp ^. viewPointViewMatrix)
+          worldTf <- nodeWorldTransform this
 
-      let mat = (projMatrix !*! viewMatrix !*! worldTf !*! surfaceTf) ^. m44GLmatrix
-      uniform uMVPMatrix $= mat
-      drawArrays TriangleFan 0 4
-      checkForErrors
+          let mat = (projMatrix !*! viewMatrix !*! worldTf !*! surfaceTf) ^. m44GLmatrix
+          uniform uMVPMatrix $= mat
+          drawArrays TriangleFan 0 4
+          checkForErrors
 
-    textureBinding Texture2D $= Nothing
-    vertexAttribArray aPosition $= Disabled
-    vertexAttribArray aTexCoord $= Disabled
-    currentProgram $= Nothing
+        textureBinding Texture2D $= Nothing
+        vertexAttribArray aPosition $= Disabled
+        vertexAttribArray aTexCoord $= Disabled
+        currentProgram $= Nothing
 
 instance WaylandSurfaceNode BaseWaylandSurfaceNode
 
@@ -241,132 +241,121 @@ instance VirtualNode MotorcarSurfaceNode
 
 instance Drawable MotorcarSurfaceNode where
   drawableDraw this scene display = do
-    checkForErrors
-    stencilTest $= Enabled
-    checkForErrors
-    
-    bindFramebuffer DrawFramebuffer $= display ^. displayScratchFrameBuffer
-    checkForErrors
-    
-    clearColor $= Color4 0 0 0 0
-    checkForErrors
-    
-    clearDepthf $= 1 --opengl es doesn't support clearDepth
-    checkForErrors
-    
-    clearStencil $= 0
-    checkForErrors
-    
-    stencilMask $= 0xff
-    checkForErrors
-    
-    clear [ColorBuffer, DepthBuffer, StencilBuffer]
-    checkForErrors
-    
-    drawWindowBoundsStencil this display
-    checkForErrors
-      
     Some surface <- readMVar (this ^. waylandSurfaceNodeSurface)
-    dce <- wsDepthCompositingEnabled surface
+    maybeTex <- wsTexture surface
+    case maybeTex of
+      Nothing -> return ()
+      Just tex -> do
+        stencilTest $= Enabled
+        bindFramebuffer DrawFramebuffer $= display ^. displayScratchFrameBuffer
+        clearColor $= Color4 0 0 0 0
+        clearDepthf $= 1 --opengl es doesn't support clearDepth
+        clearStencil $= 0    
+        stencilMask $= 0xff
+        clear [ColorBuffer, DepthBuffer, StencilBuffer]
+        checkForErrors
     
-    let surfaceCoords = this ^. motorcarSurfaceNodeSurfaceVertexCoords
-
-    case dce of
-      True -> do
-        currentProgram $= Just (this ^. motorcarSurfaceNodeDepthCompositedSurfaceShader)
-        let aPosition = this ^. motorcarSurfaceNodeAPositionDepthComposite
-        let aColorTexCoord = this ^. motorcarSurfaceNodeAColorTexCoordDepthComposite
-        let aDepthTexCoord = this ^. motorcarSurfaceNodeADepthTexCoordDepthComposite
-
-        vertexAttribArray aPosition $= Enabled
-        bindBuffer ArrayBuffer $= Just surfaceCoords
-        vertexAttribPointer aPosition $= (ToFloat, VertexArrayDescriptor 3 Float 0 nullPtr)
-
-        vertexAttribArray aColorTexCoord $= Enabled
-        bindBuffer ArrayBuffer $= Nothing
-        vertexAttribArray aDepthTexCoord $= Enabled
-        bindBuffer ArrayBuffer $= Nothing
-       
-      _ -> do
-        currentProgram $= Just (this ^. waylandSurfaceNodeShader)
-        let aPosition = this ^. waylandSurfaceNodeAPosition
-        let aTexCoord = this ^. waylandSurfaceNodeATexCoord
-        let uMVPMatrix = this ^. waylandSurfaceNodeUMVPMatrix
-
-        vertexAttribArray aPosition $= Enabled
-        bindBuffer ArrayBuffer $= Just surfaceCoords
-        vertexAttribPointer aPosition $= (ToFloat, VertexArrayDescriptor 3 Float 0 nullPtr)
-
-        vertexAttribArray aTexCoord $= Enabled
-        bindBuffer ArrayBuffer $= Nothing
-        uniform uMVPMatrix $= (identity ^. m44GLmatrix :: GLmatrix Float)
-        glDisable GL_DEPTH_TEST
-        depthMask $= Disabled
-
-    checkForErrors
-
-    --TODO proper Nothing handling; this theoretically shouldn't happen
-    Just tex <- wsTexture surface
-    textureBinding Texture2D $= Just tex
-    textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
-    checkForErrors
-    
-    vps <- readMVar (display ^. displayViewpoints)
-
-    forM_ vps $ \vp -> do
-      readMVar (vp ^. viewPointViewPort) >>= setViewPort
-      case dce of
-        True -> do
-          ccvp <- readMVar (vp ^. viewPointClientColorViewPort)
-          ccvpCoords <- vpCoords ccvp
-          let aColorTexCoord = this ^. motorcarSurfaceNodeAColorTexCoordDepthComposite
-          
-          withArrayLen ccvpCoords $ \len coordPtr ->
-            vertexAttribPointer aColorTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 coordPtr)
-
-          cdvp <- readMVar (vp ^. viewPointClientDepthViewPort)
-          cdvpCoords <- vpCoords cdvp
-          let aDepthTexCoord = this ^. motorcarSurfaceNodeADepthTexCoordDepthComposite
-          
-          withArrayLen cdvpCoords $ \len coordPtr ->
-            vertexAttribPointer aDepthTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 coordPtr)
-        False -> do
-          vport <- readMVar (vp ^. viewPointViewPort)
-          vportCoords <- vpCoords vport
-          let aTexCoord = this ^. waylandSurfaceNodeATexCoord
-          
-          withArrayLen vportCoords $ \len coordPtr ->
-            vertexAttribPointer aTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 coordPtr)
-
-      checkForErrors
-      drawArrays TriangleFan 0 4
-      checkForErrors
-
-    when (not dce) $ do
-      depthMask $= Enabled
-
-    checkForErrors
-
-    clipWindowBounds this display
-    checkForErrors
+        drawWindowBoundsStencil this display
+        checkForErrors
       
-    drawFrameBufferContents this display
-    checkForErrors
+        dce <- wsDepthCompositingEnabled surface
+    
+        let surfaceCoords = this ^. motorcarSurfaceNodeSurfaceVertexCoords
 
-    bindFramebuffer Framebuffer $= defaultFramebufferObject
-    vertexAttribArray (this ^. motorcarSurfaceNodeAPositionDepthComposite) $= Disabled
-    vertexAttribArray (this ^. motorcarSurfaceNodeAColorTexCoordDepthComposite) $= Disabled
-    activeTexture $= TextureUnit 1
-    textureBinding Texture2D $= Nothing
-    checkForErrors
+        case dce of
+          True -> do
+            currentProgram $= Just (this ^. motorcarSurfaceNodeDepthCompositedSurfaceShader)
+            let aPosition = this ^. motorcarSurfaceNodeAPositionDepthComposite
+            let aColorTexCoord = this ^. motorcarSurfaceNodeAColorTexCoordDepthComposite
+            let aDepthTexCoord = this ^. motorcarSurfaceNodeADepthTexCoordDepthComposite
+
+            vertexAttribArray aPosition $= Enabled
+            bindBuffer ArrayBuffer $= Just surfaceCoords
+            vertexAttribPointer aPosition $= (ToFloat, VertexArrayDescriptor 3 Float 0 nullPtr)
+
+            vertexAttribArray aColorTexCoord $= Enabled
+            bindBuffer ArrayBuffer $= Nothing
+            vertexAttribArray aDepthTexCoord $= Enabled
+            bindBuffer ArrayBuffer $= Nothing
+       
+          _ -> do
+            currentProgram $= Just (this ^. waylandSurfaceNodeShader)
+            let aPosition = this ^. waylandSurfaceNodeAPosition
+            let aTexCoord = this ^. waylandSurfaceNodeATexCoord
+            let uMVPMatrix = this ^. waylandSurfaceNodeUMVPMatrix
+
+            vertexAttribArray aPosition $= Enabled
+            bindBuffer ArrayBuffer $= Just surfaceCoords
+            vertexAttribPointer aPosition $= (ToFloat, VertexArrayDescriptor 3 Float 0 nullPtr)
+
+            vertexAttribArray aTexCoord $= Enabled
+            bindBuffer ArrayBuffer $= Nothing
+            uniform uMVPMatrix $= (identity ^. m44GLmatrix :: GLmatrix Float)
+            glDisable GL_DEPTH_TEST
+            depthMask $= Disabled
+
+        checkForErrors
+
+        textureBinding Texture2D $= Just tex
+        textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
+        checkForErrors
     
-    activeTexture $= TextureUnit 0
-    textureBinding Texture2D $= Nothing
-    checkForErrors
+        vps <- readMVar (display ^. displayViewpoints)
+
+        forM_ vps $ \vp -> do
+          readMVar (vp ^. viewPointViewPort) >>= setViewPort
+          case dce of
+            True -> do
+              ccvp <- readMVar (vp ^. viewPointClientColorViewPort)
+              ccvpCoords <- vpCoords ccvp
+              let aColorTexCoord = this ^. motorcarSurfaceNodeAColorTexCoordDepthComposite
+          
+              withArrayLen ccvpCoords $ \len coordPtr ->
+                vertexAttribPointer aColorTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 coordPtr)
+
+              cdvp <- readMVar (vp ^. viewPointClientDepthViewPort)
+              cdvpCoords <- vpCoords cdvp
+              let aDepthTexCoord = this ^. motorcarSurfaceNodeADepthTexCoordDepthComposite
+          
+              withArrayLen cdvpCoords $ \len coordPtr ->
+                vertexAttribPointer aDepthTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 coordPtr)
+            False -> do
+              vport <- readMVar (vp ^. viewPointViewPort)
+              vportCoords <- vpCoords vport
+              let aTexCoord = this ^. waylandSurfaceNodeATexCoord
+          
+              withArrayLen vportCoords $ \len coordPtr ->
+                vertexAttribPointer aTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 coordPtr)
+
+          checkForErrors
+          drawArrays TriangleFan 0 4
+          checkForErrors
+
+        when (not dce) $ do
+          depthMask $= Enabled
+
+        checkForErrors
+
+        clipWindowBounds this display
+        checkForErrors
+      
+        drawFrameBufferContents this display
+        checkForErrors
+
+        bindFramebuffer Framebuffer $= defaultFramebufferObject
+        vertexAttribArray (this ^. motorcarSurfaceNodeAPositionDepthComposite) $= Disabled
+        vertexAttribArray (this ^. motorcarSurfaceNodeAColorTexCoordDepthComposite) $= Disabled
+        activeTexture $= TextureUnit 1
+        textureBinding Texture2D $= Nothing
+        checkForErrors
     
-    currentProgram $= Nothing
-    stencilTest $= Disabled
-    checkForErrors
+        activeTexture $= TextureUnit 0
+        textureBinding Texture2D $= Nothing
+        checkForErrors
+    
+        currentProgram $= Nothing
+        stencilTest $= Disabled
+        checkForErrors
   
       where
         vpCoords :: ViewPort -> IO [Float]

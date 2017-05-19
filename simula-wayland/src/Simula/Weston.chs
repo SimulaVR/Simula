@@ -29,6 +29,7 @@ import Linear
 
 {#pointer *weston_compositor as WestonCompositor newtype#}
 deriving instance Eq WestonCompositor
+deriving instance Storable WestonCompositor
 
 {#pointer *weston_seat as WestonSeat newtype#}
 deriving instance Eq WestonSeat
@@ -348,11 +349,14 @@ emitOutputFrameSignal (WestonOutput ptr) = let signal = WlSignal $ plusPtr (cast
 {#fun eglGetError {} -> `Int'#}
 {#fun eglInitialize {`EGLDisplay', id `Ptr CInt', id `Ptr CInt'} -> `()'#}
 
+type SurfaceGetContentSizeFunc = WestonSurface -> Ptr CInt -> Ptr CInt -> IO ()
+foreign import ccall "dynamic" fromSurfaceGetContentSizeFunc :: FunPtr SurfaceGetContentSizeFunc -> SurfaceGetContentSizeFunc
+
 {#pointer *weston_gl_surface_state as WestonGlSurfaceState newtype#}
-westonSurfaceGlState :: WestonSurface -> IO WestonGlSurfaceState
+westonSurfaceGlState :: WestonSurface -> IO (Maybe WestonGlSurfaceState)
 westonSurfaceGlState surf = do
   ptr <- {#get weston_surface->renderer_state#} surf
-  return $ WestonGlSurfaceState (castPtr ptr)
+  if ptr == nullPtr then return Nothing else return $ Just (WestonGlSurfaceState (castPtr ptr))
 
 westonGlStateNumTextures :: WestonGlSurfaceState -> IO CInt
 westonGlStateNumTextures = {#get weston_gl_surface_state->num_textures#}
