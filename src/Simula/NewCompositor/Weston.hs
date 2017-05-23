@@ -25,6 +25,7 @@ import Simula.NewCompositor.Compositor
 import Simula.NewCompositor.Geometry
 import Simula.NewCompositor.OpenGL
 import Simula.NewCompositor.SceneGraph
+import Simula.NewCompositor.SceneGraph.Wayland
 import Simula.NewCompositor.Wayland.Input
 import Simula.NewCompositor.Wayland.Output
 import Simula.NewCompositor.WindowManager
@@ -220,6 +221,8 @@ instance Compositor SimulaCompositor where
   compositorOpenGLContext this = do
     Just glctx <- readMVar (this ^. simulaCompositorGlContext)
     return (Some glctx)
+
+  compositorSeat this = return (this ^. simulaCompositorScene.sceneWindowManager.windowManagerDefaultSeat)
     
   compositorGetSurfaceFromResource comp resource = do
     ptr <- wlResourceData resource    
@@ -335,6 +338,14 @@ newSimulaCompositor scene display = do
   
   westonDesktopCreate wcomp api nullPtr
 
+  let interface = defaultWestonPointerGrabInterface {
+        grabPointerFocus = onPointerFocus compositor,
+        grabPointerButton = onPointerButton compositor
+        }
+
+  interfacePtr <- new interface
+  weston_compositor_set_default_pointer_grab wcomp interfacePtr
+
   return compositor
 
   where
@@ -390,7 +401,42 @@ newSimulaCompositor scene display = do
       let glctx = SimulaOpenGLContext eglctx egldp eglsurf
      
       writeMVar (compositor ^. simulaCompositorGlContext) (Just glctx)
-     
+
+    onPointerFocus compositor grab = do
+      pointer <- westonPointerFromGrab grab
+      pos' <- westonPointerPosition pointer
+      let pos = (`div` 256) <$> pos'
+      setFocusForPointer compositor pointer pos
+                     
+      
+    onPointerButton compositor grab time button state = do
+      pointer <- westonPointerFromGrab grab
+      pos' <- westonPointerPosition pointer
+      let pos = (`div` 256) <$> pos'
+      setFocusForPointer compositor pointer pos
+
+
+setFocusForPointer :: SimulaCompositor -> WestonPointer -> V2 Int -> IO ()
+setFocusForPointer compositor pointer pos = do
+  ray' <- displayWorldRayAtDisplayPosition (compositor ^. simulaCompositorDisplay) (fromIntegral <$> pos)
+  let ray = ray' & rayDir %~ negate
+  inter <- nodeIntersectWithSurfaces (compositor ^. simulaCompositorScene) ray
+  case inter of
+    Nothing -> return ()
+    Just rsi -> do
+      Some node <- return (rsi ^. rsiSurfaceNode)
+      let coords = rsi ^. rsiSurfaceCoordinates
+      Some seat <- compositorSeat compositor
+      Some surface <- wsnSurface node
+      setSeatPointerFocus seat surface coords
+      case cast surface of
+        Nothing -> return ()
+        Just surface -> do
+          weston_pointer_set_focus pointer (surface ^. simulaSurfaceView) (truncate (256 * coords ^. _x)) (truncate (256 * coords ^. _y))
+          seat <- westonPointerSeat pointer
+          kbd <- weston_seat_get_keyboard seat
+          ws <- weston_desktop_surface_get_surface $ surface ^. simulaSurfaceWestonDesktopSurface
+          weston_keyboard_set_focus kbd ws
 
 instance WaylandSurface SimulaSurface where
   wsTexture = views simulaSurfaceTexture readMVar

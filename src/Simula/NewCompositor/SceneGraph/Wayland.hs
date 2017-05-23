@@ -145,6 +145,29 @@ instance HasBaseDrawable MotorcarSurfaceNode where
 instance HasBaseWaylandSurfaceNode MotorcarSurfaceNode where
   baseWaylandSurfaceNode = motorcarSurfaceNodeBase
 
+defaultWSNIntersectWithSurface this ray = do
+  closestSubtreeIntersection <- defaultNodeIntersectWithSurfaces this ray
+  Some surface <- readMVar $ this ^. waylandSurfaceNodeSurface
+  ty <- wsType surface
+  case ty of
+    Cursor -> return closestSubtreeIntersection
+    _ -> do
+      tf <- nodeTransform this
+      let localRay = transformRay ray (inv44 tf)
+
+      maybeIsec <- computeLocalSurfaceIntersection this localRay
+      size <- (fmap . fmap) fromIntegral $ wsSize surface
+      case (maybeIsec, closestSubtreeIntersection) of
+        (Just (isec, t), Just closest)
+          | isec ^. _x >= 0 && isec ^. _y >= 0
+            && and (liftI2 (<=) isec size)
+            && t < (closest ^. rsiT)
+            -> return . Just $ RaySurfaceIntersection (Some this) isec ray t
+        (Just (isec, t), Nothing)
+          -> return . Just $ RaySurfaceIntersection (Some this) isec ray t
+        _ -> return closestSubtreeIntersection
+
+
 instance SceneGraphNode BaseWaylandSurfaceNode where
   nodeOnFrameBegin this _ = do
     checkForErrors
@@ -153,28 +176,7 @@ instance SceneGraphNode BaseWaylandSurfaceNode where
     wsPrepare surface
     
   nodeOnFrameDraw = drawableOnFrameDraw
-
-  nodeIntersectWithSurfaces this ray = do
-    closestSubtreeIntersection <- defaultNodeIntersectWithSurfaces this ray
-    Some surface <- readMVar $ this ^. waylandSurfaceNodeSurface
-    ty <- wsType surface
-    case ty of
-      Cursor -> return closestSubtreeIntersection
-      _ -> do
-        tf <- nodeTransform this
-        let localRay = transformRay ray (inv44 tf)
-
-        maybeIsec <- computeLocalSurfaceIntersection this localRay
-
-        size <- (fmap . fmap) fromIntegral $ wsSize surface
-
-        case (maybeIsec, closestSubtreeIntersection) of
-          (Just (isec, t), Just closest)
-            | isec ^. _x >= 0 && isec ^. _y >= 0
-              && and (liftI2 (<=) isec size)
-              && t < (closest ^. rsiT)
-            -> return . Just $ RaySurfaceIntersection (Some this) isec ray t
-          _ -> return closestSubtreeIntersection
+  nodeIntersectWithSurfaces = defaultWSNIntersectWithSurface
                              
       
 
@@ -236,6 +238,7 @@ instance SceneGraphNode MotorcarSurfaceNode where
     wsPrepare surface
     
   nodeOnFrameDraw = drawableOnFrameDraw
+  nodeIntersectWithSurfaces = defaultWSNIntersectWithSurface
 
 instance VirtualNode MotorcarSurfaceNode
 

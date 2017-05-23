@@ -33,6 +33,7 @@ deriving instance Storable WestonCompositor
 
 {#pointer *weston_seat as WestonSeat newtype#}
 deriving instance Eq WestonSeat
+deriving instance Storable WestonSeat
 
 {#pointer *weston_output as WestonOutput newtype#}
 deriving instance Eq WestonOutput
@@ -43,6 +44,7 @@ deriving instance Eq WestonKeyboard
 
 {#pointer *weston_pointer as WestonPointer newtype#}
 deriving instance Eq WestonPointer
+deriving instance Storable WestonPointer
 
 {#pointer *weston_surface as WestonSurface newtype#}
 deriving instance Eq WestonSurface
@@ -161,14 +163,7 @@ westonViewPosY = {#get weston_view->geometry.y#} >=> (return . realToFrac)
 westonViewPos :: WestonView -> IO (V2 Float)
 westonViewPos view = V2 <$> westonViewPosX view <*> westonViewPosY view
 
-{#pointer *weston_pointer_motion_event as WestonPointerMotionEvent newtype#}
-{#pointer *weston_pointer_axis_event as WestonPointerAxisEvent newtype#}
 {#enum wl_keyboard_key_state as WlKeyboardKeyState {underscoreToCase} #}
-
-{#fun weston_pointer_send_motion {`WestonPointer', `CUInt', `WestonPointerMotionEvent'} -> `()'#}
-{#fun weston_pointer_send_button {`WestonPointer', `CUInt', `CUInt', `CUInt'} -> `()'#}
-{#fun weston_pointer_send_axis {`WestonPointer', `CUInt', `WestonPointerAxisEvent'} -> `()'#}
-{#fun weston_pointer_set_focus {`WestonPointer', `WestonView', `Int', `Int'} ->`()'#}
 
 {#fun weston_keyboard_send_key {`WestonKeyboard', `CUInt', `CUInt', `WlKeyboardKeyState'} -> `()'#}
 {#fun weston_keyboard_set_focus {`WestonKeyboard', `WestonSurface'} -> `()'#}
@@ -380,3 +375,78 @@ westonViewSetMapped = {#set weston_view->is_mapped#}
 
 westonViewSetOutput :: WestonView -> WestonOutput -> IO ()
 westonViewSetOutput = {#set weston_view->output#}
+
+{#pointer *weston_pointer_grab as WestonPointerGrab newtype#}
+{#pointer *weston_pointer_grab_interface  as WestonPointerGrabInterfacePtr -> WestonPointerGrabInterface#}
+{#pointer *weston_pointer_motion_event as WestonPointerMotionEvent newtype#}
+{#pointer *weston_pointer_axis_event as WestonPointerAxisEvent newtype#}
+
+type PointerGrabUnaryFunc = WestonPointerGrab -> IO ()
+type PointerGrabMotionFunc = WestonPointerGrab -> CUInt -> WestonPointerMotionEvent -> IO ()
+type PointerGrabButtonFunc = WestonPointerGrab -> CUInt -> CUInt -> CUInt -> IO ()
+type PointerGrabAxisFunc = WestonPointerGrab -> CUInt -> WestonPointerAxisEvent -> IO ()
+type PointerGrabAxisSourceFunc = WestonPointerGrab -> CUInt -> IO ()
+
+foreign import ccall "wrapper" createPointerGrabUnaryFunc :: PointerGrabUnaryFunc -> IO (FunPtr PointerGrabUnaryFunc)
+foreign import ccall "wrapper" createPointerGrabMotionFunc :: PointerGrabMotionFunc -> IO (FunPtr PointerGrabMotionFunc)
+foreign import ccall "wrapper" createPointerGrabButtonFunc :: PointerGrabButtonFunc -> IO (FunPtr PointerGrabButtonFunc)
+foreign import ccall "wrapper" createPointerGrabAxisFunc :: PointerGrabAxisFunc -> IO (FunPtr PointerGrabAxisFunc)
+foreign import ccall "wrapper" createPointerGrabAxisSourceFunc :: PointerGrabAxisSourceFunc -> IO (FunPtr PointerGrabAxisSourceFunc)
+
+data WestonPointerGrabInterface = WestonPointerGrabInterface {
+  grabPointerFocus :: WestonPointerGrab -> IO (),
+  grabPointerMotion :: PointerGrabMotionFunc,
+  grabPointerButton :: PointerGrabButtonFunc,
+  grabPointerAxis :: PointerGrabAxisFunc,
+  grabPointerAxisSource :: PointerGrabAxisSourceFunc,
+  grabPointerFrame :: WestonPointerGrab -> IO (),
+  grabPointerCancel :: WestonPointerGrab -> IO ()
+  }
+
+instance Storable WestonPointerGrabInterface where
+  sizeOf _ = {#sizeof weston_pointer_grab_interface#}
+  alignment _ = {#alignof weston_pointer_grab_interface#}
+  peek = error "can't peek WestonPointerGrabInterface"
+  poke ptr WestonPointerGrabInterface{..} = do
+    createPointerGrabUnaryFunc grabPointerFocus >>= {#set weston_pointer_grab_interface->focus#} ptr
+    createPointerGrabMotionFunc grabPointerMotion >>= {#set weston_pointer_grab_interface->motion#} ptr
+    createPointerGrabButtonFunc grabPointerButton >>= {#set weston_pointer_grab_interface->button#} ptr
+    createPointerGrabAxisFunc grabPointerAxis >>= {#set weston_pointer_grab_interface->axis#} ptr
+    createPointerGrabAxisSourceFunc grabPointerAxisSource >>= {#set weston_pointer_grab_interface->axis_source#} ptr
+    createPointerGrabUnaryFunc grabPointerFrame >>= {#set weston_pointer_grab_interface->frame#} ptr
+    createPointerGrabUnaryFunc grabPointerCancel >>= {#set weston_pointer_grab_interface->cancel#} ptr
+
+
+{#fun weston_pointer_set_focus {`WestonPointer',`WestonView', `Int', `Int'} -> `()'#}
+{#fun weston_pointer_send_motion {`WestonPointer', `CUInt', `WestonPointerMotionEvent'} -> `()'#}
+{#fun weston_pointer_send_button {`WestonPointer', `CUInt', `CUInt', `CUInt'} -> `()'#}
+{#fun weston_pointer_send_axis {`WestonPointer', `CUInt', `WestonPointerAxisEvent'} -> `()'#}
+{#fun weston_pointer_send_axis_source {`WestonPointer', `CUInt'} -> `()'#}
+{#fun weston_pointer_send_frame {`WestonPointer'} -> `()'#}
+
+westonPointerFromGrab :: WestonPointerGrab -> IO WestonPointer
+westonPointerFromGrab = {#get weston_pointer_grab->pointer#}
+
+defaultWestonPointerGrabInterface :: WestonPointerGrabInterface
+defaultWestonPointerGrabInterface = WestonPointerGrabInterface {
+  grabPointerFocus = error "Must implement focus",
+  grabPointerMotion = \grab time event -> westonPointerFromGrab grab >>= \ptr ->
+      weston_pointer_send_motion ptr time event,
+  grabPointerButton = error "Must implement button for focus",
+  grabPointerAxis = \grab time event -> westonPointerFromGrab grab >>= \ptr ->
+      weston_pointer_send_axis ptr time event,
+  grabPointerAxisSource = \grab source -> westonPointerFromGrab grab >>= \ptr ->
+      weston_pointer_send_axis_source ptr source,
+  grabPointerFrame = \grab -> westonPointerFromGrab grab >>= weston_pointer_send_frame,
+  grabPointerCancel = \_ -> return ()
+  }
+   
+{#fun weston_compositor_set_default_pointer_grab {`WestonCompositor', `WestonPointerGrabInterfacePtr'} -> `()' #}
+
+westonPointerPosition :: WestonPointer -> IO (V2 Int)
+westonPointerPosition wp = V2
+                           <$> fmap fromIntegral ({#get weston_pointer->x#} wp)
+                           <*> fmap fromIntegral ({#get weston_pointer->y#} wp)
+
+westonPointerSeat :: WestonPointer -> IO WestonSeat
+westonPointerSeat = {#get weston_pointer->seat#}

@@ -16,7 +16,7 @@ data Keyboard = Keyboard {
   }
 
 data Pointer = Pointer {
-  _pointerLocalPosition :: MVar  (V2 Float),
+  _pointerLocalPosition :: MVar (V2 Float),
   _pointerFocus :: MVar (Maybe (Some WaylandSurface)),
   _pointerCursorNode :: MVar (Maybe (Some WaylandSurfaceNode)),
   _pointerCursorHotspot :: MVar (Maybe (V2 Int))
