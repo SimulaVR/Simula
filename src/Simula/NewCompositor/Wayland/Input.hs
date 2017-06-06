@@ -16,6 +16,7 @@ data Keyboard = Keyboard {
   }
 
 data Pointer = Pointer {
+  _pointerGlobalPosition :: MVar (V2 Float),
   _pointerLocalPosition :: MVar (V2 Float),
   _pointerFocus :: MVar (Maybe (Some WaylandSurface)),
   _pointerCursorNode :: MVar (Maybe (Some WaylandSurfaceNode)),
@@ -82,6 +83,7 @@ newKeyboard = Keyboard <$> newMVar Nothing
 newPointer :: IO Pointer
 newPointer = Pointer
              <$> newMVar (V2 0 0)
+             <*> newMVar (V2 0 0)
              <*> newMVar Nothing
              <*> newMVar Nothing
              <*> newMVar Nothing

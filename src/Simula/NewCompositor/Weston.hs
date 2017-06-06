@@ -63,7 +63,8 @@ data SimulaSeat = SimulaSeat {
 data OpenGLData = OpenGLData {
   _openGlDataPpcm :: Float,
   _openGlDataTextureBlitter :: TextureBlitter,
-  _openGlDataSurfaceFbo :: FramebufferObject
+  _openGlDataSurfaceFbo :: FramebufferObject,
+  _openGlDataMousePointer :: MousePointer
   } deriving Eq
 
 data SimulaOpenGLContext = SimulaOpenGLContext {
@@ -79,12 +80,21 @@ data TextureBlitter = TextureBlitter {
   _textureBlitterMatrixLocation :: UniformLocation
   } deriving Eq
 
+data MousePointer = MousePointer {
+  _mousePointerProgram :: Program,
+  _mousePointerSurfaceVertexCoords :: BufferObject,
+  _mousePointerPositionLocation :: AttribLocation,
+  _mousePointerTexCoordLocation :: AttribLocation,
+  _mousePointerPointerLocation :: UniformLocation
+  } deriving Eq
+
 makeLenses ''SimulaSurface
 makeLenses ''SimulaCompositor
 makeLenses ''OpenGLData
 makeLenses ''SimulaOpenGLContext
 makeLenses ''TextureBlitter
 makeLenses ''SimulaSeat
+makeLenses ''MousePointer
 
 instance HasBaseSeat SimulaSeat where
   baseSeat = simulaSeatBase
@@ -119,7 +129,7 @@ newSimulaSurface ws view comp ty = do
   return surface
 
 newOpenGlData :: IO OpenGLData
-newOpenGlData = OpenGLData 64 <$> newTextureBlitter <*> genObjectName
+newOpenGlData = OpenGLData 64 <$> newTextureBlitter <*> genObjectName <*> newMousePointer
 
 newTextureBlitter :: IO TextureBlitter
 newTextureBlitter = do
@@ -193,8 +203,95 @@ blitterDrawTexture tb tex targetRect targetSize depth targetInvertedY sourceInve
     scaleMat = scale $ V3 (2 / width) (2 / height) 1
     translateMat = translate $ V3 (negate width / 2) (negate height / 2) 0
     transform = translateMat !*! scaleMat :: M44 Float
-  
 
+newMousePointer :: IO MousePointer
+newMousePointer = do
+  program <- getProgram ShaderMousePointer
+  surfaceVertexCoords <- genObjectName
+  let surfaceVerts = [-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0] :: [Float]
+  bindBuffer ArrayBuffer $= Just surfaceVertexCoords
+  withArrayLen surfaceVerts $ \len coordPtr ->
+    bufferData ArrayBuffer $= (fromIntegral (len * sizeOf (undefined :: Float)), coordPtr, StaticDraw)
+
+  currentProgram $= Just program
+  colorSampler <- get $ uniformLocation program "uColorSampler"
+  uniform colorSampler $= TextureUnit 0
+  currentProgram $= Nothing
+  
+  MousePointer
+    <$> pure program
+    <*> pure surfaceVertexCoords
+    <*> get (attribLocation program "aPosition")
+    <*> get (attribLocation program "aTexCoord")
+    <*> get (uniformLocation program "uPointer")
+
+drawMousePointer :: Display -> MousePointer -> V2 Float -> IO ()
+drawMousePointer display mp pos = do
+  bindFramebuffer Framebuffer $= defaultFramebufferObject
+
+  tex <- genObjectName
+  activeTexture $= TextureUnit 0
+  textureBinding Texture2D $= Just tex
+  textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
+  textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
+  textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
+
+
+  let res = fromIntegral <$>  display ^. displaySize
+  let size = TextureSize2D (res ^. _x) (res ^. _y)
+  texImage2D Texture2D NoProxy 0 RGBA' size 0 (PixelData RGBA UnsignedByte nullPtr)
+  copyTexSubImage2D Texture2D 0 (TexturePosition2D 0 0) (Position 0 0) size
+
+  depthMask $= Enabled
+  stencilMask $= 0xff
+  clearColor $= Color4 0 1 0 1
+  clearDepthf $= 1
+  clearStencil $= 0
+  colorMask $= Color4 Enabled Enabled Enabled Enabled
+  clear [ColorBuffer, DepthBuffer, StencilBuffer]
+  stencilMask $= 0
+  depthMask $= Disabled
+  
+  currentProgram $= Just (mp ^. mousePointerProgram)
+
+  
+  let aPosition = mp ^. mousePointerPositionLocation
+  let aTexCoord = mp ^. mousePointerTexCoordLocation
+  let surfaceCoords = mp ^. mousePointerSurfaceVertexCoords
+
+  vertexAttribArray aPosition $= Enabled
+  bindBuffer ArrayBuffer $= Just surfaceCoords
+  vertexAttribPointer aPosition $= (ToFloat, VertexArrayDescriptor 3 Float 0 nullPtr)
+  vertexAttribArray aTexCoord $= Enabled
+  bindBuffer ArrayBuffer $= Nothing
+
+  vps <- readMVar (display ^. displayViewpoints)
+  forM_ vps $ \vp -> do
+    vport <- readMVar (vp ^. viewPointViewPort)
+    setViewPort vport
+
+    let pos' = V2 (pos^._x) (res^._y.to fromIntegral - pos^._y)
+
+    uniform (mp ^. mousePointerPointerLocation) $= (pos' ^. vector2V)
+    
+    vpOffset <- readMVar (vport ^. viewPortOffsetFactor)
+    vpSize <- readMVar (vport ^. viewPortSizeFactor)
+    let textureBlitCoords = [ vpOffset ^. _x, vpOffset ^. _y
+                            , vpOffset ^. _x + vpSize ^. _x, vpOffset ^. _y
+                            , vpOffset ^. _x + vpSize ^. _x, vpOffset ^. _y + vpSize  ^. _y
+                            , vpOffset ^. _x, vpOffset ^. _y + vpSize ^. _y ] :: [Float]
+
+
+    withArrayLen textureBlitCoords $ \len coordPtr ->
+      vertexAttribPointer aTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 coordPtr)
+
+    drawArrays TriangleFan 0 4
+    checkForErrors
+
+  textureBinding Texture2D $= Nothing
+  deleteObjectName tex
+
+                                       
 setTimeout :: Int -> IO () -> IO ThreadId
 setTimeout ms ioOperation =
   forkIO $ do
@@ -429,6 +526,8 @@ setFocusForPointer compositor pointer pos = do
       Some seat <- compositorSeat compositor
       Some surface <- wsnSurface node
       setSeatPointerFocus seat surface coords
+      sp <- seatPointer seat
+      writeMVar (sp ^. pointerGlobalPosition) (fromIntegral <$> pos)
       case cast surface of
         Nothing -> return ()
         Just surface -> do
@@ -537,7 +636,7 @@ paintChildren surface window windowSize gld = do
       subsurfaceInverted <- westonSurfaceIsYInverted subsurface
       blitterDrawTexture (gld ^. openGlDataTextureBlitter) tex geo windowSize 0 windowInverted subsurfaceInverted
     paintChildren subsurface window windowSize gld
-    
+
 
 compositorRender :: SimulaCompositor -> IO ()
 compositorRender comp = do
@@ -561,13 +660,20 @@ compositorRender comp = do
   moveCamera
   sceneDrawFrame scene
   checkForErrors
+
+  Some seat <- compositorSeat comp
+  pointer <- seatPointer seat
+  pos <- readMVar (pointer ^. pointerGlobalPosition) 
+  drawMousePointer (comp ^. simulaCompositorDisplay) (comp ^. simulaCompositorOpenGlData.openGlDataMousePointer) pos
+  
   sceneFinishFrame scene
   checkForErrors
+    
 
 
   emitOutputFrameSignal output
   eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
-
+  
 
   where
     moveCamera = return ()

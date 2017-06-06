@@ -53,7 +53,6 @@ destroyWindowManager this = do
 
 wmCreateSurface :: WaylandSurface ws => WindowManager -> ws -> IO (Some WaylandSurfaceNode)
 wmCreateSurface this surface = do
-  putStrLn "creating surface"
   let ssurf = Some surface
   surfaceMap <- readMVar (this ^. windowManagerSurfaceMap) 
   case HM.lookup ssurf surfaceMap of

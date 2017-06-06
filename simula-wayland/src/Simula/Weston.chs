@@ -49,6 +49,7 @@ deriving instance Storable WestonPointer
 {#pointer *weston_surface as WestonSurface newtype#}
 deriving instance Eq WestonSurface
 deriving instance Ord WestonSurface
+deriving instance Storable WestonSurface
 
 {#pointer *weston_view as WestonView newtype#}
 deriving instance Eq WestonView
@@ -58,6 +59,9 @@ instance WlListElement WestonCompositor WestonSeat where
 
 instance WlListElement WestonCompositor WestonOutput where
   linkOffset _ _ = {#offsetof weston_output->link#}
+
+instance WlListElement WestonLayer WestonView where
+  linkOffset _ _ = {#offsetof weston_view->layer_link#}
 
 {#enum weston_compositor_backend as WestonCompositorBackend {underscoreToCase} #}
 
@@ -144,6 +148,9 @@ westonSurfaceViews ws = do
    list <- WlList <$> {#get weston_surface->views#} ws
    ptrs <- wlListAll (Proxy :: Proxy WestonSurface) list
    return (WestonView <$> ptrs)
+
+westonViewSurface :: WestonView -> IO WestonSurface
+westonViewSurface = {#get weston_view->surface#}
 
 westonSurfaceWidth, westonSurfaceHeight :: WestonSurface -> IO Int
 westonSurfaceWidth = {#get weston_surface->width#} >=> (return . fromIntegral)
@@ -297,6 +304,16 @@ newWestonLayer wc = do
   ptr <- WestonLayer <$> mallocBytes {#sizeof weston_layer#}
   weston_layer_init ptr wc
   return ptr
+
+westonLayerViews :: WestonLayer -> IO [WestonView]
+westonLayerViews (WestonLayer wlPtr) = do
+  let list = WlList $ plusPtr (castPtr wlPtr) {#offsetof weston_layer->view_list#}
+  ptrs <- wlListAll (Proxy :: Proxy WestonLayer) list
+  return (WestonView <$> ptrs)
+
+westonCompositorCursorLayer :: WestonCompositor -> WestonLayer
+westonCompositorCursorLayer (WestonCompositor ptr) = WestonLayer $ plusPtr (castPtr ptr) {#offsetof weston_compositor->cursor_layer#}
+  
   
 
 {#fun weston_layer_set_position {`WestonLayer', `WestonLayerPosition'} -> `()' #}
@@ -450,3 +467,9 @@ westonPointerPosition wp = V2
 
 westonPointerSeat :: WestonPointer -> IO WestonSeat
 westonPointerSeat = {#get weston_pointer->seat#}
+
+
+{#fun weston_surface_get_position_x {`WestonSurface'} -> `Int' #}
+{#fun weston_surface_get_position_y {`WestonSurface'} -> `Int' #}
+{#fun weston_surface_get_width {`WestonSurface'} -> `Int' #}
+{#fun weston_surface_get_height {`WestonSurface'} -> `Int' #}
