@@ -229,17 +229,10 @@ drawMousePointer :: Display -> MousePointer -> V2 Float -> IO ()
 drawMousePointer display mp pos = do
   bindFramebuffer Framebuffer $= defaultFramebufferObject
 
-  tex <- genObjectName
-  activeTexture $= TextureUnit 0
-  textureBinding Texture2D $= Just tex
-  textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
-  textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
-  textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
-
+  textureBinding Texture2D $= Just (display ^. displayScratchColorBufferTexture)
 
   let res = fromIntegral <$>  display ^. displaySize
   let size = TextureSize2D (res ^. _x) (res ^. _y)
-  texImage2D Texture2D NoProxy 0 RGBA' size 0 (PixelData RGBA UnsignedByte nullPtr)
   copyTexSubImage2D Texture2D 0 (TexturePosition2D 0 0) (Position 0 0) size
 
   depthMask $= Enabled
@@ -289,7 +282,6 @@ drawMousePointer display mp pos = do
     checkForErrors
 
   textureBinding Texture2D $= Nothing
-  deleteObjectName tex
 
                                        
 setTimeout :: Int -> IO () -> IO ThreadId
@@ -511,6 +503,7 @@ newSimulaCompositor scene display = do
       pos' <- westonPointerPosition pointer
       let pos = (`div` 256) <$> pos'
       setFocusForPointer compositor pointer pos
+      weston_pointer_send_button pointer time button state
 
 
 setFocusForPointer :: SimulaCompositor -> WestonPointer -> V2 Int -> IO ()
