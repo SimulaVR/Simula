@@ -20,7 +20,6 @@ import Simula.WaylandServer
 import Simula.Weston
 import Simula.WestonDesktop
 
-
 import Simula.NewCompositor.Compositor
 import Simula.NewCompositor.Geometry
 import Simula.NewCompositor.OpenGL
@@ -230,10 +229,12 @@ drawMousePointer display mp pos = do
   bindFramebuffer Framebuffer $= defaultFramebufferObject
 
   textureBinding Texture2D $= Just (display ^. displayScratchColorBufferTexture)
+  checkForErrors
 
   let res = fromIntegral <$>  display ^. displaySize
   let size = TextureSize2D (res ^. _x) (res ^. _y)
-  copyTexSubImage2D Texture2D 0 (TexturePosition2D 0 0) (Position 0 0) size
+  copyTexImage2D Texture2D 0 RGB' (Position 0 0) size 0
+  checkForErrors
 
   depthMask $= Enabled
   stencilMask $= 0xff
@@ -244,6 +245,7 @@ drawMousePointer display mp pos = do
   clear [ColorBuffer, DepthBuffer, StencilBuffer]
   stencilMask $= 0
   depthMask $= Disabled
+  checkForErrors
   
   currentProgram $= Just (mp ^. mousePointerProgram)
 
@@ -257,6 +259,7 @@ drawMousePointer display mp pos = do
   vertexAttribPointer aPosition $= (ToFloat, VertexArrayDescriptor 3 Float 0 nullPtr)
   vertexAttribArray aTexCoord $= Enabled
   bindBuffer ArrayBuffer $= Nothing
+  checkForErrors
 
   vps <- readMVar (display ^. displayViewpoints)
   forM_ vps $ \vp -> do
@@ -266,6 +269,7 @@ drawMousePointer display mp pos = do
     let pos' = V2 (pos^._x) (res^._y.to fromIntegral - pos^._y)
 
     uniform (mp ^. mousePointerPointerLocation) $= (pos' ^. vector2V)
+    checkForErrors
     
     vpOffset <- readMVar (vport ^. viewPortOffsetFactor)
     vpSize <- readMVar (vport ^. viewPortSizeFactor)
@@ -277,6 +281,7 @@ drawMousePointer display mp pos = do
 
     withArrayLen textureBlitCoords $ \len coordPtr ->
       vertexAttribPointer aTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 coordPtr)
+    checkForErrors
 
     drawArrays TriangleFan 0 4
     checkForErrors
