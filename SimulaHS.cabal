@@ -44,6 +44,7 @@ library
     , unix
     , StateVar
     , simula-wayland
+    , simula-osvr
   exposed-modules:
       Simula.NewCompositor.SceneGraph
       Simula.NewCompositor.SceneGraph.Wayland
@@ -58,6 +59,7 @@ library
       Simula.NewCompositor.Weston
   other-modules:
       Simula.NewCompositor.Event
+      Simula.NewCompositor.OSVR
       Simula.Utils
       Paths_SimulaHS
   default-language: Haskell2010
@@ -91,6 +93,7 @@ executable simple-compositor
     , unix
     , StateVar
     , simula-wayland
+    , simula-osvr
     , SimulaHS
   other-modules:
       Main
