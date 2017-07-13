@@ -11,11 +11,18 @@ import Linear
 
 #include <osvr/ClientKit/ClientKitC.h>
 #include <osvr/ClientKit/DisplayC.h>
+
+-- #include <osvr/RenderKit/RenderManagerC.h>
+-- #include <osvr/RenderKit/RenderManagerOpenGLC.h>
+
   
 {#pointer OSVR_ClientContext newtype#}
+deriving instance Eq OSVR_ClientContext
 {#pointer OSVR_DisplayConfig newtype#}
+deriving instance Eq OSVR_DisplayConfig
 deriving instance Storable OSVR_DisplayConfig
 {#pointer *OSVR_Pose3 newtype#}
+deriving instance Eq OSVR_Pose3
 
 {#enum define OSVR_ReturnCode {OSVR_RETURN_SUCCESS as ReturnSuccess, OSVR_RETURN_FAILURE as ReturnFailure} deriving (Eq)#}
 
@@ -67,7 +74,7 @@ type OSVR_SurfaceCount = {#type OSVR_SurfaceCount#}
                                  , `OSVR_EyeCount'
                                  , `OSVR_Pose3'} -> `OSVR_ReturnCode'#}
 
-{#enum OSVR_MatrixOrderingFlags {underscoreToCase}  #}
+{#enum OSVR_MatrixOrderingFlags {underscoreToCase} deriving (Show, Eq)#}
 
 {#fun osvrClientGetViewerEyeViewMatrixd {`OSVR_DisplayConfig'
                                         , `OSVR_ViewerCount'
@@ -81,6 +88,21 @@ osvrClientGetViewerEyeViewMatrixd' :: OSVR_DisplayConfig
                                    -> IO (M44 Double)
 osvrClientGetViewerEyeViewMatrixd' disp viewer eye = alloca $ \matPtr -> do
   osvrClientGetViewerEyeViewMatrixd disp viewer eye OsvrMatrixRowmajor (castPtr matPtr)
+  peek matPtr
+
+{#fun osvrClientGetViewerEyeViewMatrixf {`OSVR_DisplayConfig'
+                                        , `OSVR_ViewerCount'
+                                        , `OSVR_EyeCount'
+                                        , `OSVR_MatrixOrderingFlags'
+                                        , id `Ptr CFloat' } -> `OSVR_ReturnCode'#}
+
+
+osvrClientGetViewerEyeViewMatrixf' :: OSVR_DisplayConfig
+                                   -> OSVR_ViewerCount
+                                   -> OSVR_EyeCount
+                                   -> IO (M44 Float)
+osvrClientGetViewerEyeViewMatrixf' disp viewer eye = alloca $ \matPtr -> do
+  osvrClientGetViewerEyeViewMatrixf disp viewer eye OsvrMatrixRowmajor (castPtr matPtr)
   peek matPtr
 
 {#fun osvrClientGetNumSurfacesForViewerEye {`OSVR_DisplayConfig'
@@ -115,3 +137,46 @@ osvrClientGetViewerEyeSurfaceProjectionMatrixd' :: OSVR_DisplayConfig
 osvrClientGetViewerEyeSurfaceProjectionMatrixd' disp viewer eye surf near far = alloca $ \matPtr -> do
   osvrClientGetViewerEyeSurfaceProjectionMatrixd disp viewer eye surf near far OsvrMatrixRowmajor (castPtr matPtr)
   peek matPtr
+
+{#fun osvrClientGetViewerEyeSurfaceProjectionMatrixf {`OSVR_DisplayConfig'
+                                                     , `OSVR_ViewerCount'
+                                                     , `OSVR_EyeCount'
+                                                     , `OSVR_SurfaceCount'
+                                                     , `Float'
+                                                     , `Float'
+                                                     , `OSVR_MatrixOrderingFlags'
+                                                     , id `Ptr CFloat' } -> `OSVR_ReturnCode'#}
+
+osvrClientGetViewerEyeSurfaceProjectionMatrixf' :: OSVR_DisplayConfig
+                                                -> OSVR_ViewerCount
+                                                -> OSVR_EyeCount
+                                                -> OSVR_SurfaceCount
+                                                -> Float
+                                                -> Float
+                                                -> IO (M44 Float)
+osvrClientGetViewerEyeSurfaceProjectionMatrixf' disp viewer eye surf near far = alloca $ \matPtr -> do
+  osvrClientGetViewerEyeSurfaceProjectionMatrixf disp viewer eye surf near far OsvrMatrixRowmajor (castPtr matPtr)
+  peek matPtr
+
+{-
+
+{#pointer *OSVR_OpenResultsOpenGL newtype#}
+{#pointer OSVR_RenderManager newtype#}
+deriving instance Storable OSVR_RenderManager
+{#pointer OSVR_RenderManagerOpenGL newtype#}
+deriving instance Storable OSVR_RenderManagerOpenGL
+
+{#fun osvrCreateRenderManagerOpenGL {`OSVR_ClientContext'
+                                    , `String'
+                                    , id `Ptr ()'
+                                    , alloca- `OSVR_RenderManager' peek*
+                                    , alloca- `OSVR_RenderManagerOpenGL' peek* } -> `OSVR_ReturnCode'#}
+
+{#fun osvrRenderManagerOpenDisplayOpenGL {`OSVR_RenderManagerOpenGL', `OSVR_OpenResultsOpenGL'} -> `OSVR_ReturnCode' #}
+
+osvrRenderManagerOpenDisplayOpenGL' :: OSVR_RenderManagerOpenGL -> IO (OSVR_ReturnCode, OSVR_OpenResultsOpenGL)
+osvrRenderManagerOpenDisplayOpenGL' rmgl = do
+  res <- OSVR_OpenResultsOpenGL <$> mallocBytes {#sizeof OSVR_OpenResultsOpenGL#}
+  ret <- osvrRenderManagerOpenDisplayOpenGL rmgl res
+  return (ret, res)
+-}

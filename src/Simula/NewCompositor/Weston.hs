@@ -31,6 +31,9 @@ import Simula.NewCompositor.WindowManager
 import Simula.NewCompositor.Utils
 import Simula.NewCompositor.Types
 
+import Simula.OSVR
+import Simula.NewCompositor.OSVR
+
 data SimulaSurface = SimulaSurface {
   _simulaSurfaceBase :: BaseWaylandSurface,
   _simulaSurfaceWestonDesktopSurface :: WestonDesktopSurface,
@@ -52,7 +55,8 @@ data SimulaCompositor = SimulaCompositor {
   _simulaCompositorOpenGlData :: OpenGLData,
   _simulaCompositorOutput :: MVar (Maybe WestonOutput),
   _simulaCompositorGlContext :: MVar (Maybe SimulaOpenGLContext),
-  _simulaCompositorNormalLayer :: WestonLayer
+  _simulaCompositorNormalLayer :: WestonLayer,
+  _simulaCompositorOSVR :: SimulaOSVRClient
   } deriving Eq
 
 data SimulaSeat = SimulaSeat {
@@ -404,11 +408,10 @@ newSimulaCompositor scene display = do
   bgLayer <- newWestonLayer wcomp
   weston_layer_set_position mainLayer WestonLayerPositionBackground
 
-
   compositor <- SimulaCompositor scene display wldp wcomp
                 <$> newMVar M.empty <*> newOpenGlData
                 <*> newMVar Nothing <*> newMVar Nothing
-                <*> pure mainLayer
+                <*> pure mainLayer <*> newSimulaOSVRClient
 
   windowedApi <- weston_windowed_output_get_api wcomp
 
@@ -645,32 +648,53 @@ compositorRender comp = do
 
   glCtxMakeCurrent glctx
   -- set up context
-  
-  let surfaces = M.keys surfaceMap
-  let scene = comp ^. simulaCompositorScene
 
-  time <- getTime Realtime
-  
-  scenePrepareForFrame scene time
-  checkForErrors
+  let osvrCtx = comp ^. simulaCompositorOSVR.simulaOsvrContext
+  let osvrDisplay = comp ^. simulaCompositorOSVR.simulaOsvrDisplay
+
+  (ReturnSuccess, viewers) <- osvrClientGetNumViewers osvrDisplay
+
   weston_output_schedule_repaint output
-  
-  moveCamera
-  sceneDrawFrame scene
-  checkForErrors
 
-  Some seat <- compositorSeat comp
-  pointer <- seatPointer seat
-  pos <- readMVar (pointer ^. pointerGlobalPosition) 
-  drawMousePointer (comp ^. simulaCompositorDisplay) (comp ^. simulaCompositorOpenGlData.openGlDataMousePointer) pos
+  forM_ [0..viewers] $ \viewer -> do
+    (ReturnSuccess, eyes) <- osvrClientGetNumEyesForViewer osvrDisplay viewers
+    forM_ [0..eyes] $ \eye -> do
+      viewMat <- osvrClientGetViewerEyeViewMatrixf' osvrDisplay viewer eye
+
+      (vp:_) <- readMVar (comp ^. simulaCompositorDisplay.displayViewpoints)
+      --TODO test
+      setNodeWorldTransform vp viewMat
+      viewPointUpdateViewMatrix vp
+      
+      (ReturnSuccess, osvrSurfaces) <- osvrClientGetNumSurfacesForViewerEye osvrDisplay viewer eye
+      forM_ [0..osvrSurfaces] $ \osvrSurface -> do
+        
+        projMat <- osvrClientGetViewerEyeSurfaceProjectionMatrixf' osvrDisplay viewer eye osvrSurface (vp^.viewPointNear) (vp^.viewPointFar)
+
+        viewPointOverrideProjectionMatrix vp projMat
+        
+        let surfaces = M.keys surfaceMap
+        let scene = comp ^. simulaCompositorScene
+
+        time <- getTime Realtime
   
-  sceneFinishFrame scene
-  checkForErrors
+        scenePrepareForFrame scene time
+        checkForErrors
     
+        moveCamera
+        sceneDrawFrame scene
+        checkForErrors
 
-
-  emitOutputFrameSignal output
-  eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
+        Some seat <- compositorSeat comp
+        pointer <- seatPointer seat
+        pos <- readMVar (pointer ^. pointerGlobalPosition) 
+        drawMousePointer (comp ^. simulaCompositorDisplay) (comp ^. simulaCompositorOpenGlData.openGlDataMousePointer) pos
+  
+        sceneFinishFrame scene
+        checkForErrors
+    
+        emitOutputFrameSignal output
+        eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
   
 
   where

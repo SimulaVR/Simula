@@ -6,7 +6,9 @@ import Simula.OSVR
 data SimulaOSVRClient = SimulaOSVRClient {
   _simulaOsvrContext :: OSVR_ClientContext,
   _simulaOsvrDisplay :: OSVR_DisplayConfig
-  }
+  } deriving Eq
+
+makeLenses ''SimulaOSVRClient
 
 newSimulaOSVRClient :: IO SimulaOSVRClient
 newSimulaOSVRClient = do

@@ -376,8 +376,6 @@ newViewPoint near far display parent transform viewPortParams centerOfProjection
 destroyViewPoint :: ViewPoint -> IO ()
 destroyViewPoint this = undefined
 
---TODO these might be wrong
---TODO FIX WORLD TRANSFORM ===========>
 viewPointUpdateViewMatrix :: ViewPoint -> IO ()
 viewPointUpdateViewMatrix this = do
   trans <- nodeWorldTransform this
