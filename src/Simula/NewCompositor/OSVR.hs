@@ -13,9 +13,12 @@ makeLenses ''SimulaOSVRClient
 newSimulaOSVRClient :: IO SimulaOSVRClient
 newSimulaOSVRClient = do
   ctx <- osvrClientInit "simula.compositor" 0
-  (ReturnSuccess, display) <- osvrClientGetDisplay ctx
-  checkDisplayUntilSuccess ctx display
-  return $ SimulaOSVRClient ctx display
+  (status, display) <- osvrClientGetDisplay ctx
+  case status of
+    ReturnSuccess -> do
+        checkDisplayUntilSuccess ctx display
+        return $ SimulaOSVRClient ctx display
+    _ -> ioError $ userError "Could not initialize the display for OSVR"
 
   where
     checkDisplayUntilSuccess ctx display = do
