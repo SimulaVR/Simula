@@ -107,8 +107,9 @@ After installing the above packages you can configure and build `libweston`. Her
 
 You will see a notice about needing to set `LD_LIBRARY_PATH` and also for setting `LD_RUN_PATH` to use these newly installed libraries. You may want to set these in your `.bashrc` file or other shell startup file. For your interactive shell you can just use the following lines:
 
-    export LD_LIBRARY_PATH="$LD_LIBRARY_PATH":"$HOME"/.local/lib
-    export LD_RUN_PATH="$LD_RUN_PATH:"$HOME"/.local/lib
+    LIBDIR="$HOME"/.local/lib
+    export LD_LIBRARY_PATH="$LD_LIBRARY_PATH":"$LIBDIR":"$LIBDIR"/libweston-2:"$LIBDIR"/weston
+    export LD_RUN_PATH="$LD_RUN_PATH:"$LIBDIR":"$LIBDIR"/libweston-2:"$LIBDIR"/weston
 
 ### Dependencies for `libfunctionality`
 
