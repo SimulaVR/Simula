@@ -4,11 +4,13 @@ Step 2: Build SimulaHS with stack build
 Step 3: Run the simple compositor with ./run-simple-compositor.sh
 
 
-# Build Instructions on Debian Stretch
+# Debian (stretch) Required packages
 
-You will need a good bit of system packages and you will need to build software from five git repositories.
+__WARNING__: _You cannot run the HMD OSVR code on Debian at this time
+you can, however, build this repository without the updated kernel
+drivers provided by Ubuntu._
 
-__TLDR;__ Install all the dependecies in one shot with the following script
+Install all the dependecies in one shot with the following script
 ```
 sudo apt install \
     g++ \
@@ -19,14 +21,14 @@ sudo apt install \
     cmake \
     libtool \
     pkg-config \
-    binutils-dev
+    binutils-dev \
     libegl1-mesa-dev \
     libgles2-mesa-dev \
     libxcb-composite0-dev \
     libxcursor-dev \
     libcairo2-dev \
     libpixman-1-dev \
-    libgbm -dev \
+    libgbm-dev \
     libmtdev-dev \
     libinput-dev \
     libxkbcommon-dev \
@@ -54,7 +56,54 @@ sudo apt install \
 
 Detailed instructions on which git repositories are needed and special instructions for each one are given below. You will also need the Haskell `stack` tool available for download at [https://docs.haskellstack.org/en/stable/README/]. Once all the dependencies are built and installed you can run `stack setup` followed by `stack build` in the top level of SimulaHS to get a build.
 
-## Git Repos Needed -- In Order
+# Ubuntu 17.04 (zesty) Required packages
+Install all the dependecies in one shot with the following script
+```
+sudo apt install \
+    g++ \
+    automake \
+    autoconf \
+    autoconf-archive \
+    make \
+    cmake \
+    libtool \
+    pkg-config \
+    binutils-dev \
+    libegl1-mesa-dev \
+    libgles2-mesa-dev \
+    libxcb-composite0-dev \
+    libxcursor-dev \
+    libcairo2-dev \
+    libpixman-1-dev \
+    libgbm-dev \
+    libmtdev-dev \
+    libinput-dev \
+    libxkbcommon-dev \
+    libpam0g-dev \
+    libgflags-dev \
+    libgoogle-glog-dev \
+    libssl-dev \
+    libdouble-conversion-dev \
+    libevent-dev \
+    libboost-context-dev \
+    libboost-chrono-dev \
+    libboost-filesystem-dev \
+    libboost-iostreams-dev \
+    libboost-locale-dev \
+    libboost-program-options-dev \
+    libboost-regex-dev \
+    libboost-system-dev \
+    libboost-thread-dev \
+    libsdl2-dev \
+    libopencv-dev \
+    libjsoncpp-dev \
+    libusb-1.0-0-dev \
+    libspdlog-dev \
+    libeigen3-dev
+
+```
+
+# Git Repos Needed -- In Order
 
 1. wayland-protocols - [https://github.com/wayland-project/wayland-protocols]
   Currently HEAD is fine, but any tag >= 1.7 will work fine.
