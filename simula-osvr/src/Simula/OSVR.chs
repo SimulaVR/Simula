@@ -33,14 +33,8 @@ type OSVR_ChannelCount = {#type OSVR_ChannelCount#}
 type OSVR_DisplayInputCount = {#type OSVR_DisplayInputCount#}
 {#typedef OSVR_DisplayInputCount OSVR_DisplayInputCount#}
 
-type OSVR_ViewerCount = {#type OSVR_ViewerCount#}
-{#typedef OSVR_ViewerCount OSVR_ViewerCount#}
-
 type OSVR_DisplayDimension = {#type OSVR_DisplayDimension#}
 {#typedef OSVR_DisplayDimension OSVR_DisplayDimension#}
-
-type OSVR_EyeCount = {#type OSVR_EyeCount#}
-{#typedef OSVR_EyeCount OSVR_EyeCount#}
 
 type OSVR_SurfaceCount = {#type OSVR_SurfaceCount#}
 {#typedef OSVR_SurfaceCount OSVR_SurfaceCount#}
@@ -59,68 +53,70 @@ type OSVR_SurfaceCount = {#type OSVR_SurfaceCount#}
                                      , alloca- `OSVR_DisplayDimension' peek*
                                      , alloca- `OSVR_DisplayDimension' peek*} -> `OSVR_ReturnCode'#}
 {#fun osvrClientGetNumViewers {`OSVR_DisplayConfig'
-                              , alloca- `OSVR_ViewerCount' peek*} -> `OSVR_ReturnCode'#}
+                              , alloca- `CUInt' peek*}  -- Viewers/as Count
+                                  -> `OSVR_ReturnCode'#}
 
 {#fun osvrClientGetViewerPose {`OSVR_DisplayConfig'
-                              , `OSVR_ViewerCount'
+                              , `CInt' -- Viewers/as ID
                               , `OSVR_Pose3'} -> `OSVR_ReturnCode'#}
 
 {#fun osvrClientGetNumEyesForViewer {`OSVR_DisplayConfig'
-                                    , `OSVR_ViewerCount'
-                                    , alloca- `OSVR_EyeCount' peek*} -> `OSVR_ReturnCode'#}
+                                    , `CUInt'                 -- Viewers/as ID
+                                    , alloca- `CUChar' peek*} -- EyeCount/as Count
+                                        -> `OSVR_ReturnCode'#}
 
 {#fun osvrClientGetViewerEyePose {`OSVR_DisplayConfig'
-                                 , `OSVR_ViewerCount'
-                                 , `OSVR_EyeCount'
+                                 , `CUInt' -- Viewers/as ID
+                                 , `CUInt' -- EyeCount/as ID
                                  , `OSVR_Pose3'} -> `OSVR_ReturnCode'#}
 
 {#enum OSVR_MatrixOrderingFlags {underscoreToCase} deriving (Show, Eq)#}
 
 {#fun osvrClientGetViewerEyeViewMatrixd {`OSVR_DisplayConfig'
-                                        , `OSVR_ViewerCount'
-                                        , `OSVR_EyeCount'
+                                        , `CUInt' -- Viewers/as ID
+                                        , `CUInt' -- EyeCount/as ID
                                         , `OSVR_MatrixOrderingFlags'
                                         , id `Ptr CDouble' } -> `OSVR_ReturnCode'#}
 
 osvrClientGetViewerEyeViewMatrixd' :: OSVR_DisplayConfig
-                                   -> OSVR_ViewerCount
-                                   -> OSVR_EyeCount
+                                   -> CUInt  -- Viewers/as ID
+                                   -> CUInt -- EyeCount/as ID
                                    -> IO (M44 Double)
 osvrClientGetViewerEyeViewMatrixd' disp viewer eye = alloca $ \matPtr -> do
   osvrClientGetViewerEyeViewMatrixd disp viewer eye OsvrMatrixRowmajor (castPtr matPtr)
   peek matPtr
 
 {#fun osvrClientGetViewerEyeViewMatrixf {`OSVR_DisplayConfig'
-                                        , `OSVR_ViewerCount'
-                                        , `OSVR_EyeCount'
+                                        , `CUInt' -- Viewers/as ID
+                                        , `Word8' -- EyeCount/as ID
                                         , `OSVR_MatrixOrderingFlags'
                                         , id `Ptr CFloat' } -> `OSVR_ReturnCode'#}
 
 
 osvrClientGetViewerEyeViewMatrixf' :: OSVR_DisplayConfig
-                                   -> OSVR_ViewerCount
-                                   -> OSVR_EyeCount
+                                   -> CUInt -- Viewers/as ID
+                                   -> Word8 -- EyeCount/as ID
                                    -> IO (M44 Float)
 osvrClientGetViewerEyeViewMatrixf' disp viewer eye = alloca $ \matPtr -> do
   osvrClientGetViewerEyeViewMatrixf disp viewer eye OsvrMatrixRowmajor (castPtr matPtr)
   peek matPtr
 
 {#fun osvrClientGetNumSurfacesForViewerEye {`OSVR_DisplayConfig'
-                                           , `OSVR_ViewerCount'
-                                           , `OSVR_EyeCount'
+                                           , `CUInt'  -- Viewers/as ID
+                                           , `CUInt' -- EyeCount/as ID
                                            , alloca- `OSVR_SurfaceCount' peek*} -> `OSVR_ReturnCode'#}
                                            
 {#fun osvrClientGetRelativeViewportForViewerEyeSurface {`OSVR_DisplayConfig'
-                                                       , `OSVR_ViewerCount'
-                                                       , `OSVR_EyeCount'
+                                                       , `CUInt'  -- Viewers/as ID
+                                                       , `CUInt' -- EyeCount/as ID
                                                        , `OSVR_SurfaceCount'
                                                        , alloca- `CInt' peek*
                                                        , alloca- `CInt' peek*
                                                        , alloca- `CInt' peek*
                                                        , alloca- `CInt' peek*} -> `OSVR_ReturnCode'#}
 {#fun osvrClientGetViewerEyeSurfaceProjectionMatrixd {`OSVR_DisplayConfig'
-                                                     , `OSVR_ViewerCount'
-                                                     , `OSVR_EyeCount'
+                                                     , `CUInt'  -- Viewers/as ID
+                                                     , `CUInt' -- EyeCount/as ID
                                                      , `OSVR_SurfaceCount'
                                                      , `Double'
                                                      , `Double'
@@ -128,8 +124,8 @@ osvrClientGetViewerEyeViewMatrixf' disp viewer eye = alloca $ \matPtr -> do
                                                      , id `Ptr CDouble' } -> `OSVR_ReturnCode'#}
 
 osvrClientGetViewerEyeSurfaceProjectionMatrixd' :: OSVR_DisplayConfig
-                                                -> OSVR_ViewerCount
-                                                -> OSVR_EyeCount
+                                                -> CUInt -- Viewers/as ID
+                                                -> CUInt -- EyeCount/as ID
                                                 -> OSVR_SurfaceCount
                                                 -> Double
                                                 -> Double
@@ -139,8 +135,8 @@ osvrClientGetViewerEyeSurfaceProjectionMatrixd' disp viewer eye surf near far = 
   peek matPtr
 
 {#fun osvrClientGetViewerEyeSurfaceProjectionMatrixf {`OSVR_DisplayConfig'
-                                                     , `OSVR_ViewerCount'
-                                                     , `OSVR_EyeCount'
+                                                     , `CUInt' -- Viewers/as ID
+                                                     , `CUInt' -- EyeCount/as ID
                                                      , `OSVR_SurfaceCount'
                                                      , `Float'
                                                      , `Float'
@@ -148,8 +144,8 @@ osvrClientGetViewerEyeSurfaceProjectionMatrixd' disp viewer eye surf near far = 
                                                      , id `Ptr CFloat' } -> `OSVR_ReturnCode'#}
 
 osvrClientGetViewerEyeSurfaceProjectionMatrixf' :: OSVR_DisplayConfig
-                                                -> OSVR_ViewerCount
-                                                -> OSVR_EyeCount
+                                                -> CUInt -- Viewers/as ID
+                                                -> CUInt -- EyeCount/as ID
                                                 -> OSVR_SurfaceCount
                                                 -> Float
                                                 -> Float
