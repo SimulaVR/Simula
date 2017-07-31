@@ -31,6 +31,7 @@ dependencies:
   - file-embed
   - hashable
   - inline-c
+  - inline-c-cpp
   - lens
   - linear
   - linear-opengl
@@ -63,6 +64,7 @@ library:
     - simula-wayland/cbits
 
   exposed-modules:
+    - Simula.Utils
     - Simula.NewCompositor.SceneGraph
     - Simula.NewCompositor.SceneGraph.Wayland
     - Simula.NewCompositor.OpenGL

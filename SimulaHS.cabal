@@ -1,4 +1,4 @@
--- This file has been generated from package.yaml by hpack version 0.17.0.
+-- This file has been generated from package.yaml by hpack version 0.17.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -29,6 +29,7 @@ library
     , file-embed
     , hashable
     , inline-c
+    , inline-c-cpp
     , lens
     , linear
     , linear-opengl
@@ -46,6 +47,7 @@ library
     , simula-wayland
     , simula-osvr
   exposed-modules:
+      Simula.Utils
       Simula.NewCompositor.SceneGraph
       Simula.NewCompositor.SceneGraph.Wayland
       Simula.NewCompositor.OpenGL
@@ -60,7 +62,6 @@ library
   other-modules:
       Simula.NewCompositor.Event
       Simula.NewCompositor.OSVR
-      Simula.Utils
       Paths_SimulaHS
   default-language: Haskell2010
 
@@ -78,6 +79,7 @@ executable simple-compositor
     , file-embed
     , hashable
     , inline-c
+    , inline-c-cpp
     , lens
     , linear
     , linear-opengl
