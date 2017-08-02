@@ -99,5 +99,4 @@ executable simple-compositor
     , SimulaHS
   other-modules:
       Main
-      OsvrCompositor
   default-language: Haskell2010
