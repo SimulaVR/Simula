@@ -97,6 +97,7 @@ sudo apt install \
     libsdl2-dev \
     libopencv-dev \
     libjsoncpp-dev \
+    libxml2-dev \
     libusb-1.0-0-dev \
     libspdlog-dev \
     libeigen3-dev

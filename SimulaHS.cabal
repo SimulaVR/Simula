@@ -65,6 +65,44 @@ library
       Paths_SimulaHS
   default-language: Haskell2010
 
+executable generic-compositor
+  main-is: GenericCompositor.hs
+  hs-source-dirs:
+      app
+  default-extensions: GADTs ConstraintKinds KindSignatures StandaloneDeriving FlexibleInstances FlexibleContexts MultiParamTypeClasses FunctionalDependencies ScopedTypeVariables RankNTypes RecursiveDo DefaultSignatures PatternSynonyms LambdaCase ForeignFunctionInterface QuasiQuotes TemplateHaskell OverloadedStrings
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >= 4.9 && < 5
+    , bytestring
+    , clock
+    , containers
+    , file-embed
+    , hashable
+    , inline-c
+    , inline-c-cpp
+    , lens
+    , linear
+    , linear-opengl
+    , monad-loops
+    , mtl
+    , OpenGL
+    , OpenGLRaw
+    , primitive
+    , unordered-containers
+    , template-haskell
+    , transformers
+    , vector
+    , unix
+    , StateVar
+    , simula-wayland
+    , simula-osvr
+    , SimulaHS
+    , dbus
+  other-modules:
+      Main
+      SimpleCompositor
+  default-language: Haskell2010
+
 executable simple-compositor
   main-is: SimpleCompositor.hs
   hs-source-dirs:
@@ -98,5 +136,6 @@ executable simple-compositor
     , simula-osvr
     , SimulaHS
   other-modules:
+      GenericCompositor
       Main
   default-language: Haskell2010
