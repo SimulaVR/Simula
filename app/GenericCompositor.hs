@@ -78,5 +78,5 @@ mainBody dbus = do
 
 main :: IO ()
 main = do
-  bracket connectDbus mainBody cleanupDbus
-
+  dbus <- connectDbus
+  mainBody dbus
