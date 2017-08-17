@@ -334,7 +334,6 @@ instance Compositor SimulaCompositor where
       _ -> do
         simulaSurface <- createSurface comp surface
         return (Some simulaSurface)
-    
 
 setSurfaceMapped :: SimulaSurface -> Bool -> IO ()
 setSurfaceMapped simulaSurface status = do
@@ -361,7 +360,6 @@ setSurfaceMapped simulaSurface status = do
           wmUnmapSurface wm simulaSurface
       | otherwise = return ()
 
-  
 
 createSurface :: SimulaCompositor -> WestonDesktopSurface  -> IO SimulaSurface
 createSurface compositor surface = do
@@ -411,7 +409,7 @@ newSimulaCompositor scene display = do
   compositor <- SimulaCompositor scene display wldp wcomp
                 <$> newMVar M.empty <*> newOpenGlData
                 <*> newMVar Nothing <*> newMVar Nothing
-                <*> pure mainLayer <*> newSimulaOSVRClient
+                <*> pure mainLayer <*> newSimulaOSVRClient Nothing
 
   windowedApi <- weston_windowed_output_get_api wcomp
 
@@ -645,60 +643,62 @@ compositorRender comp = do
   Just glctx <- readMVar (comp ^. simulaCompositorGlContext)
   Just output <- readMVar (comp ^. simulaCompositorOutput)
 
-
   glCtxMakeCurrent glctx
   -- set up context
 
+  let surfaces = M.keys surfaceMap
+  let scene  = comp ^. simulaCompositorScene
   let osvrCtx = comp ^. simulaCompositorOSVR.simulaOsvrContext
   let osvrDisplay = comp ^. simulaCompositorOSVR.simulaOsvrDisplay
 
-  (ReturnSuccess, viewers) <- osvrClientGetNumViewers osvrDisplay
+  time <- getTime Realtime
+  scenePrepareForFrame scene time
+  checkForErrors
 
-  weston_output_schedule_repaint output
+  case osvrDisplay of
+    Nothing -> ioError $ userError "Could not initialize display in OSVR"
+    Just display -> do
+      (value, viewers) <- osvrClientGetNumViewers display
+      case value of
+          ReturnSuccess -> do
+            putStrLn $ "[INFO] viewer count is " ++ show viewers
+            weston_output_schedule_repaint output
 
-  putStrLn $ "[INFO] viewer count is " ++ show viewers
-  when (viewers > 0) $ do
-    forM_ [0..(fromIntegral viewers - 1)] $ \viewer -> do
-        (ReturnSuccess, eyes) <- osvrClientGetNumEyesForViewer osvrDisplay (fromIntegral viewer)
-        if eyes < 1 then error "Well, we got no eyes!"
+            moveCamera
+            sceneDrawFrame scene
+            checkForErrors
+
+            when (viewers > 0) $ do
+                forM_ [0..(fromIntegral viewers - 1)] $ \viewer -> do
+                    -- TODO: Check for Errors for ReturnSuccess
+                    (ReturnSuccess, eyes) <- osvrClientGetNumEyesForViewer display (fromIntegral viewer)
+                    if eyes < 1 then error "Well, we got no eyes!"
                     else do
                         forM_ [0..(eyes - 1)] $ \eye -> do
-                            viewMat <- osvrClientGetViewerEyeViewMatrixf' osvrDisplay viewer (fromIntegral eye)
+                          viewMat <- osvrClientGetViewerEyeViewMatrixf' display viewer (fromIntegral eye)
 
-                            (vp:_) <- readMVar (comp ^. simulaCompositorDisplay.displayViewpoints)
-                            --TODO test
-                            setNodeWorldTransform vp viewMat
-                            viewPointUpdateViewMatrix vp
+                          (vp:_) <- readMVar (comp ^. simulaCompositorDisplay.displayViewpoints)
+                          --TODO test
+                          setNodeWorldTransform vp viewMat
+                          viewPointUpdateViewMatrix vp
 
-                            (ReturnSuccess, osvrSurfaces) <- osvrClientGetNumSurfacesForViewerEye osvrDisplay viewer (fromIntegral eye)
-                            forM_ [0..osvrSurfaces] $ \osvrSurface -> do
+                          -- TODO: Check for Errors for ReturnSuccess
+                          (ReturnSuccess, osvrSurfaces) <-
+                            osvrClientGetNumSurfacesForViewerEye display viewer (fromIntegral eye)
 
-                                projMat <- osvrClientGetViewerEyeSurfaceProjectionMatrixf' osvrDisplay viewer (fromIntegral eye) osvrSurface (vp^.viewPointNear) (vp^.viewPointFar)
+                          forM_ [0..osvrSurfaces] $ \osvrSurface -> do
+                            projMat <- osvrClientGetViewerEyeSurfaceProjectionMatrixf' display viewer (fromIntegral eye) osvrSurface (vp^.viewPointNear) (vp^.viewPointFar)
 
-                                viewPointOverrideProjectionMatrix vp projMat
+                            viewPointOverrideProjectionMatrix vp projMat
+                            Some seat <- compositorSeat comp
+                            pointer <- seatPointer seat
+                            pos <- readMVar (pointer ^. pointerGlobalPosition)
+                            drawMousePointer (comp ^. simulaCompositorDisplay) (comp ^. simulaCompositorOpenGlData.openGlDataMousePointer) pos
 
-                                let surfaces = M.keys surfaceMap
-                                let scene = comp ^. simulaCompositorScene
-
-                                time <- getTime Realtime
-
-                                scenePrepareForFrame scene time
-                                checkForErrors
-
-                                moveCamera
-                                sceneDrawFrame scene
-                                checkForErrors
-
-                                Some seat <- compositorSeat comp
-                                pointer <- seatPointer seat
-                                pos <- readMVar (pointer ^. pointerGlobalPosition)
-                                drawMousePointer (comp ^. simulaCompositorDisplay) (comp ^. simulaCompositorOpenGlData.openGlDataMousePointer) pos
-
-                                sceneFinishFrame scene
-                                checkForErrors
-
-                                emitOutputFrameSignal output
-                                eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
+                            emitOutputFrameSignal output
+                            eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
+            sceneFinishFrame scene
+            checkForErrors
 
   where
     moveCamera = return ()
