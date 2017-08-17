@@ -409,7 +409,7 @@ newSimulaCompositor scene display = do
   compositor <- SimulaCompositor scene display wldp wcomp
                 <$> newMVar M.empty <*> newOpenGlData
                 <*> newMVar Nothing <*> newMVar Nothing
-                <*> pure mainLayer <*> newSimulaOSVRClient Nothing
+                <*> pure mainLayer <*> initSimulaOSVRClient
 
   windowedApi <- weston_windowed_output_get_api wcomp
 
@@ -656,8 +656,28 @@ compositorRender comp = do
   checkForErrors
 
   case osvrDisplay of
-    Nothing -> ioError $ userError "Could not initialize display in OSVR"
+    Nothing -> do -- ioError $ userError "Could not initialize display in OSVR"
+      putStrLn "[INFO] no OSVR display is connected"
+
+      -- We can still render to wayland though
+      weston_output_schedule_repaint output
+      moveCamera
+      sceneDrawFrame scene
+      checkForErrors
+
+      Some seat <- compositorSeat comp
+      pointer <- seatPointer seat
+      pos <- readMVar (pointer ^. pointerGlobalPosition)
+      drawMousePointer (comp ^. simulaCompositorDisplay) (comp ^. simulaCompositorOpenGlData.openGlDataMousePointer) pos
+  
+      emitOutputFrameSignal output
+      eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
+
+      sceneFinishFrame scene
+      checkForErrors
+
     Just display -> do
+      -- TODO: make the Head Mounted Display work at all
       (value, viewers) <- osvrClientGetNumViewers display
       case value of
           ReturnSuccess -> do

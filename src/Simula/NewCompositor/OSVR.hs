@@ -15,12 +15,12 @@ initSimulaOSVRClient = do
   ctx <- osvrClientInit "simula.compositor" 0
   return $ SimulaOSVRClient ctx Nothing
 
-newSimulaOSVRClient :: Maybe SimulaOSVRClient -> IO SimulaOSVRClient
-newSimulaOSVRClient Nothing = do
+waitForOsvrDisplay :: Maybe SimulaOSVRClient -> IO SimulaOSVRClient
+waitForOsvrDisplay Nothing = do
   client <- initSimulaOSVRClient
-  newSimulaOSVRClient $ Just client
+  waitForOsvrDisplay $ Just client
 
-newSimulaOSVRClient (Just client) = do
+waitForOsvrDisplay (Just client) = do
   let ctx = view simulaOsvrContext client
   (status, display) <- osvrClientGetDisplay ctx
   case status of
