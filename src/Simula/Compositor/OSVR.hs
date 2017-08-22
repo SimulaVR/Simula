@@ -1,4 +1,4 @@
-module Simula.NewCompositor.OSVR where
+module Simula.Compositor.OSVR where
 
 import Control.Lens
 import Simula.OSVR

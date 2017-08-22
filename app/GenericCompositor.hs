@@ -3,13 +3,13 @@ import Control.Lens
 import Control.Concurrent.MVar
 import Data.Typeable
 
-import Simula.NewCompositor.Compositor
-import Simula.NewCompositor.Wayland.Input
-import Simula.NewCompositor.Weston
-import Simula.NewCompositor.WindowManager
-import Simula.NewCompositor.SceneGraph
-import Simula.NewCompositor.Types
-import Simula.NewCompositor.Utils
+import Simula.Compositor.Compositor
+import Simula.Compositor.Wayland.Input
+import Simula.Compositor.Weston
+import Simula.Compositor.WindowManager
+import Simula.Compositor.SceneGraph
+import Simula.Compositor.Types
+import Simula.Compositor.Utils
 import Simula.WestonDesktop
 import Simula.Weston
 import Simula.WaylandServer

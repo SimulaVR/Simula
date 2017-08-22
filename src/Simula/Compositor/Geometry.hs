@@ -1,10 +1,10 @@
-module Simula.NewCompositor.Geometry where
+module Simula.Compositor.Geometry where
 
 import Control.Lens
 import Linear
 
-import {-# SOURCE #-} Simula.NewCompositor.SceneGraph.Wayland
-import Simula.NewCompositor.Types
+import {-# SOURCE #-} Simula.Compositor.SceneGraph.Wayland
+import Simula.Compositor.Types
 
 data Ray = Ray {
   _rayPos :: V3 Float,

@@ -1,4 +1,4 @@
-module Simula.NewCompositor.Weston where
+module Simula.Compositor.Weston where
 
 import Control.Concurrent
 import Control.Lens
@@ -20,19 +20,19 @@ import Simula.WaylandServer
 import Simula.Weston
 import Simula.WestonDesktop
 
-import Simula.NewCompositor.Compositor
-import Simula.NewCompositor.Geometry
-import Simula.NewCompositor.OpenGL
-import Simula.NewCompositor.SceneGraph
-import Simula.NewCompositor.SceneGraph.Wayland
-import Simula.NewCompositor.Wayland.Input
-import Simula.NewCompositor.Wayland.Output
-import Simula.NewCompositor.WindowManager
-import Simula.NewCompositor.Utils
-import Simula.NewCompositor.Types
+import Simula.Compositor.Compositor
+import Simula.Compositor.Geometry
+import Simula.Compositor.OpenGL
+import Simula.Compositor.SceneGraph
+import Simula.Compositor.SceneGraph.Wayland
+import Simula.Compositor.Wayland.Input
+import Simula.Compositor.Wayland.Output
+import Simula.Compositor.WindowManager
+import Simula.Compositor.Utils
+import Simula.Compositor.Types
 
 import Simula.OSVR
-import Simula.NewCompositor.OSVR
+import Simula.Compositor.OSVR
 
 data SimulaSurface = SimulaSurface {
   _simulaSurfaceBase :: BaseWaylandSurface,
