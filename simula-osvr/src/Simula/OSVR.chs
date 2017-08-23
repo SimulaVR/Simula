@@ -11,6 +11,7 @@ import Linear
 
 #include <osvr/ClientKit/ClientKitC.h>
 #include <osvr/ClientKit/DisplayC.h>
+#include <osvr/ClientKit/InterfaceC.h>
 
 -- #include <osvr/RenderKit/RenderManagerC.h>
 -- #include <osvr/RenderKit/RenderManagerOpenGLC.h>
@@ -18,11 +19,16 @@ import Linear
   
 {#pointer OSVR_ClientContext newtype#}
 deriving instance Eq OSVR_ClientContext
+
 {#pointer OSVR_DisplayConfig newtype#}
 deriving instance Eq OSVR_DisplayConfig
 deriving instance Storable OSVR_DisplayConfig
+
 {#pointer *OSVR_Pose3 newtype#}
 deriving instance Eq OSVR_Pose3
+
+{#pointer OSVR_ClientInterface newtype #}
+deriving instance Eq OSVR_ClientInterface
 
 {#enum define OSVR_ReturnCode {OSVR_RETURN_SUCCESS as ReturnSuccess, OSVR_RETURN_FAILURE as ReturnFailure} deriving (Eq)#}
 
@@ -69,6 +75,10 @@ type OSVR_SurfaceCount = {#type OSVR_SurfaceCount#}
                                  , `CUInt' -- Viewers/as ID
                                  , `CUInt' -- EyeCount/as ID
                                  , `OSVR_Pose3'} -> `OSVR_ReturnCode'#}
+
+{#fun osvrClientGetInterface { `OSVR_ClientContext'
+                             , `String' -- interface path
+                             , id `Ptr OSVR_ClientInterface' } -> `OSVR_ReturnCode' #}
 
 {#enum OSVR_MatrixOrderingFlags {underscoreToCase} deriving (Show, Eq)#}
 
@@ -176,3 +186,6 @@ osvrRenderManagerOpenDisplayOpenGL' rmgl = do
   ret <- osvrRenderManagerOpenDisplayOpenGL rmgl res
   return (ret, res)
 -}
+
+
+
