@@ -12,6 +12,7 @@ import Linear
 #include <osvr/ClientKit/ClientKitC.h>
 #include <osvr/ClientKit/DisplayC.h>
 #include <osvr/ClientKit/InterfaceC.h>
+#include <osvr/Util/TimeValueC.h>
 
 -- #include <osvr/RenderKit/RenderManagerC.h>
 -- #include <osvr/RenderKit/RenderManagerOpenGLC.h>
@@ -32,6 +33,9 @@ deriving instance Eq OSVR_ClientInterface
 
 {#enum define OSVR_ReturnCode {OSVR_RETURN_SUCCESS as ReturnSuccess, OSVR_RETURN_FAILURE as ReturnFailure} deriving (Eq)#}
 
+type OSVR_TimeValue = {#type OSVR_TimeValue #}
+type OSVR_TimeValue_Seconds = {#type OSVR_TimeValue_Seconds #}
+type OSVR_TimeValue_Microseconds = {#type OSVR_TimeValue_Microseconds #}
 
 type OSVR_ChannelCount = {#type OSVR_ChannelCount#}
 {#typedef OSVR_ChannelCount OSVR_ChannelCount#}
@@ -79,6 +83,10 @@ type OSVR_SurfaceCount = {#type OSVR_SurfaceCount#}
 {#fun osvrClientGetInterface { `OSVR_ClientContext'
                              , `String' -- interface path
                              , id `Ptr OSVR_ClientInterface' } -> `OSVR_ReturnCode' #}
+
+{#fun osvrRegisterPoseCallback { `OSVR_ClientInterface'
+                               , id `FunPtr (Ptr () -> Ptr () -> Ptr () -> IO ())'
+                               , id `Ptr ()' } -> `()' #}
 
 {#enum OSVR_MatrixOrderingFlags {underscoreToCase} deriving (Show, Eq)#}
 
@@ -164,6 +172,7 @@ osvrClientGetViewerEyeSurfaceProjectionMatrixf' disp viewer eye surf near far = 
   osvrClientGetViewerEyeSurfaceProjectionMatrixf disp viewer eye surf near far OsvrMatrixRowmajor (castPtr matPtr)
   peek matPtr
 
+
 {-
 
 {#pointer *OSVR_OpenResultsOpenGL newtype#}
@@ -187,5 +196,4 @@ osvrRenderManagerOpenDisplayOpenGL' rmgl = do
   return (ret, res)
 -}
 
-
-
+-- Callbacks

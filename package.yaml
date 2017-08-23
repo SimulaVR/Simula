@@ -43,6 +43,7 @@ dependencies:
   - unordered-containers
   - template-haskell
   - transformers
+  - text
   - vector
   - unix
   - StateVar
