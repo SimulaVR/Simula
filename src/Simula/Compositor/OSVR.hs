@@ -113,6 +113,7 @@ registerPoseCallback :: SimulaOSVRClient -> Ptr OSVR_ClientInterface
                      -> StablePtr a -> StablePtr PoseTracker
                      -> IO ()
 registerPoseCallback ctx@(SimulaOSVRClient osvrCtx _) p callback userdata = do
+    u <- deRefStablePtr userdata
     client <- deRefStablePtr $ castPtrToStablePtr (castPtr p)
 
     osvrRegisterPoseCallback client
@@ -121,9 +122,9 @@ registerPoseCallback ctx@(SimulaOSVRClient osvrCtx _) p callback userdata = do
 
     ret <- osvrClientUpdate osvrCtx
     case ret of
-        ReturnSuccess -> putStrLn "Registered tracking callback"
-        _             -> putStrLn "Could not register tracking callback"
-
+        ReturnSuccess -> putStrLn $ "Registered tracking callback: " ++ (T.unpack $ _interfacePath u)
+        _             -> putStrLn $ "Could not register tracking callback" ++ (T.unpack $ _interfacePath u)
+  where
 
 -- For Pose callbacks the types are:
 -- void *userdata
