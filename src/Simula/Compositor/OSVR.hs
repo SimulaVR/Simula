@@ -4,6 +4,8 @@ import Data.Text as T
 import Data.Text (Text)
 
 import Control.Lens
+import Linear
+
 import Control.Concurrent.MVar
 
 import Foreign.Ptr
@@ -17,16 +19,23 @@ data SimulaOSVRClient = SimulaOSVRClient {
   } deriving Eq
 
 -- TODO: plug into viewport and surfaces
-data Tracker = Tracker {
-  _position :: MVar OSVR_Vec3,
-  _headOrientation :: MVar OSVR_Quaternion
+data PoseTracker = PoseTracker {
+  _interfacePath :: Text,
+  _position :: MVar (V3 Double),
+  _orientation :: MVar (V4 Double)
   -- renderer :: _
   -- model :: _
   -- texture :: _
   -- etc...
   } deriving Eq
 
-makeLenses ''Tracker
+mkDefaultPoseTracker :: Text -> IO PoseTracker
+mkDefaultPoseTracker path =
+    PoseTracker <$> return path
+                <*> newMVar (V3 0.0 0.0 0.0)
+                <*> newMVar (V4 0 0.0 0.0 0.0)
+
+makeLenses ''PoseTracker
 makeLenses ''SimulaOSVRClient
 
 initSimulaOSVRClient :: IO SimulaOSVRClient
@@ -65,37 +74,51 @@ interfaceQuery ctx@(SimulaOSVRClient osvrCtx _) path = do
 
 setupHeadTracking :: SimulaOSVRClient -> IO ()
 setupHeadTracking ctx@(SimulaOSVRClient osvrCtx _) = do
-    q <- interfaceQuery ctx $ T.pack "/me/head"
+    q <- interfaceQuery ctx path
     case q of
       Left rc -> ioError $ userError "Could not get interface for head tracking"
       Right p -> do
-        callBackStbl <- newStablePtr headTrackingCallback
-        registerPoseCallback ctx p callBackStbl
+        callback <- newStablePtr headTrackingCallback
+        userdata <- mkDefaultPoseTracker path >>= newStablePtr
+        registerPoseCallback ctx p callback userdata
+  where
+    path = "/me/head"
 
 setupLeftHandTracking :: SimulaOSVRClient -> IO ()
 setupLeftHandTracking ctx@(SimulaOSVRClient osvrCtx _) = do
-    q <- interfaceQuery ctx $ T.pack "/me/hand/left"
+    q <- interfaceQuery ctx path
     case q of
       Left rc -> ioError $ userError "Could not get interface for left hand"
       Right p -> do
-        callBackStbl <- newStablePtr leftHandTrackingCallback
-        registerPoseCallback ctx p callBackStbl
+        callback <- newStablePtr leftHandTrackingCallback
+        userdata <- mkDefaultPoseTracker path >>= newStablePtr
+        registerPoseCallback ctx p callback userdata
+  where
+    path = "/me/hand/left"
 
 
 setupRightHandTracking :: SimulaOSVRClient -> IO ()
 setupRightHandTracking ctx@(SimulaOSVRClient osvrCtx _) = do
-    q <- interfaceQuery ctx $ T.pack "/me/hand/right"
+    q <- interfaceQuery ctx path
     case q of
       Left rc -> ioError $ userError "Could not get interface for right hand"
       Right p -> do
-        callBackStbl <- newStablePtr rightHandTrackingCallback
-        registerPoseCallback ctx p callBackStbl
+        callback <- newStablePtr rightHandTrackingCallback
+        userdata <- mkDefaultPoseTracker path >>= newStablePtr
+        registerPoseCallback ctx p callback userdata
+  where
+    path = "/me/hand/right"
 
-registerPoseCallback :: SimulaOSVRClient -> Ptr OSVR_ClientInterface -> StablePtr a -> IO ()
-registerPoseCallback ctx@(SimulaOSVRClient osvrCtx _) p callback = do
-    deRefP <- deRefStablePtr $ castPtrToStablePtr (castPtr p)
-    -- last argument is void *userdata
-    osvrRegisterPoseCallback deRefP (castPtrToFunPtr $ castStablePtrToPtr callback) nullPtr
+registerPoseCallback :: SimulaOSVRClient -> Ptr OSVR_ClientInterface
+                     -> StablePtr a -> StablePtr PoseTracker
+                     -> IO ()
+registerPoseCallback ctx@(SimulaOSVRClient osvrCtx _) p callback userdata = do
+    client <- deRefStablePtr $ castPtrToStablePtr (castPtr p)
+
+    osvrRegisterPoseCallback client
+      (castPtrToFunPtr $ castStablePtrToPtr callback)
+      (castStablePtrToPtr userdata)
+
     ret <- osvrClientUpdate osvrCtx
     case ret of
         ReturnSuccess -> putStrLn "Registered tracking callback"
