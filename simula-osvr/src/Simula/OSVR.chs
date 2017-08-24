@@ -13,6 +13,9 @@ import Linear
 #include <osvr/ClientKit/DisplayC.h>
 #include <osvr/ClientKit/InterfaceC.h>
 #include <osvr/Util/TimeValueC.h>
+#include <osvr/Util/Vec3C.h>
+#include <osvr/Util/QuaternionC.h>
+#include <osvr/Util/Pose3C.h>
 
 -- #include <osvr/RenderKit/RenderManagerC.h>
 -- #include <osvr/RenderKit/RenderManagerOpenGLC.h>
@@ -25,9 +28,6 @@ deriving instance Eq OSVR_ClientContext
 deriving instance Eq OSVR_DisplayConfig
 deriving instance Storable OSVR_DisplayConfig
 
-{#pointer *OSVR_Pose3 newtype#}
-deriving instance Eq OSVR_Pose3
-
 {#pointer OSVR_ClientInterface newtype #}
 deriving instance Eq OSVR_ClientInterface
 
@@ -36,6 +36,24 @@ deriving instance Eq OSVR_ClientInterface
 type OSVR_TimeValue = {#type OSVR_TimeValue #}
 type OSVR_TimeValue_Seconds = {#type OSVR_TimeValue_Seconds #}
 type OSVR_TimeValue_Microseconds = {#type OSVR_TimeValue_Microseconds #}
+
+getSeconds :: OSVR_TimeValue -> IO OSVR_TimeValue_Seconds
+getSeconds = {#get OSVR_TimeValue -> seconds #}
+
+getMicroseconds :: OSVR_TimeValue -> IO OSVR_TimeValue_Microseconds
+getMicroseconds = {#get OSVR_TimeValue -> microseconds #}
+
+{#pointer *OSVR_Pose3 newtype #}
+deriving instance Eq OSVR_Pose3
+
+type OSVR_Vec3 = {#type OSVR_Vec3 #}
+type OSVR_Quaternion = {#type OSVR_Quaternion #}
+
+getPosFromPose :: OSVR_Pose3 -> IO OSVR_Vec3
+getPosFromPose = {#get OSVR_Pose3 -> translation #}
+
+getOrientFromPose :: OSVR_Pose3 -> IO OSVR_Quaternion
+getOrientFromPose = {#get OSVR_Pose3 -> rotation #}
 
 type OSVR_ChannelCount = {#type OSVR_ChannelCount#}
 {#typedef OSVR_ChannelCount OSVR_ChannelCount#}

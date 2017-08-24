@@ -4,6 +4,7 @@ import Data.Text as T
 import Data.Text (Text)
 
 import Control.Lens
+import Control.Concurrent.MVar
 
 import Foreign.Ptr
 import Foreign.StablePtr
@@ -15,6 +16,17 @@ data SimulaOSVRClient = SimulaOSVRClient {
   _simulaOsvrDisplay :: Maybe OSVR_DisplayConfig
   } deriving Eq
 
+-- TODO: plug into viewport and surfaces
+data Tracker = Tracker {
+  _position :: MVar OSVR_Vec3,
+  _headOrientation :: MVar OSVR_Quaternion
+  -- renderer :: _
+  -- model :: _
+  -- texture :: _
+  -- etc...
+  } deriving Eq
+
+makeLenses ''Tracker
 makeLenses ''SimulaOSVRClient
 
 initSimulaOSVRClient :: IO SimulaOSVRClient
@@ -57,14 +69,8 @@ setupHeadTracking ctx@(SimulaOSVRClient osvrCtx _) = do
     case q of
       Left rc -> ioError $ userError "Could not get interface for head tracking"
       Right p -> do
-        let pose = nullPtr
-        deRefP <- deRefStablePtr $ castPtrToStablePtr (castPtr p)
         callBackStbl <- newStablePtr headTrackingCallback
-        osvrRegisterPoseCallback deRefP (castPtrToFunPtr $ castStablePtrToPtr callBackStbl) pose
-        ret <- osvrClientUpdate osvrCtx
-        case ret of
-          ReturnSuccess -> putStrLn "Registered head tracking callback"
-          _             -> putStrLn "Could not register head tracking callback"
+        registerPoseCallback ctx p callBackStbl
 
 setupLeftHandTracking :: SimulaOSVRClient -> IO ()
 setupLeftHandTracking ctx@(SimulaOSVRClient osvrCtx _) = do
@@ -72,14 +78,8 @@ setupLeftHandTracking ctx@(SimulaOSVRClient osvrCtx _) = do
     case q of
       Left rc -> ioError $ userError "Could not get interface for left hand"
       Right p -> do
-        let pose = nullPtr
-        deRefP <- deRefStablePtr $ castPtrToStablePtr (castPtr p)
         callBackStbl <- newStablePtr leftHandTrackingCallback
-        osvrRegisterPoseCallback deRefP (castPtrToFunPtr $ castStablePtrToPtr callBackStbl) pose
-        ret <- osvrClientUpdate osvrCtx
-        case ret of
-          ReturnSuccess -> putStrLn "Registered left hand tracking callback"
-          _             -> putStrLn "Could not register left hand tracking callback"
+        registerPoseCallback ctx p callBackStbl
 
 
 setupRightHandTracking :: SimulaOSVRClient -> IO ()
@@ -88,14 +88,18 @@ setupRightHandTracking ctx@(SimulaOSVRClient osvrCtx _) = do
     case q of
       Left rc -> ioError $ userError "Could not get interface for right hand"
       Right p -> do
-        let pose = nullPtr
-        deRefP <- deRefStablePtr $ castPtrToStablePtr (castPtr p)
         callBackStbl <- newStablePtr rightHandTrackingCallback
-        osvrRegisterPoseCallback deRefP (castPtrToFunPtr $ castStablePtrToPtr callBackStbl) pose
-        ret <- osvrClientUpdate osvrCtx
-        case ret of
-          ReturnSuccess -> putStrLn "Registered right hand tracking callback"
-          _             -> putStrLn "Could not register right hand tracking callback"
+        registerPoseCallback ctx p callBackStbl
+
+registerPoseCallback :: SimulaOSVRClient -> Ptr OSVR_ClientInterface -> StablePtr a -> IO ()
+registerPoseCallback ctx@(SimulaOSVRClient osvrCtx _) p callback = do
+    deRefP <- deRefStablePtr $ castPtrToStablePtr (castPtr p)
+    -- last argument is void *userdata
+    osvrRegisterPoseCallback deRefP (castPtrToFunPtr $ castStablePtrToPtr callback) nullPtr
+    ret <- osvrClientUpdate osvrCtx
+    case ret of
+        ReturnSuccess -> putStrLn "Registered tracking callback"
+        _             -> putStrLn "Could not register tracking callback"
 
 
 -- For Pose callbacks the types are:
