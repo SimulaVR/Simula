@@ -8,8 +8,7 @@ import Linear
 
 import Control.Concurrent.MVar
 
-import Foreign.Ptr
-import Foreign.StablePtr
+import Foreign
 
 import Simula.OSVR
 
@@ -66,11 +65,13 @@ waitForOsvrDisplay (Just client) = do
 
 interfaceQuery :: SimulaOSVRClient -> Text -> IO (Either OSVR_ReturnCode (Ptr OSVR_ClientInterface))
 interfaceQuery ctx@(SimulaOSVRClient osvrCtx _) path = do
-    let p = nullPtr
-    v <- osvrClientGetInterface osvrCtx (T.unpack path) p
-    case v of
-      ReturnSuccess -> return $ Right p
-      _ -> return $ Left v
+    p <- mallocForeignPtr
+    withForeignPtr p $
+      \rawPtr -> do
+        v <- osvrClientGetInterface osvrCtx (T.unpack path) rawPtr
+        case v of
+          ReturnSuccess -> return $ Right rawPtr
+          _ -> return $ Left v
 
 setupHeadTracking :: SimulaOSVRClient -> IO ()
 setupHeadTracking ctx@(SimulaOSVRClient osvrCtx _) = do
@@ -94,8 +95,7 @@ setupLeftHandTracking ctx@(SimulaOSVRClient osvrCtx _) = do
         userdata <- mkDefaultPoseTracker path >>= newStablePtr
         registerPoseCallback ctx p callback userdata
   where
-    path = "/me/hand/left"
-
+    path = "/me/hands/left"
 
 setupRightHandTracking :: SimulaOSVRClient -> IO ()
 setupRightHandTracking ctx@(SimulaOSVRClient osvrCtx _) = do
@@ -107,15 +107,14 @@ setupRightHandTracking ctx@(SimulaOSVRClient osvrCtx _) = do
         userdata <- mkDefaultPoseTracker path >>= newStablePtr
         registerPoseCallback ctx p callback userdata
   where
-    path = "/me/hand/right"
+    path = "/me/hands/right"
 
 registerPoseCallback :: SimulaOSVRClient -> Ptr OSVR_ClientInterface
                      -> StablePtr a -> StablePtr PoseTracker
                      -> IO ()
 registerPoseCallback ctx@(SimulaOSVRClient osvrCtx _) p callback userdata = do
     u <- deRefStablePtr userdata
-    client <- deRefStablePtr $ castPtrToStablePtr (castPtr p)
-
+    client <- peekElemOff p 0
     osvrRegisterPoseCallback client
       (castPtrToFunPtr $ castStablePtrToPtr callback)
       (castStablePtrToPtr userdata)
@@ -134,12 +133,31 @@ registerPoseCallback ctx@(SimulaOSVRClient osvrCtx _) p callback userdata = do
 -- For the HTC Vive and many other setups, Poses are available for a head,
 -- a left hand, and a right hand. Each of these can use the
 -- osvrRegisterPoseCallback function to react to 
-headTrackingCallback :: Ptr a -> Ptr OSVR_TimeValue -> Ptr OSVR_Pose3 -> IO ()
-headTrackingCallback iface stamp report = undefined
+headTrackingCallback :: Ptr PoseTracker -> Ptr OSVR_TimeValue -> Ptr OSVR_Pose3 -> IO ()
+headTrackingCallback userdata stamp report = do
+    (sec, usec) <- timeValuePair stamp
+    putStrLn $ "[DEBUG] left hand reported at " ++ show sec ++ ":" ++ show usec
+--            ++ " with position " ++ positionReport
+ --           ++ " with orientation " ++ orientationReport
 
-leftHandTrackingCallback :: Ptr a -> Ptr OSVR_TimeValue -> Ptr OSVR_Pose3 -> IO ()
-leftHandTrackingCallback iface stamp report = undefined
+leftHandTrackingCallback :: Ptr PoseTracker -> Ptr OSVR_TimeValue -> Ptr OSVR_Pose3 -> IO ()
+leftHandTrackingCallback userdata stamp report = do
+    (sec, usec) <- timeValuePair stamp
+    putStrLn $ "[DEBUG] left hand reported at " ++ show sec ++ ":" ++ show usec
+--            ++ " with position " ++ positionReport
+ --           ++ " with orientation " ++ orientationReport
 
-rightHandTrackingCallback :: Ptr a -> Ptr OSVR_TimeValue -> Ptr OSVR_Pose3 -> IO ()
-rightHandTrackingCallback  iface stamp report = undefined
 
+rightHandTrackingCallback :: Ptr PoseTracker -> Ptr OSVR_TimeValue -> Ptr OSVR_Pose3 -> IO ()
+rightHandTrackingCallback  userdata stamp report = do
+    (sec, usec) <- timeValuePair stamp
+    putStrLn $ "[DEBUG] left hand reported at " ++ show sec ++ ":" ++ show usec
+--            ++ " with position " ++ positionReport
+ --           ++ " with orientation " ++ orientationReport
+
+timeValuePair :: Ptr OSVR_TimeValue -> IO (OSVR_TimeValue_Seconds, OSVR_TimeValue_Microseconds)
+timeValuePair stamp = do
+    t <- peekElemOff stamp 0
+    sec <- getSeconds t
+    usec <- getMicroseconds t
+    return (sec, usec)

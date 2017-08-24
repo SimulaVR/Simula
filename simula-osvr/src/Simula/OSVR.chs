@@ -30,6 +30,7 @@ deriving instance Storable OSVR_DisplayConfig
 
 {#pointer OSVR_ClientInterface newtype #}
 deriving instance Eq OSVR_ClientInterface
+deriving instance Storable OSVR_ClientInterface
 
 {#enum define OSVR_ReturnCode {OSVR_RETURN_SUCCESS as ReturnSuccess, OSVR_RETURN_FAILURE as ReturnFailure} deriving (Eq)#}
 
