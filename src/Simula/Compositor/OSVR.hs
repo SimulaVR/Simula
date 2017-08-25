@@ -79,9 +79,8 @@ setupHeadTracking ctx@(SimulaOSVRClient osvrCtx _) = do
     case q of
       Left rc -> ioError $ userError "Could not get interface for head tracking"
       Right p -> do
-        callback <- newStablePtr headTrackingCallback
         userdata <- mkDefaultPoseTracker path >>= newStablePtr
-        registerPoseCallback ctx p callback userdata
+        registerPoseCallback ctx p headTrackingCallback userdata
   where
     path = "/me/head"
 
@@ -91,9 +90,8 @@ setupLeftHandTracking ctx@(SimulaOSVRClient osvrCtx _) = do
     case q of
       Left rc -> ioError $ userError "Could not get interface for left hand"
       Right p -> do
-        callback <- newStablePtr leftHandTrackingCallback
         userdata <- mkDefaultPoseTracker path >>= newStablePtr
-        registerPoseCallback ctx p callback userdata
+        registerPoseCallback ctx p leftHandTrackingCallback userdata
   where
     path = "/me/hands/left"
 
@@ -103,27 +101,30 @@ setupRightHandTracking ctx@(SimulaOSVRClient osvrCtx _) = do
     case q of
       Left rc -> ioError $ userError "Could not get interface for right hand"
       Right p -> do
-        callback <- newStablePtr rightHandTrackingCallback
         userdata <- mkDefaultPoseTracker path >>= newStablePtr
-        registerPoseCallback ctx p callback userdata
+        registerPoseCallback ctx p rightHandTrackingCallback userdata
   where
     path = "/me/hands/right"
 
-registerPoseCallback :: SimulaOSVRClient -> Ptr OSVR_ClientInterface
-                     -> StablePtr a -> StablePtr PoseTracker
+type PoseCallback = Ptr PoseTracker -> Ptr OSVR_TimeValue -> Ptr OSVR_Pose3 -> IO ()
+foreign import ccall "wrapper"
+  mkPoseCallback :: PoseCallback -> IO (FunPtr PoseCallback)
+
+registerPoseCallback :: SimulaOSVRClient
+                     -> Ptr OSVR_ClientInterface
+                     -> PoseCallback
+                     -> StablePtr PoseTracker
                      -> IO ()
 registerPoseCallback ctx@(SimulaOSVRClient osvrCtx _) p callback userdata = do
     u <- deRefStablePtr userdata
     client <- peekElemOff p 0
-    osvrRegisterPoseCallback client
-      (castPtrToFunPtr $ castStablePtrToPtr callback)
-      (castStablePtrToPtr userdata)
+    cf <- mkPoseCallback callback
+    osvrRegisterPoseCallback client (castFunPtr cf) (castStablePtrToPtr userdata)
 
     ret <- osvrClientUpdate osvrCtx
     case ret of
         ReturnSuccess -> putStrLn $ "Registered tracking callback: " ++ (T.unpack $ _interfacePath u)
         _             -> putStrLn $ "Could not register tracking callback" ++ (T.unpack $ _interfacePath u)
-  where
 
 -- For Pose callbacks the types are:
 -- void *userdata

@@ -658,6 +658,7 @@ compositorRender comp = do
   time <- getTime Realtime
   scenePrepareForFrame scene time
   checkForErrors
+  osvrClientUpdate osvrCtx
 
   case osvrDisplay of
     Nothing -> do -- ioError $ userError "Could not initialize display in OSVR"
