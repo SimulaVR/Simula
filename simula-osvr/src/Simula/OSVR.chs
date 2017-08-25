@@ -34,15 +34,18 @@ deriving instance Storable OSVR_ClientInterface
 
 {#enum define OSVR_ReturnCode {OSVR_RETURN_SUCCESS as ReturnSuccess, OSVR_RETURN_FAILURE as ReturnFailure} deriving (Eq)#}
 
-type OSVR_TimeValue = {#type OSVR_TimeValue #}
-type OSVR_TimeValue_Seconds = {#type OSVR_TimeValue_Seconds #}
-type OSVR_TimeValue_Microseconds = {#type OSVR_TimeValue_Microseconds #}
+{#pointer *OSVR_TimeValue newtype#}
+deriving instance Eq OSVR_TimeValue
 
-getSeconds :: OSVR_TimeValue -> IO OSVR_TimeValue_Seconds
-getSeconds = {#get OSVR_TimeValue -> seconds #}
+getSeconds :: OSVR_TimeValue -> IO Int
+getSeconds tv= do
+   cseconds <- {#get OSVR_TimeValue.seconds #} tv
+   return $ fromIntegral cseconds
 
-getMicroseconds :: OSVR_TimeValue -> IO OSVR_TimeValue_Microseconds
-getMicroseconds = {#get OSVR_TimeValue -> microseconds #}
+getMicroseconds :: OSVR_TimeValue -> IO Int
+getMicroseconds tv = do
+    cmicro <- {#get OSVR_TimeValue -> microseconds #} tv
+    return $ fromIntegral cmicro
 
 {#pointer *OSVR_Pose3 newtype #}
 deriving instance Eq OSVR_Pose3
@@ -104,7 +107,7 @@ type OSVR_SurfaceCount = {#type OSVR_SurfaceCount#}
                              , id `Ptr OSVR_ClientInterface' } -> `OSVR_ReturnCode' #}
 
 {#fun osvrRegisterPoseCallback { `OSVR_ClientInterface'
-                               , id `FunPtr (Ptr () -> Ptr () -> Ptr () -> IO ())'
+                               , id `FunPtr (Ptr () -> OSVR_TimeValue -> Ptr () -> IO ())'
                                , id `Ptr ()' } -> `()' #}
 
 {#enum OSVR_MatrixOrderingFlags {underscoreToCase} deriving (Show, Eq)#}

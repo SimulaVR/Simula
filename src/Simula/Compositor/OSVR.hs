@@ -106,7 +106,7 @@ setupRightHandTracking ctx@(SimulaOSVRClient osvrCtx _) = do
   where
     path = "/me/hands/right"
 
-type PoseCallback = Ptr PoseTracker -> Ptr OSVR_TimeValue -> Ptr OSVR_Pose3 -> IO ()
+type PoseCallback = Ptr PoseTracker -> OSVR_TimeValue -> Ptr OSVR_Pose3 -> IO ()
 foreign import ccall "wrapper"
   mkPoseCallback :: PoseCallback -> IO (FunPtr PoseCallback)
 
@@ -134,14 +134,14 @@ registerPoseCallback ctx@(SimulaOSVRClient osvrCtx _) p callback userdata = do
 -- For the HTC Vive and many other setups, Poses are available for a head,
 -- a left hand, and a right hand. Each of these can use the
 -- osvrRegisterPoseCallback function to react to 
-headTrackingCallback :: Ptr PoseTracker -> Ptr OSVR_TimeValue -> Ptr OSVR_Pose3 -> IO ()
+headTrackingCallback :: Ptr PoseTracker -> OSVR_TimeValue -> Ptr OSVR_Pose3 -> IO ()
 headTrackingCallback userdata stamp report = do
     (sec, usec) <- timeValuePair stamp
-    putStrLn $ "[DEBUG] left hand reported at " ++ show sec ++ ":" ++ show usec
+    putStrLn $ "[DEBUG] head reported at " ++ show sec ++ ":" ++ show usec
 --            ++ " with position " ++ positionReport
  --           ++ " with orientation " ++ orientationReport
 
-leftHandTrackingCallback :: Ptr PoseTracker -> Ptr OSVR_TimeValue -> Ptr OSVR_Pose3 -> IO ()
+leftHandTrackingCallback :: Ptr PoseTracker -> OSVR_TimeValue -> Ptr OSVR_Pose3 -> IO ()
 leftHandTrackingCallback userdata stamp report = do
     (sec, usec) <- timeValuePair stamp
     putStrLn $ "[DEBUG] left hand reported at " ++ show sec ++ ":" ++ show usec
@@ -149,16 +149,15 @@ leftHandTrackingCallback userdata stamp report = do
  --           ++ " with orientation " ++ orientationReport
 
 
-rightHandTrackingCallback :: Ptr PoseTracker -> Ptr OSVR_TimeValue -> Ptr OSVR_Pose3 -> IO ()
+rightHandTrackingCallback :: Ptr PoseTracker -> OSVR_TimeValue -> Ptr OSVR_Pose3 -> IO ()
 rightHandTrackingCallback  userdata stamp report = do
     (sec, usec) <- timeValuePair stamp
-    putStrLn $ "[DEBUG] left hand reported at " ++ show sec ++ ":" ++ show usec
+    putStrLn $ "[DEBUG] right hand reported at " ++ show sec ++ ":" ++ show usec
 --            ++ " with position " ++ positionReport
  --           ++ " with orientation " ++ orientationReport
 
-timeValuePair :: Ptr OSVR_TimeValue -> IO (OSVR_TimeValue_Seconds, OSVR_TimeValue_Microseconds)
+timeValuePair :: OSVR_TimeValue -> IO (Int, Int)
 timeValuePair stamp = do
-    t <- peekElemOff stamp 0
-    sec <- getSeconds t
-    usec <- getMicroseconds t
+    sec <- getSeconds stamp
+    usec <- getMicroseconds stamp
     return (sec, usec)
