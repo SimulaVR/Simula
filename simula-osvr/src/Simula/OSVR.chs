@@ -1,6 +1,9 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveGeneric #-}
 module Simula.OSVR where
 
+import GHC.Generics (Generic)
+import System.IO
 import Control.Monad
 import Data.Proxy
 import Data.Word
@@ -16,11 +19,11 @@ import Linear
 #include <osvr/Util/Vec3C.h>
 #include <osvr/Util/QuaternionC.h>
 #include <osvr/Util/Pose3C.h>
+#include <osvr/Util/ClientReportTypesC.h>
 
 -- #include <osvr/RenderKit/RenderManagerC.h>
 -- #include <osvr/RenderKit/RenderManagerOpenGLC.h>
 
-  
 {#pointer OSVR_ClientContext newtype#}
 deriving instance Eq OSVR_ClientContext
 
@@ -38,26 +41,64 @@ deriving instance Storable OSVR_ClientInterface
 deriving instance Eq OSVR_TimeValue
 
 getSeconds :: OSVR_TimeValue -> IO Int
-getSeconds tv= do
+getSeconds tv = do
    cseconds <- {#get OSVR_TimeValue.seconds #} tv
    return $ fromIntegral cseconds
 
 getMicroseconds :: OSVR_TimeValue -> IO Int
 getMicroseconds tv = do
-    cmicro <- {#get OSVR_TimeValue -> microseconds #} tv
+    cmicro <- {#get OSVR_TimeValue.microseconds #} tv
     return $ fromIntegral cmicro
 
-{#pointer *OSVR_Pose3 newtype #}
-deriving instance Eq OSVR_Pose3
+data PoseState = PoseState { _translation :: V3 Double
+                           , _rotation :: V4 Double
+                           } deriving (Show, Generic, Eq)
+instance Storable PoseState where
+    sizeOf _ = {#sizeof OSVR_Pose3 #}
+    alignment _ = {#alignof OSVR_Pose3 #}
+    peekElemOff pr idx = fixIO $ \result ->
+        peek (pr `plusPtr` (idx * sizeOf result))
+    pokeElemOff pr idx x = poke (pr `plusPtr` (idx * sizeOf x)) x
 
-type OSVR_Vec3 = {#type OSVR_Vec3 #}
-type OSVR_Quaternion = {#type OSVR_Quaternion #}
+{#pointer *OSVR_PoseState as OSVR_PoseState -> PoseState #}
+{#pointer *OSVR_Pose3 -> PoseState #}
 
-getPosFromPose :: OSVR_Pose3 -> IO OSVR_Vec3
-getPosFromPose = {#get OSVR_Pose3 -> translation #}
+data PoseReport = PoseReport { _sensorid :: Int
+                             , _pose :: PoseState
+                             } deriving (Show, Generic, Eq)
+instance Storable PoseReport where
+    sizeOf _ = {#sizeof OSVR_PoseReport #}
+    alignment _ = {#alignof OSVR_PoseReport #}
+    peekElemOff pr idx = fixIO $ \result ->
+        peek (pr `plusPtr` (idx * sizeOf result))
+    pokeElemOff pr idx x = poke (pr `plusPtr` (idx * sizeOf x)) x
 
-getOrientFromPose :: OSVR_Pose3 -> IO OSVR_Quaternion
-getOrientFromPose = {#get OSVR_Pose3 -> rotation #}
+
+{#pointer *OSVR_PoseReport as OSVR_PoseReport -> PoseReport #}
+
+data PoseVec3 = PoseVec3 { _vData :: V3 Double }
+    deriving (Eq, Show)
+{#pointer *OSVR_Vec3 as OSVR_Vec3 -> PoseVec3 #}
+
+data PoseQuat = PoseQuat { _qData :: V4 Double }
+{#pointer *OSVR_Quaternion as OSVR_Quaternion -> PoseQuat #}
+
+getSensorFromReport :: OSVR_PoseReport -> IO Int
+getSensorFromReport r = do
+    s <- {#get struct OSVR_PoseReport -> sensor #} r
+    return $ fromIntegral s
+
+getPoseFromReport :: OSVR_PoseReport -> IO PoseState
+getPoseFromReport pr = do
+    p <- {#get struct OSVR_PoseReport -> pose #} pr
+    v <- peek (castPtr p)
+    return v
+
+getPosistionFromPose :: PoseState -> V3 Double
+getPosistionFromPose (PoseState t _) = t
+
+getOrientFromPose :: PoseState -> V4 Double
+getOrientFromPose (PoseState _ r) = r
 
 type OSVR_ChannelCount = {#type OSVR_ChannelCount#}
 {#typedef OSVR_ChannelCount OSVR_ChannelCount#}
@@ -107,7 +148,7 @@ type OSVR_SurfaceCount = {#type OSVR_SurfaceCount#}
                              , id `Ptr OSVR_ClientInterface' } -> `OSVR_ReturnCode' #}
 
 {#fun osvrRegisterPoseCallback { `OSVR_ClientInterface'
-                               , id `FunPtr (Ptr () -> OSVR_TimeValue -> Ptr () -> IO ())'
+                               , id `FunPtr (Ptr () -> OSVR_TimeValue -> OSVR_PoseReport -> IO ())'
                                , id `Ptr ()' } -> `()' #}
 
 {#enum OSVR_MatrixOrderingFlags {underscoreToCase} deriving (Show, Eq)#}

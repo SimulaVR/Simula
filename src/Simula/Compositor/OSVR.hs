@@ -80,7 +80,7 @@ setupHeadTracking ctx@(SimulaOSVRClient osvrCtx _) = do
       Left rc -> ioError $ userError "Could not get interface for head tracking"
       Right p -> do
         userdata <- mkDefaultPoseTracker path >>= newStablePtr
-        registerPoseCallback ctx p headTrackingCallback userdata
+        registerPoseCallback ctx p poseTrackingCallback userdata
   where
     path = "/me/head"
 
@@ -91,7 +91,7 @@ setupLeftHandTracking ctx@(SimulaOSVRClient osvrCtx _) = do
       Left rc -> ioError $ userError "Could not get interface for left hand"
       Right p -> do
         userdata <- mkDefaultPoseTracker path >>= newStablePtr
-        registerPoseCallback ctx p leftHandTrackingCallback userdata
+        registerPoseCallback ctx p poseTrackingCallback userdata
   where
     path = "/me/hands/left"
 
@@ -102,11 +102,11 @@ setupRightHandTracking ctx@(SimulaOSVRClient osvrCtx _) = do
       Left rc -> ioError $ userError "Could not get interface for right hand"
       Right p -> do
         userdata <- mkDefaultPoseTracker path >>= newStablePtr
-        registerPoseCallback ctx p rightHandTrackingCallback userdata
+        registerPoseCallback ctx p poseTrackingCallback userdata
   where
     path = "/me/hands/right"
 
-type PoseCallback = Ptr PoseTracker -> OSVR_TimeValue -> Ptr OSVR_Pose3 -> IO ()
+type PoseCallback = Ptr PoseTracker -> OSVR_TimeValue -> OSVR_PoseReport -> IO ()
 foreign import ccall "wrapper"
   mkPoseCallback :: PoseCallback -> IO (FunPtr PoseCallback)
 
@@ -134,27 +134,15 @@ registerPoseCallback ctx@(SimulaOSVRClient osvrCtx _) p callback userdata = do
 -- For the HTC Vive and many other setups, Poses are available for a head,
 -- a left hand, and a right hand. Each of these can use the
 -- osvrRegisterPoseCallback function to react to 
-headTrackingCallback :: Ptr PoseTracker -> OSVR_TimeValue -> Ptr OSVR_Pose3 -> IO ()
-headTrackingCallback userdata stamp report = do
+poseTrackingCallback :: Ptr PoseTracker -> OSVR_TimeValue -> OSVR_PoseReport -> IO ()
+poseTrackingCallback userdata stamp report = do
     (sec, usec) <- timeValuePair stamp
-    putStrLn $ "[DEBUG] head reported at " ++ show sec ++ ":" ++ show usec
---            ++ " with position " ++ positionReport
- --           ++ " with orientation " ++ orientationReport
-
-leftHandTrackingCallback :: Ptr PoseTracker -> OSVR_TimeValue -> Ptr OSVR_Pose3 -> IO ()
-leftHandTrackingCallback userdata stamp report = do
-    (sec, usec) <- timeValuePair stamp
-    putStrLn $ "[DEBUG] left hand reported at " ++ show sec ++ ":" ++ show usec
---            ++ " with position " ++ positionReport
- --           ++ " with orientation " ++ orientationReport
-
-
-rightHandTrackingCallback :: Ptr PoseTracker -> OSVR_TimeValue -> Ptr OSVR_Pose3 -> IO ()
-rightHandTrackingCallback  userdata stamp report = do
-    (sec, usec) <- timeValuePair stamp
-    putStrLn $ "[DEBUG] right hand reported at " ++ show sec ++ ":" ++ show usec
---            ++ " with position " ++ positionReport
- --           ++ " with orientation " ++ orientationReport
+    sensor <- getSensorFromReport report
+    -- pose <- getPoseFromReport report
+    putStrLn $ "[DEBUG] sensor id " ++ show sensor
+            ++ " reported at " ++ show sec ++ ":" ++ show usec
+    --        ++ " with position " ++ show (_translation pose)
+    --        ++ " and rotation " ++ show (_rotation pose)
 
 timeValuePair :: OSVR_TimeValue -> IO (Int, Int)
 timeValuePair stamp = do

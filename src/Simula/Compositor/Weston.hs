@@ -441,11 +441,10 @@ newSimulaCompositor scene display = do
   interfacePtr <- new interface
   weston_compositor_set_default_pointer_grab wcomp interfacePtr
 
-  setupHeadTracking $ _simulaCompositorOSVR compositor
-  setupLeftHandTracking $ _simulaCompositorOSVR compositor
-  setupRightHandTracking $ _simulaCompositorOSVR compositor
-
-  return compositor
+  setupHeadTracking (_simulaCompositorOSVR compositor)
+    >> setupLeftHandTracking (_simulaCompositorOSVR compositor)
+    >> setupRightHandTracking (_simulaCompositorOSVR compositor)
+    >> return compositor
 
   where
     onSurfaceCreated compositor surface  _ = do
