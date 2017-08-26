@@ -138,11 +138,12 @@ poseTrackingCallback :: Ptr PoseTracker -> OSVR_TimeValue -> OSVR_PoseReport -> 
 poseTrackingCallback userdata stamp report = do
     (sec, usec) <- timeValuePair stamp
     sensor <- getSensorFromReport report
-    -- pose <- getPoseFromReport report
+    p <- getTranslationFromReport report
+    r <- getRotationFromReport report
     putStrLn $ "[DEBUG] sensor id " ++ show sensor
             ++ " reported at " ++ show sec ++ ":" ++ show usec
-    --        ++ " with position " ++ show (_translation pose)
-    --        ++ " and rotation " ++ show (_rotation pose)
+            ++ " with position " ++ show p
+            ++ " and rotation " ++ show r
 
 timeValuePair :: OSVR_TimeValue -> IO (Int, Int)
 timeValuePair stamp = do

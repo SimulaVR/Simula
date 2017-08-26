@@ -60,8 +60,10 @@ instance Storable PoseState where
         peek (pr `plusPtr` (idx * sizeOf result))
     pokeElemOff pr idx x = poke (pr `plusPtr` (idx * sizeOf x)) x
 
-{#pointer *OSVR_PoseState as OSVR_PoseState -> PoseState #}
-{#pointer *OSVR_Pose3 -> PoseState #}
+{#pointer *OSVR_PoseState newtype #}
+deriving instance Eq OSVR_PoseState
+{#pointer *OSVR_Pose3 newtype #}
+deriving instance Eq OSVR_Pose3
 
 data PoseReport = PoseReport { _sensorid :: Int
                              , _pose :: PoseState
@@ -76,29 +78,16 @@ instance Storable PoseReport where
 
 {#pointer *OSVR_PoseReport as OSVR_PoseReport -> PoseReport #}
 
-data PoseVec3 = PoseVec3 { _vData :: V3 Double }
-    deriving (Eq, Show)
-{#pointer *OSVR_Vec3 as OSVR_Vec3 -> PoseVec3 #}
-
-data PoseQuat = PoseQuat { _qData :: V4 Double }
-{#pointer *OSVR_Quaternion as OSVR_Quaternion -> PoseQuat #}
-
 getSensorFromReport :: OSVR_PoseReport -> IO Int
 getSensorFromReport r = do
     s <- {#get struct OSVR_PoseReport -> sensor #} r
     return $ fromIntegral s
 
-getPoseFromReport :: OSVR_PoseReport -> IO PoseState
-getPoseFromReport pr = do
-    p <- {#get struct OSVR_PoseReport -> pose #} pr
-    v <- peek (castPtr p)
-    return v
+getTranslationFromReport :: OSVR_PoseReport -> IO {#type OSVR_Vec3 #}
+getTranslationFromReport = {#get struct OSVR_PoseReport -> pose.translation #}
 
-getPosistionFromPose :: PoseState -> V3 Double
-getPosistionFromPose (PoseState t _) = t
-
-getOrientFromPose :: PoseState -> V4 Double
-getOrientFromPose (PoseState _ r) = r
+getRotationFromReport :: OSVR_PoseReport -> IO {#type OSVR_Quaternion #}
+getRotationFromReport = {#get struct OSVR_PoseReport -> pose.rotation #}
 
 type OSVR_ChannelCount = {#type OSVR_ChannelCount#}
 {#typedef OSVR_ChannelCount OSVR_ChannelCount#}
