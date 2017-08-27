@@ -9,6 +9,7 @@ import Linear
 import Control.Concurrent.MVar
 
 import Foreign
+import Foreign.C
 
 import Simula.OSVR
 
@@ -140,10 +141,29 @@ poseTrackingCallback userdata stamp report = do
     sensor <- getSensorFromReport report
     p <- getTranslationFromReport report
     r <- getRotationFromReport report
+
+    -- TODO: stuff with the data, maybe even the userdata?
+    posRep <- positionReport p
+    rotRep <- rotationReport r
     putStrLn $ "[DEBUG] sensor id " ++ show sensor
             ++ " reported at " ++ show sec ++ ":" ++ show usec
-            ++ " with position " ++ show p
-            ++ " and rotation " ++ show r
+            ++ " with position " ++ posRep
+            ++ " and rotation " ++ rotRep
+
+positionReport :: OSVRVec3 -> IO String
+positionReport (OSVRVec3 p) = do
+    x <- with p vec3GetX
+    y <- with p vec3GetY
+    z <- with p vec3GetZ
+    return $ ">" ++ show x ++ " ^" ++ show y ++ " ·" ++ show z
+
+rotationReport :: OSVRQuaternion -> IO String
+rotationReport (OSVRQuaternion r) = do
+    w <- with r quatGetW
+    x <- with r quatGetX
+    y <- with r quatGetY
+    z <- with r quatGetZ
+    return $ "w" ++ show w ++ ">" ++ show x ++ " ^" ++ show y ++ " ·" ++ show z
 
 timeValuePair :: OSVR_TimeValue -> IO (Int, Int)
 timeValuePair stamp = do

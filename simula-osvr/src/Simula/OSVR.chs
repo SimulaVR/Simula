@@ -1,5 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE CApiFFI #-}
 module Simula.OSVR where
 
 import GHC.Generics (Generic)
@@ -50,44 +51,51 @@ getMicroseconds tv = do
     cmicro <- {#get OSVR_TimeValue.microseconds #} tv
     return $ fromIntegral cmicro
 
-data PoseState = PoseState { _translation :: V3 Double
-                           , _rotation :: V4 Double
-                           } deriving (Show, Generic, Eq)
-instance Storable PoseState where
-    sizeOf _ = {#sizeof OSVR_Pose3 #}
-    alignment _ = {#alignof OSVR_Pose3 #}
-    peekElemOff pr idx = fixIO $ \result ->
-        peek (pr `plusPtr` (idx * sizeOf result))
-    pokeElemOff pr idx x = poke (pr `plusPtr` (idx * sizeOf x)) x
-
+{- OSVR_PoseState and OSVR_Pose3 are the same damn thing -}
 {#pointer *OSVR_PoseState newtype #}
 deriving instance Eq OSVR_PoseState
+
+{- OSVR_Pose3 and OSVR_PoseState are the same damn thing -}
 {#pointer *OSVR_Pose3 newtype #}
 deriving instance Eq OSVR_Pose3
 
-data PoseReport = PoseReport { _sensorid :: Int
-                             , _pose :: PoseState
-                             } deriving (Show, Generic, Eq)
-instance Storable PoseReport where
-    sizeOf _ = {#sizeof OSVR_PoseReport #}
-    alignment _ = {#alignof OSVR_PoseReport #}
-    peekElemOff pr idx = fixIO $ \result ->
-        peek (pr `plusPtr` (idx * sizeOf result))
-    pokeElemOff pr idx x = poke (pr `plusPtr` (idx * sizeOf x)) x
-
-
-{#pointer *OSVR_PoseReport as OSVR_PoseReport -> PoseReport #}
+{#pointer *OSVR_PoseReport newtype #}
+deriving instance Eq OSVR_PoseReport
 
 getSensorFromReport :: OSVR_PoseReport -> IO Int
 getSensorFromReport r = do
     s <- {#get struct OSVR_PoseReport -> sensor #} r
     return $ fromIntegral s
 
-getTranslationFromReport :: OSVR_PoseReport -> IO {#type OSVR_Vec3 #}
-getTranslationFromReport = {#get struct OSVR_PoseReport -> pose.translation #}
+{#pointer *OSVR_Vec3 as OSVR_Vec3 -> OSVRVec3 #}
+data OSVRVec3 = OSVRVec3 {#type OSVR_Vec3 #}
+foreign import capi "osvr/Util/Vec3C.h osvrVec3GetX"
+    vec3GetX:: Ptr ({#type OSVR_Vec3 #}) -> IO CDouble
+foreign import capi "osvr/Util/Vec3C.h osvrVec3GetY"
+    vec3GetY:: Ptr ({#type OSVR_Vec3 #}) -> IO CDouble
+foreign import capi "osvr/Util/Vec3C.h osvrVec3GetZ"
+    vec3GetZ:: Ptr ({#type OSVR_Vec3 #}) -> IO CDouble
 
-getRotationFromReport :: OSVR_PoseReport -> IO {#type OSVR_Quaternion #}
-getRotationFromReport = {#get struct OSVR_PoseReport -> pose.rotation #}
+{#pointer *OSVR_Quaternion as OSVR_Quaternion -> OSVRVec3 #}
+data OSVRQuaternion = OSVRQuaternion {#type OSVR_Quaternion #}
+foreign import capi "osvr/Util/QuaternionC.h osvrQuatGetW"
+    quatGetW :: Ptr ({#type OSVR_Quaternion #}) -> IO CDouble
+foreign import capi "osvr/Util/QuaternionC.h osvrQuatGetX"
+    quatGetX :: Ptr ({#type OSVR_Quaternion #}) -> IO CDouble
+foreign import capi "osvr/Util/QuaternionC.h osvrQuatGetY"
+    quatGetY :: Ptr ({#type OSVR_Quaternion #}) -> IO CDouble
+foreign import capi "osvr/Util/QuaternionC.h osvrQuatGetZ"
+    quatGetZ :: Ptr ({#type OSVR_Quaternion #}) -> IO CDouble
+
+getTranslationFromReport :: OSVR_PoseReport -> IO OSVRVec3
+getTranslationFromReport r = do
+    v <- {#get struct OSVR_PoseReport -> pose.translation #} r
+    return $ OSVRVec3 v
+
+getRotationFromReport :: OSVR_PoseReport -> IO OSVRQuaternion
+getRotationFromReport r = do
+    q <- {#get struct OSVR_PoseReport -> pose.rotation #} r
+    return $ OSVRQuaternion q
 
 type OSVR_ChannelCount = {#type OSVR_ChannelCount#}
 {#typedef OSVR_ChannelCount OSVR_ChannelCount#}
