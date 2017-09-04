@@ -12,6 +12,7 @@ import Foreign
 import Foreign.C
 
 import Simula.OSVR
+import Simula.Compositor.Utils
 
 data SimulaOSVRClient = SimulaOSVRClient {
   _simulaOsvrContext :: OSVR_ClientContext,
@@ -21,6 +22,7 @@ data SimulaOSVRClient = SimulaOSVRClient {
 -- TODO: plug into viewport and surfaces
 data PoseTracker = PoseTracker {
   _interfacePath :: Text,
+  _sensorNumber :: Int,
   _position :: MVar (V3 Double),
   _orientation :: MVar (V4 Double)
   -- renderer :: _
@@ -29,9 +31,10 @@ data PoseTracker = PoseTracker {
   -- etc...
   } deriving Eq
 
-mkDefaultPoseTracker :: Text -> IO PoseTracker
-mkDefaultPoseTracker path =
+mkDefaultPoseTracker :: Int -> Text -> IO PoseTracker
+mkDefaultPoseTracker s path =
     PoseTracker <$> return path
+                <*> return s
                 <*> newMVar (V3 0.0 0.0 0.0)
                 <*> newMVar (V4 0 0.0 0.0 0.0)
 
@@ -74,13 +77,46 @@ interfaceQuery ctx@(SimulaOSVRClient osvrCtx _) path = do
           ReturnSuccess -> return $ Right rawPtr
           _ -> return $ Left v
 
+osvrGetPose :: OSVR_ClientContext -> Text -> IO PoseTracker
+osvrGetPose ctx path = do
+  q <- interfaceQuery (SimulaOSVRClient ctx Nothing) path
+  case q of
+    Left rc -> ioError $ userError "Could not get interface for head pose"
+    Right p -> do
+      iface <- peek p
+      (OSVR_TimeValue tv) <- mkTimeValue
+      p@(OSVR_PoseReport ps) <- mkPose
+      r <- osvrGetPoseState iface tv ps
+      case toEnum r of
+            ReturnSuccess -> do
+              prP <- new ps
+              s <- getSensorFromReport p
+              pt <- mkDefaultPoseTracker s path
+              pos <- getTranslationFromReport p >>= mkV3fromVec3
+              writeMVar (pt ^. position) pos
+              rot <- getRotationFromReport p >>= mkV4fromQuat
+              writeMVar (pt ^. orientation) rot
+              return pt
+            _ -> ioError $ userError ("Could not fetch pose from " ++ pathStr)
+  where
+    pathStr = T.unpack path
+
+osvrGetHeadPose :: OSVR_ClientContext -> IO PoseTracker
+osvrGetHeadPose ctx = osvrGetPose ctx "/me/head"
+
+osvrGetLeftHandPose :: OSVR_ClientContext -> IO PoseTracker
+osvrGetLeftHandPose ctx = osvrGetPose ctx "/me/hands/left"
+
+osvrGetRightHandPose :: OSVR_ClientContext -> IO PoseTracker
+osvrGetRightHandPose ctx = osvrGetPose ctx "/me/hands/right"
+
 setupHeadTracking :: SimulaOSVRClient -> IO ()
 setupHeadTracking ctx@(SimulaOSVRClient osvrCtx _) = do
     q <- interfaceQuery ctx path
     case q of
       Left rc -> ioError $ userError "Could not get interface for head tracking"
       Right p -> do
-        userdata <- mkDefaultPoseTracker path >>= newStablePtr
+        userdata <- mkDefaultPoseTracker (0-1) path >>= newStablePtr
         registerPoseCallback ctx p poseTrackingCallback userdata
   where
     path = "/me/head"
@@ -91,7 +127,7 @@ setupLeftHandTracking ctx@(SimulaOSVRClient osvrCtx _) = do
     case q of
       Left rc -> ioError $ userError "Could not get interface for left hand"
       Right p -> do
-        userdata <- mkDefaultPoseTracker path >>= newStablePtr
+        userdata <- mkDefaultPoseTracker (0-1) path >>= newStablePtr
         registerPoseCallback ctx p poseTrackingCallback userdata
   where
     path = "/me/hands/left"
@@ -102,7 +138,7 @@ setupRightHandTracking ctx@(SimulaOSVRClient osvrCtx _) = do
     case q of
       Left rc -> ioError $ userError "Could not get interface for right hand"
       Right p -> do
-        userdata <- mkDefaultPoseTracker path >>= newStablePtr
+        userdata <- mkDefaultPoseTracker (0-1) path >>= newStablePtr
         registerPoseCallback ctx p poseTrackingCallback userdata
   where
     path = "/me/hands/right"

@@ -651,6 +651,7 @@ compositorRender comp = do
 
   let surfaces = M.keys surfaceMap
   let scene  = comp ^. simulaCompositorScene
+  let simDisplay = comp ^. simulaCompositorDisplay
   let osvrCtx = comp ^. simulaCompositorOSVR.simulaOsvrContext
   let osvrDisplay = comp ^. simulaCompositorOSVR.simulaOsvrDisplay
 
@@ -665,7 +666,13 @@ compositorRender comp = do
 
       -- We can still render to wayland though
       weston_output_schedule_repaint output
-      moveCamera
+      headP <- osvrGetHeadPose osvrCtx
+      newDisplay <- moveCamera simDisplay headP
+      writeMVar (scene ^. sceneDisplays) [newDisplay]
+
+      osvrGetLeftHandPose osvrCtx
+      osvrGetRightHandPose osvrCtx
+
       sceneDrawFrame scene
       checkForErrors
 
@@ -688,7 +695,6 @@ compositorRender comp = do
             putStrLn $ "[INFO] viewer count is " ++ show viewers
             weston_output_schedule_repaint output
 
-            moveCamera
             sceneDrawFrame scene
             checkForErrors
 
@@ -724,8 +730,14 @@ compositorRender comp = do
             sceneFinishFrame scene
             checkForErrors
 
-  where
-    moveCamera = return ()
+moveCamera :: Display -> PoseTracker -> IO Display
+moveCamera d p = return d
+
+drawLeftHand :: PoseTracker -> IO ()
+drawLeftHand p = return ()
+
+drawRightHand :: PoseTracker -> IO ()
+drawRightHand p = return ()
 {-
     if(m_camIsMoving) {
         glm::vec4 camPos;

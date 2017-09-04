@@ -16,6 +16,7 @@ import Linear
 #include <osvr/ClientKit/ClientKitC.h>
 #include <osvr/ClientKit/DisplayC.h>
 #include <osvr/ClientKit/InterfaceC.h>
+#include <osvr/ClientKit/InterfaceStateC.h>
 #include <osvr/Util/TimeValueC.h>
 #include <osvr/Util/Vec3C.h>
 #include <osvr/Util/QuaternionC.h>
@@ -40,6 +41,12 @@ deriving instance Storable OSVR_ClientInterface
 
 {#pointer *OSVR_TimeValue newtype#}
 deriving instance Eq OSVR_TimeValue
+
+mkTimeValue :: IO OSVR_TimeValue
+mkTimeValue = mallocBytes {#sizeof OSVR_TimeValue #} >>= return . OSVR_TimeValue
+
+mkPose :: IO OSVR_PoseReport
+mkPose = mallocBytes {#sizeof OSVR_PoseReport #} >>= return . OSVR_PoseReport
 
 getSeconds :: OSVR_TimeValue -> IO Int
 getSeconds tv = do
@@ -96,6 +103,25 @@ getRotationFromReport :: OSVR_PoseReport -> IO OSVRQuaternion
 getRotationFromReport r = do
     q <- {#get struct OSVR_PoseReport -> pose.rotation #} r
     return $ OSVRQuaternion q
+
+mkV3fromVec3 :: OSVRVec3 -> IO (V3 Double)
+mkV3fromVec3 (OSVRVec3 v) = do
+  x <- with v vec3GetX
+  y <- with v vec3GetY
+  z <- with v vec3GetZ
+  return $ V3 (realToFrac x) (realToFrac y) (realToFrac z)
+
+mkV4fromQuat :: OSVRQuaternion -> IO (V4 Double)
+mkV4fromQuat (OSVRQuaternion q) = do
+  w <- with q quatGetW
+  x <- with q quatGetX
+  y <- with q quatGetY
+  z <- with q quatGetZ
+  return $ V4 (realToFrac w) (realToFrac x) (realToFrac y) (realToFrac z)
+
+foreign import capi "osvr/ClientKit/InterfaceStateC.h osvrGetPoseState"
+    osvrGetPoseState :: OSVR_ClientInterface -> Ptr OSVR_TimeValue -> Ptr OSVR_PoseReport
+                     -> IO Int
 
 type OSVR_ChannelCount = {#type OSVR_ChannelCount#}
 {#typedef OSVR_ChannelCount OSVR_ChannelCount#}

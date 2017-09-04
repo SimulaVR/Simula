@@ -253,7 +253,6 @@ setNodeWorldTransform this tf = nodeParent this >>= \case
   Just (Some prt) -> fmap (!*! tf) (inv44 <$> nodeWorldTransform prt) >>= setNodeTransform this
   Nothing -> setNodeTransform this tf
 
-
 nodeMapOntoSubtree :: SceneGraphNode a => a -> (Some SceneGraphNode -> Maybe Scene -> IO ()) -> Maybe Scene -> IO ()
 nodeMapOntoSubtree this func scene = do
   func (Some this) scene
@@ -371,7 +370,6 @@ newViewPoint near far display parent transform viewPortParams centerOfProjection
 
       modifyMVar' (vp ^. viewPointResources) (res:)
       viewPointSendCurrentStateToSingleClient vp res
-
 
 destroyViewPoint :: ViewPoint -> IO ()
 destroyViewPoint this = undefined
