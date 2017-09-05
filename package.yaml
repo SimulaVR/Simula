@@ -83,13 +83,4 @@ executables:
     <<: *executable_options
     main: SimpleCompositor.hs
     source-dirs: app
-    dependencies: [SimulaHS]
-
-  generic-compositor:
-    <<: *executable_options
-    main: GenericCompositor.hs
-    source-dirs: app
-    dependencies: 
-      - SimulaHS
-      - dbus
-
+    dependencies: [dbus, SimulaHS]

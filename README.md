@@ -1,60 +1,31 @@
 # SimulaHS
-Step 1: Build simula_cpp with ./build.sh qtwayland libmotorcar-compositor
-Step 2: Build SimulaHS with stack build
-Step 3: Run the simple compositor with ./run-simple-compositor.sh
 
+The process to try out `SimulaHS`, is as simple as 1, 2, 3, 4a or 4b, 5 with only minor software compliation in between. You will need to install software from your linux distributor and have your machine whirl and buzz for minutes on end with no output to test this collection of Haskell, C, and C++ code. If you are up for the challenge then you can find most of a recipie below. Many of the instructions have only been attempted once, if any at all, and can only be cast as a guide to get running. With those precautions aside, here's what someone got working once, sometime, probably.
 
-# Debian (stretch) Required packages
+Step 1: Clone all submodules
+Step 2: Build and Install requisite packages for your system
+Step 3: Build SimulaHS with
+    stack build --extra-lib-dirs="${HOME}"/.local/lib --extra-include-dirs="${HOME}"/.local/include
+Step 4a (_Default_): Run OSVR Server
+    osvr_server
 
-__WARNING__: _You cannot run the HMD OSVR code on Debian at this time
-you can, however, build this repository without the updated kernel
-drivers provided by Ubuntu._
+Step 4b (_Advanced_): Run OSVR Server with a configuation file
+    osvr_server /path/to/configuration-file.json
 
-Install all the dependecies in one shot with the following script
-```
-sudo apt install \
-    g++ \
-    automake \
-    autoconf \
-    autoconf-archive \
-    make \
-    cmake \
-    libtool \
-    pkg-config \
-    binutils-dev \
-    libegl1-mesa-dev \
-    libgles2-mesa-dev \
-    libxcb-composite0-dev \
-    libxcursor-dev \
-    libcairo2-dev \
-    libpixman-1-dev \
-    libgbm-dev \
-    libmtdev-dev \
-    libinput-dev \
-    libxkbcommon-dev \
-    libpam0g-dev \
-    libgflags-dev \
-    libgoogle-glog-dev \
-    libssl-dev \
-    libdouble-conversion-dev \
-    libevent-dev \
-    libboost-context-dev \
-    libboost-chrono-dev \
-    libboost-filesystem-dev \
-    libboost-locale-dev \
-    libboost-program-options-dev \
-    libboost-regex-dev \
-    libboost-system-dev \
-    libboost-thread-dev \
-    libsdl2-dev \
-    libopencv-dev \
-    libjsoncpp-dev \
-    libusb-1.0-0-dev \
-    libspdlog-dev
+Step 5: Run the simple compositor with
+    stack exec simple-compositor
 
-```
+# Cloning Submodules
 
-Detailed instructions on which git repositories are needed and special instructions for each one are given below. You will also need the Haskell `stack` tool available for download at [https://docs.haskellstack.org/en/stable/README/]. Once all the dependencies are built and installed you can run `stack setup` followed by `stack build` in the top level of SimulaHS to get a build.
+Before you begin you must initialize and update the submodules in the `SimulaHS` repository.  This process ensures that you are in sync with previously checked in combinations of commits between the two projects. More information on submodules is [here](https://git-scm.com/book/en/v2/Git-Tools-Submodules).
+
+## Initialization
+
+    git submodule init
+
+## Update
+
+    git submodule update
 
 # Ubuntu 17.04 (zesty) Required packages
 Install all the dependecies in one shot with the following script
@@ -214,3 +185,57 @@ When fetching from github you must fetch the submodules and initialize them befo
     git submodule update --init --recursive
 
 OSVR-Core is a `cmake` project so refer to the instructions above in the `libfunctionality` section to perform an out-of-tree build.
+
+# Debian (stretch) Required packages
+
+__WARNING__: _You cannot run the HMD OSVR code on Debian at this time
+you can, however, build this repository without the updated kernel
+drivers provided by Ubuntu._
+
+Install all the dependecies in one shot with the following script
+```
+sudo apt install \
+    g++ \
+    automake \
+    autoconf \
+    autoconf-archive \
+    make \
+    cmake \
+    libtool \
+    pkg-config \
+    binutils-dev \
+    libegl1-mesa-dev \
+    libgles2-mesa-dev \
+    libxcb-composite0-dev \
+    libxcursor-dev \
+    libcairo2-dev \
+    libpixman-1-dev \
+    libgbm-dev \
+    libmtdev-dev \
+    libinput-dev \
+    libxkbcommon-dev \
+    libpam0g-dev \
+    libgflags-dev \
+    libgoogle-glog-dev \
+    libssl-dev \
+    libdouble-conversion-dev \
+    libevent-dev \
+    libboost-context-dev \
+    libboost-chrono-dev \
+    libboost-filesystem-dev \
+    libboost-locale-dev \
+    libboost-program-options-dev \
+    libboost-regex-dev \
+    libboost-system-dev \
+    libboost-thread-dev \
+    libsdl2-dev \
+    libopencv-dev \
+    libjsoncpp-dev \
+    libusb-1.0-0-dev \
+    libspdlog-dev
+
+```
+
+Detailed instructions on which git repositories are needed and special instructions for each one are given below. You will also need the Haskell `stack` tool available for download at [https://docs.haskellstack.org/en/stable/README/]. Once all the dependencies are built and installed you can run `stack setup` followed by `stack build` in the top level of SimulaHS to get a build.
+
+
