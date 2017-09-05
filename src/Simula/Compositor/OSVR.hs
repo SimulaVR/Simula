@@ -96,8 +96,10 @@ osvrGetPose ctx path = do
               writeMVar (pt ^. position) pos
               rot <- getRotationFromReport p >>= mkV4fromQuat
               writeMVar (pt ^. orientation) rot
-              return pt
-            _ -> ioError $ userError ("Could not fetch pose from " ++ pathStr)
+              free tv >> free ps >> return pt
+            _ -> do
+              free tv >> free ps
+              ioError $ userError ("Could not fetch pose from " ++ pathStr)
   where
     pathStr = T.unpack path
 
