@@ -1,4 +1,4 @@
-module Simula.NewCompositor.OpenGL where
+module Simula.Compositor.OpenGL where
 
 import Control.Applicative
 import Control.Monad
@@ -13,8 +13,8 @@ import GHC.Stack
 import Graphics.Rendering.OpenGL
 import Foreign
 
-import Simula.NewCompositor.Geometry
-import Simula.NewCompositor.Types
+import Simula.Compositor.Geometry
+import Simula.Compositor.Types
 
 data ViewPort = ViewPort {
   _viewPortOffsetFactor :: MVar (V2 Float),

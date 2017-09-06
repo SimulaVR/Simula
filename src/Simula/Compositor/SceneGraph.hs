@@ -1,4 +1,4 @@
-module Simula.NewCompositor.SceneGraph where
+module Simula.Compositor.SceneGraph where
 
 import Control.Lens
 import Control.Monad
@@ -16,12 +16,12 @@ import System.Clock
 import Simula.WaylandServer
 import Simula.MotorcarServer
 
-import Simula.NewCompositor.Compositor
-import Simula.NewCompositor.Geometry
-import Simula.NewCompositor.OpenGL
-import {-# SOURCE #-} Simula.NewCompositor.WindowManager
-import Simula.NewCompositor.Types
-import Simula.NewCompositor.Utils
+import Simula.Compositor.Compositor
+import Simula.Compositor.Geometry
+import Simula.Compositor.OpenGL
+import {-# SOURCE #-} Simula.Compositor.WindowManager
+import Simula.Compositor.Types
+import Simula.Compositor.Utils
 
 data BaseSceneGraphNode = BaseSceneGraphNode {
   _graphNodeChildren :: MVar [Some SceneGraphNode],
@@ -253,7 +253,6 @@ setNodeWorldTransform this tf = nodeParent this >>= \case
   Just (Some prt) -> fmap (!*! tf) (inv44 <$> nodeWorldTransform prt) >>= setNodeTransform this
   Nothing -> setNodeTransform this tf
 
-
 nodeMapOntoSubtree :: SceneGraphNode a => a -> (Some SceneGraphNode -> Maybe Scene -> IO ()) -> Maybe Scene -> IO ()
 nodeMapOntoSubtree this func scene = do
   func (Some this) scene
@@ -372,12 +371,9 @@ newViewPoint near far display parent transform viewPortParams centerOfProjection
       modifyMVar' (vp ^. viewPointResources) (res:)
       viewPointSendCurrentStateToSingleClient vp res
 
-
 destroyViewPoint :: ViewPoint -> IO ()
 destroyViewPoint this = undefined
 
---TODO these might be wrong
---TODO FIX WORLD TRANSFORM ===========>
 viewPointUpdateViewMatrix :: ViewPoint -> IO ()
 viewPointUpdateViewMatrix this = do
   trans <- nodeWorldTransform this

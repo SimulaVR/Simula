@@ -1,10 +1,10 @@
-module Simula.NewCompositor.Event where
+module Simula.Compositor.Event where
 
 import Data.Word
 import Linear
 
-import Simula.NewCompositor.Wayland.Input
-import Simula.NewCompositor.Types
+import Simula.Compositor.Wayland.Input
+import Simula.Compositor.Types
 
 data InputEvent
   = MouseEvent (Some Seat) MouseEvent

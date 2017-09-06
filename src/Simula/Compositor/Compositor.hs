@@ -1,15 +1,15 @@
-module Simula.NewCompositor.Compositor where
+module Simula.Compositor.Compositor where
 
 import Control.Concurrent.MVar
 import Foreign
 
 import Simula.WaylandServer
 
-import {-# SOURCE #-} Simula.NewCompositor.SceneGraph
-import Simula.NewCompositor.OpenGL
-import Simula.NewCompositor.Types
-import Simula.NewCompositor.Wayland.Input
-import Simula.NewCompositor.Wayland.Output
+import {-# SOURCE #-} Simula.Compositor.SceneGraph
+import Simula.Compositor.OpenGL
+import Simula.Compositor.Types
+import Simula.Compositor.Wayland.Input
+import Simula.Compositor.Wayland.Output
 
 
 data CompositorType = QtWayland | OsvrQtWayland

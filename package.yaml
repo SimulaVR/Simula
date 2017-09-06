@@ -31,6 +31,7 @@ dependencies:
   - file-embed
   - hashable
   - inline-c
+  - inline-c-cpp
   - lens
   - linear
   - linear-opengl
@@ -42,6 +43,7 @@ dependencies:
   - unordered-containers
   - template-haskell
   - transformers
+  - text
   - vector
   - unix
   - StateVar
@@ -63,22 +65,22 @@ library:
     - simula-wayland/cbits
 
   exposed-modules:
-    - Simula.NewCompositor.SceneGraph
-    - Simula.NewCompositor.SceneGraph.Wayland
-    - Simula.NewCompositor.OpenGL
-    - Simula.NewCompositor.Types
-    - Simula.NewCompositor.Utils
-    - Simula.NewCompositor.Compositor
-    - Simula.NewCompositor.WindowManager
-    - Simula.NewCompositor.Wayland.Input
-    - Simula.NewCompositor.Wayland.Output
-    - Simula.NewCompositor.Geometry
-    - Simula.NewCompositor.Weston
+    - Simula.Utils
+    - Simula.Compositor.SceneGraph
+    - Simula.Compositor.SceneGraph.Wayland
+    - Simula.Compositor.OpenGL
+    - Simula.Compositor.Types
+    - Simula.Compositor.Utils
+    - Simula.Compositor.Compositor
+    - Simula.Compositor.WindowManager
+    - Simula.Compositor.Wayland.Input
+    - Simula.Compositor.Wayland.Output
+    - Simula.Compositor.Geometry
+    - Simula.Compositor.Weston
 
 executables:
   simple-compositor:
     <<: *executable_options
     main: SimpleCompositor.hs
     source-dirs: app
-    dependencies: [SimulaHS]
-
+    dependencies: [dbus, SimulaHS]

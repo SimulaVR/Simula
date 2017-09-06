@@ -1,5 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
-module Simula.NewCompositor.WindowManager where
+module Simula.Compositor.WindowManager where
 
 import Control.Concurrent.MVar
 import Control.Lens
@@ -14,14 +14,14 @@ import Linear
 import Simula.WaylandServer
 import Simula.MotorcarServer
 
-import Simula.NewCompositor.Compositor
-import Simula.NewCompositor.Event
-import Simula.NewCompositor.SceneGraph
-import Simula.NewCompositor.SceneGraph.Wayland
-import Simula.NewCompositor.Wayland.Input
-import Simula.NewCompositor.Wayland.Output
-import Simula.NewCompositor.Types
-import Simula.NewCompositor.Utils
+import Simula.Compositor.Compositor
+import Simula.Compositor.Event
+import Simula.Compositor.SceneGraph
+import Simula.Compositor.SceneGraph.Wayland
+import Simula.Compositor.Wayland.Input
+import Simula.Compositor.Wayland.Output
+import Simula.Compositor.Types
+import Simula.Compositor.Utils
 
 data WindowManager = WindowManager {
   _windowManagerScene :: Scene,
@@ -146,7 +146,7 @@ wmMapSurface this surface sty = do
     
     popupZOffset = 0.05
     zOffset = -1.5
-    thetaOffset = -30
+    thetaOffset = -10
 
     handlePopupTransient :: WaylandSurfaceNode a => a -> IO ()
     handlePopupTransient node = do

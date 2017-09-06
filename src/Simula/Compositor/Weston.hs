@@ -1,4 +1,4 @@
-module Simula.NewCompositor.Weston where
+module Simula.Compositor.Weston where
 
 import Control.Concurrent
 import Control.Lens
@@ -20,16 +20,19 @@ import Simula.WaylandServer
 import Simula.Weston
 import Simula.WestonDesktop
 
-import Simula.NewCompositor.Compositor
-import Simula.NewCompositor.Geometry
-import Simula.NewCompositor.OpenGL
-import Simula.NewCompositor.SceneGraph
-import Simula.NewCompositor.SceneGraph.Wayland
-import Simula.NewCompositor.Wayland.Input
-import Simula.NewCompositor.Wayland.Output
-import Simula.NewCompositor.WindowManager
-import Simula.NewCompositor.Utils
-import Simula.NewCompositor.Types
+import Simula.Compositor.Compositor
+import Simula.Compositor.Geometry
+import Simula.Compositor.OpenGL
+import Simula.Compositor.SceneGraph
+import Simula.Compositor.SceneGraph.Wayland
+import Simula.Compositor.Wayland.Input
+import Simula.Compositor.Wayland.Output
+import Simula.Compositor.WindowManager
+import Simula.Compositor.Utils
+import Simula.Compositor.Types
+
+import Simula.OSVR
+import Simula.Compositor.OSVR
 
 data SimulaSurface = SimulaSurface {
   _simulaSurfaceBase :: BaseWaylandSurface,
@@ -52,7 +55,8 @@ data SimulaCompositor = SimulaCompositor {
   _simulaCompositorOpenGlData :: OpenGLData,
   _simulaCompositorOutput :: MVar (Maybe WestonOutput),
   _simulaCompositorGlContext :: MVar (Maybe SimulaOpenGLContext),
-  _simulaCompositorNormalLayer :: WestonLayer
+  _simulaCompositorNormalLayer :: WestonLayer,
+  _simulaCompositorOSVR :: SimulaOSVRClient
   } deriving Eq
 
 data SimulaSeat = SimulaSeat {
@@ -109,7 +113,7 @@ instance OpenGLContext SimulaOpenGLContext where
       egldp = this ^. simulaOpenGlContextEglDisplay
       eglsurf = this ^. simulaOpenGlContextEglSurface
 
-
+  glCtxDefaultFramebufferSize this = return $ V2 2160 1200
 
 instance HasBaseWaylandSurface SimulaSurface where
   baseWaylandSurface = simulaSurfaceBase
@@ -330,7 +334,6 @@ instance Compositor SimulaCompositor where
       _ -> do
         simulaSurface <- createSurface comp surface
         return (Some simulaSurface)
-    
 
 setSurfaceMapped :: SimulaSurface -> Bool -> IO ()
 setSurfaceMapped simulaSurface status = do
@@ -357,7 +360,6 @@ setSurfaceMapped simulaSurface status = do
           wmUnmapSurface wm simulaSurface
       | otherwise = return ()
 
-  
 
 createSurface :: SimulaCompositor -> WestonDesktopSurface  -> IO SimulaSurface
 createSurface compositor surface = do
@@ -404,11 +406,10 @@ newSimulaCompositor scene display = do
   bgLayer <- newWestonLayer wcomp
   weston_layer_set_position mainLayer WestonLayerPositionBackground
 
-
   compositor <- SimulaCompositor scene display wldp wcomp
                 <$> newMVar M.empty <*> newOpenGlData
                 <*> newMVar Nothing <*> newMVar Nothing
-                <*> pure mainLayer
+                <*> pure mainLayer <*> initSimulaOSVRClient
 
   windowedApi <- weston_windowed_output_get_api wcomp
 
@@ -440,7 +441,10 @@ newSimulaCompositor scene display = do
   interfacePtr <- new interface
   weston_compositor_set_default_pointer_grab wcomp interfacePtr
 
-  return compositor
+  setupHeadTracking (_simulaCompositorOSVR compositor)
+    >> setupLeftHandTracking (_simulaCompositorOSVR compositor)
+    >> setupRightHandTracking (_simulaCompositorOSVR compositor)
+    >> return compositor
 
   where
     onSurfaceCreated compositor surface  _ = do
@@ -642,39 +646,98 @@ compositorRender comp = do
   Just glctx <- readMVar (comp ^. simulaCompositorGlContext)
   Just output <- readMVar (comp ^. simulaCompositorOutput)
 
-
   glCtxMakeCurrent glctx
   -- set up context
-  
+
   let surfaces = M.keys surfaceMap
-  let scene = comp ^. simulaCompositorScene
+  let scene  = comp ^. simulaCompositorScene
+  let simDisplay = comp ^. simulaCompositorDisplay
+  let osvrCtx = comp ^. simulaCompositorOSVR.simulaOsvrContext
+  let osvrDisplay = comp ^. simulaCompositorOSVR.simulaOsvrDisplay
 
   time <- getTime Realtime
-  
   scenePrepareForFrame scene time
   checkForErrors
-  weston_output_schedule_repaint output
+  osvrClientUpdate osvrCtx
+
+  case osvrDisplay of
+    Nothing -> do -- ioError $ userError "Could not initialize display in OSVR"
+      putStrLn "[INFO] no OSVR display is connected"
+
+      -- We can still render to wayland though
+      weston_output_schedule_repaint output
+      headP <- osvrGetHeadPose osvrCtx
+      newDisplay <- moveCamera simDisplay headP
+      writeMVar (scene ^. sceneDisplays) [newDisplay]
+
+      osvrGetLeftHandPose osvrCtx
+      osvrGetRightHandPose osvrCtx
+
+      sceneDrawFrame scene
+      checkForErrors
+
+      Some seat <- compositorSeat comp
+      pointer <- seatPointer seat
+      pos <- readMVar (pointer ^. pointerGlobalPosition)
+      drawMousePointer (comp ^. simulaCompositorDisplay) (comp ^. simulaCompositorOpenGlData.openGlDataMousePointer) pos
   
-  moveCamera
-  sceneDrawFrame scene
-  checkForErrors
+      emitOutputFrameSignal output
+      eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
 
-  Some seat <- compositorSeat comp
-  pointer <- seatPointer seat
-  pos <- readMVar (pointer ^. pointerGlobalPosition) 
-  drawMousePointer (comp ^. simulaCompositorDisplay) (comp ^. simulaCompositorOpenGlData.openGlDataMousePointer) pos
-  
-  sceneFinishFrame scene
-  checkForErrors
-    
+      sceneFinishFrame scene
+      checkForErrors
 
+    Just display -> do
+      -- TODO: make the Head Mounted Display work at all
+      (value, viewers) <- osvrClientGetNumViewers display
+      case value of
+          ReturnSuccess -> do
+            putStrLn $ "[INFO] viewer count is " ++ show viewers
+            weston_output_schedule_repaint output
 
-  emitOutputFrameSignal output
-  eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
-  
+            sceneDrawFrame scene
+            checkForErrors
 
-  where
-    moveCamera = return ()
+            when (viewers > 0) $ do
+                forM_ [0..(fromIntegral viewers - 1)] $ \viewer -> do
+                    -- TODO: Check for Errors for ReturnSuccess
+                    (ReturnSuccess, eyes) <- osvrClientGetNumEyesForViewer display (fromIntegral viewer)
+                    if eyes < 1 then error "Well, we got no eyes!"
+                    else do
+                        forM_ [0..(eyes - 1)] $ \eye -> do
+                          viewMat <- osvrClientGetViewerEyeViewMatrixf' display viewer (fromIntegral eye)
+
+                          (vp:_) <- readMVar (comp ^. simulaCompositorDisplay.displayViewpoints)
+                          --TODO test
+                          setNodeWorldTransform vp viewMat
+                          viewPointUpdateViewMatrix vp
+
+                          -- TODO: Check for Errors for ReturnSuccess
+                          (ReturnSuccess, osvrSurfaces) <-
+                            osvrClientGetNumSurfacesForViewerEye display viewer (fromIntegral eye)
+
+                          forM_ [0..osvrSurfaces] $ \osvrSurface -> do
+                            projMat <- osvrClientGetViewerEyeSurfaceProjectionMatrixf' display viewer (fromIntegral eye) osvrSurface (vp^.viewPointNear) (vp^.viewPointFar)
+
+                            viewPointOverrideProjectionMatrix vp projMat
+                            Some seat <- compositorSeat comp
+                            pointer <- seatPointer seat
+                            pos <- readMVar (pointer ^. pointerGlobalPosition)
+                            drawMousePointer (comp ^. simulaCompositorDisplay) (comp ^. simulaCompositorOpenGlData.openGlDataMousePointer) pos
+
+                            emitOutputFrameSignal output
+                            eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
+            sceneFinishFrame scene
+            checkForErrors
+
+moveCamera :: Display -> PoseTracker -> IO Display
+moveCamera d p = return d
+
+drawLeftHand :: PoseTracker -> IO ()
+drawLeftHand p = return ()
+
+drawRightHand :: PoseTracker -> IO ()
+drawRightHand p = return ()
 {-
     if(m_camIsMoving) {
         glm::vec4 camPos;

@@ -1,5 +1,5 @@
 {-# LANGUAGE PatternSynonyms #-}
-module Simula.NewCompositor.SceneGraph.Wayland where
+module Simula.Compositor.SceneGraph.Wayland where
 
 import Control.Lens
 import Control.Monad
@@ -18,12 +18,12 @@ import Foreign.C
 import Simula.WaylandServer
 import Simula.MotorcarServer
 
-import Simula.NewCompositor.Geometry
-import Simula.NewCompositor.Utils
-import Simula.NewCompositor.OpenGL
-import Simula.NewCompositor.SceneGraph
-import Simula.NewCompositor.Types
-import Simula.NewCompositor.Wayland.Output
+import Simula.Compositor.Geometry
+import Simula.Compositor.Utils
+import Simula.Compositor.OpenGL
+import Simula.Compositor.SceneGraph
+import Simula.Compositor.Types
+import Simula.Compositor.Wayland.Output
 
 data BaseWaylandSurfaceNode = BaseWaylandSurfaceNode {
   _waylandSurfaceNodeBase :: BaseDrawable,
