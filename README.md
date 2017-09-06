@@ -2,17 +2,20 @@
 
 The process to try out `SimulaHS`, is as simple as 1, 2, 3, 4a or 4b, 5 with only minor software compliation in between. You will need to install software from your linux distributor and have your machine whirl and buzz for minutes on end with no output to test this collection of Haskell, C, and C++ code. If you are up for the challenge then you can find most of a recipie below. Many of the instructions have only been attempted once, if any at all, and can only be cast as a guide to get running. With those precautions aside, here's what someone got working once, sometime, probably.
 
-Step 1: Clone all submodules
-Step 2: Build and Install requisite packages for your system
-Step 3: Build SimulaHS with
+1. Clone all submodules
+
+2. Build and Install requisite packages for your system
+
+3. Build SimulaHS with
     stack build --extra-lib-dirs="${HOME}"/.local/lib --extra-include-dirs="${HOME}"/.local/include
-Step 4a (_Default_): Run OSVR Server
+4. Load OSVR Server
+  *_Default_
     osvr_server
 
-Step 4b (_Advanced_): Run OSVR Server with a configuation file
+  *_Advanced_
     osvr_server /path/to/configuration-file.json
 
-Step 5: Run the simple compositor with
+5. Run the simple compositor with
     stack exec simple-compositor
 
 # Cloning Submodules
