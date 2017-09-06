@@ -6,13 +6,17 @@ The process to try out `SimulaHS`, is as simple as 1, 2, 3, 4a or 4b, 5 with onl
 
 2. Build and Install requisite packages for your system
 
-3. Build SimulaHS, `stack build --extra-lib-dirs="${HOME}"/.local/lib --extra-include-dirs="${HOME}"/.local/include`
+3. Build SimulaHS
+
+   `stack build --extra-lib-dirs="${HOME}"/.local/lib --extra-include-dirs="${HOME}"/.local/include`
 
 4. Load OSVR Server
 
-  *Default `osvr_server`
+  * Default
+      `osvr_server`
 
-  *Advanced `osvr_server /path/to/configuration-file.json`
+  * Advanced 
+      `osvr_server /path/to/configuration-file.json`
 
 5. Run the simple compositor with `stack exec simple-compositor`
 
