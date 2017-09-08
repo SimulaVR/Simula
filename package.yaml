@@ -49,7 +49,7 @@ dependencies:
   - StateVar
   - simula-wayland
   - simula-osvr
-
+  - simula-openvr
 _executable_options: &executable_options
   dependencies: [base, Simula]
   ghc-options: [-threaded, -rtsopts, -with-rtsopts=-N]
