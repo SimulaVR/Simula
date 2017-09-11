@@ -1,4 +1,4 @@
-![Temporary Logo](http://www.digitaldogs.com/wp-content/uploads/2014/04/simula.gif)
+![Temporary Logo](./doc/TEMP_LOGO.png)
 
 Simula is a VR window manager for Linux. Its goal is to facilitate an open-source future for VR & AR productivity by running on standalone headsets.
 
@@ -13,3 +13,7 @@ Simula is a VR window manager for Linux. Its goal is to facilitate an open-sourc
 - TODO: [How to Contribute](./CONTRIBUTING.md)
 - TODO: [Contributors](./CONTRIBUTORS.md)
 - TODO: [Releases & Changelog](https://github.com/georgewsinger/SimulaHS/releases)
+
+## Community
+- [#simulavr @ Slack](simulavr.slack.com)
+- TODO: [Simula Home]()
