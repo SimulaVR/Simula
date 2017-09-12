@@ -31,8 +31,8 @@ import Simula.Compositor.WindowManager
 import Simula.Compositor.Utils
 import Simula.Compositor.Types
 
-import Simula.OSVR
-import Simula.Compositor.OSVR
+-- import Simula.OSVR            -- nix strip
+-- import Simula.Compositor.OSVR -- nix strip
 
 data SimulaSurface = SimulaSurface {
   _simulaSurfaceBase :: BaseWaylandSurface,
@@ -55,8 +55,8 @@ data SimulaCompositor = SimulaCompositor {
   _simulaCompositorOpenGlData :: OpenGLData,
   _simulaCompositorOutput :: MVar (Maybe WestonOutput),
   _simulaCompositorGlContext :: MVar (Maybe SimulaOpenGLContext),
-  _simulaCompositorNormalLayer :: WestonLayer,
-  _simulaCompositorOSVR :: SimulaOSVRClient
+  _simulaCompositorNormalLayer :: WestonLayer --nix-strip
+--  _simulaCompositorOSVR :: SimulaOSVRClient --nix-strip
   } deriving Eq
 
 data SimulaSeat = SimulaSeat {
@@ -409,7 +409,8 @@ newSimulaCompositor scene display = do
   compositor <- SimulaCompositor scene display wldp wcomp
                 <$> newMVar M.empty <*> newOpenGlData
                 <*> newMVar Nothing <*> newMVar Nothing
-                <*> pure mainLayer <*> initSimulaOSVRClient
+                <*> pure mainLayer
+                -- <*> initSimulaOSVRClient --nix strip
 
   windowedApi <- weston_windowed_output_get_api wcomp
 
@@ -441,10 +442,11 @@ newSimulaCompositor scene display = do
   interfacePtr <- new interface
   weston_compositor_set_default_pointer_grab wcomp interfacePtr
 
-  setupHeadTracking (_simulaCompositorOSVR compositor)
-    >> setupLeftHandTracking (_simulaCompositorOSVR compositor)
-    >> setupRightHandTracking (_simulaCompositorOSVR compositor)
-    >> return compositor
+--  setupHeadTracking (_simulaCompositorOSVR compositor)           --nix strip
+--    >> setupLeftHandTracking (_simulaCompositorOSVR compositor)  --nix strip
+--    >> setupRightHandTracking (_simulaCompositorOSVR compositor) --nix strip
+--    >> return compositor                                         --nix strip
+  return compositor --nix strip
 
   where
     onSurfaceCreated compositor surface  _ = do
@@ -652,14 +654,15 @@ compositorRender comp = do
   let surfaces = M.keys surfaceMap
   let scene  = comp ^. simulaCompositorScene
   let simDisplay = comp ^. simulaCompositorDisplay
-  let osvrCtx = comp ^. simulaCompositorOSVR.simulaOsvrContext
-  let osvrDisplay = comp ^. simulaCompositorOSVR.simulaOsvrDisplay
+--  let osvrCtx = comp ^. simulaCompositorOSVR.simulaOsvrContext     --nix strip
+--  let osvrDisplay = comp ^. simulaCompositorOSVR.simulaOsvrDisplay --nix strip
 
   time <- getTime Realtime
   scenePrepareForFrame scene time
   checkForErrors
-  osvrClientUpdate osvrCtx
+--  osvrClientUpdate osvrCtx --nix strip
 
+{- nix strip
   case osvrDisplay of
     Nothing -> do -- ioError $ userError "Could not initialize display in OSVR"
       putStrLn "[INFO] no OSVR display is connected"
@@ -729,15 +732,16 @@ compositorRender comp = do
                             eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
             sceneFinishFrame scene
             checkForErrors
+    -}
 
-moveCamera :: Display -> PoseTracker -> IO Display
-moveCamera d p = return d
+--moveCamera :: Display -> PoseTracker -> IO Display --nix strip
+--moveCamera d p = return d --nix strip
 
-drawLeftHand :: PoseTracker -> IO ()
-drawLeftHand p = return ()
+--drawLeftHand :: PoseTracker -> IO () --nix strip
+--drawLeftHand p = return () --nix strip
 
-drawRightHand :: PoseTracker -> IO ()
-drawRightHand p = return ()
+--drawRightHand :: PoseTracker -> IO () --nix strip
+--drawRightHand p = return () --nix strip
 {-
     if(m_camIsMoving) {
         glm::vec4 camPos;
