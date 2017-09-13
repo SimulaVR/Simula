@@ -78,5 +78,5 @@ mainBody dbus = do
 main :: IO ()
 main = do
   --dbus <- connectDbus
-  --mainBody dbus :: Client
+  --mainBody dbus
   mainBody void

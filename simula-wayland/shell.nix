@@ -8,7 +8,7 @@ pkgs.haskell.lib.buildStackProject {
                              wayland-protocols
                              wayland
                              xorg.libX11
-                            (callPackage ./weston2.nix { }) # custom nix expression for weston2
+                            (callPackage ./weston2.nix { })
                           ];
   LANG = "en_US.UTF-8";
   TMPDIR = "/tmp";

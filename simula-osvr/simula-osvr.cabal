@@ -21,5 +21,3 @@ library
   default-language: Haskell2010
   extra-libraries:
       osvrClientKit
-  -- pkgconfig-depends: ?
-  --     osvrClientKit  ?
