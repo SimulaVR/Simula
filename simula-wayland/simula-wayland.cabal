@@ -30,8 +30,9 @@ library
       Simula.WestonDesktop                  
   default-language: Haskell2010
   pkgconfig-depends:
-      libweston-2
-    , libweston-desktop-2
-    , wayland-server
+      pixman-1
     , egl
-    , pixman-1              
+    , wayland-server
+    , libweston-2
+    , libweston-desktop-2
+    , egl

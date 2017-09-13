@@ -38,7 +38,7 @@ resolver: lts-9.2
 packages:
 - '.'
 - simula-wayland
-- simula-osvr
+#- simula-osvr
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:
@@ -70,39 +70,5 @@ allow-newer: true
 # compiler-check: newer-minor
 
 nix:
-  enable: false # we leave nix off by default; users must pass `stack --nix ...` to use it
-#  packages:
-# - gcc6
-# - autoconf
-# - autoconf-archive
-# - automake
-# - gnumake
-# - cmake
-# - libtool
-# - pkgconfig
-# - binutils
-# - eigen
-# - libusb1
-# - libxml2
-# - jsoncpp
-# - boost
-# - double_conversion
-# - libevent
-# - openssl
-# - opencv
-# - glog
-# - google-gflags
-# - pam
-# - mtdev
-# - SDL2
-# - mesa
-# - libinput
-# - libxkbcommon
-# - xorg.libxcb
-# - xorg.libXcursor
-# - xorg.pixman
-# - wayland-protocols
-# - wayland
-# - weston
-
-
+  enable:     false     # we leave nix off by default; users must pass `stack --nix ...` to use it
+  shell-file: shell.nix 
