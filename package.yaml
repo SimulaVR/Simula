@@ -48,7 +48,7 @@ dependencies:
   - unix
   - StateVar
   - simula-wayland
-#  - simula-osvr # nix strip
+  - simula-osvr
 
 
 

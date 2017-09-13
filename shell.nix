@@ -8,7 +8,9 @@ pkgs.haskell.lib.buildStackProject {
                              wayland-protocols
                              wayland
                              xorg.libX11
-                            (callPackage ./weston2.nix { }) # custom nix expression for weston2
+                             dbus
+                             (callPackage simula-wayland/weston2.nix { })
+                             (callPackage simula-osvr/OSVR-Core.nix { })
                           ];
   LANG = "en_US.UTF-8";
   TMPDIR = "/tmp";
