@@ -11,6 +11,8 @@ pkgs.haskell.lib.buildStackProject {
                              dbus
                              (callPackage simula-wayland/weston2.nix { })
                              (callPackage simula-osvr/OSVR-Core.nix { })
+                             libxml2
+                             libxkbcommon
                           ];
   LANG = "en_US.UTF-8";
   TMPDIR = "/tmp";
