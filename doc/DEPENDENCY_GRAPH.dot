@@ -1,0 +1,19 @@
+digraph {
+  subgraph cluster_0 {
+    label="Haskell Modules";
+    "Simula" -> "simula-wayland";
+    "Simula" -> "simula-osvr";
+    "Simula" -> "simula-openvr";
+    color=red;
+  }
+  subgraph cluster_1 {
+     label="C Libs";
+     "simula-wayland" -> "weston-desktop";
+     "simula-wayland" -> "wayland (+protocol extensions)";
+     "simula-osvr" -> "osvrClientKit";
+     "simula-openvr" -> "openvr_capi";
+     color=green
+    }
+    "openvr_capi" -> "SteamVR"
+    "SteamVR"     -> "nvidia-381.26.13+"
+}
