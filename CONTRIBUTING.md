@@ -1,6 +1,6 @@
 ## 1 Code Overview
 
-Simula is a spiritual fork (i.e., complete reimplementation and improvement over) [motorcar](https://github.com/evil0sheep/motorcar). To read about motorcar, see [Toward General Purpose 3D User Interfaces: Extending Windowing Systems to Three Dimensions](https://github.com/evil0sheep/MastersThesis/blob/master/thesis.pdf?raw=true).
+Simula is a complete reimplementation of and improvement over [motorcar](https://github.com/evil0sheep/motorcar). To read about motorcar, see *[Toward General Purpose 3D User Interfaces: Extending Windowing Systems to Three Dimensions](https://github.com/evil0sheep/MastersThesis/blob/master/thesis.pdf?raw=true)*.
 
 Here is the project's dependency graph:
 
