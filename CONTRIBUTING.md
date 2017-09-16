@@ -1,14 +1,16 @@
 ## 1 Code Overview
 
+Simula is a spiritual fork (i.e., complete reimplementation and improvement over) [motorcar](https://github.com/evil0sheep/motorcar). To read about motorcar, see [Toward General Purpose 3D User Interfaces: Extending Windowing Systems to Three Dimensions](https://github.com/evil0sheep/MastersThesis/blob/master/thesis.pdf?raw=true).
+
+Here is the project's dependency graph:
+
 ![Project Dependency Graph](./doc/DEPENDENCY_GRAPH.png)
 
 - The top level of this project hosts the primary Haskell modules.
 
-- The embedded submodules `simula-wayland`, `simula-osvr`, and `simula-openvr` host FFI marshalling modules (via c2hs) to the respective C libraries shown above.
+- The embedded submodules `simula-wayland`, `simula-osvr`, and `simula-openvr` contain FFI bindings (via c2hs) that connect to their respective C libraries shown above.
 
-- In order to run the vive-compositor, this graph also shows a dependency on `nvidia-381.26.13` or greater, which `nix` cannot provide. You do not need nvidia drivers, however, to run the `base-compositor`.
-
-- Simula is a spiritual fork (i.e., complete reimplementation and improvement over) [motorcar](https://github.com/evil0sheep/motorcar). To read about motorcar, see [Toward General Purpose 3D User Interfaces: Extending Windowing Systems to Three Dimensions](https://github.com/evil0sheep/MastersThesis/blob/master/thesis.pdf?raw=true).
+- In order to run the vive-compositor, you will need `nvidia-381.26.13` or greater installed on your system, which (unfortunately) `nix` cannot provide. You do not need nvidia drivers, however, to run the `base-compositor`.
 
 ## 2 How to Contribute
 

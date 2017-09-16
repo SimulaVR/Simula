@@ -1,8 +1,8 @@
 ![Temporary Logo](./doc/TEMP_LOGO.png)
 
-Simula is a 3D window manager for Linux. Its goal is to facilitate an open-source future for VR & AR productivity by allowing people to run 2D and 3D Linux apps *simulataneously* in standalone headsets.
+Simula is a 3D window manager for Linux. Its goal is to facilitate a Linux future for VR & AR. In the short-run, that means allowing people to run 2D Linux apps with current generation headsets. In the long-run, that means allowing people to run Linux in standalone AR & VR HMDs.
 
-Currently, it is aiming to be compatible with the HTC Vive.
+Currently, Simula is aiming to be compatible with the HTC Vive.
 
 - TODO: Better logo
 - TODO: continuous build status?
