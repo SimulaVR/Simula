@@ -28,10 +28,15 @@ The project contains two compositors: base-compositor and vive-compositor.
 $ stack [--nix --no-exec-pure] exec base-compositor # include the flags only if you built w/nix
 ```
 
-2. **vive-compositor (doesn't currently run):** Attempts (and fails) to the compositor in an HTC Vive headset. You will need two terminals to launch this compositor: one to launch the OSVR server and the other to launch the actual vive-compositor.
+2. **vive-compositor (doesn't currently run):** Attempts (and fails) to launch the compositor in an HTC Vive headset. You will need two terminals to launch this compositor. In the first terminal, you must launch the OSVR server:
 
 ```
-$ nix-shell shell.nix              # not needed unless you built the project with nix
-$ osvr_server ./config_direct.json # or use config_extended.json for extended mode
-$ stack exec vive-compositor       # launch this in a second terminal
+$ nix-shell ./shell.nix                             # not needed unless you built the project with nix
+$ osvr_server ./config/ViveDirectMode.json          # or use ViveExtendedMode.json for extended mode
+```
+
+In the second terminal, launch the vive-compositor:
+
+```
+$ stack [--nix --no-exec-pure] exec base-compositor # include the flags only if you built w/nix
 ```
