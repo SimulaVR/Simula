@@ -1,5 +1,5 @@
-### 1 Building
-#### 1.1 Building with Nix
+## 1 Building
+### 1.1 Building with Nix
 
 The easiest way to build Simula is to install `nix` and run
 
@@ -14,11 +14,11 @@ If you don't have `nix` installed, you can get it from your distro's package man
 curl https://nixos.org/nix/install | sh
 ```
 
-#### 1.2 Building without Nix
+### 1.2 Building without Nix
 
 Not recommended, but see [here](./BUILD_WITHOUT_NIX.md).
 
-### 2 Launching
+## 2 Launching
 
 The project contains two compositors: base-compositor and vive-compositor.
 
@@ -38,5 +38,5 @@ $ osvr_server ./config/ViveDirectMode.json          # or use ViveExtendedMode.js
 In the second terminal, launch the vive-compositor:
 
 ```
-$ stack [--nix --no-exec-pure] exec base-compositor # include the flags only if you built w/nix
+$ stack [--nix --no-exec-pure] exec vive-compositor # include the flags only if you built w/nix
 ```
