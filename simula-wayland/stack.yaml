@@ -64,3 +64,7 @@ extra-package-dbs: []
 #
 # Allow a newer minor version of GHC than the snapshot specifies
 # compiler-check: newer-minor
+
+nix:
+  enable:     false     # we leave nix off by default; users must pass `stack --nix ...` to use it
+  shell-file: shell.nix 

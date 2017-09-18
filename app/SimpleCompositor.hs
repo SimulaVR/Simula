@@ -56,7 +56,7 @@ cleanupDbus dbus = do
     NameNotOwner -> putStrLn "Attemped to release com.SimulaHS.GenericCompositor from DBus and we are not the owner"
     NameNonExistent -> putStrLn "Attemped to release com.SimulaHS.GenericCompositor from DBus and the name does not exist"        
 
-mainBody :: Client -> IO ()
+mainBody :: a -> IO ()
 mainBody dbus = do
   seat <- newSimulaSeat
   let dpRot = axisAngle (V3 1 0 0) (radians (negate 25))
@@ -75,8 +75,8 @@ mainBody dbus = do
     wm <- newWindowManager scene seat
   startCompositor comp
 
-
 main :: IO ()
 main = do
-  dbus <- connectDbus
-  mainBody dbus
+  --dbus <- connectDbus
+  --mainBody dbus
+  mainBody void

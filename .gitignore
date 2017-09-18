@@ -14,3 +14,10 @@ src/**/*.cpp
 src/**/*.c
 *.so
 SimulaHS.cabal
+
+# osvr_server
+lighthousedb.json
+lhr-*/
+
+# emacs TAG file
+TAGS

@@ -409,7 +409,8 @@ newSimulaCompositor scene display = do
   compositor <- SimulaCompositor scene display wldp wcomp
                 <$> newMVar M.empty <*> newOpenGlData
                 <*> newMVar Nothing <*> newMVar Nothing
-                <*> pure mainLayer <*> initSimulaOSVRClient
+                <*> pure mainLayer
+                <*> initSimulaOSVRClient
 
   windowedApi <- weston_windowed_output_get_api wcomp
 
