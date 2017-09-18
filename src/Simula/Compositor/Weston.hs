@@ -309,6 +309,17 @@ instance Compositor SimulaCompositor where
     setRepaintOutput wc newFunc
     weston_compositor_wake wc
     putStrLn "Compositor start"
+
+    Just output <- readMVar (comp ^. simulaCompositorOutput)
+    forkOS $ forever $ weston_output_schedule_repaint output >> threadDelay 1000
+    forkIO $ forever $ do
+        let scene = comp ^. simulaCompositorScene
+        diffTime <- liftM2 diffTimeSpec (readMVar $ scene ^. sceneLastTimestamp) (readMVar $ scene ^. sceneCurrentTimestamp)
+        let diff = fromIntegral $ toNanoSecs diffTime
+        let fps = floor (10^9/diff)
+        putStrLn $ "FPS: " ++ show fps
+        threadDelay 1000000
+
     wl_display_run $ comp ^. simulaCompositorWlDisplay
 
     where
@@ -385,6 +396,7 @@ newSimulaCompositor :: Scene -> Display -> IO SimulaCompositor
 newSimulaCompositor scene display = do
   wldp <- wl_display_create
   wcomp <- weston_compositor_create wldp nullPtr
+  westonCompositorSetRepaintMsec wcomp 1000
 
   setup_weston_log_handler
   westonCompositorSetEmptyRuleNames wcomp
@@ -663,16 +675,16 @@ compositorRender comp = do
 
   case osvrDisplay of
     Nothing -> do -- ioError $ userError "Could not initialize display in OSVR"
-      putStrLn "[INFO] no OSVR display is connected"
+--      putStrLn "[INFO] no OSVR display is connected"
 
       -- We can still render to wayland though
       weston_output_schedule_repaint output
-      headP <- osvrGetHeadPose osvrCtx
-      newDisplay <- moveCamera simDisplay headP
-      writeMVar (scene ^. sceneDisplays) [newDisplay]
+--      headP <- osvrGetHeadPose osvrCtx
+--      newDisplay <- moveCamera simDisplay headP
+--      writeMVar (scene ^. sceneDisplays) [newDisplay]
 
-      osvrGetLeftHandPose osvrCtx
-      osvrGetRightHandPose osvrCtx
+--      osvrGetLeftHandPose osvrCtx
+--      osvrGetRightHandPose osvrCtx
 
       sceneDrawFrame scene
       checkForErrors

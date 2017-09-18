@@ -281,7 +281,7 @@ setSceneTimestamp this ts = do
 
 scenePrepareForFrame :: Scene -> TimeSpec -> IO ()
 scenePrepareForFrame this ts = do
-  setSceneTimestamp this ts
+  setSceneTimestamp this ts  
   nodeMapOntoSubtree this (\(Some node) -> nodeOnFrameBegin node) (Just this)
   dps <- readMVar (_sceneDisplays this)
   forM_ dps $ \dp -> do
