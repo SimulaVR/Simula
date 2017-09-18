@@ -15,5 +15,5 @@ Currently, Simula is aiming to be compatible with the HTC Vive.
 - TODO: [Releases & Changelog](https://github.com/georgewsinger/SimulaHS/releases)
 
 ## Community
-- [Gitter Channel](gitter.im/SimulaVR) (chat with contributors for support)
+- [Gitter Channel](www.gitter.im/SimulaVR) (chat with contributors for support)
 - TODO: [Simula Home]()
