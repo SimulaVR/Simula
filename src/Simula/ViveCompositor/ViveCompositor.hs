@@ -8,6 +8,7 @@ import Control.Concurrent.MVar
 import Data.Hashable
 import Data.Word
 import Data.Typeable
+import Data.Maybe
 import Foreign
 import Foreign.C
 import Graphics.Rendering.OpenGL hiding (scale, translate, rotate, Rect)
@@ -30,8 +31,7 @@ import Simula.BaseCompositor.Wayland.Output
 import Simula.BaseCompositor.WindowManager
 import Simula.BaseCompositor.Utils
 import Simula.BaseCompositor.Types
-
-import Simula.BaseCompositor.Weston
+import Simula.BaseCompositor.Weston hiding (moveCamera)
 
 import Simula.OSVR
 import Simula.ViveCompositor.OSVR
@@ -83,7 +83,7 @@ newViveCompositor scene display = do
                 <$> newMVar M.empty <*> newOpenGlData
                 <*> newMVar Nothing <*> newMVar Nothing
                 <*> pure mainLayer
-                -- <*> initSimulaOSVRClient
+                <*> initSimulaOSVRClient
 
   windowedApi <- weston_windowed_output_get_api wcomp
 
@@ -232,8 +232,7 @@ viveCompositorRender viveComp = do
       -- We can still render to wayland though
       weston_output_schedule_repaint output
       headP <- osvrGetHeadPose osvrCtx
-      newDisplay <- moveCamera simDisplay headP
-      writeMVar (scene ^. sceneDisplays) [newDisplay]
+      when (isJust headP) (moveCamera simDisplay (fromJust headP) >>= \d -> writeMVar (scene ^. sceneDisplays) [d])
 
       osvrGetLeftHandPose osvrCtx
       osvrGetRightHandPose osvrCtx
@@ -245,7 +244,7 @@ viveCompositorRender viveComp = do
       pointer <- seatPointer seat
       pos <- readMVar (pointer ^. pointerGlobalPosition)
       drawMousePointer (comp ^. baseCompositorDisplay) (comp ^. baseCompositorOpenGlData.openGlDataMousePointer) pos
-  
+
       emitOutputFrameSignal output
       eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
 

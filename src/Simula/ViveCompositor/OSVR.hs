@@ -77,7 +77,7 @@ interfaceQuery ctx@(SimulaOSVRClient osvrCtx _) path = do
           ReturnSuccess -> return $ Right rawPtr
           _ -> return $ Left v
 
-osvrGetPose :: OSVR_ClientContext -> Text -> IO PoseTracker
+osvrGetPose :: OSVR_ClientContext -> Text -> IO (Maybe PoseTracker)
 osvrGetPose ctx path = do
   q <- interfaceQuery (SimulaOSVRClient ctx Nothing) path
   case q of
@@ -96,20 +96,19 @@ osvrGetPose ctx path = do
               writeMVar (pt ^. position) pos
               rot <- getRotationFromReport p >>= mkV4fromQuat
               writeMVar (pt ^. orientation) rot
-              free tv >> free ps >> return pt
+              free tv >> free ps >> return (Just pt)
             _ -> do
-              free tv >> free ps
-              ioError $ userError ("Could not fetch pose from " ++ pathStr)
+              free tv >> free ps >> return Nothing
   where
     pathStr = T.unpack path
 
-osvrGetHeadPose :: OSVR_ClientContext -> IO PoseTracker
+osvrGetHeadPose :: OSVR_ClientContext -> IO (Maybe PoseTracker)
 osvrGetHeadPose ctx = osvrGetPose ctx "/me/head"
 
-osvrGetLeftHandPose :: OSVR_ClientContext -> IO PoseTracker
+osvrGetLeftHandPose :: OSVR_ClientContext -> IO (Maybe PoseTracker)
 osvrGetLeftHandPose ctx = osvrGetPose ctx "/me/hands/left"
 
-osvrGetRightHandPose :: OSVR_ClientContext -> IO PoseTracker
+osvrGetRightHandPose :: OSVR_ClientContext -> IO (Maybe PoseTracker)
 osvrGetRightHandPose ctx = osvrGetPose ctx "/me/hands/right"
 
 setupHeadTracking :: SimulaOSVRClient -> IO ()

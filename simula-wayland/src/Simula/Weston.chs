@@ -473,3 +473,7 @@ westonPointerSeat = {#get weston_pointer->seat#}
 {#fun weston_surface_get_position_y {`WestonSurface'} -> `Int' #}
 {#fun weston_surface_get_width {`WestonSurface'} -> `Int' #}
 {#fun weston_surface_get_height {`WestonSurface'} -> `Int' #}
+
+
+westonCompositorSetRepaintMsec :: WestonCompositor -> CInt -> IO ()
+westonCompositorSetRepaintMsec = {#set weston_compositor->repaint_msec#}
