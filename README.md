@@ -7,9 +7,9 @@ Currently, Simula is aiming to be compatible with the HTC Vive.
 - TODO: Better logo
 - TODO: continuous build status?
 
-## Building & Launching
-
 [![Join the chat at https://gitter.im/SimulaVR/Simula](https://badges.gitter.im/SimulaVR/Simula.svg)](https://gitter.im/SimulaVR/Simula?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
+## Building & Launching
 - [Build & Launch Instructions](./BUILD.md).
 
 ## Contributing
