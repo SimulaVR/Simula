@@ -1,4 +1,4 @@
-module Simula.Compositor.OSVR where
+module Simula.ViveCompositor.OSVR where
 
 import Data.Text as T
 import Data.Text (Text)
@@ -12,7 +12,7 @@ import Foreign
 import Foreign.C
 
 import Simula.OSVR
-import Simula.Compositor.Utils
+import Simula.BaseCompositor.Utils
 
 data SimulaOSVRClient = SimulaOSVRClient {
   _simulaOsvrContext :: OSVR_ClientContext,

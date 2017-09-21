@@ -1,4 +1,4 @@
-module Simula.Compositor.SceneGraph where
+module Simula.BaseCompositor.SceneGraph where
 
 data BaseSceneGraphNode 
 data Scene 

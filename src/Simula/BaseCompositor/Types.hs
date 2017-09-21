@@ -1,4 +1,4 @@
-module Simula.Compositor.Types where
+module Simula.BaseCompositor.Types where
 
 import GHC.Exts (Constraint)
 

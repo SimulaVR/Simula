@@ -1,5 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
-module Simula.Compositor.WindowManager where
+module Simula.BaseCompositor.WindowManager where
 
 import Control.Concurrent.MVar
 import Control.Lens
@@ -14,14 +14,14 @@ import Linear
 import Simula.WaylandServer
 import Simula.MotorcarServer
 
-import Simula.Compositor.Compositor
-import Simula.Compositor.Event
-import Simula.Compositor.SceneGraph
-import Simula.Compositor.SceneGraph.Wayland
-import Simula.Compositor.Wayland.Input
-import Simula.Compositor.Wayland.Output
-import Simula.Compositor.Types
-import Simula.Compositor.Utils
+import Simula.BaseCompositor.Compositor
+import Simula.BaseCompositor.Event
+import Simula.BaseCompositor.SceneGraph
+import Simula.BaseCompositor.SceneGraph.Wayland
+import Simula.BaseCompositor.Wayland.Input
+import Simula.BaseCompositor.Wayland.Output
+import Simula.BaseCompositor.Types
+import Simula.BaseCompositor.Utils
 
 data WindowManager = WindowManager {
   _windowManagerScene :: Scene,

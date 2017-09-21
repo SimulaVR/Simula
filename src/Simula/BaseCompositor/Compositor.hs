@@ -1,20 +1,18 @@
-module Simula.Compositor.Compositor where
+module Simula.BaseCompositor.Compositor where
 
 import Control.Concurrent.MVar
 import Foreign
 
 import Simula.WaylandServer
 
-import {-# SOURCE #-} Simula.Compositor.SceneGraph
-import Simula.Compositor.OpenGL
-import Simula.Compositor.Types
-import Simula.Compositor.Wayland.Input
-import Simula.Compositor.Wayland.Output
-
-
-data CompositorType = QtWayland | OsvrQtWayland
+import {-# SOURCE #-} Simula.BaseCompositor.SceneGraph
+import Simula.BaseCompositor.OpenGL
+import Simula.BaseCompositor.Types
+import Simula.BaseCompositor.Wayland.Input
+import Simula.BaseCompositor.Wayland.Output
 
 class Compositor a where
+  -- data SimulaSurface a -- data family pattern
   startCompositor :: a -> IO ()
 
   compositorOpenGLContext :: a -> IO (Some OpenGLContext)

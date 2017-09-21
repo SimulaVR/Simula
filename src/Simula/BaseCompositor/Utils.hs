@@ -1,4 +1,4 @@
-module Simula.Compositor.Utils where
+module Simula.BaseCompositor.Utils where
 
 import Control.Concurrent.MVar
 import Control.Exception.Base

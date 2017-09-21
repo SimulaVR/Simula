@@ -1,4 +1,4 @@
-module Simula.Compositor.Wayland.Input where
+module Simula.BaseCompositor.Wayland.Input where
 
 import Control.Lens
 import Control.Monad
@@ -6,10 +6,10 @@ import Control.Concurrent.MVar
 import Data.Typeable
 import Linear
 
-import Simula.Compositor.Types
-import {-# SOURCE #-} Simula.Compositor.SceneGraph.Wayland
-import Simula.Compositor.Wayland.Output
-import Simula.Compositor.Utils
+import Simula.BaseCompositor.Types
+import {-# SOURCE #-} Simula.BaseCompositor.SceneGraph.Wayland
+import Simula.BaseCompositor.Wayland.Output
+import Simula.BaseCompositor.Utils
 
 data Keyboard = Keyboard {
   _keyboardFocus :: MVar (Maybe (Some WaylandSurface))

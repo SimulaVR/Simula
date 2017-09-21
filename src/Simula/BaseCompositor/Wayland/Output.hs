@@ -1,4 +1,4 @@
-module Simula.Compositor.Wayland.Output where
+module Simula.BaseCompositor.Wayland.Output where
 
 import Control.Lens
 import Control.Concurrent.MVar
@@ -11,9 +11,9 @@ import Debug.Trace
 
 import Graphics.Rendering.OpenGL hiding (Proxy)
 
-import {-# SOURCE #-} Simula.Compositor.Event
-import Simula.Compositor.Types
-import Simula.Compositor.Utils
+import {-# SOURCE #-} Simula.BaseCompositor.Event
+import Simula.BaseCompositor.Types
+import Simula.BaseCompositor.Utils
 
 data WaylandSurfaceType = TopLevel | Transient | Popup | Cursor | NA
   deriving (Show, Eq, Ord, Enum)

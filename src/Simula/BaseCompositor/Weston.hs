@@ -1,4 +1,4 @@
-module Simula.Compositor.Weston where
+module Simula.BaseCompositor.Weston where
 
 import Control.Concurrent
 import Control.Lens
@@ -20,44 +20,55 @@ import Simula.WaylandServer
 import Simula.Weston
 import Simula.WestonDesktop
 
-import Simula.Compositor.Compositor
-import Simula.Compositor.Geometry
-import Simula.Compositor.OpenGL
-import Simula.Compositor.SceneGraph
-import Simula.Compositor.SceneGraph.Wayland
-import Simula.Compositor.Wayland.Input
-import Simula.Compositor.Wayland.Output
-import Simula.Compositor.WindowManager
-import Simula.Compositor.Utils
-import Simula.Compositor.Types
+import Simula.BaseCompositor.Compositor
+import Simula.BaseCompositor.Geometry
+import Simula.BaseCompositor.OpenGL
+import Simula.BaseCompositor.SceneGraph
+import Simula.BaseCompositor.SceneGraph.Wayland
+import Simula.BaseCompositor.Wayland.Input
+import Simula.BaseCompositor.Wayland.Output
+import Simula.BaseCompositor.WindowManager
+import Simula.BaseCompositor.Utils
+import Simula.BaseCompositor.Types
 
-import Simula.OSVR
-import Simula.Compositor.OSVR
+import Simula.ViveCompositor.OSVR -- TODO: Remove this dependency
+
+-- data family pattern
+-- instance Compositor BaseCompositor where
+--   data SimulaSurface BaseCompositor = BaseCompositorSurface {
+--     _baseCompositorSurfaceBase :: BaseWaylandSurface,
+--     _baseCompositorSurfaceWestonDesktopSurface :: WestonDesktopSurface,
+--     _baseCompositorSurfaceView :: WestonView,
+--     _baseCompositorSurfaceCompositor :: MVar BaseCompositor,
+--     _baseCompositorSurfaceTexture :: MVar (Maybe TextureObject),
+--     _baseCompositorSurfaceStableName :: StableName (SimulaSurface BaseCompositor)
+--     } deriving (Eq, Typeable)
 
 data SimulaSurface = SimulaSurface {
-  _simulaSurfaceBase :: BaseWaylandSurface,
+  _simulaSurfaceBase                 :: BaseWaylandSurface,
   _simulaSurfaceWestonDesktopSurface :: WestonDesktopSurface,
-  _simulaSurfaceView :: WestonView,
-  _simulaSurfaceCompositor :: MVar SimulaCompositor,
-  _simulaSurfaceTexture :: MVar (Maybe TextureObject),
-  _simulaSurfaceStableName :: StableName SimulaSurface
+  _simulaSurfaceView                 :: WestonView,
+  --_simulaSurfaceCompositor         :: MVar SimulaCompositor,
+  _simulaSurfaceBaseCompositor       :: MVar BaseCompositor,
+  _simulaSurfaceTexture              :: MVar (Maybe TextureObject),
+  _simulaSurfaceStableName           :: StableName SimulaSurface
   } deriving (Eq, Typeable)
 
 instance Hashable SimulaSurface where
   hashWithSalt s = hashWithSalt s . _simulaSurfaceStableName
 
-data SimulaCompositor = SimulaCompositor {
-  _simulaCompositorScene :: Scene,
-  _simulaCompositorDisplay :: Display,
-  _simulaCompositorWlDisplay :: WlDisplay,
-  _simulaCompositorWestonCompositor :: WestonCompositor,
-  _simulaCompositorSurfaceMap :: MVar (M.Map WestonSurface SimulaSurface),
-  _simulaCompositorOpenGlData :: OpenGLData,
-  _simulaCompositorOutput :: MVar (Maybe WestonOutput),
-  _simulaCompositorGlContext :: MVar (Maybe SimulaOpenGLContext),
-  _simulaCompositorNormalLayer :: WestonLayer,
-  _simulaCompositorOSVR :: SimulaOSVRClient
-  } deriving Eq
+data BaseCompositor = BaseCompositor {
+  _baseCompositorScene :: Scene,
+  _baseCompositorDisplay :: Display,
+  _baseCompositorWlDisplay :: WlDisplay,
+  _baseCompositorWestonCompositor :: WestonCompositor,
+  _baseCompositorSurfaceMap :: MVar (M.Map WestonSurface SimulaSurface),
+  _baseCompositorOpenGlData :: OpenGLData,
+  _baseCompositorOutput :: MVar (Maybe WestonOutput),
+  _baseCompositorGlContext :: MVar (Maybe SimulaOpenGLContext),
+  _baseCompositorNormalLayer :: WestonLayer
+ -- _baseCompositorOSVR :: SimulaOSVRClient
+}
 
 data SimulaSeat = SimulaSeat {
   _simulaSeatBase :: BaseSeat
@@ -92,7 +103,8 @@ data MousePointer = MousePointer {
   } deriving Eq
 
 makeLenses ''SimulaSurface
-makeLenses ''SimulaCompositor
+--makeLenses ''SimulaCompositor
+makeLenses ''BaseCompositor
 makeLenses ''OpenGLData
 makeLenses ''SimulaOpenGLContext
 makeLenses ''TextureBlitter
@@ -121,12 +133,12 @@ instance HasBaseWaylandSurface SimulaSurface where
 newSimulaSeat :: IO SimulaSeat
 newSimulaSeat = SimulaSeat <$> newBaseSeat
 
-newSimulaSurface :: WestonDesktopSurface -> WestonView -> SimulaCompositor -> WaylandSurfaceType -> IO SimulaSurface
-newSimulaSurface ws view comp ty = do
+newSimulaSurface :: WestonDesktopSurface -> WestonView -> BaseCompositor -> WaylandSurfaceType -> IO SimulaSurface
+newSimulaSurface ws view baseCompositor ty = do
   rec surface <- SimulaSurface
                  <$> newBaseWaylandSurface ty
                  <*> pure ws <*> pure view
-                 <*> newMVar comp
+                 <*> newMVar baseCompositor
                  <*> newMVar Nothing
                  <*> makeStableName surface
   return surface
@@ -292,35 +304,35 @@ drawMousePointer display mp pos = do
 
   textureBinding Texture2D $= Nothing
 
-                                       
 setTimeout :: Int -> IO () -> IO ThreadId
 setTimeout ms ioOperation =
   forkIO $ do
     threadDelay (ms*1000)
     ioOperation
 
+  
 --BIG TODO: type safety for C bindings, e.g. WlSignal should encode the type of the NotifyFunc data.
 
-instance Compositor SimulaCompositor where
+instance Compositor BaseCompositor where
   startCompositor comp = do
-    let wc = comp ^. simulaCompositorWestonCompositor
+    let wc = comp ^. baseCompositorWestonCompositor
     oldFunc <- getRepaintOutput wc
     newFunc <- createRendererRepaintOutputFunc (onRender comp oldFunc)
     setRepaintOutput wc newFunc
     weston_compositor_wake wc
     putStrLn "Compositor start"
-    wl_display_run $ comp ^. simulaCompositorWlDisplay
+    wl_display_run $ comp ^. baseCompositorWlDisplay
 
     where
-      onRender comp oldFunc output damage = compositorRender comp
+      onRender comp oldFunc output damage = baseCompositorRender comp
 
-  compositorDisplay = return . view simulaCompositorDisplay
-  compositorWlDisplay = view simulaCompositorWlDisplay
+  compositorDisplay = return . view baseCompositorDisplay
+  compositorWlDisplay = view baseCompositorWlDisplay
   compositorOpenGLContext this = do
-    Just glctx <- readMVar (this ^. simulaCompositorGlContext)
+    Just glctx <- readMVar (this ^. baseCompositorGlContext)
     return (Some glctx)
 
-  compositorSeat this = return (this ^. simulaCompositorScene.sceneWindowManager.windowManagerDefaultSeat)
+  compositorSeat this = return (this ^. baseCompositorScene.sceneWindowManager.windowManagerDefaultSeat)
     
   compositorGetSurfaceFromResource comp resource = do
     ptr <- wlResourceData resource    
@@ -328,7 +340,7 @@ instance Compositor SimulaCompositor where
     surface <- weston_surface_get_desktop_surface ws
     putStr "resource ptr: "
     print ptr
-    simulaSurface <- M.lookup ws <$> readMVar (comp ^. simulaCompositorSurfaceMap)
+    simulaSurface <- M.lookup ws <$> readMVar (comp ^. baseCompositorSurfaceMap)
     case simulaSurface of
       Just simulaSurface -> return (Some simulaSurface)
       _ -> do
@@ -347,42 +359,40 @@ setSurfaceMapped simulaSurface status = do
           westonSurfaceSetMapped ws True
           westonViewSetMapped view True
           weston_view_update_transform view
-          compositor <- readMVar (simulaSurface ^. simulaSurfaceCompositor)
-          let wm = compositor ^. simulaCompositorScene.sceneWindowManager
+          compositor <- readMVar (simulaSurface ^. simulaSurfaceBaseCompositor)
+          let wm = compositor ^. baseCompositorScene.sceneWindowManager
           wmMapSurface wm simulaSurface TopLevel
-          Just output <- readMVar (compositor ^. simulaCompositorOutput)
+          Just output <- readMVar (compositor ^. baseCompositorOutput)
           weston_output_schedule_repaint output
       | not status && currentStatus = do
           westonSurfaceSetMapped ws False
           westonViewSetMapped view False
-          compositor <- readMVar (simulaSurface ^. simulaSurfaceCompositor)
-          let wm = compositor ^. simulaCompositorScene.sceneWindowManager
+          compositor <- readMVar (simulaSurface ^. simulaSurfaceBaseCompositor)
+          let wm = compositor ^. baseCompositorScene.sceneWindowManager
           wmUnmapSurface wm simulaSurface
       | otherwise = return ()
 
-
-createSurface :: SimulaCompositor -> WestonDesktopSurface  -> IO SimulaSurface
-createSurface compositor surface = do
+createSurface :: BaseCompositor -> WestonDesktopSurface  -> IO SimulaSurface
+createSurface baseCompositor surface = do
   view <- weston_desktop_surface_create_view surface
   ws <- weston_desktop_surface_get_surface surface
-  simulaSurface <- M.lookup ws <$> readMVar (compositor ^. simulaCompositorSurfaceMap)
+  simulaSurface <- M.lookup ws <$> readMVar (baseCompositor ^. baseCompositorSurfaceMap)
   case simulaSurface of
     Just s -> return s
     _ -> do
-      simulaSurface <- newSimulaSurface surface view compositor NA
-      modifyMVar' (compositor ^. simulaCompositorSurfaceMap) (M.insert ws simulaSurface)
+      simulaSurface <- newSimulaSurface surface view baseCompositor NA
+      modifyMVar' (baseCompositor ^. baseCompositorSurfaceMap) (M.insert ws simulaSurface)
   
-      Just output <- readMVar (compositor ^. simulaCompositorOutput)
+      Just output <- readMVar (baseCompositor ^. baseCompositorOutput)
       westonViewSetOutput view output
-      let layer = compositor ^. simulaCompositorNormalLayer
+      let layer = baseCompositor ^. baseCompositorNormalLayer
             
       weston_layer_entry_insert  (westonLayerViewList layer) (westonViewLayerEntry view)
       
       return simulaSurface
 
---BUG TODO: need an actual wl_shell
-newSimulaCompositor :: Scene -> Display -> IO SimulaCompositor
-newSimulaCompositor scene display = do
+newBaseCompositor :: Scene -> Display -> IO BaseCompositor
+newBaseCompositor scene display = do
   wldp <- wl_display_create
   wcomp <- weston_compositor_create wldp nullPtr
 
@@ -406,11 +416,11 @@ newSimulaCompositor scene display = do
   bgLayer <- newWestonLayer wcomp
   weston_layer_set_position mainLayer WestonLayerPositionBackground
 
-  compositor <- SimulaCompositor scene display wldp wcomp
+  compositor <- BaseCompositor scene display wldp wcomp
                 <$> newMVar M.empty <*> newOpenGlData
                 <*> newMVar Nothing <*> newMVar Nothing
                 <*> pure mainLayer
-                <*> initSimulaOSVRClient
+                -- <*> initSimulaOSVRClient
 
   windowedApi <- weston_windowed_output_get_api wcomp
 
@@ -442,10 +452,12 @@ newSimulaCompositor scene display = do
   interfacePtr <- new interface
   weston_compositor_set_default_pointer_grab wcomp interfacePtr
 
-  setupHeadTracking (_simulaCompositorOSVR compositor)
-    >> setupLeftHandTracking (_simulaCompositorOSVR compositor)
-    >> setupRightHandTracking (_simulaCompositorOSVR compositor)
-    >> return compositor
+  -- setupHeadTracking (_baseCompositorOSVR compositor)
+  --   >> setupLeftHandTracking (_baseCompositorOSVR compositor)
+  --   >> setupRightHandTracking (_baseCompositorOSVR compositor)
+  --   >> return compositor
+
+  return compositor
 
   where
     onSurfaceCreated compositor surface  _ = do
@@ -457,18 +469,18 @@ newSimulaCompositor scene display = do
     onSurfaceDestroyed compositor surface _ = do
       --TODO destroy surface in wm
       ws <- weston_desktop_surface_get_surface surface
-      simulaSurface <- M.lookup ws <$> readMVar (compositor ^. simulaCompositorSurfaceMap) 
+      simulaSurface <- M.lookup ws <$> readMVar (compositor ^. baseCompositorSurfaceMap) 
       case simulaSurface of
         Just simulaSurface -> do
-          modifyMVar' (compositor ^. simulaCompositorSurfaceMap) (M.delete ws)
-          let wm = compositor ^. simulaCompositorScene.sceneWindowManager
+          modifyMVar' (compositor ^. baseCompositorSurfaceMap) (M.delete ws)
+          let wm = compositor ^. baseCompositorScene.sceneWindowManager
           setSurfaceMapped simulaSurface False
           wmDestroySurface wm simulaSurface
         _ -> return ()
   
     onSurfaceCommit compositor surface x y _ = do
       ws <- weston_desktop_surface_get_surface surface
-      simulaSurface <- M.lookup ws <$> readMVar (compositor ^. simulaCompositorSurfaceMap)
+      simulaSurface <- M.lookup ws <$> readMVar (compositor ^. baseCompositorSurfaceMap)
       case simulaSurface of
         Just simulaSurface -> do
           setSurfaceMapped simulaSurface True
@@ -491,15 +503,15 @@ newSimulaCompositor scene display = do
     onOutputCreated compositor _ outputPtr = do
       putStrLn "output created"
       let output = WestonOutput $ castPtr outputPtr
-      writeMVar (compositor ^. simulaCompositorOutput) $ Just output
-      let wc = compositor ^. simulaCompositorWestonCompositor
+      writeMVar (compositor ^. baseCompositorOutput) $ Just output
+      let wc = compositor ^. baseCompositorWestonCompositor
       renderer <- westonCompositorGlRenderer wc
       eglctx <- westonGlRendererContext renderer
       egldp <- westonGlRendererDisplay renderer
       eglsurf <- westonOutputRendererSurface output
       let glctx = SimulaOpenGLContext eglctx egldp eglsurf
      
-      writeMVar (compositor ^. simulaCompositorGlContext) (Just glctx)
+      writeMVar (compositor ^. baseCompositorGlContext) (Just glctx)
 
     onPointerFocus compositor grab = do
       pointer <- westonPointerFromGrab grab
@@ -515,18 +527,17 @@ newSimulaCompositor scene display = do
       setFocusForPointer compositor pointer pos
       weston_pointer_send_button pointer time button state
 
-
-setFocusForPointer :: SimulaCompositor -> WestonPointer -> V2 Int -> IO ()
-setFocusForPointer compositor pointer pos = do
-  ray' <- displayWorldRayAtDisplayPosition (compositor ^. simulaCompositorDisplay) (fromIntegral <$> pos)
+setFocusForPointer :: BaseCompositor -> WestonPointer -> V2 Int -> IO ()
+setFocusForPointer baseCompositor pointer pos = do
+  ray' <- displayWorldRayAtDisplayPosition (baseCompositor ^. baseCompositorDisplay) (fromIntegral <$> pos)
   let ray = ray' & rayDir %~ negate
-  inter <- nodeIntersectWithSurfaces (compositor ^. simulaCompositorScene) ray
+  inter <- nodeIntersectWithSurfaces (baseCompositor ^. baseCompositorScene) ray
   case inter of
     Nothing -> return ()
     Just rsi -> do
       Some node <- return (rsi ^. rsiSurfaceNode)
       let coords = rsi ^. rsiSurfaceCoordinates
-      Some seat <- compositorSeat compositor
+      Some seat <- compositorSeat baseCompositor
       Some surface <- wsnSurface node
       setSeatPointerFocus seat surface coords
       sp <- seatPointer seat
@@ -558,8 +569,8 @@ instance WaylandSurface SimulaSurface where
       ws = surf ^. simulaSurfaceWestonDesktopSurface
     
   wsPrepare surf = do
-    comp <- readMVar (surf ^. simulaSurfaceCompositor)
-    texture <- composeSurface surf (comp^.simulaCompositorOpenGlData)
+    comp <- readMVar (surf ^. simulaSurfaceBaseCompositor)
+    texture <- composeSurface surf (comp^.baseCompositorOpenGlData)
     writeMVar (surf ^. simulaSurfaceTexture) texture
   
   wsSendEvent surf event = undefined
@@ -640,125 +651,36 @@ paintChildren surface window windowSize gld = do
       blitterDrawTexture (gld ^. openGlDataTextureBlitter) tex geo windowSize 0 windowInverted subsurfaceInverted
     paintChildren subsurface window windowSize gld
 
+--BUG TODO: need an actual wl_shell
 
-compositorRender :: SimulaCompositor -> IO ()
-compositorRender comp = do
-  surfaceMap <- readMVar (comp ^. simulaCompositorSurfaceMap)
-  Just glctx <- readMVar (comp ^. simulaCompositorGlContext)
-  Just output <- readMVar (comp ^. simulaCompositorOutput)
+baseCompositorRender :: BaseCompositor -> IO ()
+baseCompositorRender comp = do
+  surfaceMap <- readMVar (comp ^. baseCompositorSurfaceMap)
+  Just glctx <- readMVar (comp ^. baseCompositorGlContext)
+  Just output <- readMVar (comp ^. baseCompositorOutput)
 
   glCtxMakeCurrent glctx
   -- set up context
 
   let surfaces = M.keys surfaceMap
-  let scene  = comp ^. simulaCompositorScene
-  let simDisplay = comp ^. simulaCompositorDisplay
-  let osvrCtx = comp ^. simulaCompositorOSVR.simulaOsvrContext
-  let osvrDisplay = comp ^. simulaCompositorOSVR.simulaOsvrDisplay
+  let scene  = comp ^. baseCompositorScene
+  let simDisplay = comp ^. baseCompositorDisplay
 
   time <- getTime Realtime
   scenePrepareForFrame scene time
   checkForErrors
-  osvrClientUpdate osvrCtx
 
-  case osvrDisplay of
-    Nothing -> do -- ioError $ userError "Could not initialize display in OSVR"
-      putStrLn "[INFO] no OSVR display is connected"
+  weston_output_schedule_repaint output
+  sceneDrawFrame scene
+  checkForErrors
 
-      -- We can still render to wayland though
-      weston_output_schedule_repaint output
-      headP <- osvrGetHeadPose osvrCtx
-      newDisplay <- moveCamera simDisplay headP
-      writeMVar (scene ^. sceneDisplays) [newDisplay]
+  Some seat <- compositorSeat comp
+  pointer <- seatPointer seat
+  pos <- readMVar (pointer ^. pointerGlobalPosition)
+  drawMousePointer (comp ^. baseCompositorDisplay) (comp ^. baseCompositorOpenGlData.openGlDataMousePointer) pos
 
-      osvrGetLeftHandPose osvrCtx
-      osvrGetRightHandPose osvrCtx
+  emitOutputFrameSignal output
+  eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
 
-      sceneDrawFrame scene
-      checkForErrors
-
-      Some seat <- compositorSeat comp
-      pointer <- seatPointer seat
-      pos <- readMVar (pointer ^. pointerGlobalPosition)
-      drawMousePointer (comp ^. simulaCompositorDisplay) (comp ^. simulaCompositorOpenGlData.openGlDataMousePointer) pos
-  
-      emitOutputFrameSignal output
-      eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
-
-      sceneFinishFrame scene
-      checkForErrors
-
-    Just display -> do
-      -- TODO: make the Head Mounted Display work at all
-      (value, viewers) <- osvrClientGetNumViewers display
-      case value of
-          ReturnSuccess -> do
-            putStrLn $ "[INFO] viewer count is " ++ show viewers
-            weston_output_schedule_repaint output
-
-            sceneDrawFrame scene
-            checkForErrors
-
-            when (viewers > 0) $ do
-                forM_ [0..(fromIntegral viewers - 1)] $ \viewer -> do
-                    -- TODO: Check for Errors for ReturnSuccess
-                    (ReturnSuccess, eyes) <- osvrClientGetNumEyesForViewer display (fromIntegral viewer)
-                    if eyes < 1 then error "Well, we got no eyes!"
-                    else do
-                        forM_ [0..(eyes - 1)] $ \eye -> do
-                          viewMat <- osvrClientGetViewerEyeViewMatrixf' display viewer (fromIntegral eye)
-
-                          (vp:_) <- readMVar (comp ^. simulaCompositorDisplay.displayViewpoints)
-                          --TODO test
-                          setNodeWorldTransform vp viewMat
-                          viewPointUpdateViewMatrix vp
-
-                          -- TODO: Check for Errors for ReturnSuccess
-                          (ReturnSuccess, osvrSurfaces) <-
-                            osvrClientGetNumSurfacesForViewerEye display viewer (fromIntegral eye)
-
-                          forM_ [0..osvrSurfaces] $ \osvrSurface -> do
-                            projMat <- osvrClientGetViewerEyeSurfaceProjectionMatrixf' display viewer (fromIntegral eye) osvrSurface (vp^.viewPointNear) (vp^.viewPointFar)
-
-                            viewPointOverrideProjectionMatrix vp projMat
-                            Some seat <- compositorSeat comp
-                            pointer <- seatPointer seat
-                            pos <- readMVar (pointer ^. pointerGlobalPosition)
-                            drawMousePointer (comp ^. simulaCompositorDisplay) (comp ^. simulaCompositorOpenGlData.openGlDataMousePointer) pos
-
-                            emitOutputFrameSignal output
-                            eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
-            sceneFinishFrame scene
-            checkForErrors
-
-moveCamera :: Display -> PoseTracker -> IO Display
-moveCamera d p = return d
-
-drawLeftHand :: PoseTracker -> IO ()
-drawLeftHand p = return ()
-
-drawRightHand :: PoseTracker -> IO ()
-drawRightHand p = return ()
-{-
-    if(m_camIsMoving) {
-        glm::vec4 camPos;
-        camPos *= 0;
-        camPos.w = 1;
-        glm::vec4 delta = camPos;
-        delta.x = m_camMoveVec.x;
-        delta.y = m_camMoveVec.y;
-        delta.z = m_camMoveVec.z;
-
-        const float speed = 0.01;
-        delta *= speed;
-        delta.w /= speed;
-        glm::mat4 trans = display()->transform();
-        //camPos = trans * camPos;
-        //delta = trans * delta;
-        glm::vec3 move = glm::vec3(delta.x/delta.w - camPos.x/camPos.w, delta.y/delta.w - camPos.y/camPos.w,
-                                   delta.z/delta.w - camPos.z/camPos.w);
-        trans = glm::translate(trans, move);
-        display()->setTransform(trans);
-    }
--}
-
+  sceneFinishFrame scene
+  checkForErrors

@@ -1,4 +1,4 @@
-module Simula.Compositor.SceneGraph where
+module Simula.BaseCompositor.SceneGraph where
 
 import Control.Lens
 import Control.Monad
@@ -16,12 +16,12 @@ import System.Clock
 import Simula.WaylandServer
 import Simula.MotorcarServer
 
-import Simula.Compositor.Compositor
-import Simula.Compositor.Geometry
-import Simula.Compositor.OpenGL
-import {-# SOURCE #-} Simula.Compositor.WindowManager
-import Simula.Compositor.Types
-import Simula.Compositor.Utils
+import Simula.BaseCompositor.Compositor
+import Simula.BaseCompositor.Geometry
+import Simula.BaseCompositor.OpenGL
+import {-# SOURCE #-} Simula.BaseCompositor.WindowManager
+import Simula.BaseCompositor.Types
+import Simula.BaseCompositor.Utils
 
 data BaseSceneGraphNode = BaseSceneGraphNode {
   _graphNodeChildren :: MVar [Some SceneGraphNode],

@@ -50,8 +50,6 @@ dependencies:
   - simula-wayland
   - simula-osvr
 
-
-
 _executable_options: &executable_options
   dependencies: [base, SimulaHS]
   ghc-options: [-threaded, -rtsopts, -with-rtsopts=-N]
@@ -66,21 +64,32 @@ library:
 
   exposed-modules:
     - Simula.Utils
-    - Simula.Compositor.SceneGraph
-    - Simula.Compositor.SceneGraph.Wayland
-    - Simula.Compositor.OpenGL
-    - Simula.Compositor.Types
-    - Simula.Compositor.Utils
-    - Simula.Compositor.Compositor
-    - Simula.Compositor.WindowManager
-    - Simula.Compositor.Wayland.Input
-    - Simula.Compositor.Wayland.Output
-    - Simula.Compositor.Geometry
-    - Simula.Compositor.Weston
+    - Simula.BaseCompositor.SceneGraph
+    - Simula.BaseCompositor.SceneGraph.Wayland
+    - Simula.BaseCompositor.OpenGL
+    - Simula.BaseCompositor.Types
+    - Simula.BaseCompositor.Utils
+    - Simula.BaseCompositor.Compositor
+    - Simula.BaseCompositor.WindowManager
+    - Simula.BaseCompositor.Wayland.Input
+    - Simula.BaseCompositor.Wayland.Output
+    - Simula.BaseCompositor.Geometry
+    - Simula.BaseCompositor.Weston
+    - Simula.ViveCompositor.ViveCompositor # TODO: cabal flag
+    - Simula.ViveCompositor.OSVR           # TODO: cabal flag
 
 executables:
-  simple-compositor:
+  base-compositor:
     <<: *executable_options
-    main: SimpleCompositor.hs
+    main: BaseCompositor.hs
     source-dirs: app
-    dependencies: [dbus, SimulaHS]
+    dependencies:
+      - dbus
+      - SimulaHS
+  vive-compositor:
+    <<: *executable_options
+    main: ViveCompositor.hs
+    source-dirs: app
+    dependencies:
+      - dbus
+      - SimulaHS
