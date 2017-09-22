@@ -1,6 +1,3 @@
-[submodule "simula_cpp"]
-	path = simula_cpp
-	url = git@github.com:georgewsinger/simula_cpp.git
 [submodule "simula-openvr"]
 	path = simula-openvr
 	url = git@github.com:georgewsinger/simula-openvr.git
