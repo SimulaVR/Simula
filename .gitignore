@@ -13,7 +13,6 @@ app/*.cpp
 src/**/*.cpp
 src/**/*.c
 *.so
-SimulaHS.cabal
 
 # osvr_server
 lighthousedb.json
