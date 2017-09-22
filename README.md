@@ -26,7 +26,7 @@ Simula is a 3D window manager for Linux.
 
 **Action Shot:**
 
-![SURFACES](./doc/SURFACES.png)
+![3 types of windows](./doc/3_types_of_windows.png)
 
 [![Join the chat at https://gitter.im/SimulaVR/Simula](https://badges.gitter.im/SimulaVR/Simula.svg)](https://gitter.im/SimulaVR/Simula?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
