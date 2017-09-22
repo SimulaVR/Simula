@@ -32,6 +32,12 @@ To launch the `base-compositor`, run
 $ stack [--nix --no-exec-pure] exec base-compositor # include the flags only if you built w/nix
 ```
 
+This should launch a white screen compositor. In order to see more, you have to launch a Wayland application, such as
+
+```
+$ weston-terminal
+```
+
 ### 2.2 Vive-Compositor
 
 You will need two terminals to launch this compositor. In the first terminal, you must launch the OSVR server:
@@ -41,8 +47,14 @@ $ nix-shell ./shell.nix                             # not needed unless you buil
 $ osvr_server ./config/ViveDirectMode.json          # or use ViveExtendedMode.json for extended mode
 ```
 
-In the second terminal, launch the vive-compositor:
+In the second terminal, launch the `vive-compositor`:
 
 ```
 $ stack [--nix --no-exec-pure] exec vive-compositor # include the flags only if you built w/nix
 ```
+
+**NOTE:** For the `vive-compositor` only, you will need `nvidia-381.26.13` (or higher) video drivers. Unfortunately, nix cannot provide those, so you will have to get them from your system's package manager.
+
+## 3 Troubleshooting
+
+For assistance, [go here](https://gitter.im/SimulaVR/Simula).

@@ -10,6 +10,8 @@ Here is the project's dependency graph:
 
 - In order to run the vive-compositor, you will need `nvidia-381.26.13` or greater installed on your system, which (unfortunately) `nix` cannot provide. You do not need nvidia drivers, however, to run the `base-compositor`.
 
+- A list of technologies in use: Haskell, C/C++ (c2hs, inline-c), OpenGL, [wayland](https://wayland.freedesktop.org/architecture.html) & [weston](https://github.com/wayland-project/weston), [OSVR](https://github.com/OSVR/OSVR-Core), [OpenVR](https://github.com/ValveSoftware/openvr/tree/master/samples), [nix](https://nixos.org/nix/) (for build dependencies).
+
 ## 2 Origins
 
 Simula is a reimplementation fork of [motorcar](https://github.com/evil0sheep/motorcar). To read about motorcar, see *[Toward General Purpose 3D User Interfaces: Extending Windowing Systems to Three Dimensions](https://github.com/evil0sheep/MastersThesis/blob/master/thesis.pdf?raw=true)*.

@@ -6,6 +6,21 @@ Simula is a 3D window manager for Linux.
 
 **Contributors:** We're looking for open-source contributors. If you're interested in using Haskell to (cleanly) bring VR and Linux together, but don't have an HTC Vive, PM or email me at georgewsinger@gmail.com.
 
+**Project Horizon:**
+
+| Goal                          | Status           | Short-Run Horizon | Long-Run Horizon |
+|:------------------------------|:-----------------|:-----------------:|:----------------:|
+| Basic, Launchable Compositor  | DONE             |         X         |                  | 
+| Wayland App Compatibility     | DONE             |         X         |                  |
+| X Applications Compatibility  |                  |         X         |                  | 
+| HTC Vive Compatibility        |                  |         X         |                  | 
+| Usable VR Desktop             |                  |         X         |                  | 
+| Test Suite                    |                  |         X         |                  | 
+| Clear Text Resolution in VR   |                  |                   |        X         | 
+| Special-Purpose 3D Linux Apps |                  |                   |        X         | 
+| A "VR Linux Distro"           |                  |                   |        X         | 
+| Standalone HMD Compatibility  |                  |                   |        X         | 
+
 <!-- - TODO: Better logo -->
 <!-- - TODO: continuous build status? -->
 
