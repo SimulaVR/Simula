@@ -1,4 +1,4 @@
--- This file has been generated from package.yaml by hpack version 0.17.0.
+-- This file has been generated from package.yaml by hpack version 0.16.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -102,8 +102,6 @@ executable base-compositor
     , dbus
     , Simula
   other-modules:
-      Main
-      SimpleCompositor
       ViveCompositor
   default-language: Haskell2010
 
@@ -143,6 +141,4 @@ executable vive-compositor
     , Simula
   other-modules:
       BaseCompositor
-      Main
-      SimpleCompositor
   default-language: Haskell2010
