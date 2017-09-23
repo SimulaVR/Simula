@@ -13,6 +13,7 @@ app/*.cpp
 src/**/*.cpp
 src/**/*.c
 *.so
+Simula.cabal
 
 # osvr_server
 lighthousedb.json
