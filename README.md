@@ -6,6 +6,8 @@ Simula is a 3D window manager for Linux.
 
 **Contributors:** We're looking for open-source contributors. If you're interested in using Haskell to (cleanly) bring VR and Linux together, but don't have an HTC Vive, PM or email me at georgewsinger@gmail.com.
 
+**Origins:** Simula is a reimplementation fork of [motorcar](https://github.com/evil0sheep/motorcar). To read about motorcar, see *[Toward General Purpose 3D User Interfaces: Extending Windowing Systems to Three Dimensions](https://github.com/evil0sheep/MastersThesis/blob/master/thesis.pdf?raw=true)*.
+
 **Project Horizon:**
 
 | Goal                          | Status           | Short-Run Horizon | Long-Run Horizon |
