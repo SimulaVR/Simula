@@ -83,7 +83,7 @@ newViveCompositor scene display = do
                 <$> newMVar M.empty <*> newOpenGlData
                 <*> newMVar Nothing <*> newMVar Nothing
                 <*> pure mainLayer
-                <*> initSimulaOSVRClient
+                <*> initSimulaOsvrClient
 
   windowedApi <- weston_windowed_output_get_api wcomp
 
@@ -119,7 +119,7 @@ newViveCompositor scene display = do
   --   >> setupLeftHandTracking (_baseCompositorOSVR baseCompositor)
   --   >> setupRightHandTracking (_baseCompositorOSVR baseCompositor)
 
-  osvrClient <- initSimulaOSVRClient
+  osvrClient <- initSimulaOsvrClient
   setupHeadTracking osvrClient
   setupLeftHandTracking osvrClient
   setupRightHandTracking osvrClient

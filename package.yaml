@@ -37,6 +37,7 @@ dependencies:
   - linear-opengl
   - monad-loops
   - mtl
+  - optparse-applicative
   - OpenGL
   - OpenGLRaw
   - primitive
@@ -79,16 +80,9 @@ library:
     - Simula.ViveCompositor.OSVR           # TODO: cabal flag
 
 executables:
-  base-compositor:
+  simulavr:
     <<: *executable_options
-    main: BaseCompositor.hs
+    main: SimulaVR.hs
     source-dirs: app
     dependencies: [dbus, Simula]
     extra-libraries: [openvr_api]
-  vive-compositor:
-    <<: *executable_options
-    main: ViveCompositor.hs
-    source-dirs: app
-    dependencies:
-      - dbus
-      - Simula
