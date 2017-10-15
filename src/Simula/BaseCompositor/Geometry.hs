@@ -60,12 +60,6 @@ intersectBox (AxisAlignedBox bd) (Ray rp rd) t0 t1
     tminx'' = max tminx' (tmin _z)
     tmaxx'' = min tmaxx' (tmax _z)
 
---TODO not actually a rectangle, refactor
-data Rectangle = Rectangle {
-  _rectangleSize :: V2 Int
-  } deriving (Show, Eq, Ord)
-
-makeLenses ''Rectangle
 
 data RaySurfaceIntersection = RaySurfaceIntersection {
   _rsiSurfaceNode :: Some WaylandSurfaceNode,

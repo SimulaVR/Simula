@@ -19,7 +19,7 @@ import Simula.BaseCompositor.Types
 data ViewPort = ViewPort {
   _viewPortOffsetFactor :: MVar (V2 Float),
   _viewPortSizeFactor :: MVar (V2 Float),
-  _viewPortBufferGeometry :: MVar Rectangle
+  _viewPortBufferGeometry :: MVar Rect
   } deriving (Eq, Typeable)
 
 makeLenses ''ViewPort
@@ -93,7 +93,7 @@ getProgram shader = do
   checkCompileStatus vert
   compileShader frag
   checkCompileStatus frag
-  
+
   program <- createProgram
   attachShader program vert
   attachShader program frag
@@ -128,11 +128,10 @@ checkForErrors = do
   when (not (null errs)) $ do
     fbStatus <- get $ framebufferStatus Framebuffer
     dfbStatus <- get $ framebufferStatus DrawFramebuffer
-    
+
     rfbStatus <- get $ framebufferStatus ReadFramebuffer
     putStrLn $ "Framebuffer status: " ++ show fbStatus
     putStrLn $ "Draw framebuffer status: " ++ show dfbStatus
     putStrLn $ "Read framebuffer status: " ++ show rfbStatus
 --    putStrLn $ show errs
     error $ show errs
-
