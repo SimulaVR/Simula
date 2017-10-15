@@ -35,11 +35,11 @@ class HasBaseSceneGraphNode a where
   graphNodeChildren :: Lens' a (MVar [Some SceneGraphNode])
   graphNodeChildren = baseSceneGraphNode . go
     where go f (BaseSceneGraphNode c p t) = (\c' -> BaseSceneGraphNode c' p t) <$> f c
-    
+
   graphNodeParent :: Lens' a (MVar (Maybe (Some SceneGraphNode)))
   graphNodeParent = baseSceneGraphNode . go
     where go f (BaseSceneGraphNode c p t) = (\p' -> BaseSceneGraphNode c p' t) <$> f p
-    
+
   graphNodeTransform :: Lens' a (MVar (M44 Float))
   graphNodeTransform = baseSceneGraphNode . go
     where go f (BaseSceneGraphNode c p t) = (\t' -> BaseSceneGraphNode c p t') <$> f t
@@ -64,7 +64,7 @@ data ViewPoint = ViewPoint {
   _viewPointFar :: Float,
   _viewPointCenterOfFocus :: V4 Float,
   _viewPointCOFTransform :: M44 Float,
-  _viewPointBufferGeometry :: Rectangle,
+  _viewPointBufferGeometry :: Rect,
   _viewPointGlobal ::  WlGlobal,
   _viewPointViewArray :: WlArray,
   _viewPointProjectionArray :: WlArray,
@@ -113,51 +113,51 @@ class (Eq a, Typeable a) => SceneGraphNode a where
     case prt of
       Nothing -> return ()
       Just (Some prt) -> modifyMVar' (nodeChildren prt) (filter (/= Some this))
-  
+
   nodeOnFrameBegin :: a -> Maybe Scene -> IO ()
   nodeOnFrameBegin _ _ = return ()
-  
+
   nodeOnFrameDraw :: a -> Maybe Scene -> IO ()
   nodeOnFrameDraw _ _ = return ()
-  
+
   nodeOnFrameEnd :: a -> Maybe Scene -> IO ()
   nodeOnFrameEnd _ _ = return ()
-  
+
   nodeOnWorldTransformChange :: a -> Maybe Scene -> IO ()
   nodeOnWorldTransformChange _ _ = return ()
 
   nodeParent :: a -> IO (Maybe (Some SceneGraphNode))
   default nodeParent :: HasBaseSceneGraphNode a  => a -> IO (Maybe (Some SceneGraphNode))
   nodeParent = views graphNodeParent readMVar
-  
+
   setNodeParent' :: a -> Maybe (Some SceneGraphNode) -> IO ()
   default setNodeParent' :: HasBaseSceneGraphNode a => a -> Maybe (Some SceneGraphNode) -> IO ()
   setNodeParent' = views graphNodeParent writeMVar
-  
+
   nodeChildren :: a -> MVar [Some SceneGraphNode]
   default nodeChildren :: HasBaseSceneGraphNode a  => a -> MVar [Some SceneGraphNode]
   nodeChildren = view graphNodeChildren
-  
+
   nodeTransform :: a -> IO (M44 Float)
   default nodeTransform :: HasBaseSceneGraphNode a => a -> IO (M44 Float)
   nodeTransform = views graphNodeTransform readMVar
-  
+
   setNodeTransform' :: a -> M44 Float -> IO ()
   default setNodeTransform' :: HasBaseSceneGraphNode a => a -> M44 Float -> IO ()
   setNodeTransform' = views graphNodeTransform writeMVar
-  
+
   nodeScene :: a -> IO (Maybe Scene)
   nodeScene this = nodeParent this >>= \case
     Just (Some prt) -> nodeScene prt
     Nothing -> return Nothing
-  
+
   isSurfaceNode :: a -> Bool
   isSurfaceNode _ = False
 
   nodeIntersectWithSurfaces :: a -> Ray -> IO (Maybe RaySurfaceIntersection)
   default nodeIntersectWithSurfaces :: HasBaseSceneGraphNode a => a -> Ray -> IO (Maybe RaySurfaceIntersection)
   nodeIntersectWithSurfaces = defaultNodeIntersectWithSurfaces
-      
+
 
 defaultNodeIntersectWithSurfaces :: (SceneGraphNode a, HasBaseSceneGraphNode a) => a -> Ray -> IO (Maybe RaySurfaceIntersection)
 defaultNodeIntersectWithSurfaces this ray = do
@@ -227,7 +227,7 @@ instance HasBaseDrawable WireframeNode where
 setNodeParent :: SceneGraphNode a => a -> Maybe (Some SceneGraphNode) -> IO ()
 setNodeParent this Nothing = setNodeParent' this Nothing
 setNodeParent this x@(Just (Some prt)) = case cast prt of
-  Just prt' | this == prt' -> setNodeParent' this Nothing 
+  Just prt' | this == prt' -> setNodeParent' this Nothing
   _ -> do
     setNodeParent' this x
     modifyMVar' (nodeChildren prt) (++ [Some this])
@@ -247,7 +247,7 @@ nodeWorldTransform :: SceneGraphNode a => a -> IO (M44 Float)
 nodeWorldTransform this = nodeParent this >>= \case
   Just (Some prt) -> liftM2 (!*!) (nodeWorldTransform prt) (nodeTransform this)
   Nothing -> nodeTransform this
-  
+
 setNodeWorldTransform :: SceneGraphNode a => a -> M44 Float -> IO ()
 setNodeWorldTransform this tf = nodeParent this >>= \case
   Just (Some prt) -> fmap (!*! tf) (inv44 <$> nodeWorldTransform prt) >>= setNodeTransform this
@@ -287,7 +287,7 @@ scenePrepareForFrame this ts = do
   forM_ dps $ \dp -> do
     vps <- readMVar (_displayViewpoints dp)
     mapM_ viewPointUpdateViewMatrix vps
-    
+
 sceneDrawFrame :: Scene -> IO ()
 sceneDrawFrame this = do
   dps <- readMVar (_sceneDisplays this)
@@ -309,7 +309,7 @@ sceneFinishFrame this = do
 
 sceneLatestTimestampChange :: Scene -> IO TimeSpec
 sceneLatestTimestampChange this = do
-  last <- readMVar $ this ^. sceneLastTimestamp 
+  last <- readMVar $ this ^. sceneLastTimestamp
   curr <- readMVar $ this ^. sceneCurrentTimestamp
   return $ curr - last
 
@@ -318,8 +318,8 @@ instance VirtualNode ViewPoint
 
 newViewPoint :: SceneGraphNode a => Float -> Float -> Display -> a -> M44 Float -> V4 Float -> V3 Float -> IO ViewPoint
 newViewPoint near far display parent transform viewPortParams centerOfProjection = do
-  let size = display ^. displaySize 
-  let bufferGeometry = Rectangle (size & _y *~ 2)
+  let size = display ^. displaySize
+  let bufferGeometry = Rect (size & _y *~ 2)
   let vpOffset = viewPortParams ^. _xy
   let vpSize = viewPortParams ^. _zw
   let cofTf = translate centerOfProjection
@@ -340,7 +340,7 @@ newViewPoint near far display parent transform viewPortParams centerOfProjection
 
   bindFuncPtr <- createGlobalBindFuncPtr bindFunc
   putStrLn "creating new viewpoint"
-  
+
   rec vp <- ViewPoint base display near far cof cofTf bufferGeometry global
                    <$> newWlArray <*> newWlArray <*> newMVar []
                    <*> newMVar vport <*> newMVar ccvp <*> newMVar cdvp
@@ -360,7 +360,7 @@ newViewPoint near far display parent transform viewPortParams centerOfProjection
     destroyFunc resource = do
       vp :: ViewPoint <- wlResourceData resource >>= deRefStablePtr . castPtrToStablePtr
       modifyMVar' (vp ^. viewPointResources) $ filter (/= resource)
-      
+
     bindFunc client vpPtr version ident = do
       vpIf <- motorcarViewpointInterface
       vp :: ViewPoint <- deRefStablePtr $ castPtrToStablePtr vpPtr
@@ -398,7 +398,7 @@ viewPointUpdateProjectionMatrix this = do
     let near = this ^. viewPointNear
     let far = this ^. viewPointFar
     let perM = perspective fov (width/height) near far
-    
+
     writeMVar (this ^. viewPointProjectionMatrix) $ cofTf !*! perM
   viewPointSendProjectionMatrixToClients this
 
@@ -444,7 +444,7 @@ viewPointSendViewPortToSingleClient this res = do
   cdvpOff <- (fmap.fmap) truncate $ viewPortOffset cdvp
   ccvpSize <- (fmap.fmap) truncate $ viewPortSize ccvp
   cdvpSize <- (fmap.fmap) truncate $ viewPortSize cdvp
-  
+
   motorcar_viewpoint_send_view_port res
     (ccvpOff ^. _x) (ccvpOff ^. _y) (ccvpSize ^. _x) (ccvpSize ^. _y)
     (cdvpOff ^. _x) (cdvpOff ^. _y) (cdvpSize ^. _x) (cdvpSize ^. _y)
@@ -506,7 +506,7 @@ newDisplay glctx size dims parent tf = do
             <*> newMVar []
       base <- newBaseNode dp (Just (Some parent)) tf
   return dp
-  
+
 
 displayWorldRayAtDisplayPosition :: Display -> V2 Float -> IO Ray
 displayWorldRayAtDisplayPosition this pixel = do
@@ -516,7 +516,7 @@ displayWorldRayAtDisplayPosition this pixel = do
 displayWorldPositionAtDisplayPosition :: Display -> V2 Float -> IO (V3 Float)
 displayWorldPositionAtDisplayPosition this pixel = do
   worldTf <- nodeWorldTransform this
-  let size = fromIntegral <$> this ^. displaySize 
+  let size = fromIntegral <$> this ^. displaySize
   let dims = _displayDimensions this
   let scaled = liftI2 (*) (liftI2 (/) pixel (size - V2 0.5 0.5)) dims
   let s4 = worldTf !* V4 (scaled ^. _x) (scaled ^. _y) 0 1
@@ -534,7 +534,7 @@ createFBO resolution = do
   textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
   textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
   textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
-        
+
   fboDepthBuffer <- genObjectName
   textureBinding Texture2D $= Just fboDepthBuffer
   textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
@@ -558,7 +558,7 @@ createFBO resolution = do
   putStrLn "created FBO"
   return (fbo, fboColorBuffer, fboDepthBuffer)
 
-    
+
 displayPrepareForDraw :: Display -> IO ()
 displayPrepareForDraw this = do
   Some glctx <- return $ this ^. displayGlContext
@@ -602,7 +602,7 @@ instance Drawable WireframeNode where
     bufferData ArrayBuffer $= (fromIntegral $ _wireframeNodeNumSegments this * 6 * sizeOf (undefined :: Float), segPtr, DynamicDraw)
 
     lineColor <- readMVar $ _wireframeNodeLineColor this
-    
+
     uniform (_wireframeNodeUColorLine this) $= lineColor
 
     viewpoints <- readMVar $ _displayViewpoints display
@@ -610,7 +610,7 @@ instance Drawable WireframeNode where
       projMatrix <- readMVar $ _viewPointProjectionMatrix vp
       viewMatrix <- readMVar $ _viewPointViewMatrix vp
       worldTf <- nodeWorldTransform this
-      
+
       let mat = (projMatrix !*! viewMatrix !*! worldTf) ^. m44GLmatrix
       uniform (_wireframeNodeUMVPMatrixLine this) $= mat
 
