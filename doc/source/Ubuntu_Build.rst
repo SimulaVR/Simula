@@ -1,5 +1,5 @@
-SimulaHS
-========
+Ubuntu Build Process
+====================
 
 The process to try out `SimulaHS`, is as simple as 1, 2, 3, 4a or 4b, 5 with only minor software compliation in between. You will need to install software from your linux distributor and have your machine whirl and buzz for minutes on end with no output to test this collection of Haskell, C, and C++ code. If you are up for the challenge then you can find most of a recipie below. Many of the instructions have only been attempted once, if any at all, and can only be cast as a guide to get running. With those precautions aside, here's what someone got working once, sometime, probably.
 
