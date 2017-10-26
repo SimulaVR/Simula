@@ -30,8 +30,8 @@ Git Setup - Submodules
 
 ``git submodule update --init --recursive``
 
-Ubuntu 17.04 (zesty) Required packages
-======================================
+Ubuntu 17.10 (Artful) Required packages
+=======================================
 
 Install all the dependecies in one shot with the following script::
 
