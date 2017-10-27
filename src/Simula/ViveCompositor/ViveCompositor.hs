@@ -11,6 +11,7 @@ import Data.Typeable
 import Data.Maybe
 import Foreign
 import Foreign.C
+import Foreign.Ptr
 import Graphics.Rendering.OpenGL hiding (scale, translate, rotate, Rect)
 import Linear
 import Linear.OpenGL
@@ -33,8 +34,7 @@ import Simula.BaseCompositor.Utils
 import Simula.BaseCompositor.Types
 import Simula.BaseCompositor.Weston hiding (moveCamera)
 
-import Simula.OSVR
-import Simula.ViveCompositor.OSVR
+import OpenVR
 
 -- data family pattern
 -- instance Compositor ViveCompositor where
@@ -49,7 +49,7 @@ import Simula.ViveCompositor.OSVR
 
 data ViveCompositor = ViveCompositor {
   _viveCompositorBaseCompositor :: BaseCompositor,
-  _viveCompositorOSVR :: SimulaOSVRClient
+  _viveCompositorOpenVR :: OpenVRContext
 }
 
 makeLenses ''ViveCompositor
@@ -83,7 +83,6 @@ newViveCompositor scene display = do
                 <$> newMVar M.empty <*> newOpenGlData
                 <*> newMVar Nothing <*> newMVar Nothing
                 <*> pure mainLayer
-                <*> initSimulaOSVRClient
 
   windowedApi <- weston_windowed_output_get_api wcomp
 
@@ -115,16 +114,12 @@ newViveCompositor scene display = do
   interfacePtr <- new interface
   weston_compositor_set_default_pointer_grab wcomp interfacePtr
 
-  -- setupHeadTracking (_baseCompositorOSVR baseCompositor) initSimulaOSVRClient
-  --   >> setupLeftHandTracking (_baseCompositorOSVR baseCompositor)
-  --   >> setupRightHandTracking (_baseCompositorOSVR baseCompositor)
+  tryInit <- vrInit VRApplication_Scene
+  openVrCtx <- case tryInit of
+    Left err -> error $ show err -- just terminate
+    Right ctx -> return ctx
 
-  osvrClient <- initSimulaOSVRClient
-  setupHeadTracking osvrClient
-  setupLeftHandTracking osvrClient
-  setupRightHandTracking osvrClient
-
-  return (ViveCompositor baseCompositor osvrClient)
+  return $ ViveCompositor baseCompositor openVrCtx
 
   where
     onSurfaceCreated compositor surface  _ = do
@@ -194,15 +189,6 @@ newViveCompositor scene display = do
       setFocusForPointer compositor pointer pos
       weston_pointer_send_button pointer time button state
 
-moveCamera :: Display -> PoseTracker -> IO Display
-moveCamera d p = return d
-
-drawLeftHand :: PoseTracker -> IO ()
-drawLeftHand p = return ()
-
-drawRightHand :: PoseTracker -> IO ()
-drawRightHand p = return ()
-
 viveCompositorRender :: ViveCompositor -> IO ()
 viveCompositorRender viveComp = do
   let comp = viveComp ^. viveCompositorBaseCompositor
@@ -217,82 +203,40 @@ viveCompositorRender viveComp = do
   let scene  = comp ^. baseCompositorScene
   let simDisplay = comp ^. baseCompositorDisplay
 
-  let osvrCtx = viveComp ^. viveCompositorOSVR.simulaOsvrContext
-  let osvrDisplay = viveComp ^. viveCompositorOSVR.simulaOsvrDisplay
+  let openVrCtx = viveComp ^. viveCompositorOpenVR
 
   time <- getTime Realtime
   scenePrepareForFrame scene time
   checkForErrors
-  osvrClientUpdate osvrCtx
+  weston_output_schedule_repaint output
 
-  case osvrDisplay of
-    Nothing -> do -- ioError $ userError "Could not initialize display in OSVR"
-      putStrLn "[INFO] no OSVR display is connected"
+  sceneDrawFrame scene
+  checkForErrors
+  Some seat <- compositorSeat comp
+  pointer <- seatPointer seat
+  pos <- readMVar (pointer ^. pointerGlobalPosition)
+  drawMousePointer (comp ^. baseCompositorDisplay) (comp ^. baseCompositorOpenGlData.openGlDataMousePointer) pos
 
-      -- We can still render to wayland though
-      weston_output_schedule_repaint output
-      headP <- osvrGetHeadPose osvrCtx
-      when (isJust headP) (moveCamera simDisplay (fromJust headP) >>= \d -> writeMVar (scene ^. sceneDisplays) [d])
+  emitOutputFrameSignal output
+  eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
+  sceneFinishFrame scene
+  checkForErrors
 
-      osvrGetLeftHandPose osvrCtx
-      osvrGetRightHandPose osvrCtx
+  let (TextureObject gltx) = comp ^. baseCompositorDisplay.displayScratchColorBufferTexture
+  -- convert to void* (shudder.)
+  let gltxPtr = intPtrToPtr $ fromIntegral gltx
 
-      sceneDrawFrame scene
-      checkForErrors
+  err <- with (OVRTexture gltxPtr TextureType_OpenGL ColorSpace_Gamma) $ \txPtr ->
+    ivrCompositorSubmit (openVrCtx ^. ivrCompositor) Eye_Left txPtr (VRTextureBounds_t nullPtr) Submit_Default
 
-      Some seat <- compositorSeat comp
-      pointer <- seatPointer seat
-      pos <- readMVar (pointer ^. pointerGlobalPosition)
-      drawMousePointer (comp ^. baseCompositorDisplay) (comp ^. baseCompositorOpenGlData.openGlDataMousePointer) pos
+  when (err /= VRCompositorError_None) $ print err
+  
+  err <- with (OVRTexture gltxPtr TextureType_OpenGL ColorSpace_Gamma) $ \txPtr ->
+    ivrCompositorSubmit (openVrCtx ^. ivrCompositor) Eye_Right txPtr (VRTextureBounds_t nullPtr) Submit_Default
 
-      emitOutputFrameSignal output
-      eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
-
-      sceneFinishFrame scene
-      checkForErrors
-
-    Just display -> do
-      -- TODO: make the Head Mounted Display work at all
-      (value, viewers) <- osvrClientGetNumViewers display
-      case value of
-          ReturnSuccess -> do
-            putStrLn $ "[INFO] viewer count is " ++ show viewers
-            weston_output_schedule_repaint output
-
-            sceneDrawFrame scene
-            checkForErrors
-
-            when (viewers > 0) $ do
-                forM_ [0..(fromIntegral viewers - 1)] $ \viewer -> do
-                    -- TODO: Check for Errors for ReturnSuccess
-                    (ReturnSuccess, eyes) <- osvrClientGetNumEyesForViewer display (fromIntegral viewer)
-                    if eyes < 1 then error "Well, we got no eyes!"
-                    else do
-                        forM_ [0..(eyes - 1)] $ \eye -> do
-                          viewMat <- osvrClientGetViewerEyeViewMatrixf' display viewer (fromIntegral eye)
-
-                          (vp:_) <- readMVar (comp ^. baseCompositorDisplay.displayViewpoints)
-                          --TODO test
-                          setNodeWorldTransform vp viewMat
-                          viewPointUpdateViewMatrix vp
-
-                          -- TODO: Check for Errors for ReturnSuccess
-                          (ReturnSuccess, osvrSurfaces) <-
-                            osvrClientGetNumSurfacesForViewerEye display viewer (fromIntegral eye)
-
-                          forM_ [0..osvrSurfaces] $ \osvrSurface -> do
-                            projMat <- osvrClientGetViewerEyeSurfaceProjectionMatrixf' display viewer (fromIntegral eye) osvrSurface (vp^.viewPointNear) (vp^.viewPointFar)
-
-                            viewPointOverrideProjectionMatrix vp projMat
-                            Some seat <- compositorSeat comp
-                            pointer <- seatPointer seat
-                            pos <- readMVar (pointer ^. pointerGlobalPosition)
-                            drawMousePointer (comp ^. baseCompositorDisplay) (comp ^. baseCompositorOpenGlData.openGlDataMousePointer) pos
-
-                            emitOutputFrameSignal output
-                            eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
-            sceneFinishFrame scene
-            checkForErrors
+  when (err /= VRCompositorError_None) $ print err
+  
+  return ()
 
 instance Compositor ViveCompositor where
   startCompositor viveComp = do

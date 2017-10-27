@@ -84,7 +84,6 @@ executables:
     main: BaseCompositor.hs
     source-dirs: app
     dependencies: [dbus, Simula]
-    extra-libraries: [openvr_api]
   vive-compositor:
     <<: *executable_options
     main: ViveCompositor.hs

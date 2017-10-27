@@ -31,9 +31,6 @@ import Simula.BaseCompositor.WindowManager
 import Simula.BaseCompositor.Utils
 import Simula.BaseCompositor.Types
 
-import Simula.OSVR
-import Simula.ViveCompositor.OSVR -- TODO: Rename this Dependency
-
 -- data family pattern
 -- instance Compositor BaseCompositor where
 --   data SimulaSurface BaseCompositor = BaseCompositorSurface {
@@ -67,8 +64,7 @@ data BaseCompositor = BaseCompositor {
   _baseCompositorOpenGlData :: OpenGLData,
   _baseCompositorOutput :: MVar (Maybe WestonOutput),
   _baseCompositorGlContext :: MVar (Maybe SimulaOpenGLContext),
-  _baseCompositorNormalLayer :: WestonLayer,
-  _baseCompositorOSVR :: SimulaOSVRClient
+  _baseCompositorNormalLayer :: WestonLayer
 }
 
 data SimulaSeat = SimulaSeat {
@@ -433,7 +429,6 @@ newBaseCompositor scene display = do
                 <$> newMVar M.empty <*> newOpenGlData
                 <*> newMVar Nothing <*> newMVar Nothing
                 <*> pure mainLayer
-                <*> initSimulaOSVRClient
 
   windowedApi <- weston_windowed_output_get_api wcomp
 
@@ -464,11 +459,6 @@ newBaseCompositor scene display = do
 
   interfacePtr <- new interface
   weston_compositor_set_default_pointer_grab wcomp interfacePtr
-
-  -- setupHeadTracking (_baseCompositorOSVR compositor)
-  --   >> setupLeftHandTracking (_baseCompositorOSVR compositor)
-  --   >> setupRightHandTracking (_baseCompositorOSVR compositor)
-  --   >> return compositor
 
   return compositor
 
@@ -675,56 +665,25 @@ baseCompositorRender comp = do
   let surfaces = M.keys surfaceMap
   let scene  = comp ^. baseCompositorScene
   let simDisplay = comp ^. baseCompositorDisplay
-  let osvrCtx = comp ^. baseCompositorOSVR ^. simulaOsvrContext
-  let osvrDisplay = comp ^. baseCompositorOSVR ^. simulaOsvrDisplay
 
   time <- getTime Realtime
   scenePrepareForFrame scene time
   checkForErrors
-  osvrClientUpdate osvrCtx
 
-  case osvrDisplay of
-    Nothing -> do -- ioError $ userError "Could not initialize display in OSVR"
-      putStrLn "[INFO] no OSVR display is connected"
+  weston_output_schedule_repaint output
+  checkPosesAndDraw simDisplay scene comp glctx output
 
-      -- We can still render to wayland though
-      weston_output_schedule_repaint output
-      checkPosesAndDraw osvrCtx simDisplay scene comp glctx output
 
-    Just display -> do
-      -- TODO: make the Head Mounted Display work at all
-      (value, viewers) <- osvrClientGetNumViewers display
-      case value of
-          ReturnSuccess -> do
-            putStrLn $ "[INFO] viewer count is " ++ show viewers
-            weston_output_schedule_repaint output
-            checkPosesAndDraw osvrCtx simDisplay scene comp glctx output
-
-checkPosesAndDraw ctx disp scene comp glctx out = do
+checkPosesAndDraw disp scene comp glctx out = do
     Some seat <- compositorSeat comp
-    osvrGetLeftHandPose ctx
-    osvrGetRightHandPose ctx
-    headP <- osvrGetHeadPose ctx
-    case headP of
-      Just pose -> do
-        newDisplay <- moveCamera disp pose
-        writeMVar (scene ^. sceneDisplays) [newDisplay]
+    sceneDrawFrame scene
+    checkForErrors
 
-        sceneDrawFrame scene
-        checkForErrors
+    drawScene seat comp glctx out
 
-        drawScene seat comp glctx out
-
-        sceneFinishFrame scene
-        checkForErrors
-      Nothing -> do
-        sceneDrawFrame scene
-        checkForErrors
-
-        drawScene seat comp glctx out
-
-        sceneFinishFrame scene
-        checkForErrors
+    sceneFinishFrame scene
+    checkForErrors
+        
 
 drawScene seat comp glctx out = do
     pointer <- seatPointer seat
@@ -733,35 +692,4 @@ drawScene seat comp glctx out = do
 
     emitOutputFrameSignal out
     eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
-
-moveCamera :: Display -> PoseTracker -> IO Display
-moveCamera d p = return d
-
-drawLeftHand :: PoseTracker -> IO ()
-drawLeftHand p = return ()
-
-drawRightHand :: PoseTracker -> IO ()
-drawRightHand p = return ()
-{-
-    if(m_camIsMoving) {
-        glm::vec4 camPos;
-        camPos *= 0;
-        camPos.w = 1;
-        glm::vec4 delta = camPos;
-        delta.x = m_camMoveVec.x;
-        delta.y = m_camMoveVec.y;
-        delta.z = m_camMoveVec.z;
-
-        const float speed = 0.01;
-        delta *= speed;
-        delta.w /= speed;
-        glm::mat4 trans = display()->transform();
-        //camPos = trans * camPos;
-        //delta = trans * delta;
-        glm::vec3 move = glm::vec3(delta.x/delta.w - camPos.x/camPos.w, delta.y/delta.w - camPos.y/camPos.w,
-                                   delta.z/delta.w - camPos.z/camPos.w);
-        trans = glm::translate(trans, move);
-        display()->setTransform(trans);
-    }
--}
 
