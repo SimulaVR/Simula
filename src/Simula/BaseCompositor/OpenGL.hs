@@ -133,6 +133,6 @@ checkForErrors = do
     putStrLn $ "Framebuffer status: " ++ show fbStatus
     putStrLn $ "Draw framebuffer status: " ++ show dfbStatus
     putStrLn $ "Read framebuffer status: " ++ show rfbStatus
---    putStrLn $ show errs
-    error $ show errs
+    putStrLn $ show errs
+--    error $ show errs
 

@@ -48,7 +48,6 @@ dependencies:
   - unix
   - StateVar
   - simula-wayland
-  - simula-osvr
   - simula-openvr
 _executable_options: &executable_options
   dependencies: [base, Simula]
@@ -76,7 +75,6 @@ library:
     - Simula.BaseCompositor.Geometry
     - Simula.BaseCompositor.Weston
     - Simula.ViveCompositor.ViveCompositor # TODO: cabal flag
-    - Simula.ViveCompositor.OSVR           # TODO: cabal flag
 
 executables:
   base-compositor:

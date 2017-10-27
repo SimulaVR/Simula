@@ -13,7 +13,7 @@ stdenv.mkDerivation {
   src = fetchgit {
     url       = "https://github.com/OSVR/OSVR-Core.git";
     rev       = "95655d3174851670b85e9be8e8620ba28f9872f4";
-    sha256    = "16sbfv4fxcvxqhm81in8lkvjpfbiz312kh7pm4vipj7dja1fchy8";
+    sha256    = "0y3lfagv3h2i9fd4py2fpfixcfpa3ad3gzdpj3wxcl7jlrxznvs4";
     deepClone = true; # git clone --recursive
   };
 }

@@ -48,8 +48,7 @@ import OpenVR
 --   } deriving (Eq, Typeable)
 
 data ViveCompositor = ViveCompositor {
-  _viveCompositorBaseCompositor :: BaseCompositor,
-  _viveCompositorOpenVR :: OpenVRContext
+  _viveCompositorBaseCompositor :: BaseCompositor
 }
 
 makeLenses ''ViveCompositor
@@ -114,12 +113,13 @@ newViveCompositor scene display = do
   interfacePtr <- new interface
   weston_compositor_set_default_pointer_grab wcomp interfacePtr
 
-  tryInit <- vrInit VRApplication_Scene
-  openVrCtx <- case tryInit of
-    Left err -> error $ show err -- just terminate
-    Right ctx -> return ctx
+  (_, initErr) <- vrInit VRApplication_Scene ""
+  
+  case initErr of 
+    VRInitError_None -> return ()
+    _ -> error $ show initErr
 
-  return $ ViveCompositor baseCompositor openVrCtx
+  return $ ViveCompositor baseCompositor 
 
   where
     onSurfaceCreated compositor surface  _ = do
@@ -191,6 +191,10 @@ newViveCompositor scene display = do
 
 viveCompositorRender :: ViveCompositor -> IO ()
 viveCompositorRender viveComp = do
+
+  putStrLn "getting poses"
+  ivrCompositorWaitGetPoses
+
   let comp = viveComp ^. viveCompositorBaseCompositor
   surfaceMap <- readMVar (comp ^. baseCompositorSurfaceMap)
   Just glctx <- readMVar (comp ^. baseCompositorGlContext)
@@ -202,8 +206,6 @@ viveCompositorRender viveComp = do
   let surfaces = M.keys surfaceMap
   let scene  = comp ^. baseCompositorScene
   let simDisplay = comp ^. baseCompositorDisplay
-
-  let openVrCtx = viveComp ^. viveCompositorOpenVR
 
   time <- getTime Realtime
   scenePrepareForFrame scene time
@@ -226,13 +228,17 @@ viveCompositorRender viveComp = do
   -- convert to void* (shudder.)
   let gltxPtr = intPtrToPtr $ fromIntegral gltx
 
+  putStrLn "Submitting left"
+
   err <- with (OVRTexture gltxPtr TextureType_OpenGL ColorSpace_Gamma) $ \txPtr ->
-    ivrCompositorSubmit (openVrCtx ^. ivrCompositor) Eye_Left txPtr (VRTextureBounds_t nullPtr) Submit_Default
+    ivrCompositorSubmit Eye_Left txPtr (VRTextureBounds_t nullPtr) Submit_Default
 
   when (err /= VRCompositorError_None) $ print err
-  
+
+  putStrLn "Submitting right"  
+
   err <- with (OVRTexture gltxPtr TextureType_OpenGL ColorSpace_Gamma) $ \txPtr ->
-    ivrCompositorSubmit (openVrCtx ^. ivrCompositor) Eye_Right txPtr (VRTextureBounds_t nullPtr) Submit_Default
+    ivrCompositorSubmit Eye_Right txPtr (VRTextureBounds_t nullPtr) Submit_Default
 
   when (err /= VRCompositorError_None) $ print err
   
