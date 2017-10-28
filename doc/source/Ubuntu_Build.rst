@@ -1,37 +1,19 @@
 Ubuntu Build Process
 ====================
 
-The process to try out `SimulaHS`, is as simple as 1, 2, 3, 4a or 4b, 5 with only minor software compliation in between. You will need to install software from your linux distributor and have your machine whirl and buzz for minutes on end with no output to test this collection of Haskell, C, and C++ code. If you are up for the challenge then you can find most of a recipie below. Many of the instructions have only been attempted once, if any at all, and can only be cast as a guide to get running. With those precautions aside, here's what someone got working once, sometime, probably.
+The process to try out *Simula*, is as simple as 1, 2, 3, 4 with only minor software compliation in between. You will need to install software from your linux distributor and have your machine whirl and buzz for minutes on end with no output to test this collection of Haskell, C, and C++ code. If you are up for the challenge then you can find most of a recipie below. Many of the instructions have only been attempted once, if any at all, and can only be cast as a guide to get running. With those precautions aside, here's what someone got working once, sometime, probably.
 
-1. Clone all submodules
+1. Clone all submodules, see :ref:`git-help`
 
 2. Build and Install requisite packages for your system
 
 3. Build SimulaHS
    ``stack build --extra-lib-dirs="${HOME}"/.local/lib --extra-include-dirs="${HOME}"/.local/include``
 
-4. Load OSVR Server
+4. Execute the program and play around: :ref:`simulavr-usage`
 
-  * Default
-      ``osvr_server``
-
-  * Advanced 
-      ``osvr_server /path/to/configuration-file.json``
-
-5. Run the simple compositor with `stack exec simple-compositor`
-
-Cloning Submodules
-==================
-
-Before you begin you must initialize and update the submodules in the `SimulaHS` repository.  This process ensures that you are in sync with previously checked in combinations of commits between the two projects. More information on submodules is [here](https://git-scm.com/book/en/v2/Git-Tools-Submodules).
-
-Git Setup - Submodules
-----------------------
-
-``git submodule update --init --recursive``
-
-Ubuntu 17.10 (Artful) Required packages
-=======================================
+Ubuntu 17.10 (Artful) Packages
+------------------------------
 
 Install all the dependecies in one shot with the following script::
 
@@ -106,7 +88,7 @@ Per Repository Notes
 Dependencies for `wayland-protocols`
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-There are no special dependencies, but a pro-tip, run `configure` with a custom `PREFIX` and copy the `wayland-protocols.pc` file to `PREFIX/lib/pkgconfig` and set `PKG_CONFIG_PATH` to the same.
+There are no special dependencies, but a pro-tip, run *configure* with a custom **PREFIX** and copy the *wayland-protocols.pc* file to **PREFIX**/*lib/pkgconfig* and set **PKG_CONFIG_PATH** to the same.
 
 Example::
 
@@ -115,10 +97,10 @@ Example::
     cp wayland-protocols.pc "$HOME"/.local/lib/pkgconfig
     export PKG_CONFIG_PATH="$HOME"/.local/lib/pkgconfig
 
-Dependencies for `libweston`
+Dependencies for *libweston*
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Make sure you have installed `wayland-protocols` before proceeding to building `libweston`.
+Make sure you have installed *wayland-protocols* before proceeding to building *libweston*.
 
 1. EGL - libegl1-mesa-dev
 2. glesv2 - libgles2-mesa-dev
@@ -132,33 +114,33 @@ Make sure you have installed `wayland-protocols` before proceeding to building `
 10. xkbcommon - libxkbcommon-dev
 11. pam - libpam0g-dev
 
-After installing the above packages you can configure and build `libweston`. Here is a recipie for success.::
+After installing the above packages you can configure and build *libweston*. Here is a recipie for success.::
 
     git checkout -b v2.0.0 2.0.0
     ./autogen.sh
     ./configure --prefix="$HOME"/.local --disable-setuid-install
     make && make install
 
-You will see a notice about needing to set `LD_LIBRARY_PATH` and also for setting `LD_RUN_PATH` to use these newly installed libraries. You may want to set these in your `.bashrc` file or other shell startup file. For your interactive shell you can just use the following lines:
+You will see a notice about needing to set **LD_LIBRARY_PATH** and also for setting **LD_RUN_PATH** to use these newly installed libraries. You may want to set these in your *.bashrc* file or other shell startup file. For your interactive shell you can just use the following lines:
 
     LIBDIR="$HOME"/.local/lib
     export LD_LIBRARY_PATH="$LD_LIBRARY_PATH":"$LIBDIR":"$LIBDIR"/libweston-2:"$LIBDIR"/weston
     export LD_RUN_PATH="$LD_RUN_PATH:"$LIBDIR":"$LIBDIR"/libweston-2:"$LIBDIR"/weston
 
-Dependencies for `libfunctionality`
+Dependencies for *libfunctionality*
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-You will need `cmake` to build any of the projects from `OSVR`. When building `cmake` projects you should perform out-of-tree builds by creating a build directory and running `cmake` from that directory. For example you can repeat this pattern for any cmake project.::
+You will need *cmake* to build any of the projects from *OSVR*. When building *cmake* projects you should perform out-of-tree builds by creating a build directory and running *cmake* from that directory. For example you can repeat this pattern for any cmake project.::
 
     mkdir $PROJECT-build
     git clone $PROJECT_URI
     cd $PROJECT-build
     cmake ../$PROJECT
 
-To set a custom `PREFIX` for cmake projects you need to use the following incantation.
+To set a custom **PREFIX** for cmake projects you need to use the following incantation.
     ``cmake -D CMAKE_INSTALL_PREFIX="$HOME"/.local ../$PROJECT``
 
-Dependencies for `folly`
+Dependencies for *folly*
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
 1. boost-context - libboost-context-dev
@@ -174,17 +156,17 @@ Dependencies for `folly`
 11. double-conversion - libdouble-conversion-dev
 12. libevent - libevent-dev
 
-To build folly you need to run `autoreconf -ivf` from the folly subdirectory of the cloned repository.::
+To build folly you need to run ``autoreconf -ivf`` from the folly subdirectory of the cloned repository.::
 
     cd folly
     autoreconf -ivf
     ./configure --prefix="$HOME"/.local
     make && make install
 
-Dependencies for `OSVR-Core`
+Dependencies for *OSVR-Core*
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-To proceed ensure you have installed `folly`, `libfunctionality`, `libweston`, and `wayland-protocols` as described above.
+To proceed ensure you have installed *folly*, *libfunctionality*, *libweston*, and *wayland-protocols* as described above.
 
 1. sdl2 - libsdl2-dev
 2. opencv - libopencv-dev
@@ -196,8 +178,9 @@ To proceed ensure you have installed `folly`, `libfunctionality`, `libweston`, a
 8. libusb - libusb-1.0-0-dev
 9. libspdlog - libspdlog-dev
 
-When fetching from github you must fetch the submodules and initialize them before attempting a build.::
-    git submodule update --init --recursive
+When fetching from github you must fetch the submodules and initialize them before attempting a build.
 
-OSVR-Core is a `cmake` project so refer to the instructions above in the `libfunctionality` section to perform an out-of-tree build.
+``git submodule update --init --recursive``
+
+OSVR-Core is a *cmake* project so refer to the instructions above in the *libfunctionality* section to perform an out-of-tree build.
 
