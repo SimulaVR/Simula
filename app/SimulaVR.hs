@@ -2,6 +2,9 @@ import Control.Exception
 import Control.Lens
 import Control.Concurrent.MVar
 import Data.Typeable
+import Data.Monoid ((<>))
+-- optparse-applicative
+import Options.Applicative
 
 --import Simula.BaseCompositor.BaseCompositor
 import Simula.BaseCompositor.Compositor
@@ -19,13 +22,21 @@ import Foreign.C
 import Linear
 import Graphics.Rendering.OpenGL hiding (translate, scale, rotate)
 
+data EngineOptions = EngineOptions
+  { _verbose :: Bool
+  , _waitHMD :: Bool
+  } deriving (Eq, Show)
+
+makeLenses ''EngineOptions
+
 main :: IO ()
 main = do
-  seat <- newSimulaSeat
   let dpRot = axisAngle (V3 1 0 0) (radians (negate 25))
   let dpTf = translate (V3 0 0.8 1.25) !*! m33_to_m44 (fromQuaternion dpRot)
+  eOpts <- execParser engineOptionsWrapper
+  seat <- newSimulaSeat
   rec -- order is important
-    comp <- newBaseCompositor scene disp
+    comp <- newBaseCompositor scene disp (eOpts ^. waitHMD)
     Just glctx <- readMVar (comp ^. baseCompositorGlContext)
     scene <- Scene <$> newBaseNode scene Nothing identity
            <*> newMVar 0 <*> newMVar 0
@@ -37,3 +48,22 @@ main = do
 
     wm <- newWindowManager scene seat
   startCompositor comp
+
+engineOptsParser :: Parser EngineOptions
+engineOptsParser = EngineOptions
+  <$> switch
+    (long "verbose"
+      <> short 'v'
+      <> help "The most messages you can get")
+  <*> switch
+    (long "waitHMD"
+      <> short 'w'
+      <> help "Wait indefinitely for the HMD to be recognized")
+
+
+engineOptionsWrapper :: ParserInfo EngineOptions
+engineOptionsWrapper = info (engineOptsParser <**> helper)
+  (fullDesc
+    <> progDesc ""
+    <> header "base-compositor - basic engine for VR Desktop"
+  )

@@ -403,8 +403,8 @@ createSurface baseCompositor surface = do
       
       return simulaSurface
 
-newBaseCompositor :: Scene -> Display -> IO BaseCompositor
-newBaseCompositor scene display = do
+newBaseCompositor :: Scene -> Display -> Bool -> IO BaseCompositor
+newBaseCompositor scene display waitH = do
   wldp <- wl_display_create
   wcomp <- weston_compositor_create wldp nullPtr
   westonCompositorSetRepaintMsec wcomp 1000
@@ -433,7 +433,7 @@ newBaseCompositor scene display = do
                 <$> newMVar M.empty <*> newOpenGlData
                 <*> newMVar Nothing <*> newMVar Nothing
                 <*> pure mainLayer
-                <*> initSimulaOSVRClient
+                <*> if waitH then waitForOsvrDisplay Nothing else initSimulaOsvrClient
 
   windowedApi <- weston_windowed_output_get_api wcomp
 
