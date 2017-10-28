@@ -5,5 +5,6 @@ Welcome to SimulaVR's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   Nix_Build
    Ubuntu_Build
 
