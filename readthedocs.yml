@@ -1,0 +1,4 @@
+formats:
+  - pdf
+
+requirements_file: doc/requirements.txt

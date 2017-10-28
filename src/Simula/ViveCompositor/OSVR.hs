@@ -41,14 +41,14 @@ mkDefaultPoseTracker s path =
 makeLenses ''PoseTracker
 makeLenses ''SimulaOSVRClient
 
-initSimulaOSVRClient :: IO SimulaOSVRClient
-initSimulaOSVRClient = do
+initSimulaOsvrClient :: IO SimulaOSVRClient
+initSimulaOsvrClient = do
   ctx <- osvrClientInit "simula.compositor" 0
   return $ SimulaOSVRClient ctx Nothing
 
 waitForOsvrDisplay :: Maybe SimulaOSVRClient -> IO SimulaOSVRClient
 waitForOsvrDisplay Nothing = do
-  client <- initSimulaOSVRClient
+  client <- initSimulaOsvrClient
   waitForOsvrDisplay $ Just client
 
 waitForOsvrDisplay (Just client) = do
