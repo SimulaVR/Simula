@@ -253,6 +253,18 @@ instance Compositor ViveCompositor where
     setRepaintOutput wc newFunc
     weston_compositor_wake wc
     putStrLn "Compositor start"
+
+    Just output <- readMVar (comp ^. baseCompositorOutput)
+    forkOS $ forever $ weston_output_schedule_repaint output >> threadDelay 1000
+    forkIO $ forever $ do
+        let scene = comp ^. baseCompositorScene
+        diffTime <- liftM2 diffTimeSpec (readMVar $ scene ^. sceneLastTimestamp) (readMVar $ scene ^. sceneCurrentTimestamp)
+        let diff = fromIntegral $ toNanoSecs diffTime
+        let fps = floor (10^9/diff)
+        putStrLn $ "FPS: " ++ show fps
+        threadDelay 1000000
+
+
     wl_display_run $ comp ^. baseCompositorWlDisplay
 
     where
