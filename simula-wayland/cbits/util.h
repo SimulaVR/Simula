@@ -46,4 +46,8 @@ struct weston_gl_output_state {
 struct wl_shm_buffer* weston_buffer_get_shm_buffer(struct weston_buffer* buffer);
 void* weston_buffer_get_legacy_buffer(struct weston_buffer* buffer);
 
+GLenum glewInitExperimental();
+
+EGLContext makeContext(EGLDisplay dp, EGLContext conf);
+
 #endif

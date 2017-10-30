@@ -48,6 +48,7 @@ data MotorcarSurfaceNode = MotorcarSurfaceNode {
   _motorcarSurfaceNodeColorTextureCoords :: BufferObject,
   _motorcarSurfaceNodeDepthTextureCoords :: BufferObject,
   _motorcarSurfaceNodeSurfaceVertexCoords :: BufferObject,
+  _motorcarSurfaceNodeSurfaceTextureCoords :: BufferObject,
   _motorcarSurfaceNodeCuboidClippingVertices :: BufferObject,
   _motorcarSurfaceNodeCuboidClippingIndices :: BufferObject,
   
@@ -545,11 +546,15 @@ instance Drawable MotorcarSurfaceNode where
                                     , vpOffset ^. _x + vpSize ^. _x, vpOffset ^. _y + vpSize  ^. _y
                                     , vpOffset ^. _x, vpOffset ^. _y + vpSize ^. _y ] :: [Float]
 
+            bindBuffer ArrayBuffer $= Just (this ^. motorcarSurfaceNodeSurfaceTextureCoords)
             withArrayLen textureBlitCoords $ \len coordPtr ->
-              vertexAttribPointer aTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 coordPtr)
-
+              bufferData ArrayBuffer $= (fromIntegral (len * sizeOf (undefined :: Float)), coordPtr, StaticDraw)
+            vertexAttribPointer aTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 nullPtr)
+            
+            bindBuffer ArrayBuffer $= Just surfaceCoords
             drawArrays TriangleFan 0 4
             checkForErrors
+            bindBuffer ArrayBuffer $= Nothing
      
       
 
@@ -664,6 +669,7 @@ newMotorcarSurfaceNode ws prt tf dims = do
               <*> pure dcsbs
   
               <*> pure clipping
+              <*> genObjectName
               <*> genObjectName
               <*> genObjectName
               <*> pure surfaceVertexCoords

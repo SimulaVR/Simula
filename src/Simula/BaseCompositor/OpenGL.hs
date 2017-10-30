@@ -16,6 +16,8 @@ import Foreign
 import Simula.BaseCompositor.Geometry
 import Simula.BaseCompositor.Types
 
+import Unsafe.Coerce 
+
 data ViewPort = ViewPort {
   _viewPortOffsetFactor :: MVar (V2 Float),
   _viewPortSizeFactor :: MVar (V2 Float),
@@ -85,6 +87,7 @@ fragSource ShaderMousePointer = $(embedFile "shaders/mousepointer.frag")
 
 getProgram :: MotorcarShader -> IO Program
 getProgram shader = do
+  checkForErrors
   vert <- createShader VertexShader
   frag <- createShader FragmentShader
   shaderSourceBS vert $= vertexSource shader
@@ -93,7 +96,8 @@ getProgram shader = do
   checkCompileStatus vert
   compileShader frag
   checkCompileStatus frag
-  
+  checkForErrors  
+
   program <- createProgram
   attachShader program vert
   attachShader program frag
@@ -102,6 +106,7 @@ getProgram shader = do
   when (not isLinked) $ do
     get (programInfoLog program) >>= putStrLn
     ioError . userError $ "Failed linking " ++ show shader
+  checkForErrors
 
   currentProgram $= Just program
   texSampler <- get $ uniformLocation program "uTexSampler"
@@ -128,11 +133,11 @@ checkForErrors = do
   when (not (null errs)) $ do
     fbStatus <- get $ framebufferStatus Framebuffer
     dfbStatus <- get $ framebufferStatus DrawFramebuffer
-    
     rfbStatus <- get $ framebufferStatus ReadFramebuffer
     putStrLn $ "Framebuffer status: " ++ show fbStatus
     putStrLn $ "Draw framebuffer status: " ++ show dfbStatus
-    putStrLn $ "Read framebuffer status: " ++ show rfbStatus
+    putStrLn $ "Read framebuffer status: " ++ show rfbStatus 
     putStrLn $ show errs
+    putStrLn $ prettyCallStack callStack
 --    error $ show errs
 

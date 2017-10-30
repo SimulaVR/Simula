@@ -546,7 +546,7 @@ createFBO resolution = do
   let size = TextureSize2D resX resY
 
   textureBinding Texture2D $= Just fboColorBuffer
-  texImage2D Texture2D NoProxy 0 RGBA' size 0 (PixelData RGBA UnsignedByte nullPtr)
+  texImage2D Texture2D NoProxy 0 RGBA8 size 0 (PixelData RGBA UnsignedByte nullPtr)
   framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D fboColorBuffer 0
 
   textureBinding Texture2D $= Just fboDepthBuffer

@@ -31,6 +31,7 @@ import Simula.BaseCompositor.WindowManager
 import Simula.BaseCompositor.Utils
 import Simula.BaseCompositor.Types
 
+
 -- data family pattern
 -- instance Compositor BaseCompositor where
 --   data SimulaSurface BaseCompositor = BaseCompositorSurface {
@@ -75,7 +76,8 @@ data OpenGLData = OpenGLData {
   _openGlDataPpcm :: Float,
   _openGlDataTextureBlitter :: TextureBlitter,
   _openGlDataSurfaceFbo :: FramebufferObject,
-  _openGlDataMousePointer :: MousePointer
+  _openGlDataMousePointer :: MousePointer,
+  _openGlVAO :: VertexArrayObject
   } deriving Eq
 
 data SimulaOpenGLContext = SimulaOpenGLContext {
@@ -88,12 +90,15 @@ data TextureBlitter = TextureBlitter {
   _textureBlitterProgram :: Program,
   _textureBlitterVertexCoordEntry :: AttribLocation,
   _textureBlitterTextureCoordEntry :: AttribLocation,
-  _textureBlitterMatrixLocation :: UniformLocation
+  _textureBlitterMatrixLocation :: UniformLocation,
+  _textureBlitterVertexBuffer :: BufferObject,
+  _textureBlitterTextureBuffer :: BufferObject
   } deriving Eq
 
 data MousePointer = MousePointer {
   _mousePointerProgram :: Program,
   _mousePointerSurfaceVertexCoords :: BufferObject,
+  _mousePointerTextureBlitCoords :: BufferObject,
   _mousePointerPositionLocation :: AttribLocation,
   _mousePointerTexCoordLocation :: AttribLocation,
   _mousePointerPointerLocation :: UniformLocation
@@ -141,7 +146,7 @@ newSimulaSurface ws view baseCompositor ty = do
   return surface
 
 newOpenGlData :: IO OpenGLData
-newOpenGlData = OpenGLData 64 <$> newTextureBlitter <*> genObjectName <*> newMousePointer
+newOpenGlData = OpenGLData 64 <$> newTextureBlitter <*> genObjectName <*> newMousePointer <*> genObjectName
 
 newTextureBlitter :: IO TextureBlitter
 newTextureBlitter = do
@@ -153,6 +158,7 @@ newTextureBlitter = do
     <*> get (attribLocation program "vertexCoordEntry")
     <*> get (attribLocation program "textureCoordEntry")
     <*> get (uniformLocation program "matrix")
+    <*> genObjectName <*> genObjectName
 
 bindTextureBlitter :: TextureBlitter -> IO ()
 bindTextureBlitter tb = currentProgram $= Just (tb ^. textureBlitterProgram)
@@ -168,16 +174,25 @@ blitterDrawTexture tb tex targetRect targetSize depth targetInvertedY sourceInve
   vertexAttribArray vertexCoordEntry $= Enabled
   vertexAttribArray textureCoordEntry $= Enabled
 
+  bindBuffer ArrayBuffer $= Just (tb ^. textureBlitterVertexBuffer)
   withArrayLen vertexCoordinates $ \len arrPtr ->
-    vertexAttribPointer vertexCoordEntry $= (ToFloat, VertexArrayDescriptor 3 Float 0 arrPtr)
+    bufferData ArrayBuffer $= (fromIntegral (len * sizeOf (undefined :: Float)), arrPtr, StaticDraw)
+
+  vertexAttribPointer vertexCoordEntry $= (ToFloat, VertexArrayDescriptor 3 Float 0 nullPtr)
+
+  bindBuffer ArrayBuffer $= Just (tb ^. textureBlitterTextureBuffer)
   withArrayLen textureCoordinates $ \len arrPtr ->
-    vertexAttribPointer textureCoordEntry $= (ToFloat, VertexArrayDescriptor 2 Float 0 arrPtr)
+    bufferData ArrayBuffer $= (fromIntegral (len * sizeOf (undefined :: Float)), arrPtr, StaticDraw)
+
+  vertexAttribPointer textureCoordEntry $= (ToFloat, VertexArrayDescriptor 2 Float 0 nullPtr)
 
   uniform matrix $= transform ^. m44GLmatrix
 
   textureBinding Texture2D $= Just tex
   textureFilter Texture2D $= ((Nearest, Nothing), Nearest)
+  bindBuffer ArrayBuffer $= Just (tb ^. textureBlitterVertexBuffer)
   drawArrays TriangleFan 0 4
+  bindBuffer ArrayBuffer $= Nothing
 
   textureBinding Texture2D $= Nothing
 
@@ -225,6 +240,7 @@ newMousePointer = do
   withArrayLen surfaceVerts $ \len coordPtr ->
     bufferData ArrayBuffer $= (fromIntegral (len * sizeOf (undefined :: Float)), coordPtr, StaticDraw)
 
+  
   currentProgram $= Just program
   colorSampler <- get $ uniformLocation program "uColorSampler"
   uniform colorSampler $= TextureUnit 0
@@ -233,6 +249,7 @@ newMousePointer = do
   MousePointer
     <$> pure program
     <*> pure surfaceVertexCoords
+    <*> genObjectName
     <*> get (attribLocation program "aPosition")
     <*> get (attribLocation program "aTexCoord")
     <*> get (uniformLocation program "uPointer")
@@ -243,6 +260,8 @@ drawMousePointer display mp pos = do
 
   textureBinding Texture2D $= Just (display ^. displayScratchColorBufferTexture)
   checkForErrors
+
+  readBuffer $= BackBuffers
 
   let res = fromIntegral <$>  display ^. displaySize
   let size = TextureSize2D (res ^. _x) (res ^. _y)
@@ -292,12 +311,17 @@ drawMousePointer display mp pos = do
                             , vpOffset ^. _x, vpOffset ^. _y + vpSize ^. _y ] :: [Float]
 
 
-    withArrayLen textureBlitCoords $ \len coordPtr ->
-      vertexAttribPointer aTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 coordPtr)
+    bindBuffer ArrayBuffer $= Just (mp ^. mousePointerTextureBlitCoords)
+    withArrayLen textureBlitCoords $ \len coordPtr -> 
+      bufferData ArrayBuffer $= (fromIntegral (len * sizeOf (undefined :: Float)), coordPtr, StaticDraw)
+
+
+    vertexAttribPointer aTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 nullPtr)
     checkForErrors
 
     drawArrays TriangleFan 0 4
     checkForErrors
+    bindBuffer ArrayBuffer $= Nothing
 
   textureBinding Texture2D $= Nothing
 
@@ -312,6 +336,7 @@ setTimeout ms ioOperation =
 
 instance Compositor BaseCompositor where
   startCompositor comp = do
+
     let wc = comp ^. baseCompositorWestonCompositor
     oldFunc <- getRepaintOutput wc
     newFunc <- createRendererRepaintOutputFunc (onRender comp oldFunc)
@@ -427,7 +452,7 @@ newBaseCompositor scene display = do
 
   compositor <- BaseCompositor scene display wldp wcomp
                 <$> newMVar M.empty <*> newOpenGlData
-                <*> newMVar Nothing <*> newMVar Nothing
+                <*> newMVar Nothing <*> newMVar Nothing 
                 <*> pure mainLayer
 
   windowedApi <- weston_windowed_output_get_api wcomp
@@ -514,7 +539,7 @@ newBaseCompositor scene display = do
       eglsurf <- westonOutputRendererSurface output
       let glctx = SimulaOpenGLContext eglctx egldp eglsurf
      
-      writeMVar (compositor ^. baseCompositorGlContext) (Just glctx)
+      writeMVar (compositor ^. baseCompositorGlContext) (Just $ SimulaOpenGLContext eglctx egldp eglsurf)
 
     onPointerFocus compositor grab = do
       pointer <- westonPointerFromGrab grab
@@ -660,6 +685,8 @@ baseCompositorRender comp = do
   Just output <- readMVar (comp ^. baseCompositorOutput)
 
   glCtxMakeCurrent glctx
+  bindVertexArrayObject $= Just (comp ^. baseCompositorOpenGlData.openGlVAO)
+
   -- set up context
 
   let surfaces = M.keys surfaceMap
@@ -672,6 +699,8 @@ baseCompositorRender comp = do
 
   weston_output_schedule_repaint output
   checkPosesAndDraw simDisplay scene comp glctx output
+  bindVertexArrayObject $= Nothing
+
 
 
 checkPosesAndDraw disp scene comp glctx out = do

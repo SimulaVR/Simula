@@ -49,6 +49,8 @@ dependencies:
   - StateVar
   - simula-wayland
   - simula-openvr
+  - vulkan
+  - vector-sized
 _executable_options: &executable_options
   dependencies: [base, Simula]
   ghc-options: [-threaded, -rtsopts, -with-rtsopts=-N]

@@ -17,7 +17,9 @@ import Linear
 {#context lib="libweston-1"#}
 {#import Simula.WaylandServer#}
 
+
 -- needs pkgconfig for libweston
+#include "GL/glew.h"
 #include "compositor.h"
 #include "compositor-wayland.h"
 #include "compositor-x11.h"
@@ -477,3 +479,7 @@ westonPointerSeat = {#get weston_pointer->seat#}
 
 westonCompositorSetRepaintMsec :: WestonCompositor -> CInt -> IO ()
 westonCompositorSetRepaintMsec = {#set weston_compositor->repaint_msec#}
+
+{#fun glewInitExperimental {} -> `Int' #}
+
+{#fun makeContext {`EGLDisplay', `EGLContext'} -> `EGLContext'#}
