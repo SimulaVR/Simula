@@ -39,6 +39,7 @@ import OpenVR
 import Graphics.Vulkan
 import Data.List
 import qualified Data.Vector.Storable.Sized as VF
+import Data.Void
 
 -- data family pattern
 -- instance Compositor ViveCompositor where
@@ -84,37 +85,69 @@ makeLenses ''ViveCompositor
 
 newVulkanInfo :: IO VulkanInfo
 newVulkanInfo = do
-  iexts <- ivrCompositorGetVulkanInstanceExtensionsRequired
+  iexts <- ("VK_EXT_debug_report":) <$> ivrCompositorGetVulkanInstanceExtensionsRequired
   iextPtrs <- mapM newCString iexts
-  inst <- createInstance iextPtrs
+  print iexts
+
+  let valLayers = [ "VK_LAYER_LUNARG_parameter_validation"
+                  , "VK_LAYER_LUNARG_core_validation"
+		  , "VK_LAYER_LUNARG_object_tracker"
+		  , "VK_LAYER_LUNARG_standard_validation"
+		  , "VK_LAYER_GOOGLE_threading"]
+  valLayerPtrs <- mapM newCString valLayers
+
+  callbackPtr <- createDebugCallbackPtr $ \_ _ _ _ _ _ message _ -> peekCString message >>= print >> return (VkBool32 VK_FALSE)
+
+  
+  inst <- createInstance iextPtrs valLayerPtrs callbackPtr
   mapM_ free iextPtrs
+  mapM_ free valLayerPtrs
+
+  createDebugReport inst callbackPtr
+  
   phys <- findPhysicalDevice inst
+
+  Just idx <- alloca $ \numPtr -> do
+    num <- vkGetPhysicalDeviceQueueFamilyProperties phys numPtr nullPtr >> peek numPtr
+    props <- allocaArray (fromIntegral num) $ \arrayPtr -> vkGetPhysicalDeviceQueueFamilyProperties phys numPtr arrayPtr >> peekArray (fromIntegral num) arrayPtr
+    return $ findIndex (\(VkQueueFamilyProperties flags _ _ _) -> flags .&. VK_QUEUE_GRAPHICS_BIT == VK_QUEUE_GRAPHICS_BIT) props
+
+  let family = fromIntegral idx
+
   dexts <- ivrCompositorGetVulkanDeviceExtensionsRequired (castPtr phys)
+  print dexts
   dextPtrs <- mapM newCString dexts
-  dev <- createDevice inst phys dextPtrs
+  dev <- createDevice inst phys dextPtrs family
   mapM_  free dextPtrs
-  (queue, family) <- createQueue phys dev
+  queue <- createQueue phys dev family
   pool <- createCommandPool dev family
   cmdBuffer <- createCommandBuffer dev pool
   return $ VulkanInfo inst phys dev queue family pool cmdBuffer
 
   where
-    createInstance iexts = withCString "vive-compositor" $ \namePtr ->
+    createInstance iexts layers callbackPtr = withCString "vive-compositor" $ \namePtr ->
       with VkApplicationInfo { vkSType = VK_STRUCTURE_TYPE_APPLICATION_INFO
                              , vkPNext = nullPtr
                              , vkPApplicationName = namePtr
                              , vkApplicationVersion = 1
                              , vkPEngineName = namePtr
                              , vkEngineVersion = 0
-                             , vkApiVersion = vkMakeVersion 1 0 3
+                             , vkApiVersion = vkMakeVersion 1 0 61
                              } $ \appInfo ->
       withArrayLen iexts $ \extCount extPtr ->
+      withArrayLen layers $ \layerCount layerPtr ->
+      with VkDebugReportCallbackCreateInfoEXT { vkSType = VkStructureType 1000011000
+                                              , vkPNext = nullPtr
+                                              , vkFlags = VK_DEBUG_REPORT_ERROR_BIT_EXT .|. VK_DEBUG_REPORT_WARNING_BIT_EXT
+                                              , vkPfnCallback = callbackPtr
+                                              , vkPUserData = nullPtr
+                                              } $ \callbackInfo ->
       with VkInstanceCreateInfo { vkSType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO
-                               , vkPNext = nullPtr -- castPtr debugInfo
+                               , vkPNext = castPtr callbackInfo
                                , vkFlags = VkInstanceCreateFlags zeroBits
                                , vkPApplicationInfo = appInfo
-                               , vkEnabledLayerCount = 0
-                               , vkPpEnabledLayerNames = nullPtr
+                               , vkEnabledLayerCount = fromIntegral layerCount
+                               , vkPpEnabledLayerNames = layerPtr
                                , vkEnabledExtensionCount = fromIntegral extCount
                                , vkPpEnabledExtensionNames = extPtr
                                } $ \instInfo ->
@@ -122,11 +155,11 @@ newVulkanInfo = do
    
     findPhysicalDevice inst = (intPtrToPtr . fromIntegral) <$> ivrSystemGetOutputDevice TextureType_Vulkan (castPtr inst)
 
-    createDevice inst phys dexts = with 1 $ \prioPtr ->
+    createDevice inst phys dexts family = with 1 $ \prioPtr ->
       with VkDeviceQueueCreateInfo { vkSType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO
                                    , vkPNext = nullPtr
                                    , vkFlags = VkDeviceQueueCreateFlags zeroBits
-                                   , vkQueueFamilyIndex = 0
+                                   , vkQueueFamilyIndex = family
                                    , vkQueueCount = 1
                                    , vkPQueuePriorities = prioPtr
                                    } $ \queueInfo ->
@@ -146,7 +179,7 @@ newVulkanInfo = do
     createCommandPool dev family = 
       with VkCommandPoolCreateInfo { vkSType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO
                                    , vkPNext = nullPtr
-                                   , vkFlags = VkCommandPoolCreateFlagBits zeroBits
+                                   , vkFlags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
                                    , vkQueueFamilyIndex = family
                                    } $ \poolInfo ->
       alloca $ \poolPtr -> vkCreateCommandPool dev poolInfo nullPtr poolPtr >> peek poolPtr
@@ -159,38 +192,47 @@ newVulkanInfo = do
                                        , vkCommandBufferCount = 1
                                        } $ \allocInfo ->
       alloca $ \bufferPtr -> vkAllocateCommandBuffers dev allocInfo bufferPtr >> peek bufferPtr
-    createQueue phys dev = do
-      Just idx <- alloca $ \numPtr -> do
-        num <- vkGetPhysicalDeviceQueueFamilyProperties phys numPtr nullPtr >> peek numPtr
-        props <- allocaArray (fromIntegral num) $ \arrayPtr -> vkGetPhysicalDeviceQueueFamilyProperties phys numPtr arrayPtr >> peekArray (fromIntegral num) arrayPtr
-        return $ findIndex (\(VkQueueFamilyProperties flags _ _ _) -> flags .&. VK_QUEUE_GRAPHICS_BIT == VK_QUEUE_GRAPHICS_BIT) props
+    createQueue phys dev idx = do
       queue <- alloca $ \queuePtr -> vkGetDeviceQueue dev (fromIntegral idx) 0 queuePtr >> peek queuePtr
-      return (queue, fromIntegral idx)
+      return queue
 
+    createDebugReport inst callbackPtr = do
+      vkDebugFnPtr <- castFunPtr <$> (withCString "vkCreateDebugReportCallbackEXT" $ \ptr -> vkGetInstanceProcAddr inst ptr)
+      print vkDebugFnPtr
+      with VkDebugReportCallbackCreateInfoEXT { vkSType = VkStructureType 1000011000
+                                              , vkPNext = nullPtr
+                                              , vkFlags = VK_DEBUG_REPORT_ERROR_BIT_EXT .|. VK_DEBUG_REPORT_WARNING_BIT_EXT
+                                              , vkPfnCallback = callbackPtr
+                                              , vkPUserData = nullPtr
+                                              } $ \callbackInfo ->
+        alloca $ \cbPtr -> vkCreateDebugReportCallbackEXT' vkDebugFnPtr inst callbackInfo nullPtr cbPtr >> peek cbPtr
+      
+
+
+foreign import ccall "wrapper" createDebugCallbackPtr :: (VkDebugReportFlagsEXT -> VkDebugReportObjectTypeEXT -> Word64 -> CSize -> Int32 -> Ptr CChar -> Ptr CChar -> Ptr Void -> IO VkBool32) -> IO PFN_vkDebugReportCallbackEXT
+
+foreign import ccall "dynamic" vkCreateDebugReportCallbackEXT' :: FunPtr (VkInstance ->  Ptr VkDebugReportCallbackCreateInfoEXT -> Ptr VkAllocationCallbacks -> Ptr VkDebugReportCallbackEXT -> IO VkResult) -> VkInstance ->  Ptr VkDebugReportCallbackCreateInfoEXT ->  Ptr VkAllocationCallbacks -> Ptr VkDebugReportCallbackEXT -> IO VkResult
       
 
 -- creates an RGB image, 8bit/channel, no alpha
 newVulkanImage :: VulkanInfo -> V2 Int -> IO VulkanImage
 newVulkanImage info size = do
-  putStrLn "2"
   (buffer, stagingMemory, bufferSize) <- createBuffer 
-  putStrLn "3"
   (image, imageMemory, imageSize) <- createImage 
-  putStrLn "5"
+  transitionImage image
   return $ VulkanImage buffer stagingMemory bufferSize image imageMemory imageSize (VkExtent3D (fromIntegral $ size ^. _x) (fromIntegral $ size ^. _y) 1)
   
   where
-    -- todo proper allocation (vkGetImageMemoryRequirements etc)
     realSize = (size ^. _x) * (size ^. _y) * 4
-    findMemory flags = do
+    findMemory flags bits = do
       props <- alloca $ \propsPtr -> vkGetPhysicalDeviceMemoryProperties (info^.vulkanPhysicalDevice) propsPtr >> peek propsPtr
       -- TODO: make this non-partial
       Just idx <- return $ VF.ifoldr (\idx elem st -> case st of
-        Nothing -> if vkPropertyFlags elem .&. flags == flags then Just idx else Nothing
+        Nothing -> if vkPropertyFlags elem .&. flags == flags && ((bits `shiftR` (fromIntegral idx)) .&. 1 == 1)  then Just idx else Nothing
         rem -> rem) Nothing (vkMemoryTypes props)
       return idx
-    allocateMemory flags size = do
-      memoryTypeIndex <- findMemory flags
+    allocateMemory flags size bits = do
+      memoryTypeIndex <- findMemory flags bits
       with VkMemoryAllocateInfo { vkSType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO
                                 , vkPNext = nullPtr
                                 , vkAllocationSize = size
@@ -208,8 +250,8 @@ newVulkanImage info size = do
                               , vkPQueueFamilyIndices = nullPtr
                               } $ \bufferInfo ->
         alloca $ \bufferPtr -> vkCreateBuffer (info^.vulkanDevice) bufferInfo nullPtr bufferPtr >> peek bufferPtr
-      (VkMemoryRequirements size _ _) <- alloca $ \memReqsPtr -> vkGetBufferMemoryRequirements (info^.vulkanDevice) buffer memReqsPtr >> peek memReqsPtr
-      memory <- allocateMemory (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT .|. VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) size
+      (VkMemoryRequirements size _ bits) <- alloca $ \memReqsPtr -> vkGetBufferMemoryRequirements (info^.vulkanDevice) buffer memReqsPtr >> peek memReqsPtr
+      memory <- allocateMemory (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT .|. VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) size bits
 
       vkBindBufferMemory (info^.vulkanDevice) buffer memory (VkDeviceSize 0)
       return (buffer, memory, size)
@@ -225,24 +267,63 @@ newVulkanImage info size = do
                                       , vkArrayLayers = 1
                                       , vkTiling = VK_IMAGE_TILING_OPTIMAL
                                       , vkSamples = VK_SAMPLE_COUNT_1_BIT
-                                      , vkUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT
+                                      , vkUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT .|. VK_IMAGE_USAGE_TRANSFER_SRC_BIT .|. VK_IMAGE_USAGE_SAMPLED_BIT
                                       , vkSharingMode = VK_SHARING_MODE_EXCLUSIVE
                                       , vkQueueFamilyIndexCount = 0
                                       , vkPQueueFamilyIndices = nullPtr
                                       , vkInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED
                                       } $ \imageInfo ->
         alloca $ \imagePtr -> vkCreateImage (info^.vulkanDevice) imageInfo nullPtr imagePtr >>= print >> peek imagePtr
-      (VkMemoryRequirements size _ _) <- alloca $ \memReqsPtr -> vkGetImageMemoryRequirements (info^.vulkanDevice) image memReqsPtr >> peek memReqsPtr
-      memory <- allocateMemory VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT size
+      (VkMemoryRequirements size _ bits) <- alloca $ \memReqsPtr -> vkGetImageMemoryRequirements (info^.vulkanDevice) image memReqsPtr >> peek memReqsPtr
+      memory <- allocateMemory VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT size bits
       vkBindImageMemory (info^.vulkanDevice) image memory (VkDeviceSize 0)
       return (image, memory, size)
+      
+    transitionImage image = do
+      beginCommand
+      with VkImageMemoryBarrier { vkSType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
+                                , vkPNext = nullPtr
+                                , vkSrcAccessMask = zeroBits
+                                , vkDstAccessMask = VK_ACCESS_TRANSFER_READ_BIT
+                                , vkOldLayout = VK_IMAGE_LAYOUT_UNDEFINED
+                                , vkNewLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+                                , vkSrcQueueFamilyIndex = info ^. vulkanQueueFamilyIndex
+                                , vkDstQueueFamilyIndex = info ^. vulkanQueueFamilyIndex
+                                , vkImage = image 
+                                , vkSubresourceRange = VkImageSubresourceRange VK_IMAGE_ASPECT_COLOR_BIT 0 1 0 1
+                                } $ \barrier ->
+        vkCmdPipelineBarrier (info^.vulkanCommandBuffer) VK_PIPELINE_STAGE_TRANSFER_BIT VK_PIPELINE_STAGE_TRANSFER_BIT zeroBits 0 nullPtr 0 nullPtr 1 barrier
+      endCommand
+    beginCommand = with VkCommandBufferBeginInfo { vkSType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
+                                                 , vkPNext = nullPtr
+                                                 , vkFlags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+                                                 , vkPInheritanceInfo = nullPtr
+                                                 } $ \beginInfo -> vkBeginCommandBuffer (info ^. vulkanCommandBuffer) beginInfo
+   
+    endCommand = do
+      vkEndCommandBuffer (info ^. vulkanCommandBuffer)
+
+      with (info ^. vulkanCommandBuffer) $ \cmdBufferPtr ->
+        with VkSubmitInfo { vkSType = VK_STRUCTURE_TYPE_SUBMIT_INFO
+                          , vkPNext = nullPtr
+                          , vkCommandBufferCount = 1
+                          , vkPCommandBuffers = cmdBufferPtr
+                          , vkWaitSemaphoreCount = 0
+                          , vkPWaitSemaphores = nullPtr
+                          , vkPWaitDstStageMask = nullPtr
+                          , vkSignalSemaphoreCount = 0
+                          , vkPSignalSemaphores = nullPtr
+                          } $ \submitInfo ->
+        vkQueueSubmit (info^.vulkanQueue) 1 submitInfo (VkFence 0)
+      vkQueueWaitIdle (info^.vulkanQueue)
+      vkResetCommandBuffer (info^.vulkanCommandBuffer) zeroBits
 
 updateVulkanImage :: VulkanInfo -> VulkanImage -> TextureObject -> IO ()
 updateVulkanImage info image tex = do
-  putStrLn "1"
+  transitionImage VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL VK_ACCESS_TRANSFER_READ_BIT VK_ACCESS_TRANSFER_WRITE_BIT
   copyToBuffer
-  putStrLn "2"
   copyBufferToImage
+  transitionImage VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL VK_ACCESS_TRANSFER_WRITE_BIT VK_ACCESS_TRANSFER_READ_BIT
   return ()
 
   where
@@ -288,6 +369,25 @@ updateVulkanImage info image tex = do
                              , vkImageExtent = image^.imageExtents
                              } $ \region -> vkCmdCopyBufferToImage (info^.vulkanCommandBuffer) (image^.imageStagingBuffer) (image^.imageImage) VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL 1 region
       endCommand
+
+    transitionImage src dst srcMask dstMask = do
+      beginCommand
+      with VkImageMemoryBarrier { vkSType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
+                                , vkPNext = nullPtr
+                                , vkSrcAccessMask = srcMask
+                                , vkDstAccessMask = dstMask
+                                , vkOldLayout = src
+                                , vkNewLayout = dst
+                                , vkSrcQueueFamilyIndex = info ^. vulkanQueueFamilyIndex
+                                , vkDstQueueFamilyIndex = info ^. vulkanQueueFamilyIndex
+                                , vkImage = image^.imageImage
+                                , vkSubresourceRange = VkImageSubresourceRange VK_IMAGE_ASPECT_COLOR_BIT 0 1 0 1
+                                } $ \barrier ->
+        vkCmdPipelineBarrier (info^.vulkanCommandBuffer) VK_PIPELINE_STAGE_TRANSFER_BIT VK_PIPELINE_STAGE_TRANSFER_BIT zeroBits 0 nullPtr 0 nullPtr 1 barrier
+      endCommand
+
+
+       
 
 newViveCompositor :: Scene -> Display -> IO ViveCompositor
 newViveCompositor scene display = do
@@ -481,37 +581,31 @@ viveCompositorRender viveComp = do
   let (VkImage rightHandle) = rightImage^.imageImage
 
   let (VkFormat format) = VK_FORMAT_R8G8B8A8_UNORM
-  putStrLn "updating image"
   updateVulkanImage info leftImage tex
   updateVulkanImage info rightImage tex
 
   let (VkExtent3D width height _) = leftImage^.imageExtents --identical
 
   with (VRVulkanTextureData leftHandle (castPtr $ info^.vulkanDevice) (castPtr $ info^.vulkanPhysicalDevice)
-         (castPtr $ info^.vulkanInstance) (castPtr $ info^.vulkanQueue) 0 width height
+         (castPtr $ info^.vulkanInstance) (castPtr $ info^.vulkanQueue) (info^.vulkanQueueFamilyIndex) width height
          (fromIntegral format) 1) $ \texDataPtr' -> do
     let texDataPtr = castPtr texDataPtr'
-    putStrLn "Submitting left"
-    err <- with (OVRTexture texDataPtr TextureType_Vulkan ColorSpace_Gamma) $ \txPtr ->
-      ivrCompositorSubmit Eye_Left txPtr (VRTextureBounds_t nullPtr) Submit_LensDistortionAlreadyApplied
+    err <- with (OVRTexture texDataPtr TextureType_Vulkan ColorSpace_Auto) $ \txPtr ->
+      ivrCompositorSubmit Eye_Left txPtr (VRTextureBounds_t nullPtr) Submit_Default
 
     when (err /= VRCompositorError_None) $ print err
 
   with (VRVulkanTextureData rightHandle (castPtr $ info^.vulkanDevice) (castPtr $ info^.vulkanPhysicalDevice)
-         (castPtr $ info^.vulkanInstance) (castPtr $ info^.vulkanQueue) 0 width height
+         (castPtr $ info^.vulkanInstance) (castPtr $ info^.vulkanQueue) (info^.vulkanQueueFamilyIndex) width height
          (fromIntegral format) 1) $ \texDataPtr' -> do
     let texDataPtr = castPtr texDataPtr'
-    putStrLn "Submitting right"  
 
-    err <- with (OVRTexture texDataPtr TextureType_Vulkan ColorSpace_Gamma) $ \txPtr ->
+    err <- with (OVRTexture texDataPtr TextureType_Vulkan ColorSpace_Auto) $ \txPtr ->
       ivrCompositorSubmit Eye_Right txPtr (VRTextureBounds_t nullPtr) Submit_Default
-    putStrLn "submitted"
 
     when (err /= VRCompositorError_None) $ print err
 
-  putStrLn "getting poses"
   ivrCompositorWaitGetPoses
-  putStrLn "got poses"
   bindVertexArrayObject $= Nothing
 
   return ()
