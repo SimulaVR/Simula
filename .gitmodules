@@ -1,3 +1,6 @@
 [submodule "simula-openvr"]
 	path = simula-openvr
 	url = git@github.com:georgewsinger/simula-openvr.git
+[submodule "vulkan"]
+	path = vulkan
+	url = https://github.com/expipiplus1/vulkan
