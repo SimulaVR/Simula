@@ -127,7 +127,7 @@ instance OpenGLContext SimulaOpenGLContext where
       egldp = this ^. simulaOpenGlContextEglDisplay
       eglsurf = this ^. simulaOpenGlContextEglSurface
 
-  glCtxDefaultFramebufferSize this = return $ V2 2160 1200
+  glCtxDefaultFramebufferSize this = return $ V2 1512 1680
 
 instance HasBaseWaylandSurface SimulaSurface where
   baseWaylandSurface = simulaSurfaceBase

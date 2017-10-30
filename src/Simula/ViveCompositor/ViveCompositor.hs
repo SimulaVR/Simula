@@ -91,9 +91,9 @@ newVulkanInfo = do
 
   let valLayers = [ "VK_LAYER_LUNARG_parameter_validation"
                   , "VK_LAYER_LUNARG_core_validation"
-		  , "VK_LAYER_LUNARG_object_tracker"
-		  , "VK_LAYER_LUNARG_standard_validation"
-		  , "VK_LAYER_GOOGLE_threading"]
+                  , "VK_LAYER_LUNARG_object_tracker"
+                  , "VK_LAYER_LUNARG_standard_validation"
+                  , "VK_LAYER_GOOGLE_threading"]
   valLayerPtrs <- mapM newCString valLayers
 
   callbackPtr <- createDebugCallbackPtr $ \_ _ _ _ _ _ message _ -> peekCString message >>= print >> return (VkBool32 VK_FALSE)
@@ -280,7 +280,7 @@ newVulkanImage info size = do
       return (image, memory, size)
       
     transitionImage image = do
-      beginCommand
+      beginCommand info
       with VkImageMemoryBarrier { vkSType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
                                 , vkPNext = nullPtr
                                 , vkSrcAccessMask = zeroBits
@@ -293,14 +293,17 @@ newVulkanImage info size = do
                                 , vkSubresourceRange = VkImageSubresourceRange VK_IMAGE_ASPECT_COLOR_BIT 0 1 0 1
                                 } $ \barrier ->
         vkCmdPipelineBarrier (info^.vulkanCommandBuffer) VK_PIPELINE_STAGE_TRANSFER_BIT VK_PIPELINE_STAGE_TRANSFER_BIT zeroBits 0 nullPtr 0 nullPtr 1 barrier
-      endCommand
-    beginCommand = with VkCommandBufferBeginInfo { vkSType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
-                                                 , vkPNext = nullPtr
-                                                 , vkFlags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
-                                                 , vkPInheritanceInfo = nullPtr
-                                                 } $ \beginInfo -> vkBeginCommandBuffer (info ^. vulkanCommandBuffer) beginInfo
-   
-    endCommand = do
+      endCommand info
+
+beginCommand :: VulkanInfo -> IO VkResult
+beginCommand info = with VkCommandBufferBeginInfo { vkSType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
+                                             , vkPNext = nullPtr
+                                             , vkFlags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+                                             , vkPInheritanceInfo = nullPtr
+                                             } $ \beginInfo -> vkBeginCommandBuffer (info ^. vulkanCommandBuffer) beginInfo
+
+endCommand :: VulkanInfo -> IO VkResult
+endCommand info = do
       vkEndCommandBuffer (info ^. vulkanCommandBuffer)
 
       with (info ^. vulkanCommandBuffer) $ \cmdBufferPtr ->
@@ -334,33 +337,9 @@ updateVulkanImage info image tex = do
       getTexImage Texture2D 0 (PixelData RGBA UnsignedByte dat)
       textureBinding Texture2D $= Nothing
       vkUnmapMemory (info^.vulkanDevice) (image^.imageStagingMemory)
-
-    beginCommand = with VkCommandBufferBeginInfo { vkSType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
-                                                 , vkPNext = nullPtr
-                                                 , vkFlags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
-                                                 , vkPInheritanceInfo = nullPtr
-                                                 } $ \beginInfo -> vkBeginCommandBuffer (info ^. vulkanCommandBuffer) beginInfo
-   
-    endCommand = do
-      vkEndCommandBuffer (info ^. vulkanCommandBuffer)
-
-      with (info ^. vulkanCommandBuffer) $ \cmdBufferPtr ->
-        with VkSubmitInfo { vkSType = VK_STRUCTURE_TYPE_SUBMIT_INFO
-                          , vkPNext = nullPtr
-                          , vkCommandBufferCount = 1
-                          , vkPCommandBuffers = cmdBufferPtr
-                          , vkWaitSemaphoreCount = 0
-                          , vkPWaitSemaphores = nullPtr
-                          , vkPWaitDstStageMask = nullPtr
-                          , vkSignalSemaphoreCount = 0
-                          , vkPSignalSemaphores = nullPtr
-                          } $ \submitInfo ->
-        vkQueueSubmit (info^.vulkanQueue) 1 submitInfo (VkFence 0)
-      vkQueueWaitIdle (info^.vulkanQueue)
-      vkResetCommandBuffer (info^.vulkanCommandBuffer) zeroBits
                         
     copyBufferToImage = do
-      beginCommand
+      beginCommand info
       with VkBufferImageCopy { vkBufferOffset = VkDeviceSize 0
                              , vkBufferRowLength = 0
                              , vkBufferImageHeight = 0
@@ -368,10 +347,10 @@ updateVulkanImage info image tex = do
                              , vkImageOffset = VkOffset3D 0 0 0
                              , vkImageExtent = image^.imageExtents
                              } $ \region -> vkCmdCopyBufferToImage (info^.vulkanCommandBuffer) (image^.imageStagingBuffer) (image^.imageImage) VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL 1 region
-      endCommand
+      endCommand info
 
     transitionImage src dst srcMask dstMask = do
-      beginCommand
+      beginCommand info
       with VkImageMemoryBarrier { vkSType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
                                 , vkPNext = nullPtr
                                 , vkSrcAccessMask = srcMask
@@ -384,7 +363,7 @@ updateVulkanImage info image tex = do
                                 , vkSubresourceRange = VkImageSubresourceRange VK_IMAGE_ASPECT_COLOR_BIT 0 1 0 1
                                 } $ \barrier ->
         vkCmdPipelineBarrier (info^.vulkanCommandBuffer) VK_PIPELINE_STAGE_TRANSFER_BIT VK_PIPELINE_STAGE_TRANSFER_BIT zeroBits 0 nullPtr 0 nullPtr 1 barrier
-      endCommand
+      endCommand info
 
 
        
@@ -465,7 +444,10 @@ newViveCompositor scene display = do
   info <- newVulkanInfo
   putStrLn "Created vulkan"
   -- hackhack
-  ViveCompositor baseCompositor info <$> newVulkanImage info (V2 1512 1680) <*> newVulkanImage info (V2 1512 1680)
+  recSize@(width, height) <- ivrSystemGetRecommendedRenderTargetSize
+  print recSize
+  let recVSize = V2 (fromIntegral width) (fromIntegral height)
+  ViveCompositor baseCompositor info <$> newVulkanImage info recVSize <*> newVulkanImage info recVSize
 
   where
     onSurfaceCreated compositor surface  _ = do
@@ -586,24 +568,25 @@ viveCompositorRender viveComp = do
 
   let (VkExtent3D width height _) = leftImage^.imageExtents --identical
 
-  with (VRVulkanTextureData leftHandle (castPtr $ info^.vulkanDevice) (castPtr $ info^.vulkanPhysicalDevice)
-         (castPtr $ info^.vulkanInstance) (castPtr $ info^.vulkanQueue) (info^.vulkanQueueFamilyIndex) width height
-         (fromIntegral format) 1) $ \texDataPtr' -> do
-    let texDataPtr = castPtr texDataPtr'
-    err <- with (OVRTexture texDataPtr TextureType_Vulkan ColorSpace_Auto) $ \txPtr ->
-      ivrCompositorSubmit Eye_Left txPtr (VRTextureBounds_t nullPtr) Submit_Default
+  with (VRTextureBounds 0 0 1 1) $ \boundsPtr -> do
+    with (VRVulkanTextureData leftHandle (castPtr $ info^.vulkanDevice) (castPtr $ info^.vulkanPhysicalDevice)
+           (castPtr $ info^.vulkanInstance) (castPtr $ info^.vulkanQueue) (info^.vulkanQueueFamilyIndex) width height
+           (fromIntegral format) 1) $ \texDataPtr' -> do
+      let texDataPtr = castPtr texDataPtr'
+      err <- with (OVRTexture texDataPtr TextureType_Vulkan ColorSpace_Auto) $ \txPtr ->
+        ivrCompositorSubmit Eye_Left txPtr boundsPtr Submit_Default
 
-    when (err /= VRCompositorError_None) $ print err
+      when (err /= VRCompositorError_None) $ print err
 
-  with (VRVulkanTextureData rightHandle (castPtr $ info^.vulkanDevice) (castPtr $ info^.vulkanPhysicalDevice)
-         (castPtr $ info^.vulkanInstance) (castPtr $ info^.vulkanQueue) (info^.vulkanQueueFamilyIndex) width height
-         (fromIntegral format) 1) $ \texDataPtr' -> do
-    let texDataPtr = castPtr texDataPtr'
+    with (VRVulkanTextureData rightHandle (castPtr $ info^.vulkanDevice) (castPtr $ info^.vulkanPhysicalDevice)
+           (castPtr $ info^.vulkanInstance) (castPtr $ info^.vulkanQueue) (info^.vulkanQueueFamilyIndex) width height
+           (fromIntegral format) 1) $ \texDataPtr' -> do
+      let texDataPtr = castPtr texDataPtr'
 
-    err <- with (OVRTexture texDataPtr TextureType_Vulkan ColorSpace_Auto) $ \txPtr ->
-      ivrCompositorSubmit Eye_Right txPtr (VRTextureBounds_t nullPtr) Submit_Default
+      err <- with (OVRTexture texDataPtr TextureType_Vulkan ColorSpace_Auto) $ \txPtr ->
+        ivrCompositorSubmit Eye_Right txPtr boundsPtr Submit_Default
 
-    when (err /= VRCompositorError_None) $ print err
+      when (err /= VRCompositorError_None) $ print err
 
   ivrCompositorWaitGetPoses
   bindVertexArrayObject $= Nothing
