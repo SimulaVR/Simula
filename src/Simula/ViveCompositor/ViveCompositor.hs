@@ -484,7 +484,7 @@ newViveCompositor scene display = do
       --TODO hack
       weston_output_set_scale output 1
       weston_output_set_transform output 0
-      westonWindowedOutputSetSize windowedApi output 1280 720
+      westonWindowedOutputSetSize windowedApi output 1512 1680
 
       weston_output_enable output
       return ()
@@ -502,6 +502,7 @@ newViveCompositor scene display = do
       let glctx = SimulaOpenGLContext eglctx egldp eglsurf
 
       writeMVar (compositor ^. baseCompositorGlContext) (Just $ SimulaOpenGLContext eglctx egldp eglsurf)
+      return ()
 
 
     onPointerFocus compositor grab = do
