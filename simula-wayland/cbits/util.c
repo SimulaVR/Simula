@@ -1,5 +1,4 @@
 
-#include "GL/glew.h"
 #include "util.h"
 #include "compositor.h"
 #include "libweston-desktop.h"
