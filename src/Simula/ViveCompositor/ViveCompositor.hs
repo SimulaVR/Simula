@@ -392,8 +392,6 @@ newViveCompositor scene display = do
 
 
   blend $= Disabled
-
-  glewInitExperimental >>= print
   
   socketName <- wl_display_add_socket_auto wldp
   putStrLn $ "Socket: " ++ socketName
