@@ -37,8 +37,8 @@ resolver: lts-9.8
 packages:
 - '.'
 - simula-wayland
-- simula-osvr
 - simula-openvr
+- vulkan
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:

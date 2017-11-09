@@ -19,6 +19,7 @@ import Linear
 {#context lib="libweston-1"#}
 {#import Simula.WaylandServer#}
 
+
 -- needs pkgconfig for libweston
 #include "compositor.h"
 #include "compositor-wayland.h"
@@ -482,6 +483,8 @@ westonCompositorSetRepaintMsec :: WestonCompositor -> CInt -> IO ()
 westonCompositorSetRepaintMsec = {#set weston_compositor->repaint_msec#}
 {#fun weston_compositor_load_xwayland {`WestonCompositor'} -> `Bool' #}
 
+
+{#fun makeContext {`EGLDisplay', `EGLContext'} -> `EGLContext'#}
 
 {#pointer *weston_xwayland as WestonXWayland newtype#}
 {#pointer *weston_xwayland_api as WestonXWaylandApiPtr -> WestonXWaylandApi #}
