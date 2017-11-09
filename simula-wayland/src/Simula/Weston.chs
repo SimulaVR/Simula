@@ -6,10 +6,12 @@ import qualified Foreign.ForeignPtr as C2HSImp
 import qualified Foreign.Ptr as C2HSImp
 import qualified Foreign.Storable as C2HSImp
 
+
 import Control.Monad
 import Data.Proxy
 import Data.Word
 import System.Posix.DynamicLinker
+import System.Posix.Types
 import Foreign
 import Foreign.C
 import Linear
@@ -26,6 +28,7 @@ import Linear
 #include "EGL/egl.h"
 #include "EGL/eglext.h"
 #include "windowed-output-api.h"
+#include "xwayland-api.h"
 
 {#pointer *weston_compositor as WestonCompositor newtype#}
 deriving instance Eq WestonCompositor
@@ -477,3 +480,43 @@ westonPointerSeat = {#get weston_pointer->seat#}
 
 westonCompositorSetRepaintMsec :: WestonCompositor -> CInt -> IO ()
 westonCompositorSetRepaintMsec = {#set weston_compositor->repaint_msec#}
+{#fun weston_compositor_load_xwayland {`WestonCompositor'} -> `Bool' #}
+
+
+{#pointer *weston_xwayland as WestonXWayland newtype#}
+{#pointer *weston_xwayland_api as WestonXWaylandApiPtr -> WestonXWaylandApi #}
+
+data WestonXWaylandApi = WestonXWaylandApi {
+  apiXWaylandGet :: XWaylandApiGetFunc,
+  apiXWaylandListen :: XWaylandApiListenFunc,
+  apiXWaylandXserverLoaded :: XWaylandApiXserverLoadedFunc,
+  apiXWaylandXserverExited :: XWaylandApiXserverExitedFunc
+}
+
+instance Storable WestonXWaylandApi where
+  sizeOf _ = {#sizeof weston_xwayland_api#}
+  alignment _ = {#alignof weston_xwayland_api#}
+  peek ptr = WestonXWaylandApi
+             <$> (fromXWaylandApiGetFuncPtr <$> {#get weston_xwayland_api->get#} ptr)
+             <*> (fromXWaylandApiListenFuncPtr <$> {#get weston_xwayland_api->listen#} ptr)
+             <*> (fromXWaylandApiXserverLoadedFuncPtr <$> {#get weston_xwayland_api->xserver_loaded#} ptr)
+             <*> (fromXWaylandApiXserverExitedFuncPtr <$> {#get weston_xwayland_api->xserver_exited#} ptr)
+
+    
+  poke = error "No poking"
+
+
+type XWaylandSpawnXserverFunc = {#type weston_xwayland_spawn_xserver_func_t #}
+type XWaylandApiGetFunc = WestonCompositor -> IO WestonXWayland
+type XWaylandApiListenFunc = WestonXWayland -> Ptr () -> XWaylandSpawnXserverFunc -> IO CInt
+type XWaylandApiXserverLoadedFunc = WestonXWayland -> WlClient -> CInt -> IO ()
+type XWaylandApiXserverExitedFunc = WestonXWayland -> CInt -> IO ()
+
+foreign import ccall "wrapper" createXWaylandSpawnXserverFunc :: XWaylandSpawnXserverFunc -> IO (FunPtr XWaylandSpawnXserverFunc)
+foreign import ccall "dynamic" fromXWaylandApiGetFuncPtr :: FunPtr XWaylandApiGetFunc -> XWaylandApiGetFunc
+foreign import ccall "dynamic" fromXWaylandApiListenFuncPtr :: FunPtr XWaylandApiListenFunc -> XWaylandApiListenFunc
+foreign import ccall "dynamic" fromXWaylandApiXserverLoadedFuncPtr :: FunPtr XWaylandApiXserverLoadedFunc -> XWaylandApiXserverLoadedFunc
+foreign import ccall "dynamic" fromXWaylandApiXserverExitedFuncPtr :: FunPtr XWaylandApiXserverExitedFunc -> XWaylandApiXserverExitedFunc
+
+{#fun weston_xwayland_get_api {`WestonCompositor'} -> `WestonXWaylandApiPtr' #}
+
