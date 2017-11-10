@@ -387,7 +387,7 @@ newViveCompositor scene display waitHMD = do
   (_, initErr) <- vrInit VRApplication_Scene ""
 
   case initErr of
-    VRInitError_None -> return ()
+    EvriniterrorVriniterrorNone -> return ()
     _ -> error $ show initErr
 
 
