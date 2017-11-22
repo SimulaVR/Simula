@@ -26,6 +26,9 @@ translate = mkTransformationMat identity
 scale :: Num a => V3 a -> M44 a
 scale v = fmap (liftI2 (*) (point v)) identity
 
+m34_to_m44 :: Num a => M34 a -> M44 a
+m34_to_m44 (V3 x y z) = V4 x y z $ point 0
+
 writeMVar :: MVar a -> a -> IO ()
 writeMVar mv x = void $ swapMVar mv x
 

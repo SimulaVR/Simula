@@ -587,7 +587,13 @@ viveCompositorRender viveComp = do
 
       when (err /= VRCompositorError_None) $ print err
 
-  ivrCompositorWaitGetPoses
+  (err, renderPoses, _) <- ivrCompositorWaitGetPoses
+  when (err /= VRCompositorError_None) $ print err
+
+  let hmdPose = m34_to_m44 . poseDeviceToAbsoluteTracking $ renderPoses !! k_unTrackedDeviceIndex_Hmd
+
+  setNodeTransform (comp ^. baseCompositorScene) hmdPose
+  
   bindVertexArrayObject $= Nothing
 
   return ()
