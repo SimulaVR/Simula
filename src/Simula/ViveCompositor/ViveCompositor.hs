@@ -384,7 +384,7 @@ newViveCompositor scene display = do
 
   when (res > 0) $ ioError $ userError "Error when loading backend"
 
-  (_, initErr) <- vrInit VRApplication_Scene ""
+  (_, initErr) <- vrInit VRApplication_Scene 
 
   case initErr of
     VRInitError_None -> return ()

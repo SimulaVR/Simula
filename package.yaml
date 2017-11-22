@@ -81,13 +81,11 @@ library:
 executables:
   base-compositor:
     <<: *executable_options
-    main: BaseCompositor.hs
-    source-dirs: app
+    main: app/BaseCompositor.hs
     dependencies: [dbus, Simula]
   vive-compositor:
     <<: *executable_options
-    main: ViveCompositor.hs
-    source-dirs: app
+    main: app/ViveCompositor.hs
     dependencies:
       - dbus
       - Simula
