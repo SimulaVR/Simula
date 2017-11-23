@@ -590,7 +590,7 @@ viveCompositorRender viveComp = do
   (err, renderPoses, _) <- ivrCompositorWaitGetPoses
   when (err /= VRCompositorError_None) $ print err
 
-  let hmdPose = inv44 . m34_to_m44 . poseDeviceToAbsoluteTracking $ renderPoses !! k_unTrackedDeviceIndex_Hmd
+  let hmdPose = m34_to_m44 . poseDeviceToAbsoluteTracking $ renderPoses !! k_unTrackedDeviceIndex_Hmd
 
   setNodeTransform simDisplay hmdPose
   
