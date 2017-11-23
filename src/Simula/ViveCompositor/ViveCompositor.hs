@@ -75,8 +75,7 @@ data VulkanImage = VulkanImage {
 data ViveCompositor = ViveCompositor {
   _viveCompositorBaseCompositor :: BaseCompositor,
   _viveCompositorVulkanInfo :: VulkanInfo,
-  _viveCompositorVulkanLeftImage :: VulkanImage,
-  _viveCompositorVulkanRightImage :: VulkanImage
+  _viveCompositorVulkanImage :: VulkanImage
 }
 
 makeLenses ''VulkanInfo
@@ -368,8 +367,8 @@ updateVulkanImage info image tex = do
 
        
 
-newViveCompositor :: Scene -> Display -> IO ViveCompositor
-newViveCompositor scene display = do
+newViveCompositor :: IO ViveCompositor
+newViveCompositor = do
   wldp <- wl_display_create
   wcomp <- weston_compositor_create wldp nullPtr
 
@@ -402,22 +401,63 @@ newViveCompositor scene display = do
   bgLayer <- newWestonLayer wcomp
   weston_layer_set_position mainLayer WestonLayerPositionBackground
 
-  baseCompositor <- BaseCompositor scene display wldp wcomp
-                <$> newMVar M.empty <*> newOpenGlData
-                <*> newMVar Nothing <*> newMVar Nothing
-                <*> pure mainLayer
+  seat <- newSimulaSeat
 
   windowedApi <- weston_windowed_output_get_api wcomp
 
-  let outputPendingSignal = westonCompositorOutputPendingSignal wcomp
-  outputPendingPtr <- createNotifyFuncPtr (onOutputPending windowedApi baseCompositor)
-  addListenerToSignal outputPendingSignal outputPendingPtr
+  let dpRot = axisAngle (V3 1 0 0) (radians (negate 25))
+  let dpTf = translate (V3 0 0.8 1.25) !*! m33_to_m44 (fromQuaternion dpRot)
 
-  let outputCreatedSignal = westonCompositorOutputCreatedSignal wcomp
-  outputCreatedPtr <- createNotifyFuncPtr (onOutputCreated baseCompositor)
-  addListenerToSignal outputCreatedSignal outputCreatedPtr
+  -- double the width for viewpoints
+  realSize@(width, height) <- ivrSystemGetRecommendedRenderTargetSize
+  let recVSize = V2 (fromIntegral $ width * 2) (fromIntegral height)
+
+  rec
+    baseCompositor <- BaseCompositor scene display wldp wcomp
+                      <$> newMVar M.empty <*> newOpenGlData
+                      <*> newMVar Nothing <*> newMVar Nothing
+                      <*> pure mainLayer
+
+    scene <- Scene <$> newBaseNode scene Nothing identity
+             <*> newMVar 0 <*> newMVar 0
+             <*> pure wm <*> newMVar (Some baseCompositor) <*> newMVar [] <*> newMVar Nothing
+
+    let outputPendingSignal = westonCompositorOutputPendingSignal wcomp
+    outputPendingPtr <- createNotifyFuncPtr (onOutputPending windowedApi width height baseCompositor)
+    addListenerToSignal outputPendingSignal outputPendingPtr
+
+    let outputCreatedSignal = westonCompositorOutputCreatedSignal wcomp
+    outputCreatedPtr <- createNotifyFuncPtr (onOutputCreated baseCompositor)
+    addListenerToSignal outputCreatedSignal outputCreatedPtr
  
-  westonWindowedOutputCreate windowedApi wcomp "X"
+    westonWindowedOutputCreate windowedApi wcomp "X"
+
+    Just glctx <- readMVar (baseCompositor ^. baseCompositorGlContext)
+    display <- newDisplay glctx recVSize (V2 0.325 0.1) scene dpTf
+
+    putStrLn "bluh"
+    wm <- newWindowManager scene seat
+    putStrLn "foo"
+
+  let near = 0.01
+      far = 100
+      leftParams = V4 0 0 0.5 1
+      rightParams = V4 0.5 0 0.5 1
+      center = V3 0 0 0
+  -- refactor??
+  leftEyeTf <- m34_to_m44 <$> ivrSystemGetEyeToHeadTransform Eye_Left
+  leftEyeProj <- ivrSystemGetProjectionMatrix Eye_Left near far
+  vpLeft <- newViewPoint 0.01 100 display display leftEyeTf leftParams center
+  viewPointOverrideProjectionMatrix vpLeft leftEyeProj
+
+  rightEyeTf <- m34_to_m44 <$> ivrSystemGetEyeToHeadTransform Eye_Right
+  rightEyeProj <- ivrSystemGetProjectionMatrix Eye_Right near far
+  vpRight <- newViewPoint 0.01 100 display display rightEyeTf rightParams center
+  viewPointOverrideProjectionMatrix vpRight rightEyeProj
+
+  writeMVar (display ^. displayViewpoints) [vpLeft, vpRight]
+  writeMVar (scene ^. sceneDisplays) [display]
+
 
 
   let api = defaultWestonDesktopApi {
@@ -442,10 +482,7 @@ newViveCompositor scene display = do
   info <- newVulkanInfo
   putStrLn "Created vulkan"
   -- hackhack
-  recSize@(width, height) <- ivrSystemGetRecommendedRenderTargetSize
-  print recSize
-  let recVSize = V2 (fromIntegral width) (fromIntegral height)
-  ViveCompositor baseCompositor info <$> newVulkanImage info recVSize <*> newVulkanImage info recVSize
+  ViveCompositor baseCompositor info <$> newVulkanImage info recVSize
 
   where
     onSurfaceCreated compositor surface  _ = do
@@ -476,13 +513,13 @@ newViveCompositor scene display = do
           return ()
         _ -> return ()
 
-    onOutputPending windowedApi compositor _ outputPtr = do
+    onOutputPending windowedApi width height compositor _ outputPtr = do
       putStrLn "output pending"
       let output = WestonOutput $ castPtr outputPtr
       --TODO hack
       weston_output_set_scale output 1
       weston_output_set_transform output 0
-      westonWindowedOutputSetSize windowedApi output 1512 1680
+      westonWindowedOutputSetSize windowedApi output (fromIntegral width) (fromIntegral height)
 
       weston_output_enable output
       return ()
@@ -497,9 +534,9 @@ newViveCompositor scene display = do
       eglctx <- westonGlRendererContext renderer
       egldp <- westonGlRendererDisplay renderer
       eglsurf <- westonOutputRendererSurface output
-      let glctx = SimulaOpenGLContext eglctx egldp eglsurf
+      let glctx = SimulaOpenGLContext eglctx egldp eglsurf  (compositor ^. baseCompositorDisplay.displaySize)
 
-      writeMVar (compositor ^. baseCompositorGlContext) (Just $ SimulaOpenGLContext eglctx egldp eglsurf)
+      writeMVar (compositor ^. baseCompositorGlContext) (Just glctx)
       return ()
 
 
@@ -544,48 +581,44 @@ viveCompositorRender viveComp = do
 
   sceneDrawFrame scene
   checkForErrors
-  Some seat <- compositorSeat comp
-  pointer <- seatPointer seat
-  pos <- readMVar (pointer ^. pointerGlobalPosition)
-  drawMousePointer (comp ^. baseCompositorDisplay) (comp ^. baseCompositorOpenGlData.openGlDataMousePointer) pos
 
-  emitOutputFrameSignal output
-  eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
-  sceneFinishFrame scene
-  checkForErrors
 
   let tex = comp ^. baseCompositorDisplay.displayScratchColorBufferTexture
   let info = viveComp^.viveCompositorVulkanInfo
-  let leftImage = viveComp^.viveCompositorVulkanLeftImage
-  let rightImage = viveComp^.viveCompositorVulkanRightImage
-  let (VkImage leftHandle) = leftImage^.imageImage
-  let (VkImage rightHandle) = rightImage^.imageImage
+  let image = viveComp^.viveCompositorVulkanImage
+  let (VkImage handle) = image^.imageImage
 
   let (VkFormat format) = VK_FORMAT_R8G8B8A8_UNORM
-  updateVulkanImage info leftImage tex
-  updateVulkanImage info rightImage tex
+  updateVulkanImage info image tex
 
-  let (VkExtent3D width height _) = leftImage^.imageExtents --identical
+  let (VkExtent3D width height _) = image^.imageExtents 
 
-  with (VRTextureBounds 0 0 1 1) $ \boundsPtr -> do
-    with (VRVulkanTextureData leftHandle (castPtr $ info^.vulkanDevice) (castPtr $ info^.vulkanPhysicalDevice)
-           (castPtr $ info^.vulkanInstance) (castPtr $ info^.vulkanQueue) (info^.vulkanQueueFamilyIndex) width height
-           (fromIntegral format) 1) $ \texDataPtr' -> do
-      let texDataPtr = castPtr texDataPtr'
-      err <- with (OVRTexture texDataPtr TextureType_Vulkan ColorSpace_Auto) $ \txPtr ->
+
+  with (VRVulkanTextureData handle (castPtr $ info^.vulkanDevice) (castPtr $ info^.vulkanPhysicalDevice)
+         (castPtr $ info^.vulkanInstance) (castPtr $ info^.vulkanQueue) (info^.vulkanQueueFamilyIndex) width height
+         (fromIntegral format) 1) $ \texDataPtr' -> do
+    let texDataPtr = castPtr texDataPtr'
+    with (OVRTexture texDataPtr TextureType_Vulkan ColorSpace_Auto) $ \txPtr -> do
+      err <- with (VRTextureBounds 0 0 0.5 1) $ \boundsPtr ->
         ivrCompositorSubmit Eye_Left txPtr boundsPtr Submit_Default
 
       when (err /= VRCompositorError_None) $ print err
 
-    with (VRVulkanTextureData rightHandle (castPtr $ info^.vulkanDevice) (castPtr $ info^.vulkanPhysicalDevice)
-           (castPtr $ info^.vulkanInstance) (castPtr $ info^.vulkanQueue) (info^.vulkanQueueFamilyIndex) width height
-           (fromIntegral format) 1) $ \texDataPtr' -> do
-      let texDataPtr = castPtr texDataPtr'
-
-      err <- with (OVRTexture texDataPtr TextureType_Vulkan ColorSpace_Auto) $ \txPtr ->
+      err <- with (VRTextureBounds 0.5 0 1 1) $ \boundsPtr ->
         ivrCompositorSubmit Eye_Right txPtr boundsPtr Submit_Default
 
       when (err /= VRCompositorError_None) $ print err
+
+
+  Some seat <- compositorSeat comp
+  pointer <- seatPointer seat
+  pos <- readMVar (pointer ^. pointerGlobalPosition)
+--  drawMousePointer (comp ^. baseCompositorDisplay) (comp ^. baseCompositorOpenGlData.openGlDataMousePointer) pos
+
+  emitOutputFrameSignal output
+  eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
+  sceneFinishFrame scene
+
 
   (err, renderPoses, _) <- ivrCompositorWaitGetPoses
   when (err /= VRCompositorError_None) $ print err

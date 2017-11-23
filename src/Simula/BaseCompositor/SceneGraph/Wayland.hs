@@ -251,7 +251,7 @@ instance Drawable MotorcarSurfaceNode where
       Nothing -> return ()
       Just tex -> do
         stencilTest $= Enabled
-        bindFramebuffer DrawFramebuffer $= display ^. displayScratchFrameBuffer
+        bindFramebuffer Framebuffer $= display ^. displayScratchFrameBuffer
         clearColor $= Color4 0 0 0 0
         clearDepthf $= 1 --opengl es doesn't support clearDepth
         clearStencil $= 0    
@@ -343,10 +343,10 @@ instance Drawable MotorcarSurfaceNode where
         clipWindowBounds this display
         checkForErrors
       
-        drawFrameBufferContents this display
+--        drawFrameBufferContents this display
         checkForErrors
 
-        bindFramebuffer Framebuffer $= defaultFramebufferObject
+
         vertexAttribArray (this ^. motorcarSurfaceNodeAPositionDepthComposite) $= Disabled
         vertexAttribArray (this ^. motorcarSurfaceNodeAColorTexCoordDepthComposite) $= Disabled
         activeTexture $= TextureUnit 1

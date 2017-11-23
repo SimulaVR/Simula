@@ -83,7 +83,8 @@ data OpenGLData = OpenGLData {
 data SimulaOpenGLContext = SimulaOpenGLContext {
   _simulaOpenGlContextEglContext :: EGLContext,
   _simulaOpenGlContextEglDisplay :: EGLDisplay,
-  _simulaOpenGlContextEglSurface :: EGLSurface
+  _simulaOpenGlContextEglSurface :: EGLSurface,
+  _simulaOpenGLContextFramebufferSize :: V2 Int
   } deriving (Eq, Typeable)
 
 data TextureBlitter = TextureBlitter {
@@ -127,7 +128,7 @@ instance OpenGLContext SimulaOpenGLContext where
       egldp = this ^. simulaOpenGlContextEglDisplay
       eglsurf = this ^. simulaOpenGlContextEglSurface
 
-  glCtxDefaultFramebufferSize this = return $ V2 1512 1680
+  glCtxDefaultFramebufferSize = return . view simulaOpenGLContextFramebufferSize
 
 instance HasBaseWaylandSurface SimulaSurface where
   baseWaylandSurface = simulaSurfaceBase
@@ -537,9 +538,9 @@ newBaseCompositor scene display = do
       eglctx <- westonGlRendererContext renderer
       egldp <- westonGlRendererDisplay renderer
       eglsurf <- westonOutputRendererSurface output
-      let glctx = SimulaOpenGLContext eglctx egldp eglsurf
+      let glctx = SimulaOpenGLContext eglctx egldp eglsurf (compositor ^. baseCompositorDisplay.displaySize)
      
-      writeMVar (compositor ^. baseCompositorGlContext) (Just $ SimulaOpenGLContext eglctx egldp eglsurf)
+      writeMVar (compositor ^. baseCompositorGlContext) (Just glctx)
 
     onPointerFocus compositor grab = do
       pointer <- westonPointerFromGrab grab
@@ -644,9 +645,10 @@ composeSurface surf gld = do
 
       -- needed for textures to properly render
       framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D (TextureObject 0) 0
-      bindFramebuffer Framebuffer $= defaultFramebufferObject
+
       checkForErrors
     _ -> return ()
+  bindFramebuffer Framebuffer $= defaultFramebufferObject
   return texture
 
 paintChildren :: WestonSurface -> WestonSurface -> V2 Int -> OpenGLData -> IO ()
