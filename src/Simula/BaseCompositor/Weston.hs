@@ -264,10 +264,7 @@ drawMousePointer display mp pos = do
 
   readBuffer $= BackBuffers
 
-  let res = fromIntegral <$>  display ^. displaySize
-  let size = TextureSize2D (res ^. _x) (res ^. _y)
-  copyTexImage2D Texture2D 0 RGB' (Position 0 0) size 0
-  checkForErrors
+  let res = fromIntegral <$> display ^. displaySize
 
   depthMask $= Enabled
   stencilMask $= 0xff

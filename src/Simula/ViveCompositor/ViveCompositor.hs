@@ -613,7 +613,7 @@ viveCompositorRender viveComp = do
   Some seat <- compositorSeat comp
   pointer <- seatPointer seat
   pos <- readMVar (pointer ^. pointerGlobalPosition)
---  drawMousePointer (comp ^. baseCompositorDisplay) (comp ^. baseCompositorOpenGlData.openGlDataMousePointer) pos
+  drawMousePointer (comp ^. baseCompositorDisplay) (comp ^. baseCompositorOpenGlData.openGlDataMousePointer) pos
 
   emitOutputFrameSignal output
   eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
