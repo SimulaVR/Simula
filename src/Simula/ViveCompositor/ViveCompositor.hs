@@ -10,6 +10,9 @@ import Data.Hashable
 import Data.Word
 import Data.Typeable
 import Data.Maybe
+import Data.List
+import qualified Data.Vector.Storable.Sized as VF
+import Data.Void
 import Foreign
 import Foreign.C
 import Foreign.Ptr
@@ -35,22 +38,11 @@ import Simula.BaseCompositor.Utils
 import Simula.BaseCompositor.Types
 import Simula.BaseCompositor.Weston hiding (moveCamera)
 
+import Simula.ViveCompositor.SimulaVRModel
+
 import OpenVR
 import Graphics.Vulkan
-import Data.List
-import qualified Data.Vector.Storable.Sized as VF
-import Data.Void
 
--- data family pattern
--- instance Compositor ViveCompositor where
---   data SimulaSurface ViveCompositor = ViveCompositorSurface {
---     _viveCompositorSurfaceBase :: BaseWaylandSurface,
---     _viveCompositorSurfaceSurface :: WestonDesktopSurface,
---     _viveCompositorSurfaceView :: WestonView,
---     _viveCompositorSurfaceCompositor :: MVar ViveCompositor,
---     _viveCompositorSurfaceTexture :: MVar (Maybe TextureObject),
---     _viveCompositorSurfaceStableName :: StableName (SimulaSurface ViveCompositor)
---   } deriving (Eq, Typeable)
 
 data VulkanInfo  = VulkanInfo {
   _vulkanInstance :: VkInstance,
@@ -75,7 +67,8 @@ data VulkanImage = VulkanImage {
 data ViveCompositor = ViveCompositor {
   _viveCompositorBaseCompositor :: BaseCompositor,
   _viveCompositorVulkanInfo :: VulkanInfo,
-  _viveCompositorVulkanImage :: VulkanImage
+  _viveCompositorVulkanImage :: VulkanImage,
+  _viveCompositorModels :: MVar (M.Map TrackedDeviceIndex SimulaVRModel)
 }
 
 makeLenses ''VulkanInfo
@@ -482,7 +475,7 @@ newViveCompositor = do
   info <- newVulkanInfo
   putStrLn "Created vulkan"
   -- hackhack
-  ViveCompositor baseCompositor info <$> newVulkanImage info recVSize
+  ViveCompositor baseCompositor info <$> newVulkanImage info recVSize <*> newMVar mempty
 
   where
     onSurfaceCreated compositor surface  _ = do
@@ -556,8 +549,6 @@ newViveCompositor = do
 
 viveCompositorRender :: ViveCompositor -> IO ()
 viveCompositorRender viveComp = do
-
-
   let comp = viveComp ^. viveCompositorBaseCompositor
 
   surfaceMap <- readMVar (comp ^. baseCompositorSurfaceMap)
@@ -567,6 +558,8 @@ viveCompositorRender viveComp = do
   glCtxMakeCurrent glctx
   bindVertexArrayObject $= Just (comp ^. baseCompositorOpenGlData.openGlVAO)
 
+  handleVrInput viveComp
+  
   -- set up context
 
   let surfaces = M.keys surfaceMap
@@ -581,7 +574,6 @@ viveCompositorRender viveComp = do
 
   sceneDrawFrame scene
   checkForErrors
-
 
   let tex = comp ^. baseCompositorDisplay.displayScratchColorBufferTexture
   let info = viveComp^.viveCompositorVulkanInfo
@@ -624,12 +616,67 @@ viveCompositorRender viveComp = do
   when (err /= VRCompositorError_None) $ print err
 
   let hmdPose = m34_to_m44 . poseDeviceToAbsoluteTracking $ renderPoses !! k_unTrackedDeviceIndex_Hmd
-
   setNodeTransform simDisplay hmdPose
+
+  updateVrModelPoses viveComp (map (m34_to_m44 . poseDeviceToAbsoluteTracking) renderPoses)
   
   bindVertexArrayObject $= Nothing
 
   return ()
+
+handleVrInput :: ViveCompositor -> IO ()
+handleVrInput viveComp = loop
+  where
+    setupRenderModel :: TrackedDeviceIndex -> IO ()
+    setupRenderModel idx = do
+      (TrackedProp_Success, rmName) <- ivrSystemGetStringTrackedDeviceProperty idx Prop_RenderModelName_String
+      model <- createRenderModel rmName
+      modifyMVar' (viveComp ^. viveCompositorModels) (M.insert idx model)
+
+    createRenderModel rmName = do
+      (model, modelPtr) <- loadRenderModel rmName
+      (texture, texturePtr) <- loadRenderModelTexture (modelDiffuseTextureId model)
+
+      let scene = viveComp ^. viveCompositorBaseCompositor.baseCompositorScene
+      vrModel <- newSimulaVrModel scene rmName model texture
+      
+      ivrRenderModelsFreeRenderModel modelPtr
+      ivrRenderModelsFreeTexture texturePtr
+
+      return vrModel
+
+    -- refactor (generalize)
+    loadRenderModel rmName = do
+      (err, ptr) <- ivrRenderModelsLoadRenderModel_Async rmName
+      case err of
+        VRRenderModelError_Loading -> threadDelay 1000 >> loadRenderModel rmName
+        VRRenderModelError_None -> (,ptr) <$> peek ptr 
+        _ -> error $ "Failed to load render model: " ++ show err
+
+    loadRenderModelTexture texId = do
+      (err, ptr) <- ivrRenderModelsLoadTexture_Async texId
+      case err of 
+        VRRenderModelError_Loading -> threadDelay 1000 >> loadRenderModelTexture texId
+        VRRenderModelError_None -> (,ptr) <$>  peek ptr
+        _ -> error $ "Failed to load render model texture: " ++ show err
+
+    processEvent event = case eventType event of
+      VREvent_TrackedDeviceActivated -> setupRenderModel (eventTrackedDeviceIndex event)
+      _ -> return ()
+    
+    loop = do
+      (avail, event) <- ivrSystemPollNextEvent
+      if avail
+        then do
+          processEvent event
+          loop
+        else return ()
+
+-- this is pretty horrible. optimize away from list asap
+updateVrModelPoses :: ViveCompositor -> [M44 Float] -> IO ()
+updateVrModelPoses viveComp renderPoses = do
+  models <- readMVar (viveComp ^. viveCompositorModels)
+  forM_ (M.toList models) $ \(idx, model) -> setNodeTransform model (renderPoses !! fromIntegral idx)
 
 instance Compositor ViveCompositor where
   startCompositor viveComp = do
