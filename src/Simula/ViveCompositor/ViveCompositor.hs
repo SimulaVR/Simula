@@ -662,8 +662,9 @@ handleVrInput viveComp = loop
         _ -> error $ "Failed to load render model texture: " ++ show err
 
     processEvent event = case eventType event of
-      VREvent_TrackedDeviceActivated -> setupRenderModel (eventTrackedDeviceIndex event)
+      100 -> setupRenderModel (eventTrackedDeviceIndex event) --VREvent_TrackedDeviceActivated
       _ -> return ()
+
     
     loop = do
       (avail, event) <- ivrSystemPollNextEvent
