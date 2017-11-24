@@ -623,10 +623,10 @@ viveCompositorRender viveComp = do
   (err, renderPoses, _) <- ivrCompositorWaitGetPoses
   when (err /= VRCompositorError_None) $ print err
 
-  let hmdPose = m34_to_m44 . poseDeviceToAbsoluteTracking $ renderPoses !! k_unTrackedDeviceIndex_Hmd
-  setNodeTransform simDisplay hmdPose
-
-  updateVrModelPoses viveComp (map (m34_to_m44 . poseDeviceToAbsoluteTracking) renderPoses)
+  when ( k_unTrackedDeviceIndex_Hmd < length renderPoses) $ do
+    let hmdPose = m34_to_m44 . poseDeviceToAbsoluteTracking $ renderPoses !! k_unTrackedDeviceIndex_Hmd
+    setNodeTransform simDisplay hmdPose
+    updateVrModelPoses viveComp (map (m34_to_m44 . poseDeviceToAbsoluteTracking) renderPoses)
   
   bindVertexArrayObject $= Nothing
 
@@ -689,7 +689,7 @@ handleVrInput viveComp = loop
 updateVrModelPoses :: ViveCompositor -> [M44 Float] -> IO ()
 updateVrModelPoses viveComp renderPoses = do
   models <- readMVar (viveComp ^. viveCompositorModels)
-  forM_ (M.toList models) $ \(idx, model) -> setNodeTransform model (renderPoses !! fromIntegral idx)
+  forM_ (M.toList models) $ \(idx, model) -> when (fromIntegral idx < length renderPoses) $ setNodeTransform model (renderPoses !! fromIntegral idx)
 
 instance Compositor ViveCompositor where
   startCompositor viveComp = do
