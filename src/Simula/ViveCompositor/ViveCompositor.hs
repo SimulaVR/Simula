@@ -630,6 +630,7 @@ handleVrInput viveComp = loop
     setupRenderModel :: TrackedDeviceIndex -> IO ()
     setupRenderModel idx = do
       (TrackedProp_Success, rmName) <- ivrSystemGetStringTrackedDeviceProperty idx Prop_RenderModelName_String
+      putStrLn rmName
       model <- createRenderModel rmName
       modifyMVar' (viveComp ^. viveCompositorModels) (M.insert idx model)
 
