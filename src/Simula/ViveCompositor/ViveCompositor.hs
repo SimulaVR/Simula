@@ -630,7 +630,9 @@ handleVrInput viveComp = loop
     setupRenderModel :: TrackedDeviceIndex -> IO ()
     setupRenderModel idx = do
       (TrackedProp_Success, rmName) <- ivrSystemGetStringTrackedDeviceProperty idx Prop_RenderModelName_String
+      putStr "RENDER MODEL: " 
       putStrLn rmName
+      
       model <- createRenderModel rmName
       modifyMVar' (viveComp ^. viveCompositorModels) (M.insert idx model)
 
@@ -662,17 +664,17 @@ handleVrInput viveComp = loop
         _ -> error $ "Failed to load render model texture: " ++ show err
 
     processEvent event = case eventType event of
-      100 -> setupRenderModel (eventTrackedDeviceIndex event) --VREvent_TrackedDeviceActivated
-      _ -> return ()
+      KnownEvent VREvent_TrackedDeviceActivated -> setupRenderModel (eventTrackedDeviceIndex event)
+      other -> putStr "EVENT: " >> print other
 
     
     loop = do
-      (avail, event) <- ivrSystemPollNextEvent
-      if avail
-        then do
+      maybeEvent <- ivrSystemPollNextEvent
+      case maybeEvent of
+        Just event -> do
           processEvent event
           loop
-        else return ()
+        _ -> return ()
 
 -- this is pretty horrible. optimize away from list asap
 updateVrModelPoses :: ViveCompositor -> [M44 Float] -> IO ()
