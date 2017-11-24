@@ -3,7 +3,7 @@ precision highp float;
 
 in highp vec3 aPosition;
 in highp vec3 aNormal;
-in highp vec2 aTextureCoord
+in highp vec2 aTextureCoord;
 
 uniform highp mat4 uMatrix;
 

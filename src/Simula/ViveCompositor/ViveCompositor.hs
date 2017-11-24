@@ -382,7 +382,6 @@ newViveCompositor = do
     VRInitError_None -> return ()
     _ -> error $ show initErr
 
-
   blend $= Disabled
   
   socketName <- wl_display_add_socket_auto wldp
@@ -475,7 +474,16 @@ newViveCompositor = do
   info <- newVulkanInfo
   putStrLn "Created vulkan"
   -- hackhack
-  ViveCompositor baseCompositor info <$> newVulkanImage info recVSize <*> newMVar mempty
+
+  viveComp <- ViveCompositor baseCompositor info <$> newVulkanImage info recVSize <*> newMVar mempty
+
+  -- setup render models
+  forM_ [k_unTrackedDeviceIndex_Hmd + 1 .. k_unMaxTrackedDeviceCount] $ \idx' -> do
+    let idx = fromIntegral idx'
+    connected <- ivrSystemIsTrackedDeviceConnected idx
+    when connected $ setupRenderModel viveComp idx
+
+  return viveComp
 
   where
     onSurfaceCreated compositor surface  _ = do
@@ -624,18 +632,16 @@ viveCompositorRender viveComp = do
 
   return ()
 
-handleVrInput :: ViveCompositor -> IO ()
-handleVrInput viveComp = loop
-  where
-    setupRenderModel :: TrackedDeviceIndex -> IO ()
-    setupRenderModel idx = do
-      (TrackedProp_Success, rmName) <- ivrSystemGetStringTrackedDeviceProperty idx Prop_RenderModelName_String
-      putStr "RENDER MODEL: " 
-      putStrLn rmName
+setupRenderModel :: ViveCompositor -> TrackedDeviceIndex -> IO ()
+setupRenderModel viveComp idx = do
+  (TrackedProp_Success, rmName) <- ivrSystemGetStringTrackedDeviceProperty idx Prop_RenderModelName_String
+  putStr "RENDER MODEL: " 
+  putStrLn rmName
       
-      model <- createRenderModel rmName
-      modifyMVar' (viveComp ^. viveCompositorModels) (M.insert idx model)
+  model <- createRenderModel rmName
+  modifyMVar' (viveComp ^. viveCompositorModels) (M.insert idx model)
 
+  where
     createRenderModel rmName = do
       (model, modelPtr) <- loadRenderModel rmName
       (texture, texturePtr) <- loadRenderModelTexture (modelDiffuseTextureId model)
@@ -663,8 +669,11 @@ handleVrInput viveComp = loop
         VRRenderModelError_None -> (,ptr) <$>  peek ptr
         _ -> error $ "Failed to load render model texture: " ++ show err
 
+handleVrInput :: ViveCompositor -> IO ()
+handleVrInput viveComp = loop
+  where
     processEvent event = case eventType event of
-      KnownEvent VREvent_TrackedDeviceActivated -> setupRenderModel (eventTrackedDeviceIndex event)
+      KnownEvent VREvent_TrackedDeviceActivated -> setupRenderModel viveComp (eventTrackedDeviceIndex event)
       other -> putStr "EVENT: " >> print other
 
     
