@@ -382,6 +382,9 @@ newViveCompositor = do
     VRInitError_None -> return ()
     _ -> error $ show initErr
 
+  debugOutput $= Enabled
+  debugMessageCallback $= Just print
+
   blend $= Disabled
   
   socketName <- wl_display_add_socket_auto wldp
@@ -693,9 +696,6 @@ updateVrModelPoses viveComp renderPoses = do
 
 instance Compositor ViveCompositor where
   startCompositor viveComp = do
-    debugOutput $= Enabled
-    debugMessageCallback $= Just (\msg -> do
-      print msg)
 --      fbStatus <- get $ framebufferStatus Framebuffer
 --      dfbStatus <- get $ framebufferStatus DrawFramebuffer
 --      rfbStatus <- get $ framebufferStatus ReadFramebuffer
