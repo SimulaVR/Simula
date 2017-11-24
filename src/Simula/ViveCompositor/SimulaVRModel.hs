@@ -47,48 +47,61 @@ newSimulaVrModel parent name rm rmTex = do
   aPosition <- get $ attribLocation program "aPosition"
   aNormal <- get $ attribLocation program "aNormal"
   aTextureCoord <- get $ attribLocation program "aTextureCoord"
+  checkForErrors
   
   vao <- genObjectName
   bindVertexArrayObject $= Just vao
+  checkForErrors
   
   vertBuffer <- genObjectName
   bindBuffer ArrayBuffer $= Just vertBuffer
   bufferData ArrayBuffer $= (fromIntegral $ modelVertexCount rm * sizeOfRenderModelVertex, modelVertexData rm, StaticDraw)
+  checkForErrors
 
   vertexAttribArray aPosition $= Enabled
   vertexAttribPointer aPosition $= (ToFloat, VertexArrayDescriptor 3 Float sizeOfRenderModelVertex offsetOfRenderModelVertexPosition)
+  checkForErrors
 
   vertexAttribArray aNormal $= Enabled
   vertexAttribPointer aNormal $= (ToFloat, VertexArrayDescriptor 3 Float sizeOfRenderModelVertex offsetOfRenderModelVertexNormal)
+  checkForErrors
 
   vertexAttribArray aTextureCoord $= Enabled
   vertexAttribPointer aTextureCoord $= (ToFloat, VertexArrayDescriptor 2 Float sizeOfRenderModelVertex offsetOfRenderModelVertexTextureCoord)
+  checkForErrors
 
   let vertCount = modelTriangleCount rm * 3
   indexBuffer <- genObjectName
   bindBuffer ElementArrayBuffer $= Just indexBuffer
   bufferData ElementArrayBuffer $= (fromIntegral $ vertCount * (sizeOf (undefined :: Word16)), modelIndexData rm, StaticDraw)
+  checkForErrors
 
   bindVertexArrayObject $= Nothing
 
   tex <- genObjectName
   textureBinding Texture2D $= Just tex
+  checkForErrors
 
   let size = TextureSize2D (fromIntegral $ textureMapWidth rmTex) (fromIntegral $ textureMapHeight rmTex)
   texImage2D Texture2D NoProxy 0 RGBA8 size 0 (PixelData RGBA UnsignedByte $ textureMapData rmTex)
-
+  checkForErrors
+  
   generateMipmap' Texture2D
+  checkForErrors
   
   textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
   textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
   textureFilter Texture2D $= ( (Linear', Just Linear'), Linear' )
+  checkForErrors
 
   get maxTextureMaxAnisotropy >>= (textureMaxAnisotropy Texture2D $=)
+  checkForErrors
 
   textureBinding Texture2D $= Nothing
 
   uMatrix <- uniformLocation program "uMatrix"
   currentProgram $= Nothing
+  checkForErrors
 
   rec
     let model = SimulaVRModel base name vertCount vertBuffer indexBuffer vao tex program uMatrix
@@ -103,6 +116,7 @@ instance Drawable SimulaVRModel where
     currentProgram $= Just (model ^. simulaVRModelProgram)
     bindVertexArrayObject $= Just (model ^. simulaVRModelVertexArray)
     textureBinding Texture2D $= Just (model ^. simulaVRModelTexture)
+    checkForErrors
   
     let uMatrix = model ^. simulaVRModelMatrixUniform
     worldTf <- nodeWorldTransform model
@@ -114,6 +128,7 @@ instance Drawable SimulaVRModel where
       
       let mat = (projMatrix !*! viewMatrix !*! worldTf) ^. m44GLmatrix
       uniform uMatrix $= mat
+      checkForErrors
 
       port <- readMVar (vp ^. viewPointViewPort)
       setViewPort port

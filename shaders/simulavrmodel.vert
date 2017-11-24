@@ -13,7 +13,7 @@ out highp vec2 vTexCoord;
 
 void main(void)
 {
-    vTexCoord = aTexCoord;
+    vTexCoord = aTextureCoord;
 
     gl_Position =  uMatrix * vec4(aPosition, 1.);
     gl_Position.y = -gl_Position.y;
