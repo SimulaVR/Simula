@@ -116,7 +116,6 @@ instance Drawable SimulaVRModel where
     currentProgram $= Just (model ^. simulaVRModelProgram)
     bindVertexArrayObject $= Just (model ^. simulaVRModelVertexArray)
     textureBinding Texture2D $= Just (model ^. simulaVRModelTexture)
-    depthFunc $= Just Less
     checkForErrors
   
     let uMatrix = model ^. simulaVRModelMatrixUniform
@@ -139,5 +138,4 @@ instance Drawable SimulaVRModel where
     bindVertexArrayObject $= oldVao
     textureBinding Texture2D $= Nothing
     currentProgram $= Nothing
-
   

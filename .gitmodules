@@ -3,7 +3,7 @@
 	url = https://github.com/georgewsinger/simula-openvr.git
 [submodule "vulkan"]
 	path = vulkan
-	url = https://github.com/expipiplus1/vulkan
+	url = https://github.com/KaneTW/vulkan
 [submodule "OpenGLRaw"]
 	path = OpenGLRaw
 	url = https://github.com/SimulaVR/OpenGLRaw
