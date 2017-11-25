@@ -82,12 +82,11 @@ newVulkanInfo = do
   iextPtrs <- mapM newCString iexts
   print iexts
 
-  {-let valLayers = [ "VK_LAYER_LUNARG_parameter_validation"
+  let valLayers = [ "VK_LAYER_LUNARG_parameter_validation"
                   , "VK_LAYER_LUNARG_core_validation"
                   , "VK_LAYER_LUNARG_object_tracker"
                   , "VK_LAYER_LUNARG_standard_validation"
-                  , "VK_LAYER_GOOGLE_threading"]-}
-  let valLayers = []
+                  , "VK_LAYER_GOOGLE_threading"]
   valLayerPtrs <- mapM newCString valLayers
 
   callbackPtr <- createDebugCallbackPtr $ \_ _ _ _ _ _ message _ -> peekCString message >>= print >> return (VkBool32 VK_FALSE)
@@ -365,7 +364,7 @@ newViveCompositor = do
     VRInitError_None -> return ()
     _ -> error $ show initErr
 
-  debugOutput $= Disabled
+  debugOutput $= Enabled
   debugMessageCallback $= Just print
 
   blend $= Disabled
@@ -392,8 +391,6 @@ newViveCompositor = do
   realSize@(width, height) <- ivrSystemGetRecommendedRenderTargetSize
   let recVSize = V2 (fromIntegral $ width * 2) (fromIntegral height)
 
-  image <- newVulkanImage info recVSize
-
   rec
     baseCompositor <- BaseCompositor scene display wldp wcomp
                       <$> newMVar M.empty <*> newOpenGlData
@@ -415,6 +412,8 @@ newViveCompositor = do
     westonWindowedOutputCreate windowedApi wcomp "X"
 
     Just glctx <- readMVar (baseCompositor ^. baseCompositorGlContext)
+    glCtxMakeCurrent glctx
+    image <- newVulkanImage info recVSize
     display <- newDisplay glctx recVSize (V2 0.325 0.1) scene dpTf (Just (image ^. imageTexture))
 
     putStrLn "bluh"
