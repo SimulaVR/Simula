@@ -14,6 +14,7 @@ pkgs.haskell.lib.buildStackProject {
                              (callPackage simula-openvr/openvr.nix { })
                              libxml2
                              libxkbcommon
+                             vulkan-loader
                           ];
 
   LANG = "en_US.UTF-8";

@@ -16,6 +16,9 @@
 #  location: "./custom-snapshot.yaml"
 resolver: nightly-2017-11-20
 
+ghc-options: 
+  "*": -pgmlg++
+
 # User packages to be built.
 # Various formats can be used as shown in the example below.
 #
@@ -43,9 +46,12 @@ packages:
 # (e.g., acme-missiles-0.3)
 extra-deps:
 - 'linear-opengl-0.3.0.0'
+- 'OpenGLRaw-3.2.5.0'
 
 # Override default flag values for local packages and extra-deps
-flags: {}
+flags: 
+  OpenGLRaw:
+    OsAndroid: true   
 
 # Extra package databases containing global packages
 extra-package-dbs: []
