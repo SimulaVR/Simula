@@ -285,9 +285,12 @@ newVulkanImage info size = do
     createOpenGLTexture fd = do
       memObj <- alloca $ \ptr -> glCreateMemoryObjectsEXT 1 ptr >> peek ptr
       glImportMemoryFdEXT memObj (fromIntegral realSize) GL_HANDLE_TYPE_OPAQUE_FD_EXT (fromIntegral fd)
-      tex <- genObjectName :: IO TextureObject
-      let texObj = coerce tex 
-      glTextureStorageMem2DEXT texObj 1 GL_RGBA8 (fromIntegral $ size ^. _x) (fromIntegral $ size ^. _y) memObj 0
+      
+      tex <- genObjectName 
+      textureBinding $= Just tex
+      glTexStorageMem2DEXT GL_TEXTURE_2D 1 GL_RGBA8 (fromIntegral $ size ^. _x) (fromIntegral $ size ^. _y) memObj 0
+      textureBinding $= Nothing
+      checkForErrors
       return (memObj, tex)
       
         
