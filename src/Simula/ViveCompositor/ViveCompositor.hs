@@ -14,7 +14,7 @@ import Data.Maybe
 import Data.List
 import qualified Data.Vector.Storable.Sized as VF
 import Data.Void
-import Foreign
+import Foreign hiding (void)
 import Foreign.C
 import Foreign.Ptr
 import Graphics.Rendering.OpenGL hiding (scale, translate, rotate, Rect)
