@@ -6,6 +6,7 @@ import Control.Lens
 import Control.Monad
 import qualified Data.Map as M
 import Control.Concurrent.MVar
+import Data.Coerce
 import Data.Hashable
 import Data.Word
 import Data.Typeable
@@ -17,6 +18,7 @@ import Foreign
 import Foreign.C
 import Foreign.Ptr
 import Graphics.Rendering.OpenGL hiding (scale, translate, rotate, Rect)
+import Graphics.GL
 import Linear
 import Linear.OpenGL
 import System.Clock
@@ -55,12 +57,11 @@ data VulkanInfo  = VulkanInfo {
  }
 
 data VulkanImage = VulkanImage {
-  _imageStagingBuffer :: VkBuffer,
-  _imageStagingMemory :: VkDeviceMemory,
-  _imageBufferSize :: VkDeviceSize,
   _imageImage :: VkImage,
   _imageImageMemory :: VkDeviceMemory,
   _imageImageSize :: VkDeviceSize,
+  _imageTexture :: TextureObject,
+  _imageOpenGLMemoryObject :: GLuint,
   _imageExtents :: VkExtent3D
 }
 
@@ -190,30 +191,28 @@ newVulkanInfo = do
       return queue
 
     createDebugReport inst callbackPtr = do
-      vkDebugFnPtr <- castFunPtr <$> (withCString "vkCreateDebugReportCallbackEXT" $ \ptr -> vkGetInstanceProcAddr inst ptr)
-      print vkDebugFnPtr
       with VkDebugReportCallbackCreateInfoEXT { vkSType = VkStructureType 1000011000
                                               , vkPNext = nullPtr
                                               , vkFlags = VK_DEBUG_REPORT_ERROR_BIT_EXT .|. VK_DEBUG_REPORT_WARNING_BIT_EXT
                                               , vkPfnCallback = callbackPtr
                                               , vkPUserData = nullPtr
                                               } $ \callbackInfo ->
-        alloca $ \cbPtr -> vkCreateDebugReportCallbackEXT' vkDebugFnPtr inst callbackInfo nullPtr cbPtr >> peek cbPtr
+        alloca $ \cbPtr -> vkCreateDebugReportCallbackEXT inst callbackInfo nullPtr cbPtr >> peek cbPtr
       
 
 
 foreign import ccall "wrapper" createDebugCallbackPtr :: (VkDebugReportFlagsEXT -> VkDebugReportObjectTypeEXT -> Word64 -> CSize -> Int32 -> Ptr CChar -> Ptr CChar -> Ptr Void -> IO VkBool32) -> IO PFN_vkDebugReportCallbackEXT
-
-foreign import ccall "dynamic" vkCreateDebugReportCallbackEXT' :: FunPtr (VkInstance ->  Ptr VkDebugReportCallbackCreateInfoEXT -> Ptr VkAllocationCallbacks -> Ptr VkDebugReportCallbackEXT -> IO VkResult) -> VkInstance ->  Ptr VkDebugReportCallbackCreateInfoEXT ->  Ptr VkAllocationCallbacks -> Ptr VkDebugReportCallbackEXT -> IO VkResult
       
 
--- creates an RGB image, 8bit/channel, no alpha
+-- creates an RGBA image, 8bit/channel
+-- no staging buffer
 newVulkanImage :: VulkanInfo -> V2 Int -> IO VulkanImage
 newVulkanImage info size = do
-  (buffer, stagingMemory, bufferSize) <- createBuffer 
-  (image, imageMemory, imageSize) <- createImage 
+  (image, imageMemory, imageSize) <- createImage
+  fd <- getFd imageMemory
+  (memObj, tex) <- createOpenGLTexture fd
   transitionImage image
-  return $ VulkanImage buffer stagingMemory bufferSize image imageMemory imageSize (VkExtent3D (fromIntegral $ size ^. _x) (fromIntegral $ size ^. _y) 1)
+  return $ VulkanImage image imageMemory imageSize tex memObj (VkExtent3D (fromIntegral $ size ^. _x) (fromIntegral $ size ^. _y) 1)
   
   where
     realSize = (size ^. _x) * (size ^. _y) * 4
@@ -226,28 +225,16 @@ newVulkanImage info size = do
       return idx
     allocateMemory flags size bits = do
       memoryTypeIndex <- findMemory flags bits
-      with VkMemoryAllocateInfo { vkSType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO
-                                , vkPNext = nullPtr
+      with VkExportMemoryAllocateInfoKHR { vkSType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO_KHR
+                                         , vkPNext = nullPtr
+                                         , vkHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR
+                                         } $ \exportInfo ->
+        with VkMemoryAllocateInfo { vkSType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO
+                                , vkPNext = castPtr exportInfo
                                 , vkAllocationSize = size
                                 , vkMemoryTypeIndex = fromIntegral memoryTypeIndex
                                 } $ \allocInfo ->
         alloca $ \memoryPtr -> vkAllocateMemory (info^.vulkanDevice) allocInfo nullPtr memoryPtr >> peek memoryPtr
-    createBuffer = do
-      buffer <- with VkBufferCreateInfo { vkSType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO
-                              , vkPNext = nullPtr
-                              , vkFlags = VkBufferCreateFlagBits zeroBits
-                              , vkSize = VkDeviceSize $ fromIntegral realSize
-                              , vkUsage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT
-                              , vkSharingMode = VK_SHARING_MODE_EXCLUSIVE
-                              , vkQueueFamilyIndexCount = 0
-                              , vkPQueueFamilyIndices = nullPtr
-                              } $ \bufferInfo ->
-        alloca $ \bufferPtr -> vkCreateBuffer (info^.vulkanDevice) bufferInfo nullPtr bufferPtr >> peek bufferPtr
-      (VkMemoryRequirements size _ bits) <- alloca $ \memReqsPtr -> vkGetBufferMemoryRequirements (info^.vulkanDevice) buffer memReqsPtr >> peek memReqsPtr
-      memory <- allocateMemory (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT .|. VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) size bits
-
-      vkBindBufferMemory (info^.vulkanDevice) buffer memory (VkDeviceSize 0)
-      return (buffer, memory, size)
 
     createImage = do
       image <- with VkImageCreateInfo { vkSType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO
@@ -266,7 +253,7 @@ newVulkanImage info size = do
                                       , vkPQueueFamilyIndices = nullPtr
                                       , vkInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED
                                       } $ \imageInfo ->
-        alloca $ \imagePtr -> vkCreateImage (info^.vulkanDevice) imageInfo nullPtr imagePtr >>= print >> peek imagePtr
+        alloca $ \imagePtr -> vkCreateImage (info^.vulkanDevice) imageInfo nullPtr imagePtr  >> peek imagePtr
       (VkMemoryRequirements size _ bits) <- alloca $ \memReqsPtr -> vkGetImageMemoryRequirements (info^.vulkanDevice) image memReqsPtr >> peek memReqsPtr
       memory <- allocateMemory VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT size bits
       vkBindImageMemory (info^.vulkanDevice) image memory (VkDeviceSize 0)
@@ -287,6 +274,24 @@ newVulkanImage info size = do
                                 } $ \barrier ->
         vkCmdPipelineBarrier (info^.vulkanCommandBuffer) VK_PIPELINE_STAGE_TRANSFER_BIT VK_PIPELINE_STAGE_TRANSFER_BIT zeroBits 0 nullPtr 0 nullPtr 1 barrier
       endCommand info
+
+    getFd mem = do
+      with VkMemoryGetFdInfoKHR { vkSType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR
+                                , vkPNext = nullPtr
+                                , vkMemory = mem
+                                , vkHandleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR
+                                } $ \getFdInfo ->
+        alloca $ \fdPtr -> vkGetMemoryFdKHR (info ^. vulkanDevice) getFdInfo fdPtr >> peek fdPtr
+
+    createOpenGLTexture fd = do
+      memObj <- alloca $ \ptr -> glCreateMemoryObjectsEXT 1 ptr >> peek ptr
+      glImportMemoryFdEXT memObj (fromIntegral realSize) GL_HANDLE_TYPE_OPAQUE_FD_EXT (fromIntegral fd)
+      tex <- genObjectName :: IO TextureObject
+      let texObj = coerce tex 
+      glTextureStorageMem2DEXT texObj 1 GL_RGBA8 (fromIntegral $ size ^. _x) (fromIntegral $ size ^. _y) memObj 0
+      return (memObj, tex)
+      
+        
 
 beginCommand :: VulkanInfo -> IO VkResult
 beginCommand info = with VkCommandBufferBeginInfo { vkSType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
@@ -314,49 +319,26 @@ endCommand info = do
       vkQueueWaitIdle (info^.vulkanQueue)
       vkResetCommandBuffer (info^.vulkanCommandBuffer) zeroBits
 
-updateVulkanImage :: VulkanInfo -> VulkanImage -> TextureObject -> IO ()
-updateVulkanImage info image tex = do
-  transitionImage VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL VK_ACCESS_TRANSFER_READ_BIT VK_ACCESS_TRANSFER_WRITE_BIT
-  copyToBuffer
-  copyBufferToImage
-  transitionImage VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL VK_ACCESS_TRANSFER_WRITE_BIT VK_ACCESS_TRANSFER_READ_BIT
+--TODO: this is technically no longer needed
+transitionImage :: VulkanInfo -> VulkanImage
+                -> VkImageLayout -> VkImageLayout
+                -> VkAccessFlagBits -> VkAccessFlagBits -> IO ()
+transitionImage info image src dst srcMask dstMask = do
+  beginCommand info
+  with VkImageMemoryBarrier { vkSType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
+                            , vkPNext = nullPtr
+                            , vkSrcAccessMask = srcMask
+                            , vkDstAccessMask = dstMask
+                            , vkOldLayout = src
+                            , vkNewLayout = dst
+                            , vkSrcQueueFamilyIndex = info ^. vulkanQueueFamilyIndex
+                            , vkDstQueueFamilyIndex = info ^. vulkanQueueFamilyIndex
+                            , vkImage = image^.imageImage
+                            , vkSubresourceRange = VkImageSubresourceRange VK_IMAGE_ASPECT_COLOR_BIT 0 1 0 1
+                            } $ \barrier ->
+    vkCmdPipelineBarrier (info^.vulkanCommandBuffer) VK_PIPELINE_STAGE_TRANSFER_BIT VK_PIPELINE_STAGE_TRANSFER_BIT zeroBits 0 nullPtr 0 nullPtr 1 barrier
+  endCommand info
   return ()
-
-  where
-    copyToBuffer = alloca $ \dataPtr -> do
-      vkMapMemory (info^.vulkanDevice) (image^.imageStagingMemory) (VkDeviceSize 0) (image^.imageBufferSize) (VkMemoryMapFlags zeroBits) dataPtr
-      dat <- peek dataPtr
-      textureBinding Texture2D $= Just tex
-      getTexImage Texture2D 0 (PixelData RGBA UnsignedByte dat)
-      textureBinding Texture2D $= Nothing
-      vkUnmapMemory (info^.vulkanDevice) (image^.imageStagingMemory)
-                        
-    copyBufferToImage = do
-      beginCommand info
-      with VkBufferImageCopy { vkBufferOffset = VkDeviceSize 0
-                             , vkBufferRowLength = 0
-                             , vkBufferImageHeight = 0
-                             , vkImageSubresource = VkImageSubresourceLayers VK_IMAGE_ASPECT_COLOR_BIT 0 0 1
-                             , vkImageOffset = VkOffset3D 0 0 0
-                             , vkImageExtent = image^.imageExtents
-                             } $ \region -> vkCmdCopyBufferToImage (info^.vulkanCommandBuffer) (image^.imageStagingBuffer) (image^.imageImage) VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL 1 region
-      endCommand info
-
-    transitionImage src dst srcMask dstMask = do
-      beginCommand info
-      with VkImageMemoryBarrier { vkSType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
-                                , vkPNext = nullPtr
-                                , vkSrcAccessMask = srcMask
-                                , vkDstAccessMask = dstMask
-                                , vkOldLayout = src
-                                , vkNewLayout = dst
-                                , vkSrcQueueFamilyIndex = info ^. vulkanQueueFamilyIndex
-                                , vkDstQueueFamilyIndex = info ^. vulkanQueueFamilyIndex
-                                , vkImage = image^.imageImage
-                                , vkSubresourceRange = VkImageSubresourceRange VK_IMAGE_ASPECT_COLOR_BIT 0 1 0 1
-                                } $ \barrier ->
-        vkCmdPipelineBarrier (info^.vulkanCommandBuffer) VK_PIPELINE_STAGE_TRANSFER_BIT VK_PIPELINE_STAGE_TRANSFER_BIT zeroBits 0 nullPtr 0 nullPtr 1 barrier
-      endCommand info
 
 
        
@@ -401,12 +383,16 @@ newViveCompositor = do
 
   windowedApi <- weston_windowed_output_get_api wcomp
 
+  info <- newVulkanInfo
+
   let dpRot = axisAngle (V3 1 0 0) (radians (negate 25))
   let dpTf = translate (V3 0 0.8 1.25) !*! m33_to_m44 (fromQuaternion dpRot)
 
   -- double the width for viewpoints
   realSize@(width, height) <- ivrSystemGetRecommendedRenderTargetSize
   let recVSize = V2 (fromIntegral $ width * 2) (fromIntegral height)
+
+  image <- newVulkanImage info recVSize
 
   rec
     baseCompositor <- BaseCompositor scene display wldp wcomp
@@ -429,7 +415,7 @@ newViveCompositor = do
     westonWindowedOutputCreate windowedApi wcomp "X"
 
     Just glctx <- readMVar (baseCompositor ^. baseCompositorGlContext)
-    display <- newDisplay glctx recVSize (V2 0.325 0.1) scene dpTf
+    display <- newDisplay glctx recVSize (V2 0.325 0.1) scene dpTf (Just (image ^. imageTexture))
 
     putStrLn "bluh"
     wm <- newWindowManager scene seat
@@ -473,13 +459,9 @@ newViveCompositor = do
   interfacePtr <- new interface
   weston_compositor_set_default_pointer_grab wcomp interfacePtr
 
-  putStrLn "Creating vulkan"
-
-  info <- newVulkanInfo
-  putStrLn "Created vulkan"
   -- hackhack
 
-  viveComp <- ViveCompositor baseCompositor info <$> newVulkanImage info recVSize <*> newMVar mempty
+  viveComp <- ViveCompositor baseCompositor info image <$> newMVar mempty
 
   -- setup render models
   forM_ [k_unTrackedDeviceIndex_Hmd + 1 .. k_unMaxTrackedDeviceCount] $ \idx' -> do
@@ -593,7 +575,7 @@ viveCompositorRender viveComp = do
   let (VkImage handle) = image^.imageImage
 
   let (VkFormat format) = VK_FORMAT_R8G8B8A8_UNORM
-  updateVulkanImage info image tex
+  transitionImage info image VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL VK_IMAGE_LAYOUT_GENERAL VK_ACCESS_TRANSFER_READ_BIT VK_ACCESS_TRANSFER_WRITE_BIT
 
   let (VkExtent3D width height _) = image^.imageExtents 
 
@@ -613,6 +595,8 @@ viveCompositorRender viveComp = do
 
       when (err /= VRCompositorError_None) $ print err
 
+
+  transitionImage info image VK_IMAGE_LAYOUT_GENERAL VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL VK_ACCESS_TRANSFER_WRITE_BIT VK_ACCESS_TRANSFER_READ_BIT 
 
   Some seat <- compositorSeat comp
   pointer <- seatPointer seat

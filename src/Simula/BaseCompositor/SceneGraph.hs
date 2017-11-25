@@ -492,10 +492,10 @@ viewPointFov this dp = do
 
 instance SceneGraphNode Display
 
-newDisplay :: (PhysicalNode a, OpenGLContext ctx) => ctx -> V2 Int -> V2 Float -> a -> M44 Float -> IO Display
-newDisplay glctx size dims parent tf = do
+newDisplay :: (PhysicalNode a, OpenGLContext ctx) => ctx -> V2 Int -> V2 Float -> a -> M44 Float -> Maybe TextureObject -> IO Display
+newDisplay glctx size dims parent tf tex = do
   glCtxMakeCurrent glctx
-  (fbo, fboCb, fboDb) <- createFBO size
+  (fbo, fboCb, fboDb) <- createFBO size tex
   rec dp <- Display base
             <$> pure (Some glctx)
             <*> pure size
@@ -523,16 +523,27 @@ displayWorldPositionAtDisplayPosition this pixel = do
   return $ s4 ^. _xyz
 
 
-createFBO :: V2 Int -> IO (FramebufferObject, TextureObject, TextureObject)
-createFBO resolution = do
+createFBO :: V2 Int -> Maybe TextureObject -> IO (FramebufferObject, TextureObject, TextureObject)
+createFBO resolution mTex = do
   let resX = fromIntegral $ resolution ^. _x
   let resY = fromIntegral $ resolution ^. _y
-
-  print resolution
+  let size = TextureSize2D resX resY
 
   fbo <- genObjectName
-  fboColorBuffer <- genObjectName
-  textureBinding Texture2D $= Just fboColorBuffer
+
+
+  bindFramebuffer Framebuffer $= fbo
+
+  fboColorBuffer <- case mTex of
+    Just tex ->  textureBinding Texture2D $= Just tex >> return tex
+    Nothing -> do
+      tex <- genObjectName
+      textureBinding Texture2D $= Just tex
+      texImage2D Texture2D NoProxy 0 RGBA8 size 0 (PixelData RGBA UnsignedByte nullPtr)
+      return tex
+
+  framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D fboColorBuffer 0
+
   textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
   textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
   textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
@@ -542,16 +553,7 @@ createFBO resolution = do
   textureFilter Texture2D $= ( (Nearest, Nothing), Nearest )
   textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
   textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
-
-  bindFramebuffer Framebuffer $= fbo
-
-  let size = TextureSize2D resX resY
-
-  textureBinding Texture2D $= Just fboColorBuffer
-  texImage2D Texture2D NoProxy 0 RGBA8 size 0 (PixelData RGBA UnsignedByte nullPtr)
-  framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D fboColorBuffer 0
-
-  textureBinding Texture2D $= Just fboDepthBuffer
+  
   texImage2D Texture2D NoProxy 0 Depth24Stencil8 size 0 (PixelData DepthStencil UnsignedInt248 nullPtr)
   framebufferTexture2D Framebuffer DepthStencilAttachment Texture2D fboDepthBuffer 0
   checkForErrors
