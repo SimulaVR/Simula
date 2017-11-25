@@ -98,7 +98,7 @@ newVulkanInfo verbose = do
   mapM_ free iextPtrs
   mapM_ free valLayerPtrs
 
-  when verbose $ createDebugReport inst callbackPtr
+  when verbose $ void $ createDebugReport inst callbackPtr
   
   phys <- findPhysicalDevice inst
 
