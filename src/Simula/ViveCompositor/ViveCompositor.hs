@@ -357,8 +357,11 @@ updateVulkanImage info image tex = do
         vkCmdPipelineBarrier (info^.vulkanCommandBuffer) VK_PIPELINE_STAGE_TRANSFER_BIT VK_PIPELINE_STAGE_TRANSFER_BIT zeroBits 0 nullPtr 0 nullPtr 1 barrier
       endCommand info
 
-newViveCompositor :: IO ViveCompositor
-newViveCompositor = do
+newViveCompositor :: Bool -> IO ViveCompositor
+newViveCompositor verbose = do
+  when verbose
+      (debugOutput $= Enabled >> debugMessageCallback $= Just print)
+
   wldp <- wl_display_create
   wcomp <- weston_compositor_create wldp nullPtr
 
@@ -374,13 +377,8 @@ newViveCompositor = do
   when (res > 0) $ ioError $ userError "Error when loading backend"
 
   (_, initErr) <- vrInit VRApplication_Scene 
+  unless (initErr == VRInitError_None) (error $ show initErr)
 
-  case initErr of
-    EvriniterrorVriniterrorNone -> return ()
-    _ -> error $ show initErr
-
-  debugOutput $= Enabled
-  debugMessageCallback $= Just print
 
   blend $= Disabled
   

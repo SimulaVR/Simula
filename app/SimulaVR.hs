@@ -14,6 +14,9 @@ import Simula.BaseCompositor.WindowManager
 import Simula.BaseCompositor.SceneGraph
 import Simula.BaseCompositor.Types
 import Simula.BaseCompositor.Utils
+
+import Simula.ViveCompositor.ViveCompositor
+
 import Simula.WestonDesktop
 import Simula.Weston
 import Simula.WaylandServer
@@ -30,8 +33,8 @@ makeLenses ''EngineOptions
 
 main :: IO ()
 main = do
-  viveComp <- newViveCompositor 
   eOpts <- execParser engineOptionsWrapper
+  viveComp <- newViveCompositor (eOpts ^. verbose)
   startCompositor viveComp
 
 engineOptsParser :: Parser EngineOptions
