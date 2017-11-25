@@ -81,11 +81,12 @@ newVulkanInfo = do
   iextPtrs <- mapM newCString iexts
   print iexts
 
-  let valLayers = [ "VK_LAYER_LUNARG_parameter_validation"
+  {-let valLayers = [ "VK_LAYER_LUNARG_parameter_validation"
                   , "VK_LAYER_LUNARG_core_validation"
                   , "VK_LAYER_LUNARG_object_tracker"
                   , "VK_LAYER_LUNARG_standard_validation"
-                  , "VK_LAYER_GOOGLE_threading"]
+                  , "VK_LAYER_GOOGLE_threading"]-}
+  let valLayers = []
   valLayerPtrs <- mapM newCString valLayers
 
   callbackPtr <- createDebugCallbackPtr $ \_ _ _ _ _ _ message _ -> peekCString message >>= print >> return (VkBool32 VK_FALSE)
@@ -382,7 +383,7 @@ newViveCompositor = do
     VRInitError_None -> return ()
     _ -> error $ show initErr
 
-  debugOutput $= Enabled
+  debugOutput $= Disabled
   debugMessageCallback $= Just print
 
   blend $= Disabled
