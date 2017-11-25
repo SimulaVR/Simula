@@ -14,7 +14,10 @@
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: lts-9.8
+resolver: nightly-2017-11-20
+
+ghc-options: 
+  "*": -pgmlg++
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -37,15 +40,18 @@ resolver: lts-9.8
 packages:
 - '.'
 - simula-wayland
-- simula-osvr
 - simula-openvr
+- vulkan
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:
 - 'linear-opengl-0.3.0.0'
+- 'OpenGLRaw-3.2.5.0'
 
 # Override default flag values for local packages and extra-deps
-flags: {}
+flags: 
+  OpenGLRaw:
+    OsAndroid: true   
 
 # Extra package databases containing global packages
 extra-package-dbs: []

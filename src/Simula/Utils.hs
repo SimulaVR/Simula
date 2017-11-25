@@ -21,3 +21,4 @@ withCStringVector args act = do
   
 withCArgs :: (VM.IOVector CString -> IO ()) -> IO ()
 withCArgs act = getArgs >>= \args -> withCStringVector args act
+

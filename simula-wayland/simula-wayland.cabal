@@ -35,4 +35,4 @@ library
     , wayland-server
     , libweston-2
     , libweston-desktop-2
-    , egl
+  

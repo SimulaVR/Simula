@@ -1,3 +1,4 @@
+
 #include "util.h"
 #include "compositor.h"
 #include "libweston-desktop.h"
@@ -59,4 +60,16 @@ struct wl_shm_buffer* weston_buffer_get_shm_buffer(struct weston_buffer* buffer)
 void* weston_buffer_get_legacy_buffer(struct weston_buffer* buffer) {
   return buffer->legacy_buffer;
 }
-  
+
+
+EGLContext makeContext(EGLDisplay display, EGLContext shared) {
+  EGLConfig config;
+  EGLint num;
+  const EGLint attribs[] = {EGL_SURFACE_TYPE, EGL_WINDOW_BIT, EGL_RED_SIZE, 1, EGL_GREEN_SIZE, 1, EGL_BLUE_SIZE, 1, EGL_ALPHA_SIZE, 1, EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_NONE };
+  if(!eglChooseConfig(display, attribs, &config, 1, &num))
+    return NULL;
+
+  const EGLint contextAttr[] = {EGL_CONTEXT_MAJOR_VERSION, 4, EGL_CONTEXT_MINOR_VERSION, 1, EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, EGL_NONE };
+  return eglCreateContext(display, config, shared, contextAttr);
+
+}

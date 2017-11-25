@@ -8,4 +8,6 @@ out highp vec2 textureCoord;
 void main() {
    textureCoord = textureCoordEntry;
    gl_Position = matrix * vec4(vertexCoordEntry, 1.);
+   gl_Position.y = -gl_Position.y;
+
 }

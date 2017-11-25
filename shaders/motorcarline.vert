@@ -8,4 +8,6 @@ in highp vec3 aPosition;
 void main(void)
 {
     gl_Position =   uMVPMatrix * vec4(aPosition, 1.);
+    gl_Position.y = -gl_Position.y;
+
 }

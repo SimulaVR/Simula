@@ -48,6 +48,7 @@ data MotorcarSurfaceNode = MotorcarSurfaceNode {
   _motorcarSurfaceNodeColorTextureCoords :: BufferObject,
   _motorcarSurfaceNodeDepthTextureCoords :: BufferObject,
   _motorcarSurfaceNodeSurfaceVertexCoords :: BufferObject,
+  _motorcarSurfaceNodeSurfaceTextureCoords :: BufferObject,
   _motorcarSurfaceNodeCuboidClippingVertices :: BufferObject,
   _motorcarSurfaceNodeCuboidClippingIndices :: BufferObject,
   
@@ -250,7 +251,7 @@ instance Drawable MotorcarSurfaceNode where
       Nothing -> return ()
       Just tex -> do
         stencilTest $= Enabled
-        bindFramebuffer DrawFramebuffer $= display ^. displayScratchFrameBuffer
+        bindFramebuffer Framebuffer $= display ^. displayScratchFrameBuffer
         clearColor $= Color4 0 0 0 0
         clearDepthf $= 1 --opengl es doesn't support clearDepth
         clearStencil $= 0    
@@ -342,10 +343,10 @@ instance Drawable MotorcarSurfaceNode where
         clipWindowBounds this display
         checkForErrors
       
-        drawFrameBufferContents this display
+--        drawFrameBufferContents this display
         checkForErrors
 
-        bindFramebuffer Framebuffer $= defaultFramebufferObject
+
         vertexAttribArray (this ^. motorcarSurfaceNodeAPositionDepthComposite) $= Disabled
         vertexAttribArray (this ^. motorcarSurfaceNodeAColorTexCoordDepthComposite) $= Disabled
         activeTexture $= TextureUnit 1
@@ -545,11 +546,15 @@ instance Drawable MotorcarSurfaceNode where
                                     , vpOffset ^. _x + vpSize ^. _x, vpOffset ^. _y + vpSize  ^. _y
                                     , vpOffset ^. _x, vpOffset ^. _y + vpSize ^. _y ] :: [Float]
 
+            bindBuffer ArrayBuffer $= Just (this ^. motorcarSurfaceNodeSurfaceTextureCoords)
             withArrayLen textureBlitCoords $ \len coordPtr ->
-              vertexAttribPointer aTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 coordPtr)
-
+              bufferData ArrayBuffer $= (fromIntegral (len * sizeOf (undefined :: Float)), coordPtr, StaticDraw)
+            vertexAttribPointer aTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 nullPtr)
+            
+            bindBuffer ArrayBuffer $= Just surfaceCoords
             drawArrays TriangleFan 0 4
             checkForErrors
+            bindBuffer ArrayBuffer $= Nothing
      
       
 
@@ -664,6 +669,7 @@ newMotorcarSurfaceNode ws prt tf dims = do
               <*> pure dcsbs
   
               <*> pure clipping
+              <*> genObjectName
               <*> genObjectName
               <*> genObjectName
               <*> pure surfaceVertexCoords

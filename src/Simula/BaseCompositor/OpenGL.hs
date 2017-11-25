@@ -16,6 +16,8 @@ import Foreign
 import Simula.BaseCompositor.Geometry
 import Simula.BaseCompositor.Types
 
+import Unsafe.Coerce 
+
 data ViewPort = ViewPort {
   _viewPortOffsetFactor :: MVar (V2 Float),
   _viewPortSizeFactor :: MVar (V2 Float),
@@ -66,6 +68,7 @@ data MotorcarShader
   | ShaderDepthCompositedSurfaceBlitter
   | ShaderTextureBlitter
   | ShaderMousePointer
+  | ShaderSimulaVRModel
   deriving (Show, Eq, Ord, Enum)
 
 vertexSource, fragSource :: MotorcarShader -> ByteString
@@ -75,6 +78,7 @@ vertexSource ShaderDepthCompositedSurface = $(embedFile "shaders/depthcomposited
 vertexSource ShaderDepthCompositedSurfaceBlitter = $(embedFile "shaders/depthcompositedsurfaceblitter.vert")
 vertexSource ShaderTextureBlitter = $(embedFile "shaders/textureblitter.vert")
 vertexSource ShaderMousePointer = $(embedFile "shaders/mousepointer.vert")
+vertexSource ShaderSimulaVRModel = $(embedFile "shaders/simulavrmodel.vert")
 
 fragSource ShaderMotorcarLine = $(embedFile "shaders/motorcarline.frag")
 fragSource ShaderMotorcarSurface =  $(embedFile "shaders/motorcarsurface.frag")
@@ -82,9 +86,11 @@ fragSource ShaderDepthCompositedSurface = $(embedFile "shaders/depthcompositedsu
 fragSource ShaderDepthCompositedSurfaceBlitter = $(embedFile "shaders/depthcompositedsurfaceblitter.frag")
 fragSource ShaderTextureBlitter = $(embedFile "shaders/textureblitter.frag")
 fragSource ShaderMousePointer = $(embedFile "shaders/mousepointer.frag")
+fragSource ShaderSimulaVRModel = $(embedFile "shaders/simulavrmodel.frag")
 
 getProgram :: MotorcarShader -> IO Program
 getProgram shader = do
+  checkForErrors
   vert <- createShader VertexShader
   frag <- createShader FragmentShader
   shaderSourceBS vert $= vertexSource shader
@@ -93,7 +99,8 @@ getProgram shader = do
   checkCompileStatus vert
   compileShader frag
   checkCompileStatus frag
-  
+  checkForErrors  
+
   program <- createProgram
   attachShader program vert
   attachShader program frag
@@ -102,6 +109,7 @@ getProgram shader = do
   when (not isLinked) $ do
     get (programInfoLog program) >>= putStrLn
     ioError . userError $ "Failed linking " ++ show shader
+  checkForErrors
 
   currentProgram $= Just program
   texSampler <- get $ uniformLocation program "uTexSampler"
@@ -128,11 +136,11 @@ checkForErrors = do
   when (not (null errs)) $ do
     fbStatus <- get $ framebufferStatus Framebuffer
     dfbStatus <- get $ framebufferStatus DrawFramebuffer
-    
     rfbStatus <- get $ framebufferStatus ReadFramebuffer
     putStrLn $ "Framebuffer status: " ++ show fbStatus
     putStrLn $ "Draw framebuffer status: " ++ show dfbStatus
-    putStrLn $ "Read framebuffer status: " ++ show rfbStatus
---    putStrLn $ show errs
-    error $ show errs
+    putStrLn $ "Read framebuffer status: " ++ show rfbStatus 
+    putStrLn $ show errs
+    putStrLn $ prettyCallStack callStack
+--    error $ show errs
 

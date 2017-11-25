@@ -16,6 +16,8 @@ import Linear.OpenGL
 import System.Clock
 import System.Environment
 import System.Mem.StableName
+import System.Posix.DynamicLinker
+  
 import Simula.WaylandServer
 import Simula.Weston
 import Simula.WestonDesktop
@@ -31,8 +33,6 @@ import Simula.BaseCompositor.WindowManager
 import Simula.BaseCompositor.Utils
 import Simula.BaseCompositor.Types
 
-import Simula.OSVR
-import Simula.ViveCompositor.OSVR -- TODO: Rename this Dependency
 
 -- data family pattern
 -- instance Compositor BaseCompositor where
@@ -67,8 +67,7 @@ data BaseCompositor = BaseCompositor {
   _baseCompositorOpenGlData :: OpenGLData,
   _baseCompositorOutput :: MVar (Maybe WestonOutput),
   _baseCompositorGlContext :: MVar (Maybe SimulaOpenGLContext),
-  _baseCompositorNormalLayer :: WestonLayer,
-  _baseCompositorOSVR :: SimulaOSVRClient
+  _baseCompositorNormalLayer :: WestonLayer
 }
 
 data SimulaSeat = SimulaSeat {
@@ -79,25 +78,30 @@ data OpenGLData = OpenGLData {
   _openGlDataPpcm :: Float,
   _openGlDataTextureBlitter :: TextureBlitter,
   _openGlDataSurfaceFbo :: FramebufferObject,
-  _openGlDataMousePointer :: MousePointer
+  _openGlDataMousePointer :: MousePointer,
+  _openGlVAO :: VertexArrayObject
   } deriving Eq
 
 data SimulaOpenGLContext = SimulaOpenGLContext {
   _simulaOpenGlContextEglContext :: EGLContext,
   _simulaOpenGlContextEglDisplay :: EGLDisplay,
-  _simulaOpenGlContextEglSurface :: EGLSurface
+  _simulaOpenGlContextEglSurface :: EGLSurface,
+  _simulaOpenGLContextFramebufferSize :: V2 Int
   } deriving (Eq, Typeable)
 
 data TextureBlitter = TextureBlitter {
   _textureBlitterProgram :: Program,
   _textureBlitterVertexCoordEntry :: AttribLocation,
   _textureBlitterTextureCoordEntry :: AttribLocation,
-  _textureBlitterMatrixLocation :: UniformLocation
+  _textureBlitterMatrixLocation :: UniformLocation,
+  _textureBlitterVertexBuffer :: BufferObject,
+  _textureBlitterTextureBuffer :: BufferObject
   } deriving Eq
 
 data MousePointer = MousePointer {
   _mousePointerProgram :: Program,
   _mousePointerSurfaceVertexCoords :: BufferObject,
+  _mousePointerTextureBlitCoords :: BufferObject,
   _mousePointerPositionLocation :: AttribLocation,
   _mousePointerTexCoordLocation :: AttribLocation,
   _mousePointerPointerLocation :: UniformLocation
@@ -126,7 +130,7 @@ instance OpenGLContext SimulaOpenGLContext where
       egldp = this ^. simulaOpenGlContextEglDisplay
       eglsurf = this ^. simulaOpenGlContextEglSurface
 
-  glCtxDefaultFramebufferSize this = return $ V2 2160 1200
+  glCtxDefaultFramebufferSize = return . view simulaOpenGLContextFramebufferSize
 
 instance HasBaseWaylandSurface SimulaSurface where
   baseWaylandSurface = simulaSurfaceBase
@@ -145,7 +149,7 @@ newSimulaSurface ws view baseCompositor ty = do
   return surface
 
 newOpenGlData :: IO OpenGLData
-newOpenGlData = OpenGLData 64 <$> newTextureBlitter <*> genObjectName <*> newMousePointer
+newOpenGlData = OpenGLData 64 <$> newTextureBlitter <*> genObjectName <*> newMousePointer <*> genObjectName
 
 newTextureBlitter :: IO TextureBlitter
 newTextureBlitter = do
@@ -157,6 +161,7 @@ newTextureBlitter = do
     <*> get (attribLocation program "vertexCoordEntry")
     <*> get (attribLocation program "textureCoordEntry")
     <*> get (uniformLocation program "matrix")
+    <*> genObjectName <*> genObjectName
 
 bindTextureBlitter :: TextureBlitter -> IO ()
 bindTextureBlitter tb = currentProgram $= Just (tb ^. textureBlitterProgram)
@@ -172,16 +177,25 @@ blitterDrawTexture tb tex targetRect targetSize depth targetInvertedY sourceInve
   vertexAttribArray vertexCoordEntry $= Enabled
   vertexAttribArray textureCoordEntry $= Enabled
 
+  bindBuffer ArrayBuffer $= Just (tb ^. textureBlitterVertexBuffer)
   withArrayLen vertexCoordinates $ \len arrPtr ->
-    vertexAttribPointer vertexCoordEntry $= (ToFloat, VertexArrayDescriptor 3 Float 0 arrPtr)
+    bufferData ArrayBuffer $= (fromIntegral (len * sizeOf (undefined :: Float)), arrPtr, StaticDraw)
+
+  vertexAttribPointer vertexCoordEntry $= (ToFloat, VertexArrayDescriptor 3 Float 0 nullPtr)
+
+  bindBuffer ArrayBuffer $= Just (tb ^. textureBlitterTextureBuffer)
   withArrayLen textureCoordinates $ \len arrPtr ->
-    vertexAttribPointer textureCoordEntry $= (ToFloat, VertexArrayDescriptor 2 Float 0 arrPtr)
+    bufferData ArrayBuffer $= (fromIntegral (len * sizeOf (undefined :: Float)), arrPtr, StaticDraw)
+
+  vertexAttribPointer textureCoordEntry $= (ToFloat, VertexArrayDescriptor 2 Float 0 nullPtr)
 
   uniform matrix $= transform ^. m44GLmatrix
 
   textureBinding Texture2D $= Just tex
   textureFilter Texture2D $= ((Nearest, Nothing), Nearest)
+  bindBuffer ArrayBuffer $= Just (tb ^. textureBlitterVertexBuffer)
   drawArrays TriangleFan 0 4
+  bindBuffer ArrayBuffer $= Nothing
 
   textureBinding Texture2D $= Nothing
 
@@ -229,6 +243,7 @@ newMousePointer = do
   withArrayLen surfaceVerts $ \len coordPtr ->
     bufferData ArrayBuffer $= (fromIntegral (len * sizeOf (undefined :: Float)), coordPtr, StaticDraw)
 
+  
   currentProgram $= Just program
   colorSampler <- get $ uniformLocation program "uColorSampler"
   uniform colorSampler $= TextureUnit 0
@@ -237,6 +252,7 @@ newMousePointer = do
   MousePointer
     <$> pure program
     <*> pure surfaceVertexCoords
+    <*> genObjectName
     <*> get (attribLocation program "aPosition")
     <*> get (attribLocation program "aTexCoord")
     <*> get (uniformLocation program "uPointer")
@@ -248,10 +264,9 @@ drawMousePointer display mp pos = do
   textureBinding Texture2D $= Just (display ^. displayScratchColorBufferTexture)
   checkForErrors
 
-  let res = fromIntegral <$>  display ^. displaySize
-  let size = TextureSize2D (res ^. _x) (res ^. _y)
-  copyTexImage2D Texture2D 0 RGB' (Position 0 0) size 0
-  checkForErrors
+  readBuffer $= BackBuffers
+
+  let res = fromIntegral <$> display ^. displaySize
 
   depthMask $= Enabled
   stencilMask $= 0xff
@@ -296,12 +311,17 @@ drawMousePointer display mp pos = do
                             , vpOffset ^. _x, vpOffset ^. _y + vpSize ^. _y ] :: [Float]
 
 
-    withArrayLen textureBlitCoords $ \len coordPtr ->
-      vertexAttribPointer aTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 coordPtr)
+    bindBuffer ArrayBuffer $= Just (mp ^. mousePointerTextureBlitCoords)
+    withArrayLen textureBlitCoords $ \len coordPtr -> 
+      bufferData ArrayBuffer $= (fromIntegral (len * sizeOf (undefined :: Float)), coordPtr, StaticDraw)
+
+
+    vertexAttribPointer aTexCoord $= (ToFloat, VertexArrayDescriptor 2 Float 0 nullPtr)
     checkForErrors
 
     drawArrays TriangleFan 0 4
     checkForErrors
+    bindBuffer ArrayBuffer $= Nothing
 
   textureBinding Texture2D $= Nothing
 
@@ -316,6 +336,7 @@ setTimeout ms ioOperation =
 
 instance Compositor BaseCompositor where
   startCompositor comp = do
+
     let wc = comp ^. baseCompositorWestonCompositor
     oldFunc <- getRepaintOutput wc
     newFunc <- createRendererRepaintOutputFunc (onRender comp oldFunc)
@@ -429,11 +450,12 @@ newBaseCompositor scene display waitH = do
   bgLayer <- newWestonLayer wcomp
   weston_layer_set_position mainLayer WestonLayerPositionBackground
 
+  weston_compositor_load_xwayland wcomp
   compositor <- BaseCompositor scene display wldp wcomp
+
                 <$> newMVar M.empty <*> newOpenGlData
-                <*> newMVar Nothing <*> newMVar Nothing
+                <*> newMVar Nothing <*> newMVar Nothing 
                 <*> pure mainLayer
-                <*> if waitH then waitForOsvrDisplay Nothing else initSimulaOsvrClient
 
   windowedApi <- weston_windowed_output_get_api wcomp
 
@@ -465,11 +487,7 @@ newBaseCompositor scene display waitH = do
   interfacePtr <- new interface
   weston_compositor_set_default_pointer_grab wcomp interfacePtr
 
-  -- setupHeadTracking (_baseCompositorOSVR compositor)
-  --   >> setupLeftHandTracking (_baseCompositorOSVR compositor)
-  --   >> setupRightHandTracking (_baseCompositorOSVR compositor)
-  --   >> return compositor
-
+  setupXWayland wcomp
   return compositor
 
   where
@@ -522,7 +540,7 @@ newBaseCompositor scene display waitH = do
       eglctx <- westonGlRendererContext renderer
       egldp <- westonGlRendererDisplay renderer
       eglsurf <- westonOutputRendererSurface output
-      let glctx = SimulaOpenGLContext eglctx egldp eglsurf
+      let glctx = SimulaOpenGLContext eglctx egldp eglsurf (compositor ^. baseCompositorDisplay.displaySize)
      
       writeMVar (compositor ^. baseCompositorGlContext) (Just glctx)
 
@@ -539,6 +557,147 @@ newBaseCompositor scene display waitH = do
       let pos = (`div` 256) <$> pos'
       setFocusForPointer compositor pointer pos
       weston_pointer_send_button pointer time button state
+
+
+setupXWayland :: WestonCompositor -> IO ()
+setupXWayland wcomp = do
+  api <- weston_xwayland_get_api wcomp >>= peek
+  xwayland <- apiXWaylandGet api wcomp
+  {-
+
+	wxw->compositor = comp;
+	wxw->api = api;
+	wxw->xwayland = xwayland;
+	wxw->process.cleanup = xserver_cleanup;
+	if (api->listen(xwayland, wxw, spawn_xserver) < 0)
+		return -1;
+
+	loop = wl_display_get_event_loop(comp->wl_display);
+	wxw->sigusr1_source = wl_event_loop_add_signal(loop, SIGUSR1,
+						       handle_sigusr1, wxw);
+-}
+  return ()
+  where
+    handleSigUsr1 signal dat = undefined
+    {- int handle_sigusr1(int signal_number, void *data)
+{
+	struct wet_xwayland *wxw = data;
+
+	/* We'd be safer if we actually had the struct
+	 * signalfd_siginfo from the signalfd data and could verify
+	 * this came from Xwayland.*/
+	wxw->api->xserver_loaded(wxw->xwayland, wxw->client, wxw->wm_fd);
+	wl_event_source_remove(wxw->sigusr1_source);
+
+	return 1;
+} -}
+    spawnXserver userData display abstractFd unixFd = undefined
+    {- pid_t 	spawn_xserver(void *user_data, const char *display, int abstract_fd, int unix_fd)
+{
+	struct wet_xwayland *wxw = user_data;
+	pid_t pid;
+	char s[8], abstract_fd_str[8], unix_fd_str[8], wm_fd_str[8];
+	int sv[2], wm[2], fd;
+	char *xserver = NULL;
+	struct weston_config *config = wet_get_config(wxw->compositor);
+	struct weston_config_section *section;
+
+	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sv) < 0) {
+		weston_log("wl connection socketpair failed\n");
+		return 1;
+	}
+
+	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, wm) < 0) {
+		weston_log("X wm connection socketpair failed\n");
+		return 1;
+	}
+
+	pid = fork();
+	switch (pid) {
+	case 0:
+		/* SOCK_CLOEXEC closes both ends, so we need to unset
+		 * the flag on the client fd. */
+		fd = dup(sv[1]);
+		if (fd < 0)
+			goto fail;
+		snprintf(s, sizeof s, "%d", fd);
+		setenv("WAYLAND_SOCKET", s, 1);
+
+		fd = dup(abstract_fd);
+		if (fd < 0)
+			goto fail;
+		snprintf(abstract_fd_str, sizeof abstract_fd_str, "%d", fd);
+		fd = dup(unix_fd);
+		if (fd < 0)
+			goto fail;
+		snprintf(unix_fd_str, sizeof unix_fd_str, "%d", fd);
+		fd = dup(wm[1]);
+		if (fd < 0)
+			goto fail;
+		snprintf(wm_fd_str, sizeof wm_fd_str, "%d", fd);
+
+		section = weston_config_get_section(config,
+						    "xwayland", NULL, NULL);
+		weston_config_section_get_string(section, "path",
+						 &xserver, XSERVER_PATH);
+
+		/* Ignore SIGUSR1 in the child, which will make the X
+		 * server send SIGUSR1 to the parent (weston) when
+		 * it's done with initialization.  During
+		 * initialization the X server will round trip and
+		 * block on the wayland compositor, so avoid making
+		 * blocking requests (like xcb_connect_to_fd) until
+		 * it's done with that. */
+		signal(SIGUSR1, SIG_IGN);
+
+		if (execl(xserver,
+			  xserver,
+			  display,
+			  "-rootless",
+			  "-listen", abstract_fd_str,
+			  "-listen", unix_fd_str,
+			  "-wm", wm_fd_str,
+			  "-terminate",
+			  NULL) < 0)
+			weston_log("exec of '%s %s -rootless "
+				   "-listen %s -listen %s -wm %s "
+				   "-terminate' failed: %m\n",
+				   xserver, display,
+				   abstract_fd_str, unix_fd_str, wm_fd_str);
+	fail:
+		_exit(EXIT_FAILURE);
+
+	default:
+		close(sv[1]);
+		wxw->client = wl_client_create(wxw->compositor->wl_display, sv[0]);
+
+		close(wm[1]);
+		wxw->wm_fd = wm[0];
+
+		wxw->process.pid = pid;
+		weston_watch_process(&wxw->process);
+		break;
+
+	case -1:
+		weston_log("Failed to fork to spawn xserver process\n");
+		break;
+	}
+
+	return pid;
+} -}
+    xserverCleanup process status = undefined
+    {- 	xserver_cleanup(struct weston_process *process, int status)
+{
+	struct wet_xwayland *wxw =
+		container_of(process, struct wet_xwayland, process);
+	struct wl_event_loop *loop =
+		wl_display_get_event_loop(wxw->compositor->wl_display);
+
+	wxw->api->xserver_exited(wxw->xwayland, status);
+	wxw->sigusr1_source = wl_event_loop_add_signal(loop, SIGUSR1,
+                                                       handle_sigusr1, wxw);
+	wxw->client = NULL;
+} -}
 
 setFocusForPointer :: BaseCompositor -> WestonPointer -> V2 Int -> IO ()
 setFocusForPointer baseCompositor pointer pos = do
@@ -629,9 +788,10 @@ composeSurface surf gld = do
 
       -- needed for textures to properly render
       framebufferTexture2D Framebuffer (ColorAttachment 0) Texture2D (TextureObject 0) 0
-      bindFramebuffer Framebuffer $= defaultFramebufferObject
+
       checkForErrors
     _ -> return ()
+  bindFramebuffer Framebuffer $= defaultFramebufferObject
   return texture
 
 paintChildren :: WestonSurface -> WestonSurface -> V2 Int -> OpenGLData -> IO ()
@@ -670,61 +830,34 @@ baseCompositorRender comp = do
   Just output <- readMVar (comp ^. baseCompositorOutput)
 
   glCtxMakeCurrent glctx
+  bindVertexArrayObject $= Just (comp ^. baseCompositorOpenGlData.openGlVAO)
+
   -- set up context
 
   let surfaces = M.keys surfaceMap
   let scene  = comp ^. baseCompositorScene
   let simDisplay = comp ^. baseCompositorDisplay
-  let osvrCtx = comp ^. baseCompositorOSVR ^. simulaOsvrContext
-  let osvrDisplay = comp ^. baseCompositorOSVR ^. simulaOsvrDisplay
 
   time <- getTime Realtime
   scenePrepareForFrame scene time
   checkForErrors
-  osvrClientUpdate osvrCtx
 
-  case osvrDisplay of
-    Nothing -> do -- ioError $ userError "Could not initialize display in OSVR"
-      putStrLn "[INFO] no OSVR display is connected"
+  weston_output_schedule_repaint output
+  checkPosesAndDraw simDisplay scene comp glctx output
+  bindVertexArrayObject $= Nothing
 
-      -- We can still render to wayland though
-      weston_output_schedule_repaint output
-      checkPosesAndDraw osvrCtx simDisplay scene comp glctx output
 
-    Just display -> do
-      -- TODO: make the Head Mounted Display work at all
-      (value, viewers) <- osvrClientGetNumViewers display
-      case value of
-          ReturnSuccess -> do
-            putStrLn $ "[INFO] viewer count is " ++ show viewers
-            weston_output_schedule_repaint output
-            checkPosesAndDraw osvrCtx simDisplay scene comp glctx output
 
-checkPosesAndDraw ctx disp scene comp glctx out = do
+checkPosesAndDraw disp scene comp glctx out = do
     Some seat <- compositorSeat comp
-    osvrGetLeftHandPose ctx
-    osvrGetRightHandPose ctx
-    headP <- osvrGetHeadPose ctx
-    case headP of
-      Just pose -> do
-        newDisplay <- moveCamera disp pose
-        writeMVar (scene ^. sceneDisplays) [newDisplay]
+    sceneDrawFrame scene
+    checkForErrors
 
-        sceneDrawFrame scene
-        checkForErrors
+    drawScene seat comp glctx out
 
-        drawScene seat comp glctx out
-
-        sceneFinishFrame scene
-        checkForErrors
-      Nothing -> do
-        sceneDrawFrame scene
-        checkForErrors
-
-        drawScene seat comp glctx out
-
-        sceneFinishFrame scene
-        checkForErrors
+    sceneFinishFrame scene
+    checkForErrors
+        
 
 drawScene seat comp glctx out = do
     pointer <- seatPointer seat
@@ -733,35 +866,4 @@ drawScene seat comp glctx out = do
 
     emitOutputFrameSignal out
     eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
-
-moveCamera :: Display -> PoseTracker -> IO Display
-moveCamera d p = return d
-
-drawLeftHand :: PoseTracker -> IO ()
-drawLeftHand p = return ()
-
-drawRightHand :: PoseTracker -> IO ()
-drawRightHand p = return ()
-{-
-    if(m_camIsMoving) {
-        glm::vec4 camPos;
-        camPos *= 0;
-        camPos.w = 1;
-        glm::vec4 delta = camPos;
-        delta.x = m_camMoveVec.x;
-        delta.y = m_camMoveVec.y;
-        delta.z = m_camMoveVec.z;
-
-        const float speed = 0.01;
-        delta *= speed;
-        delta.w /= speed;
-        glm::mat4 trans = display()->transform();
-        //camPos = trans * camPos;
-        //delta = trans * delta;
-        glm::vec3 move = glm::vec3(delta.x/delta.w - camPos.x/camPos.w, delta.y/delta.w - camPos.y/camPos.w,
-                                   delta.z/delta.w - camPos.z/camPos.w);
-        trans = glm::translate(trans, move);
-        display()->setTransform(trans);
-    }
--}
 

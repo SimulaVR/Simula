@@ -11,4 +11,6 @@ void main(void)
     //vTexCoord = aTexCoord;
     vUDCPos = aPosition.xy;
     gl_Position = vec4(aPosition, 1.);
+    gl_Position.y = -gl_Position.y;
+
 }

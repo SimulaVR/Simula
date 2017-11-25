@@ -22,6 +22,7 @@ default-extensions:
   - QuasiQuotes
   - TemplateHaskell
   - OverloadedStrings
+  - TupleSections
 
 dependencies:
   - base >= 4.9 && < 5
@@ -49,8 +50,9 @@ dependencies:
   - unix
   - StateVar
   - simula-wayland
-  - simula-osvr
   - simula-openvr
+  - vulkan
+  - vector-sized
 _executable_options: &executable_options
   dependencies: [base, Simula]
   ghc-options: [-threaded, -rtsopts, -with-rtsopts=-N]
@@ -76,8 +78,8 @@ library:
     - Simula.BaseCompositor.Wayland.Output
     - Simula.BaseCompositor.Geometry
     - Simula.BaseCompositor.Weston
-    - Simula.ViveCompositor.ViveCompositor # TODO: cabal flag
-    - Simula.ViveCompositor.OSVR           # TODO: cabal flag
+    - Simula.ViveCompositor.ViveCompositor
+    - Simula.ViveCompositor.SimulaVRModel
 
 executables:
   simulavr:
@@ -85,4 +87,3 @@ executables:
     main: SimulaVR.hs
     source-dirs: app
     dependencies: [dbus, Simula]
-    extra-libraries: [openvr_api]

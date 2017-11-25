@@ -1,3 +1,4 @@
+{-# LANGUAGE DuplicateRecordFields #-}
 module Simula.ViveCompositor.ViveCompositor where
 
 import Control.Concurrent
@@ -5,13 +6,19 @@ import Control.Lens
 import Control.Monad
 import qualified Data.Map as M
 import Control.Concurrent.MVar
+import Data.Coerce
 import Data.Hashable
 import Data.Word
 import Data.Typeable
 import Data.Maybe
+import Data.List
+import qualified Data.Vector.Storable.Sized as VF
+import Data.Void
 import Foreign
 import Foreign.C
+import Foreign.Ptr
 import Graphics.Rendering.OpenGL hiding (scale, translate, rotate, Rect)
+import Graphics.GL
 import Linear
 import Linear.OpenGL
 import System.Clock
@@ -33,29 +40,316 @@ import Simula.BaseCompositor.Utils
 import Simula.BaseCompositor.Types
 import Simula.BaseCompositor.Weston hiding (moveCamera)
 
-import Simula.OSVR
-import Simula.ViveCompositor.OSVR
+import Simula.ViveCompositor.SimulaVRModel
 
--- data family pattern
--- instance Compositor ViveCompositor where
---   data SimulaSurface ViveCompositor = ViveCompositorSurface {
---     _viveCompositorSurfaceBase :: BaseWaylandSurface,
---     _viveCompositorSurfaceSurface :: WestonDesktopSurface,
---     _viveCompositorSurfaceView :: WestonView,
---     _viveCompositorSurfaceCompositor :: MVar ViveCompositor,
---     _viveCompositorSurfaceTexture :: MVar (Maybe TextureObject),
---     _viveCompositorSurfaceStableName :: StableName (SimulaSurface ViveCompositor)
---   } deriving (Eq, Typeable)
+import OpenVR
+import Graphics.Vulkan
+
+
+data VulkanInfo  = VulkanInfo {
+  _vulkanInstance :: VkInstance,
+  _vulkanPhysicalDevice :: VkPhysicalDevice,
+  _vulkanDevice :: VkDevice,
+  _vulkanQueue :: VkQueue,
+  _vulkanQueueFamilyIndex :: Word32,
+  _vulkanCommandPool :: VkCommandPool,
+  _vulkanCommandBuffer :: VkCommandBuffer
+ }
+
+data VulkanImage = VulkanImage {
+  _imageImage :: VkImage,
+  _imageImageMemory :: VkDeviceMemory,
+  _imageImageSize :: VkDeviceSize,
+  _imageTexture :: TextureObject,
+  _imageOpenGLMemoryObject :: GLuint,
+  _imageExtents :: VkExtent3D
+}
 
 data ViveCompositor = ViveCompositor {
   _viveCompositorBaseCompositor :: BaseCompositor,
-  _viveCompositorOSVR :: SimulaOSVRClient
+  _viveCompositorVulkanInfo :: VulkanInfo,
+  _viveCompositorVulkanImage :: VulkanImage,
+  _viveCompositorModels :: MVar (M.Map TrackedDeviceIndex SimulaVRModel)
 }
 
+makeLenses ''VulkanInfo
+makeLenses ''VulkanImage
 makeLenses ''ViveCompositor
 
-newViveCompositor :: Scene -> Display -> IO ViveCompositor
-newViveCompositor scene display = do
+newVulkanInfo :: Bool -> IO VulkanInfo
+newVulkanInfo verbose = do
+  iexts <- ("VK_EXT_debug_report":) <$> ivrCompositorGetVulkanInstanceExtensionsRequired
+  iextPtrs <- mapM newCString iexts
+  print iexts
+
+  let valLayers = if verbose then
+                  [ "VK_LAYER_LUNARG_parameter_validation"
+                  , "VK_LAYER_LUNARG_core_validation"
+                  , "VK_LAYER_LUNARG_object_tracker"
+                  , "VK_LAYER_LUNARG_standard_validation"
+                  , "VK_LAYER_GOOGLE_threading"]
+                  else []
+  valLayerPtrs <- mapM newCString valLayers
+
+  callbackPtr <- createDebugCallbackPtr $ \_ _ _ _ _ _ message _ -> peekCString message >>= print >> return (VkBool32 VK_FALSE)
+
+  
+  inst <- createInstance iextPtrs valLayerPtrs callbackPtr
+  mapM_ free iextPtrs
+  mapM_ free valLayerPtrs
+
+  when verbose $ createDebugReport inst callbackPtr
+  
+  phys <- findPhysicalDevice inst
+
+  Just idx <- alloca $ \numPtr -> do
+    num <- vkGetPhysicalDeviceQueueFamilyProperties phys numPtr nullPtr >> peek numPtr
+    props <- allocaArray (fromIntegral num) $ \arrayPtr -> vkGetPhysicalDeviceQueueFamilyProperties phys numPtr arrayPtr >> peekArray (fromIntegral num) arrayPtr
+    return $ findIndex (\(VkQueueFamilyProperties flags _ _ _) -> flags .&. VK_QUEUE_GRAPHICS_BIT == VK_QUEUE_GRAPHICS_BIT) props
+
+  let family = fromIntegral idx
+
+  dexts <- ivrCompositorGetVulkanDeviceExtensionsRequired (castPtr phys)
+  print dexts
+  dextPtrs <- mapM newCString dexts
+  dev <- createDevice inst phys dextPtrs family
+  mapM_  free dextPtrs
+  queue <- createQueue phys dev family
+  pool <- createCommandPool dev family
+  cmdBuffer <- createCommandBuffer dev pool
+  return $ VulkanInfo inst phys dev queue family pool cmdBuffer
+
+  where
+    createInstance iexts layers callbackPtr = withCString "vive-compositor" $ \namePtr ->
+      with VkApplicationInfo { vkSType = VK_STRUCTURE_TYPE_APPLICATION_INFO
+                             , vkPNext = nullPtr
+                             , vkPApplicationName = namePtr
+                             , vkApplicationVersion = 1
+                             , vkPEngineName = namePtr
+                             , vkEngineVersion = 0
+                             , vkApiVersion = vkMakeVersion 1 0 61
+                             } $ \appInfo ->
+      withArrayLen iexts $ \extCount extPtr ->
+      withArrayLen layers $ \layerCount layerPtr ->
+      with VkDebugReportCallbackCreateInfoEXT { vkSType = VkStructureType 1000011000
+                                              , vkPNext = nullPtr
+                                              , vkFlags = VK_DEBUG_REPORT_ERROR_BIT_EXT .|. VK_DEBUG_REPORT_WARNING_BIT_EXT
+                                              , vkPfnCallback = callbackPtr
+                                              , vkPUserData = nullPtr
+                                              } $ \callbackInfo ->
+      with VkInstanceCreateInfo { vkSType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO
+                               , vkPNext = castPtr callbackInfo
+                               , vkFlags = VkInstanceCreateFlags zeroBits
+                               , vkPApplicationInfo = appInfo
+                               , vkEnabledLayerCount = fromIntegral layerCount
+                               , vkPpEnabledLayerNames = layerPtr
+                               , vkEnabledExtensionCount = fromIntegral extCount
+                               , vkPpEnabledExtensionNames = extPtr
+                               } $ \instInfo ->
+      alloca $ \instPtr -> vkCreateInstance instInfo nullPtr instPtr >> peek instPtr
+   
+    findPhysicalDevice inst = (intPtrToPtr . fromIntegral) <$> ivrSystemGetOutputDevice TextureType_Vulkan (castPtr inst)
+
+    createDevice inst phys dexts family = with 1 $ \prioPtr ->
+      with VkDeviceQueueCreateInfo { vkSType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO
+                                   , vkPNext = nullPtr
+                                   , vkFlags = VkDeviceQueueCreateFlags zeroBits
+                                   , vkQueueFamilyIndex = family
+                                   , vkQueueCount = 1
+                                   , vkPQueuePriorities = prioPtr
+                                   } $ \queueInfo ->
+      withArrayLen dexts $ \extCount extPtr ->
+      with VkDeviceCreateInfo { vkSType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO
+                              , vkPNext = nullPtr
+                              , vkFlags = VkDeviceCreateFlags 0
+                              , vkQueueCreateInfoCount = 1
+                              , vkPQueueCreateInfos = queueInfo
+                              , vkEnabledLayerCount = 0
+                              , vkPpEnabledLayerNames = nullPtr
+                              , vkEnabledExtensionCount = fromIntegral extCount
+                              , vkPpEnabledExtensionNames = extPtr
+                              , vkPEnabledFeatures = nullPtr
+                              } $ \deviceInfo ->
+      alloca $ \devicePtr -> vkCreateDevice phys deviceInfo nullPtr devicePtr >> peek devicePtr
+    createCommandPool dev family = 
+      with VkCommandPoolCreateInfo { vkSType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO
+                                   , vkPNext = nullPtr
+                                   , vkFlags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
+                                   , vkQueueFamilyIndex = family
+                                   } $ \poolInfo ->
+      alloca $ \poolPtr -> vkCreateCommandPool dev poolInfo nullPtr poolPtr >> peek poolPtr
+
+    createCommandBuffer dev pool = 
+      with VkCommandBufferAllocateInfo { vkSType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO
+                                       , vkPNext = nullPtr
+                                       , vkCommandPool = pool
+                                       , vkLevel = VK_COMMAND_BUFFER_LEVEL_PRIMARY
+                                       , vkCommandBufferCount = 1
+                                       } $ \allocInfo ->
+      alloca $ \bufferPtr -> vkAllocateCommandBuffers dev allocInfo bufferPtr >> peek bufferPtr
+    createQueue phys dev idx = do
+      queue <- alloca $ \queuePtr -> vkGetDeviceQueue dev (fromIntegral idx) 0 queuePtr >> peek queuePtr
+      return queue
+
+    createDebugReport inst callbackPtr = do
+      with VkDebugReportCallbackCreateInfoEXT { vkSType = VkStructureType 1000011000
+                                              , vkPNext = nullPtr
+                                              , vkFlags = VK_DEBUG_REPORT_ERROR_BIT_EXT .|. VK_DEBUG_REPORT_WARNING_BIT_EXT
+                                              , vkPfnCallback = callbackPtr
+                                              , vkPUserData = nullPtr
+                                              } $ \callbackInfo ->
+        alloca $ \cbPtr -> vkCreateDebugReportCallbackEXT inst callbackInfo nullPtr cbPtr >> peek cbPtr
+      
+
+
+foreign import ccall "wrapper" createDebugCallbackPtr :: (VkDebugReportFlagsEXT -> VkDebugReportObjectTypeEXT -> Word64 -> CSize -> Int32 -> Ptr CChar -> Ptr CChar -> Ptr Void -> IO VkBool32) -> IO PFN_vkDebugReportCallbackEXT
+      
+
+-- creates an RGBA image, 8bit/channel
+-- no staging buffer
+newVulkanImage :: VulkanInfo -> V2 Int -> IO VulkanImage
+newVulkanImage info size = do
+  (image, imageMemory, imageSize) <- createImage
+  fd <- getFd imageMemory
+  (memObj, tex) <- createOpenGLTexture fd
+  transitionImage image
+  return $ VulkanImage image imageMemory imageSize tex memObj (VkExtent3D (fromIntegral $ size ^. _x) (fromIntegral $ size ^. _y) 1)
+  
+  where
+    realSize = (size ^. _x) * (size ^. _y) * 4
+    findMemory flags bits = do
+      props <- alloca $ \propsPtr -> vkGetPhysicalDeviceMemoryProperties (info^.vulkanPhysicalDevice) propsPtr >> peek propsPtr
+      -- TODO: make this non-partial
+      Just idx <- return $ VF.ifoldr (\idx elem st -> case st of
+        Nothing -> if vkPropertyFlags elem .&. flags == flags && ((bits `shiftR` (fromIntegral idx)) .&. 1 == 1)  then Just idx else Nothing
+        rem -> rem) Nothing (vkMemoryTypes props)
+      return idx
+    allocateMemory flags size bits = do
+      memoryTypeIndex <- findMemory flags bits
+      with VkExportMemoryAllocateInfoKHR { vkSType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO_KHR
+                                         , vkPNext = nullPtr
+                                         , vkHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR
+                                         } $ \exportInfo ->
+        with VkMemoryAllocateInfo { vkSType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO
+                                , vkPNext = castPtr exportInfo
+                                , vkAllocationSize = size
+                                , vkMemoryTypeIndex = fromIntegral memoryTypeIndex
+                                } $ \allocInfo ->
+        alloca $ \memoryPtr -> vkAllocateMemory (info^.vulkanDevice) allocInfo nullPtr memoryPtr >> peek memoryPtr
+
+    createImage = do
+      image <- with VkImageCreateInfo { vkSType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO
+                                      , vkPNext = nullPtr
+                                      , vkFlags = zeroBits
+                                      , vkImageType = VK_IMAGE_TYPE_2D
+                                      , vkFormat = VK_FORMAT_R8G8B8A8_UNORM
+                                      , vkExtent = VkExtent3D (fromIntegral $ size ^. _x) (fromIntegral $ size ^. _y) 1
+                                      , vkMipLevels = 1
+                                      , vkArrayLayers = 1
+                                      , vkTiling = VK_IMAGE_TILING_OPTIMAL
+                                      , vkSamples = VK_SAMPLE_COUNT_1_BIT
+                                      , vkUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT .|. VK_IMAGE_USAGE_TRANSFER_SRC_BIT .|. VK_IMAGE_USAGE_SAMPLED_BIT
+                                      , vkSharingMode = VK_SHARING_MODE_EXCLUSIVE
+                                      , vkQueueFamilyIndexCount = 0
+                                      , vkPQueueFamilyIndices = nullPtr
+                                      , vkInitialLayout = VK_IMAGE_LAYOUT_UNDEFINED
+                                      } $ \imageInfo ->
+        alloca $ \imagePtr -> vkCreateImage (info^.vulkanDevice) imageInfo nullPtr imagePtr  >> peek imagePtr
+      (VkMemoryRequirements size _ bits) <- alloca $ \memReqsPtr -> vkGetImageMemoryRequirements (info^.vulkanDevice) image memReqsPtr >> peek memReqsPtr
+      memory <- allocateMemory VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT size bits
+      vkBindImageMemory (info^.vulkanDevice) image memory (VkDeviceSize 0)
+      return (image, memory, size)
+      
+    transitionImage image = do
+      beginCommand info
+      with VkImageMemoryBarrier { vkSType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
+                                , vkPNext = nullPtr
+                                , vkSrcAccessMask = zeroBits
+                                , vkDstAccessMask = VK_ACCESS_TRANSFER_READ_BIT
+                                , vkOldLayout = VK_IMAGE_LAYOUT_UNDEFINED
+                                , vkNewLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+                                , vkSrcQueueFamilyIndex = info ^. vulkanQueueFamilyIndex
+                                , vkDstQueueFamilyIndex = info ^. vulkanQueueFamilyIndex
+                                , vkImage = image 
+                                , vkSubresourceRange = VkImageSubresourceRange VK_IMAGE_ASPECT_COLOR_BIT 0 1 0 1
+                                } $ \barrier ->
+        vkCmdPipelineBarrier (info^.vulkanCommandBuffer) VK_PIPELINE_STAGE_TRANSFER_BIT VK_PIPELINE_STAGE_TRANSFER_BIT zeroBits 0 nullPtr 0 nullPtr 1 barrier
+      endCommand info
+
+    getFd mem = do
+      with VkMemoryGetFdInfoKHR { vkSType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR
+                                , vkPNext = nullPtr
+                                , vkMemory = mem
+                                , vkHandleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR
+                                } $ \getFdInfo ->
+        alloca $ \fdPtr -> vkGetMemoryFdKHR (info ^. vulkanDevice) getFdInfo fdPtr >> peek fdPtr
+
+    createOpenGLTexture fd = do
+      memObj <- alloca $ \ptr -> glCreateMemoryObjectsEXT 1 ptr >> peek ptr
+      glImportMemoryFdEXT memObj (fromIntegral realSize) GL_HANDLE_TYPE_OPAQUE_FD_EXT (fromIntegral fd)
+      
+      tex <- genObjectName 
+      textureBinding Texture2D $= Just tex
+      glTexStorageMem2DEXT GL_TEXTURE_2D 1 GL_RGBA8 (fromIntegral $ size ^. _x) (fromIntegral $ size ^. _y) memObj 0
+      textureBinding Texture2D $= Nothing
+      checkForErrors
+      return (memObj, tex)
+      
+        
+
+beginCommand :: VulkanInfo -> IO VkResult
+beginCommand info = with VkCommandBufferBeginInfo { vkSType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
+                                             , vkPNext = nullPtr
+                                             , vkFlags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+                                             , vkPInheritanceInfo = nullPtr
+                                             } $ \beginInfo -> vkBeginCommandBuffer (info ^. vulkanCommandBuffer) beginInfo
+
+endCommand :: VulkanInfo -> IO VkResult
+endCommand info = do
+      vkEndCommandBuffer (info ^. vulkanCommandBuffer)
+
+      with (info ^. vulkanCommandBuffer) $ \cmdBufferPtr ->
+        with VkSubmitInfo { vkSType = VK_STRUCTURE_TYPE_SUBMIT_INFO
+                          , vkPNext = nullPtr
+                          , vkCommandBufferCount = 1
+                          , vkPCommandBuffers = cmdBufferPtr
+                          , vkWaitSemaphoreCount = 0
+                          , vkPWaitSemaphores = nullPtr
+                          , vkPWaitDstStageMask = nullPtr
+                          , vkSignalSemaphoreCount = 0
+                          , vkPSignalSemaphores = nullPtr
+                          } $ \submitInfo ->
+        vkQueueSubmit (info^.vulkanQueue) 1 submitInfo (VkFence 0)
+      vkQueueWaitIdle (info^.vulkanQueue)
+      vkResetCommandBuffer (info^.vulkanCommandBuffer) zeroBits
+
+--TODO: this is technically no longer needed
+transitionImage :: VulkanInfo -> VulkanImage
+                -> VkImageLayout -> VkImageLayout
+                -> VkAccessFlagBits -> VkAccessFlagBits -> IO ()
+transitionImage info image src dst srcMask dstMask = do
+  beginCommand info
+  with VkImageMemoryBarrier { vkSType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
+                            , vkPNext = nullPtr
+                            , vkSrcAccessMask = srcMask
+                            , vkDstAccessMask = dstMask
+                            , vkOldLayout = src
+                            , vkNewLayout = dst
+                            , vkSrcQueueFamilyIndex = info ^. vulkanQueueFamilyIndex
+                            , vkDstQueueFamilyIndex = info ^. vulkanQueueFamilyIndex
+                            , vkImage = image^.imageImage
+                            , vkSubresourceRange = VkImageSubresourceRange VK_IMAGE_ASPECT_COLOR_BIT 0 1 0 1
+                            } $ \barrier ->
+    vkCmdPipelineBarrier (info^.vulkanCommandBuffer) VK_PIPELINE_STAGE_TRANSFER_BIT VK_PIPELINE_STAGE_TRANSFER_BIT zeroBits 0 nullPtr 0 nullPtr 1 barrier
+  endCommand info
+  return ()
+
+
+newViveCompositor :: Bool -> IO ViveCompositor
+newViveCompositor verbose = do
+  when verbose
+      (debugOutput $= Enabled >> debugMessageCallback $= Just print)
+
   wldp <- wl_display_create
   wcomp <- weston_compositor_create wldp nullPtr
 
@@ -69,6 +363,12 @@ newViveCompositor scene display = do
            False) $ weston_compositor_load_backend wcomp WestonBackendX11 . castPtr
 
   when (res > 0) $ ioError $ userError "Error when loading backend"
+
+  (_, initErr) <- vrInit VRApplication_Scene 
+  unless (initErr == VRInitError_None) (error $ show initErr)
+
+
+  blend $= Disabled
   
   socketName <- wl_display_add_socket_auto wldp
   putStrLn $ "Socket: " ++ socketName
@@ -79,23 +379,67 @@ newViveCompositor scene display = do
   bgLayer <- newWestonLayer wcomp
   weston_layer_set_position mainLayer WestonLayerPositionBackground
 
-  baseCompositor <- BaseCompositor scene display wldp wcomp
-                <$> newMVar M.empty <*> newOpenGlData
-                <*> newMVar Nothing <*> newMVar Nothing
-                <*> pure mainLayer
-                <*> initSimulaOsvrClient
+  seat <- newSimulaSeat
 
   windowedApi <- weston_windowed_output_get_api wcomp
 
-  let outputPendingSignal = westonCompositorOutputPendingSignal wcomp
-  outputPendingPtr <- createNotifyFuncPtr (onOutputPending windowedApi baseCompositor)
-  addListenerToSignal outputPendingSignal outputPendingPtr
+  info <- newVulkanInfo verbose
 
-  let outputCreatedSignal = westonCompositorOutputCreatedSignal wcomp
-  outputCreatedPtr <- createNotifyFuncPtr (onOutputCreated baseCompositor)
-  addListenerToSignal outputCreatedSignal outputCreatedPtr
+  let dpRot = axisAngle (V3 1 0 0) (radians (negate 25))
+  let dpTf = translate (V3 0 0.8 1.25) !*! m33_to_m44 (fromQuaternion dpRot)
+
+  -- double the width for viewpoints
+  realSize@(width, height) <- ivrSystemGetRecommendedRenderTargetSize
+  let recVSize = V2 (fromIntegral $ width * 2) (fromIntegral height)
+
+  rec
+    baseCompositor <- BaseCompositor scene display wldp wcomp
+                      <$> newMVar M.empty <*> newOpenGlData
+                      <*> newMVar Nothing <*> newMVar Nothing
+                      <*> pure mainLayer
+
+    scene <- Scene <$> newBaseNode scene Nothing identity
+             <*> newMVar 0 <*> newMVar 0
+             <*> pure wm <*> newMVar (Some baseCompositor) <*> newMVar [] <*> newMVar Nothing
+
+    let outputPendingSignal = westonCompositorOutputPendingSignal wcomp
+    outputPendingPtr <- createNotifyFuncPtr (onOutputPending windowedApi width height baseCompositor)
+    addListenerToSignal outputPendingSignal outputPendingPtr
+
+    let outputCreatedSignal = westonCompositorOutputCreatedSignal wcomp
+    outputCreatedPtr <- createNotifyFuncPtr (onOutputCreated baseCompositor)
+    addListenerToSignal outputCreatedSignal outputCreatedPtr
  
-  westonWindowedOutputCreate windowedApi wcomp "X"
+    westonWindowedOutputCreate windowedApi wcomp "X"
+
+    Just glctx <- readMVar (baseCompositor ^. baseCompositorGlContext)
+    glCtxMakeCurrent glctx
+    image <- newVulkanImage info recVSize
+    display <- newDisplay glctx recVSize (V2 0.325 0.1) scene dpTf (Just (image ^. imageTexture))
+
+    putStrLn "bluh"
+    wm <- newWindowManager scene seat
+    putStrLn "foo"
+
+  let near = 0.01
+      far = 100
+      leftParams = V4 0 0 0.5 1
+      rightParams = V4 0.5 0 0.5 1
+      center = V3 0 0 0
+  -- refactor??
+  leftEyeTf <- m34_to_m44 <$> ivrSystemGetEyeToHeadTransform Eye_Left
+  leftEyeProj <- ivrSystemGetProjectionMatrix Eye_Left near far
+  vpLeft <- newViewPoint 0.01 100 display display leftEyeTf leftParams center
+  viewPointOverrideProjectionMatrix vpLeft leftEyeProj
+
+  rightEyeTf <- m34_to_m44 <$> ivrSystemGetEyeToHeadTransform Eye_Right
+  rightEyeProj <- ivrSystemGetProjectionMatrix Eye_Right near far
+  vpRight <- newViewPoint 0.01 100 display display rightEyeTf rightParams center
+  viewPointOverrideProjectionMatrix vpRight rightEyeProj
+
+  writeMVar (display ^. displayViewpoints) [vpLeft, vpRight]
+  writeMVar (scene ^. sceneDisplays) [display]
+
 
 
   let api = defaultWestonDesktopApi {
@@ -115,16 +459,17 @@ newViveCompositor scene display = do
   interfacePtr <- new interface
   weston_compositor_set_default_pointer_grab wcomp interfacePtr
 
-  -- setupHeadTracking (_baseCompositorOSVR baseCompositor) initSimulaOSVRClient
-  --   >> setupLeftHandTracking (_baseCompositorOSVR baseCompositor)
-  --   >> setupRightHandTracking (_baseCompositorOSVR baseCompositor)
+  -- hackhack
 
-  osvrClient <- initSimulaOsvrClient
-  setupHeadTracking osvrClient
-  setupLeftHandTracking osvrClient
-  setupRightHandTracking osvrClient
+  viveComp <- ViveCompositor baseCompositor info image <$> newMVar mempty
 
-  return (ViveCompositor baseCompositor osvrClient)
+  -- setup render models
+  forM_ [k_unTrackedDeviceIndex_Hmd + 1 .. k_unMaxTrackedDeviceCount] $ \idx' -> do
+    let idx = fromIntegral idx'
+    connected <- ivrSystemIsTrackedDeviceConnected idx
+    when connected $ setupRenderModel viveComp idx
+
+  return viveComp
 
   where
     onSurfaceCreated compositor surface  _ = do
@@ -155,13 +500,13 @@ newViveCompositor scene display = do
           return ()
         _ -> return ()
 
-    onOutputPending windowedApi compositor _ outputPtr = do
+    onOutputPending windowedApi width height compositor _ outputPtr = do
       putStrLn "output pending"
       let output = WestonOutput $ castPtr outputPtr
       --TODO hack
       weston_output_set_scale output 1
       weston_output_set_transform output 0
-      westonWindowedOutputSetSize windowedApi output 1280 720
+      westonWindowedOutputSetSize windowedApi output (fromIntegral width) (fromIntegral height)
 
       weston_output_enable output
       return ()
@@ -176,9 +521,11 @@ newViveCompositor scene display = do
       eglctx <- westonGlRendererContext renderer
       egldp <- westonGlRendererDisplay renderer
       eglsurf <- westonOutputRendererSurface output
-      let glctx = SimulaOpenGLContext eglctx egldp eglsurf
-     
+      let glctx = SimulaOpenGLContext eglctx egldp eglsurf  (compositor ^. baseCompositorDisplay.displaySize)
+
       writeMVar (compositor ^. baseCompositorGlContext) (Just glctx)
+      return ()
+
 
     onPointerFocus compositor grab = do
       pointer <- westonPointerFromGrab grab
@@ -194,108 +541,152 @@ newViveCompositor scene display = do
       setFocusForPointer compositor pointer pos
       weston_pointer_send_button pointer time button state
 
-moveCamera :: Display -> PoseTracker -> IO Display
-moveCamera d p = return d
-
-drawLeftHand :: PoseTracker -> IO ()
-drawLeftHand p = return ()
-
-drawRightHand :: PoseTracker -> IO ()
-drawRightHand p = return ()
-
 viveCompositorRender :: ViveCompositor -> IO ()
 viveCompositorRender viveComp = do
   let comp = viveComp ^. viveCompositorBaseCompositor
+
   surfaceMap <- readMVar (comp ^. baseCompositorSurfaceMap)
   Just glctx <- readMVar (comp ^. baseCompositorGlContext)
   Just output <- readMVar (comp ^. baseCompositorOutput)
 
   glCtxMakeCurrent glctx
+  bindVertexArrayObject $= Just (comp ^. baseCompositorOpenGlData.openGlVAO)
+
+  handleVrInput viveComp
+  
   -- set up context
 
   let surfaces = M.keys surfaceMap
   let scene  = comp ^. baseCompositorScene
   let simDisplay = comp ^. baseCompositorDisplay
 
-  let osvrCtx = viveComp ^. viveCompositorOSVR.simulaOsvrContext
-  let osvrDisplay = viveComp ^. viveCompositorOSVR.simulaOsvrDisplay
-
+  checkForErrors
   time <- getTime Realtime
   scenePrepareForFrame scene time
   checkForErrors
-  osvrClientUpdate osvrCtx
+  weston_output_schedule_repaint output
 
-  case osvrDisplay of
-    Nothing -> do -- ioError $ userError "Could not initialize display in OSVR"
-      putStrLn "[INFO] no OSVR display is connected"
+  sceneDrawFrame scene
+  checkForErrors
 
-      -- We can still render to wayland though
-      weston_output_schedule_repaint output
-      headP <- osvrGetHeadPose osvrCtx
-      when (isJust headP) (moveCamera simDisplay (fromJust headP) >>= \d -> writeMVar (scene ^. sceneDisplays) [d])
+  let tex = comp ^. baseCompositorDisplay.displayScratchColorBufferTexture
+  let info = viveComp^.viveCompositorVulkanInfo
+  let image = viveComp^.viveCompositorVulkanImage
+  let (VkImage handle) = image^.imageImage
 
-      osvrGetLeftHandPose osvrCtx
-      osvrGetRightHandPose osvrCtx
+  let (VkFormat format) = VK_FORMAT_R8G8B8A8_UNORM
+  transitionImage info image  VK_IMAGE_LAYOUT_GENERAL VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL VK_ACCESS_TRANSFER_WRITE_BIT VK_ACCESS_TRANSFER_READ_BIT
 
-      sceneDrawFrame scene
-      checkForErrors
+  let (VkExtent3D width height _) = image^.imageExtents 
 
-      Some seat <- compositorSeat comp
-      pointer <- seatPointer seat
-      pos <- readMVar (pointer ^. pointerGlobalPosition)
-      drawMousePointer (comp ^. baseCompositorDisplay) (comp ^. baseCompositorOpenGlData.openGlDataMousePointer) pos
 
-      emitOutputFrameSignal output
-      eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
+  with (VRVulkanTextureData handle (castPtr $ info^.vulkanDevice) (castPtr $ info^.vulkanPhysicalDevice)
+         (castPtr $ info^.vulkanInstance) (castPtr $ info^.vulkanQueue) (info^.vulkanQueueFamilyIndex) width height
+         (fromIntegral format) 1) $ \texDataPtr' -> do
+    let texDataPtr = castPtr texDataPtr'
+    with (OVRTexture texDataPtr TextureType_Vulkan ColorSpace_Auto) $ \txPtr -> do
+      err <- with (VRTextureBounds 0 0 0.5 1) $ \boundsPtr ->
+        ivrCompositorSubmit Eye_Left txPtr boundsPtr Submit_Default
 
-      sceneFinishFrame scene
-      checkForErrors
+      when (err /= VRCompositorError_None) $ print err
 
-    Just display -> do
-      -- TODO: make the Head Mounted Display work at all
-      (value, viewers) <- osvrClientGetNumViewers display
-      case value of
-          ReturnSuccess -> do
-            putStrLn $ "[INFO] viewer count is " ++ show viewers
-            weston_output_schedule_repaint output
+      err <- with (VRTextureBounds 0.5 0 1 1) $ \boundsPtr ->
+        ivrCompositorSubmit Eye_Right txPtr boundsPtr Submit_Default
 
-            sceneDrawFrame scene
-            checkForErrors
+      when (err /= VRCompositorError_None) $ print err
 
-            when (viewers > 0) $ do
-                forM_ [0..(fromIntegral viewers - 1)] $ \viewer -> do
-                    -- TODO: Check for Errors for ReturnSuccess
-                    (ReturnSuccess, eyes) <- osvrClientGetNumEyesForViewer display (fromIntegral viewer)
-                    if eyes < 1 then error "Well, we got no eyes!"
-                    else do
-                        forM_ [0..(eyes - 1)] $ \eye -> do
-                          viewMat <- osvrClientGetViewerEyeViewMatrixf' display viewer (fromIntegral eye)
 
-                          (vp:_) <- readMVar (comp ^. baseCompositorDisplay.displayViewpoints)
-                          --TODO test
-                          setNodeWorldTransform vp viewMat
-                          viewPointUpdateViewMatrix vp
+  transitionImage info image VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL VK_IMAGE_LAYOUT_GENERAL VK_ACCESS_TRANSFER_READ_BIT VK_ACCESS_TRANSFER_WRITE_BIT
 
-                          -- TODO: Check for Errors for ReturnSuccess
-                          (ReturnSuccess, osvrSurfaces) <-
-                            osvrClientGetNumSurfacesForViewerEye display viewer (fromIntegral eye)
+  Some seat <- compositorSeat comp
+  pointer <- seatPointer seat
+  pos <- readMVar (pointer ^. pointerGlobalPosition)
+  drawMousePointer (comp ^. baseCompositorDisplay) (comp ^. baseCompositorOpenGlData.openGlDataMousePointer) pos
 
-                          forM_ [0..osvrSurfaces] $ \osvrSurface -> do
-                            projMat <- osvrClientGetViewerEyeSurfaceProjectionMatrixf' display viewer (fromIntegral eye) osvrSurface (vp^.viewPointNear) (vp^.viewPointFar)
+  emitOutputFrameSignal output
+  eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
+  sceneFinishFrame scene
 
-                            viewPointOverrideProjectionMatrix vp projMat
-                            Some seat <- compositorSeat comp
-                            pointer <- seatPointer seat
-                            pos <- readMVar (pointer ^. pointerGlobalPosition)
-                            drawMousePointer (comp ^. baseCompositorDisplay) (comp ^. baseCompositorOpenGlData.openGlDataMousePointer) pos
 
-                            emitOutputFrameSignal output
-                            eglSwapBuffers (glctx ^. simulaOpenGlContextEglDisplay) (glctx ^. simulaOpenGlContextEglSurface)
-            sceneFinishFrame scene
-            checkForErrors
+  (err, renderPoses, _) <- ivrCompositorWaitGetPoses
+  when (err /= VRCompositorError_None) $ print err
+
+  when ( k_unTrackedDeviceIndex_Hmd < length renderPoses) $ do
+    let hmdPose = m34_to_m44 . poseDeviceToAbsoluteTracking $ renderPoses !! k_unTrackedDeviceIndex_Hmd
+    setNodeTransform simDisplay hmdPose
+    updateVrModelPoses viveComp (map (m34_to_m44 . poseDeviceToAbsoluteTracking) renderPoses)
+  
+  bindVertexArrayObject $= Nothing
+
+  return ()
+
+setupRenderModel :: ViveCompositor -> TrackedDeviceIndex -> IO ()
+setupRenderModel viveComp idx = do
+  (TrackedProp_Success, rmName) <- ivrSystemGetStringTrackedDeviceProperty idx Prop_RenderModelName_String
+  putStr "RENDER MODEL: " 
+  putStrLn rmName
+      
+  model <- createRenderModel rmName
+  modifyMVar' (viveComp ^. viveCompositorModels) (M.insert idx model)
+
+  where
+    createRenderModel rmName = do
+      (model, modelPtr) <- loadRenderModel rmName
+      (texture, texturePtr) <- loadRenderModelTexture (modelDiffuseTextureId model)
+
+      let scene = viveComp ^. viveCompositorBaseCompositor.baseCompositorScene
+      vrModel <- newSimulaVrModel scene rmName model texture
+      
+      ivrRenderModelsFreeRenderModel modelPtr
+      ivrRenderModelsFreeTexture texturePtr
+
+      return vrModel
+
+    -- refactor (generalize)
+    loadRenderModel rmName = do
+      (err, ptr) <- ivrRenderModelsLoadRenderModel_Async rmName
+      case err of
+        VRRenderModelError_Loading -> threadDelay 1000 >> loadRenderModel rmName
+        VRRenderModelError_None -> (,ptr) <$> peek ptr 
+        _ -> error $ "Failed to load render model: " ++ show err
+
+    loadRenderModelTexture texId = do
+      (err, ptr) <- ivrRenderModelsLoadTexture_Async texId
+      case err of 
+        VRRenderModelError_Loading -> threadDelay 1000 >> loadRenderModelTexture texId
+        VRRenderModelError_None -> (,ptr) <$>  peek ptr
+        _ -> error $ "Failed to load render model texture: " ++ show err
+
+handleVrInput :: ViveCompositor -> IO ()
+handleVrInput viveComp = loop
+  where
+    processEvent event = case eventType event of
+      KnownEvent VREvent_TrackedDeviceActivated -> setupRenderModel viveComp (eventTrackedDeviceIndex event)
+      other -> putStr "EVENT: " >> print other
+
+    
+    loop = do
+      maybeEvent <- ivrSystemPollNextEvent
+      case maybeEvent of
+        Just event -> do
+          processEvent event
+          loop
+        _ -> return ()
+
+-- this is pretty horrible. optimize away from list asap
+updateVrModelPoses :: ViveCompositor -> [M44 Float] -> IO ()
+updateVrModelPoses viveComp renderPoses = do
+  models <- readMVar (viveComp ^. viveCompositorModels)
+  forM_ (M.toList models) $ \(idx, model) -> when (fromIntegral idx < length renderPoses) $ setNodeTransform model (renderPoses !! fromIntegral idx)
 
 instance Compositor ViveCompositor where
   startCompositor viveComp = do
+--      fbStatus <- get $ framebufferStatus Framebuffer
+--      dfbStatus <- get $ framebufferStatus DrawFramebuffer
+--      rfbStatus <- get $ framebufferStatus ReadFramebuffer
+--      putStrLn $ "Framebuffer status: " ++ show fbStatus
+--      putStrLn $ "Draw framebuffer status: " ++ show dfbStatus
+--      putStrLn $ "Read framebuffer status: " ++ show rfbStatus)
     let comp = viveComp ^. viveCompositorBaseCompositor
     let wc = comp ^. baseCompositorWestonCompositor
     oldFunc <- getRepaintOutput wc
@@ -303,6 +694,18 @@ instance Compositor ViveCompositor where
     setRepaintOutput wc newFunc
     weston_compositor_wake wc
     putStrLn "Compositor start"
+
+    Just output <- readMVar (comp ^. baseCompositorOutput)
+    forkOS $ forever $ weston_output_schedule_repaint output >> threadDelay 1000
+    forkIO $ forever $ do
+        let scene = comp ^. baseCompositorScene
+        diffTime <- liftM2 diffTimeSpec (readMVar $ scene ^. sceneLastTimestamp) (readMVar $ scene ^. sceneCurrentTimestamp)
+        let diff = fromIntegral $ toNanoSecs diffTime
+        let fps = floor (10^9/diff)
+        putStrLn $ "FPS: " ++ show fps
+        threadDelay 1000000
+
+
     wl_display_run $ comp ^. baseCompositorWlDisplay
 
     where
