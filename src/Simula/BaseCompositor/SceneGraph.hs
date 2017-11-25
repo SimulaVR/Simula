@@ -572,12 +572,14 @@ displayPrepareForDraw this = do
   clear [ColorBuffer, DepthBuffer, StencilBuffer]
   blend $= Enabled
   blendFunc $= (One, OneMinusSrcAlpha)
+  depthFunc $= Just Less
 
   checkForErrors
 
 
 displayFinishDraw :: Display -> IO ()
-displayFinishDraw _ = return ()
+displayFinishDraw _ = do
+  depthFunc $= Nothing
 
 drawableOnFrameDraw :: Drawable a => a -> Maybe Scene -> IO ()
 drawableOnFrameDraw this (Just scene) = do
