@@ -26,4 +26,6 @@ void main(void)
    vTexCoordG.y = 1.0 - vTexCoordG.y;
    vTexCoordB.y = 1.0 - vTexCoordB.y;
    gl_Position = vec4(aPosition.xy, 0, 1.);
+   gl_Position.y = -gl_Position.y;
+
 }

@@ -4,3 +4,6 @@
 [submodule "vulkan"]
 	path = vulkan
 	url = https://github.com/expipiplus1/vulkan
+[submodule "OpenGLRaw"]
+	path = OpenGLRaw
+	url = https://github.com/SimulaVR/OpenGLRaw

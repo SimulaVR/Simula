@@ -528,6 +528,8 @@ createFBO resolution = do
   let resX = fromIntegral $ resolution ^. _x
   let resY = fromIntegral $ resolution ^. _y
 
+  print resolution
+
   fbo <- genObjectName
   fboColorBuffer <- genObjectName
   textureBinding Texture2D $= Just fboColorBuffer
@@ -552,7 +554,6 @@ createFBO resolution = do
   textureBinding Texture2D $= Just fboDepthBuffer
   texImage2D Texture2D NoProxy 0 Depth24Stencil8 size 0 (PixelData DepthStencil UnsignedInt248 nullPtr)
   framebufferTexture2D Framebuffer DepthStencilAttachment Texture2D fboDepthBuffer 0
-  bindFramebuffer Framebuffer $= defaultFramebufferObject
   checkForErrors
 
   putStrLn "created FBO"
@@ -564,12 +565,14 @@ displayPrepareForDraw this = do
   Some glctx <- return $ this ^. displayGlContext
   glCtxMakeCurrent glctx
 
+  bindFramebuffer Framebuffer $= this ^. displayScratchFrameBuffer
   clearColor $= Color4 1 1 1 1
   clearStencil $= 0
   stencilMask $= 0xff
   clear [ColorBuffer, DepthBuffer, StencilBuffer]
   blend $= Enabled
   blendFunc $= (One, OneMinusSrcAlpha)
+
   checkForErrors
 
 
