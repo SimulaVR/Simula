@@ -577,7 +577,7 @@ viveCompositorRender viveComp = do
   let (VkImage handle) = image^.imageImage
 
   let (VkFormat format) = VK_FORMAT_R8G8B8A8_UNORM
-  transitionImage info image VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL VK_IMAGE_LAYOUT_GENERAL VK_ACCESS_TRANSFER_READ_BIT VK_ACCESS_TRANSFER_WRITE_BIT
+  transitionImage info image  VK_IMAGE_LAYOUT_GENERAL VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL VK_ACCESS_TRANSFER_WRITE_BIT VK_ACCESS_TRANSFER_READ_BIT
 
   let (VkExtent3D width height _) = image^.imageExtents 
 
@@ -598,7 +598,7 @@ viveCompositorRender viveComp = do
       when (err /= VRCompositorError_None) $ print err
 
 
-  transitionImage info image VK_IMAGE_LAYOUT_GENERAL VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL VK_ACCESS_TRANSFER_WRITE_BIT VK_ACCESS_TRANSFER_READ_BIT 
+  transitionImage info image VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL VK_IMAGE_LAYOUT_GENERAL VK_ACCESS_TRANSFER_READ_BIT VK_ACCESS_TRANSFER_WRITE_BIT
 
   Some seat <- compositorSeat comp
   pointer <- seatPointer seat
