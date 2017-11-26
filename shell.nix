@@ -10,7 +10,6 @@ pkgs.haskell.lib.buildStackProject {
                              xorg.libX11
                              dbus
                              (callPackage simula-wayland/weston2.nix { })
-                             (callPackage simula-osvr/OSVR-Core.nix { })
                              (callPackage simula-openvr/openvr.nix { })
                              libxml2
                              libxkbcommon
