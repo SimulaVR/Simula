@@ -1,7 +1,0 @@
-{
-
-    "comment": "ViveDisplayExtractor should generate a HTC_Vive.json, referred to below, containing an absolute path to displays/HTC_Vive_meshdata.json",
-    "display": "./config/HTC_Vive.json",
-
-    "renderManagerConfig": "./config/renderManager.extended.landscape.json"
-}
