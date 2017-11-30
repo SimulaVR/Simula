@@ -122,13 +122,15 @@ westonX11BackendConfigVersion = {#const WESTON_X11_BACKEND_CONFIG_VERSION#}
 
 westonCompositorOutputs :: WestonCompositor -> IO [WestonOutput]
 westonCompositorOutputs wc = do
-   list <- WlList <$> {#get weston_compositor->output_list#} wc
+   let (WestonCompositor ptr) = wc
+   let list = WlList . castPtr $ ptr `plusPtr` {#offsetof weston_compositor->output_list#}
    ptrs <- wlListAll (Proxy :: Proxy WestonCompositor) list
    return (WestonOutput <$> ptrs)
 
 westonCompositorSeats :: WestonCompositor -> IO [WestonSeat]
 westonCompositorSeats wc = do
-   list <- WlList <$> {#get weston_compositor->seat_list#} wc
+   let (WestonCompositor ptr) = wc
+   let list = WlList . castPtr $ ptr `plusPtr` {#offsetof weston_compositor->seat_list#}
    ptrs <- wlListAll (Proxy :: Proxy WestonCompositor) list
    return (WestonSeat <$> ptrs)
 
@@ -149,7 +151,8 @@ instance WlListElement WestonSurface WestonView where
 
 westonSurfaceViews :: WestonSurface -> IO [WestonView]
 westonSurfaceViews ws = do
-   list <- WlList <$> {#get weston_surface->views#} ws
+   let (WestonSurface ptr) = ws
+   let list = WlList . castPtr $ ptr `plusPtr` {#offsetof weston_surface->views#}
    ptrs <- wlListAll (Proxy :: Proxy WestonSurface) list
    return (WestonView <$> ptrs)
 
@@ -561,5 +564,5 @@ foreign import ccall "dynamic" fromXWaylandApiXserverExitedFuncPtr :: FunPtr XWa
 {#fun weston_pointer_move { `WestonPointer'
                           , `WestonPointerMotionEventPtr'} -> `()' #}
 
-setWestonPointerFocus :: WestonPointer -> WestonView -> IO ()
-setWestonPointerFocus wp wv = {#set weston_pointer->focus#} wp wv
+--setWestonPointerFocus :: WestonPointer -> WestonView -> IO ()
+--setWestonPointerFocus wp wv = {#set weston_pointer->focus#} wp wv
