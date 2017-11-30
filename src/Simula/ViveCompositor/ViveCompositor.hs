@@ -634,7 +634,7 @@ setupRenderModel viveComp idx = do
   case devClass of
     TrackedDeviceClass_Controller -> do
       (seat:_) <- westonCompositorSeats (viveComp ^. viveCompositorBaseCompositor . baseCompositorWestonCompositor)
-      pointer <- weston_seat_get_pointer seat
+      pointer <- weston_pointer_create seat
       modifyMVar' (viveComp ^. viveCompositorControllers) (M.insert idx pointer)
     _ -> return ()
 
