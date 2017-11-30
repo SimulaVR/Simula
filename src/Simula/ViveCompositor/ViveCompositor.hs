@@ -634,7 +634,7 @@ setupRenderModel viveComp idx = do
   case devClass of
     TrackedDeviceClass_Controller -> do
       (seat:_) <- westonCompositorSeats (viveComp ^. viveCompositorBaseCompositor . baseCompositorWestonCompositor)
-      pointer <- weston_pointer_create seat
+      pointer <- weston_seat_get_pointer seat
       modifyMVar' (viveComp ^. viveCompositorControllers) (M.insert idx pointer)
     _ -> return ()
 
@@ -697,12 +697,17 @@ sendButtonPress viveComp idx ety _ = do
     go model pointer = do
       tf <- nodeWorldTransform model
       let ray = transformRay (Ray 0 (V3 0 0 (negate 1))) tf
+      putStr $ show ety ++ ": "
+      print ray
+
       inter <- nodeIntersectWithSurfaces (viveComp ^. viveCompositorBaseCompositor. baseCompositorScene) ray
       case inter of
         Nothing -> return ()
         Just rsi -> do
           Some node <- return (rsi ^. rsiSurfaceNode)
           let coords = rsi ^. rsiSurfaceCoordinates
+          putStr "Intersection coords: "
+          print coords
           Some seat <- compositorSeat viveComp
           Some surface <- wsnSurface node
           case cast surface of
@@ -715,7 +720,7 @@ sendButtonPress viveComp idx ety _ = do
               weston_keyboard_set_focus kbd ws
 
               time <- getTime Realtime
-              let usec = fromIntegral $ 1000 * toNanoSecs time
+              let usec = fromIntegral $ toNanoSecs time `div` 1000
               weston_pointer_send_button pointer usec 0x110 (toState ety) --see libinput and wayland for enums; converting later
               
     toState VREvent_ButtonPress = 1
