@@ -69,7 +69,8 @@ data ViveCompositor = ViveCompositor {
   _viveCompositorBaseCompositor :: BaseCompositor,
   _viveCompositorVulkanInfo :: VulkanInfo,
   _viveCompositorVulkanImage :: VulkanImage,
-  _viveCompositorModels :: MVar (M.Map TrackedDeviceIndex SimulaVRModel)
+  _viveCompositorModels :: MVar (M.Map TrackedDeviceIndex SimulaVRModel),
+  _viveCompositorControllers :: MVar (M.Map TrackedDeviceIndex WestonPointer)
 }
 
 makeLenses ''VulkanInfo
@@ -461,7 +462,7 @@ newViveCompositor verbose = do
 
   -- hackhack
 
-  viveComp <- ViveCompositor baseCompositor info image <$> newMVar mempty
+  viveComp <- ViveCompositor baseCompositor info image <$> newMVar mempty <*> newMVar mempty
 
   -- setup render models
   forM_ [k_unTrackedDeviceIndex_Hmd + 1 .. k_unMaxTrackedDeviceCount] $ \idx' -> do
@@ -532,8 +533,7 @@ newViveCompositor verbose = do
       pos' <- westonPointerPosition pointer
       let pos = (`div` 256) <$> pos'
       setFocusForPointer compositor pointer pos
-                     
-      
+
     onPointerButton compositor grab time button state = do
       pointer <- westonPointerFromGrab grab
       pos' <- westonPointerPosition pointer
@@ -620,14 +620,23 @@ viveCompositorRender viveComp = do
 
   return ()
 
+--TODO: making a weston pointer here, but the name doesn't match
 setupRenderModel :: ViveCompositor -> TrackedDeviceIndex -> IO ()
 setupRenderModel viveComp idx = do
   (TrackedProp_Success, rmName) <- ivrSystemGetStringTrackedDeviceProperty idx Prop_RenderModelName_String
-  putStr "RENDER MODEL: " 
+  putStr "RENDER MODEL: "
   putStrLn rmName
       
   model <- createRenderModel rmName
   modifyMVar' (viveComp ^. viveCompositorModels) (M.insert idx model)
+
+  devClass <- ivrSystemGetTrackedDeviceClass idx
+  case devClass of
+    TrackedDeviceClass_Controller -> do
+      (seat:_) <- westonCompositorSeats (viveComp ^. viveCompositorBaseCompositor . baseCompositorWestonCompositor)
+      pointer <- weston_pointer_create seat
+      modifyMVar' (viveComp ^. viveCompositorControllers) (M.insert idx pointer)
+    _ -> return ()
 
   where
     createRenderModel rmName = do
@@ -662,9 +671,9 @@ handleVrInput viveComp = loop
   where
     processEvent event = case eventType event of
       KnownEvent VREvent_TrackedDeviceActivated -> setupRenderModel viveComp (eventTrackedDeviceIndex event)
+      KnownEvent btn | isButtonEvent btn -> sendButtonPress viveComp (eventTrackedDeviceIndex event) btn (eventData event)
       other -> putStr "EVENT: " >> print other
 
-    
     loop = do
       maybeEvent <- ivrSystemPollNextEvent
       case maybeEvent of
@@ -672,6 +681,46 @@ handleVrInput viveComp = loop
           processEvent event
           loop
         _ -> return ()
+
+    isButtonEvent VREvent_ButtonPress = True
+    isButtonEvent VREvent_ButtonUnpress = True
+    isButtonEvent _ = False
+
+sendButtonPress :: ViveCompositor -> TrackedDeviceIndex -> EVREventType -> VREvent_Data -> IO ()
+sendButtonPress viveComp idx ety _ = do
+  models <- readMVar (viveComp ^. viveCompositorModels)
+  cts <- readMVar (viveComp ^. viveCompositorControllers)
+  case (M.lookup idx models, M.lookup idx cts) of
+    (Just model, Just pointer) -> go model pointer
+    _ -> return ()
+  where
+    go model pointer = do
+      tf <- nodeWorldTransform model
+      let ray = transformRay (Ray 0 (V3 0 0 (negate 1))) tf
+      inter <- nodeIntersectWithSurfaces (viveComp ^. viveCompositorBaseCompositor. baseCompositorScene) ray
+      case inter of
+        Nothing -> return ()
+        Just rsi -> do
+          Some node <- return (rsi ^. rsiSurfaceNode)
+          let coords = rsi ^. rsiSurfaceCoordinates
+          Some seat <- compositorSeat viveComp
+          Some surface <- wsnSurface node
+          case cast surface of
+            Nothing -> return ()
+            Just surface -> do
+              weston_pointer_set_focus pointer (surface ^. simulaSurfaceView) (truncate (256 * coords ^. _x)) (truncate (256 * coords ^. _y))
+              seat <- westonPointerSeat pointer
+              kbd <- weston_seat_get_keyboard seat
+              ws <- weston_desktop_surface_get_surface $ surface ^. simulaSurfaceWestonDesktopSurface
+              weston_keyboard_set_focus kbd ws
+
+              time <- getTime Realtime
+              let usec = fromIntegral $ 1000 * toNanoSecs time
+              weston_pointer_send_button pointer usec 0x110 (toState ety) --see libinput and wayland for enums; converting later
+              
+    toState VREvent_ButtonPress = 1
+    toState VREvent_ButtonUnpress = 0
+    toState _ = error "didn't get a button event"
 
 -- this is pretty horrible. optimize away from list asap
 updateVrModelPoses :: ViveCompositor -> [M44 Float] -> IO ()
