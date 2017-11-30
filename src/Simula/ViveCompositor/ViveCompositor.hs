@@ -713,6 +713,8 @@ sendButtonPress viveComp idx ety _ = do
           case cast surface of
             Nothing -> return ()
             Just surface -> do
+              -- bug?
+              setWestonPointerFocus pointer (WestonView nullPtr)
               weston_pointer_set_focus pointer (surface ^. simulaSurfaceView) (truncate (256 * coords ^. _x)) (truncate (256 * coords ^. _y))
               seat <- westonPointerSeat pointer
               kbd <- weston_seat_get_keyboard seat

@@ -56,6 +56,7 @@ deriving instance Storable WestonSurface
 
 {#pointer *weston_view as WestonView newtype#}
 deriving instance Eq WestonView
+deriving instance Storable WestonView
 
 instance WlListElement WestonCompositor WestonSeat where
   linkOffset _ _ = {#offsetof weston_seat->link#}
@@ -559,3 +560,6 @@ foreign import ccall "dynamic" fromXWaylandApiXserverExitedFuncPtr :: FunPtr XWa
 
 {#fun weston_pointer_move { `WestonPointer'
                           , `WestonPointerMotionEventPtr'} -> `()' #}
+
+setWestonPointerFocus :: WestonPointer -> WestonView -> IO ()
+setWestonPointerFocus wp wv = {#set weston_pointer->focus#} wp wv
