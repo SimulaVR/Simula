@@ -41,7 +41,7 @@ installUbuntuDependencies() {
       libusb-1.0-0-dev \
       libspdlog-dev \
       libeigen3-dev \
-      libvulkan-dev \
+      libvulkan-dev
 }
 
 installWaylandProtocols() {
