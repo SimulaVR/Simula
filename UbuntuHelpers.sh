@@ -95,6 +95,7 @@ installNvidiaDrivers() {
 
 # Unclear if this is needed long-term.
 installOpenVR() {
+    local SIMULA_DIR=$(pwd)
     cd /tmp
     git clone https://github.com/ValveSoftware/openvr.git openvr
     cd /tmp/openvr
@@ -108,6 +109,7 @@ installOpenVR() {
     # NOTE: At least once a developer has found it useful to copy
     #       the `libopenvr_api.so` from Simula to Ubuntu's global
     #       store, i.e.:
+    cd "$SIMULA_DIR"
     sudo cp ./simula-openvr/openvr/lib/linux64/libopenvr_api.so /usr/local/lib
 }
 
