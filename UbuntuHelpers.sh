@@ -108,8 +108,7 @@ installOpenVR() {
     # NOTE: At least once a developer has found it useful to copy
     #       the `libopenvr_api.so` from Simula to Ubuntu's global
     #       store, i.e.:
-    #       sudo cp ./simula-openvr/openvr/lib/linux64/libopenvr_api.so \
-    #                /usr/local/lib/libopenvr_api.so
+    sudo cp ./simula-openvr/openvr/lib/linux64/libopenvr_api.so /usr/local/lib
 }
 
 # If you have Ubuntu 17.10 you can just run `sudo apt-get install steam-devices` instead of this command
@@ -138,14 +137,14 @@ addViveUdevRules() {
 # old versions found in Ubuntu's package stores.
 installStack() {
     curl -sSL https://get.haskellstack.org/ | sh
-    echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc # ensures stack programs like hpack are on your PATH
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc # ensures stack programs like hpack are on your PATH
+    . ~/.bashrc
 }
 
 # Use this if you already have stack installed via apt-get install.
 upgradeStack() {
   cd ~
   stack setup
-  stack upgrade --git                                    # Old versions of stack can cause Simula build trouble
   stack install hpack                                    # Same with old versions of hpack
 }
 
@@ -165,6 +164,6 @@ buildSimulaDependencies() {
 buildSimula() {
   make init
   stack setup --install-ghc
-  stack build
+  stack build --extra-lib-dirs=/usr/local/lib
   echo "Remember to open steam and install and run SteamVR before launching Simula."
 }
