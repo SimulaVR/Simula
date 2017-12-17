@@ -357,12 +357,12 @@ endCommand info maybeSem = do
       vkResetCommandBuffer (info^.vulkanCommandBuffer) zeroBits
 
   where
-    withMaybeSem =
+    withMaybeSem f =
       case maybeSem of
         Just sem -> with sem $ \semPtr
           -> with VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT $ \maskPtr
-          -> ($ (semPtr, maskPtr) )
-        Nothing -> ($ (nullPtr, nullPtr) )
+          -> f (semPtr, maskPtr)
+        Nothing -> f (nullPtr, nullPtr)
 
 transitionImage :: VulkanInfo -> VulkanImage
                 -> VkImageLayout -> VkImageLayout
