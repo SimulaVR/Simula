@@ -340,7 +340,7 @@ beginCommand info = with VkCommandBufferBeginInfo { vkSType = VK_STRUCTURE_TYPE_
 endCommand :: VulkanInfo -> Maybe VkSemaphore -> IO VkResult
 endCommand info maybeSem = do
       vkEndCommandBuffer (info ^. vulkanCommandBuffer)
-      withMaybeSem $ \semPtr ->
+      withMaybeSem $ \(semPtr, maskPtr) ->
         with (info ^. vulkanCommandBuffer) $ \cmdBufferPtr ->
         with VkSubmitInfo { vkSType = VK_STRUCTURE_TYPE_SUBMIT_INFO
                           , vkPNext = nullPtr
@@ -348,7 +348,7 @@ endCommand info maybeSem = do
                           , vkPCommandBuffers = cmdBufferPtr
                           , vkWaitSemaphoreCount = if semPtr == nullPtr then 0 else 1
                           , vkPWaitSemaphores = semPtr
-                          , vkPWaitDstStageMask = nullPtr
+                          , vkPWaitDstStageMask = maskPtr
                           , vkSignalSemaphoreCount = 0
                           , vkPSignalSemaphores = nullPtr
                           } $ \submitInfo ->
@@ -359,8 +359,10 @@ endCommand info maybeSem = do
   where
     withMaybeSem =
       case maybeSem of
-        Just sem -> with sem
-        Nothing -> ($ nullPtr)
+        Just sem -> with sem $ \semPtr
+          -> with VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT $ \maskPtr
+          -> ($ (semPtr, maskPtr) )
+        Nothing -> ($ (nullPtr, nullPtr) )
 
 transitionImage :: VulkanInfo -> VulkanImage
                 -> VkImageLayout -> VkImageLayout
