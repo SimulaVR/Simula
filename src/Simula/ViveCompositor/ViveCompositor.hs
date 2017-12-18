@@ -505,6 +505,7 @@ newViveCompositor verbose = do
   viveComp <- ViveCompositor baseCompositor info image <$> newMVar mempty
 
   -- setup render models
+  glCtxMakeCurrent glctx
   forM_ [k_unTrackedDeviceIndex_Hmd + 1 .. k_unMaxTrackedDeviceCount] $ \idx' -> do
     let idx = fromIntegral idx'
     connected <- ivrSystemIsTrackedDeviceConnected idx
