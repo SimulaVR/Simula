@@ -11,8 +11,9 @@ stdenv.mkDerivation rec {
 
   src = fetchurl {
     url = "http://wayland.freedesktop.org/releases/${name}.tar.xz";
-    sha256 = "b4e446ac27f118196f1609dab89bb3cb3e81652d981414ad860e733b355365d8";
+    sha256 = "19936zlkb75xcaidd8fag4ah8000wrh2ziqy7nxkq36pimgdbqfd";
   };
+
 
   nativeBuildInputs = [ pkgconfig ];
   buildInputs = [
