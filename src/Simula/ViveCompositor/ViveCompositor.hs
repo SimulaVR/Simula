@@ -58,10 +58,12 @@ data VulkanInfo  = VulkanInfo {
 
 data VulkanImage = VulkanImage {
   _imageImage :: VkImage,
+  _imageSemaphore :: VkSemaphore,
   _imageImageMemory :: VkDeviceMemory,
   _imageImageSize :: VkDeviceSize,
   _imageTexture :: TextureObject,
   _imageOpenGLMemoryObject :: GLuint,
+  _imageOpenGLSemaphoreObject :: GLuint,
   _imageExtents :: VkExtent3D
 }
 
@@ -211,10 +213,15 @@ foreign import ccall "wrapper" createDebugCallbackPtr :: (VkDebugReportFlagsEXT 
 newVulkanImage :: VulkanInfo -> V2 Int -> IO VulkanImage
 newVulkanImage info size = do
   (image, imageMemory, imageSize) <- createImage
-  fd <- getFd imageMemory
-  (memObj, tex) <- createOpenGLTexture fd
+  sem <- createSemaphore
+
+  mfd <- getMemoryFd imageMemory
+  (memObj, tex) <- createOpenGLTexture mfd
+
+  sfd <- getSemaphoreFd sem
+  semObj <- createOpenGLSemaphore sfd
   transitionImage image
-  return $ VulkanImage image imageMemory imageSize tex memObj (VkExtent3D (fromIntegral $ size ^. _x) (fromIntegral $ size ^. _y) 1)
+  return $ VulkanImage image sem imageMemory imageSize tex memObj semObj (VkExtent3D (fromIntegral $ size ^. _x) (fromIntegral $ size ^. _y) 1)
   
   where
     realSize = (size ^. _x) * (size ^. _y) * 4
@@ -268,16 +275,16 @@ newVulkanImage info size = do
                                 , vkSrcAccessMask = zeroBits
                                 , vkDstAccessMask = VK_ACCESS_TRANSFER_READ_BIT
                                 , vkOldLayout = VK_IMAGE_LAYOUT_UNDEFINED
-                                , vkNewLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+                                , vkNewLayout = VK_IMAGE_LAYOUT_GENERAL
                                 , vkSrcQueueFamilyIndex = info ^. vulkanQueueFamilyIndex
                                 , vkDstQueueFamilyIndex = info ^. vulkanQueueFamilyIndex
                                 , vkImage = image 
                                 , vkSubresourceRange = VkImageSubresourceRange VK_IMAGE_ASPECT_COLOR_BIT 0 1 0 1
                                 } $ \barrier ->
         vkCmdPipelineBarrier (info^.vulkanCommandBuffer) VK_PIPELINE_STAGE_TRANSFER_BIT VK_PIPELINE_STAGE_TRANSFER_BIT zeroBits 0 nullPtr 0 nullPtr 1 barrier
-      endCommand info
+      endCommand info Nothing
 
-    getFd mem = do
+    getMemoryFd mem = do
       with VkMemoryGetFdInfoKHR { vkSType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR
                                 , vkPNext = nullPtr
                                 , vkMemory = mem
@@ -295,6 +302,32 @@ newVulkanImage info size = do
       textureBinding Texture2D $= Nothing
       checkForErrors
       return (memObj, tex)
+
+    createSemaphore = do
+      with VkExportSemaphoreCreateInfoKHR { vkSType = VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO_KHR
+                                          , vkPNext = nullPtr
+                                          , vkHandleTypes = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR
+                                          } $ \exportSemInfo ->
+        with VkSemaphoreCreateInfo { vkSType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
+                                   , vkPNext = castPtr exportSemInfo
+                                   , vkFlags = zeroBits
+                                   } $ \semInfo ->
+        alloca $ \semPtr -> vkCreateSemaphore (info ^. vulkanDevice) semInfo nullPtr semPtr >> peek semPtr
+
+    getSemaphoreFd sem = do
+      with VkSemaphoreGetFdInfoKHR { vkSType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR
+                                   , vkPNext = nullPtr
+                                   , vkSemaphore = sem
+                                   , vkHandleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR
+                                   } $ \getFdInfo ->
+        alloca $ \fdPtr -> vkGetSemaphoreFdKHR (info ^. vulkanDevice) getFdInfo fdPtr >> peek fdPtr
+
+    createOpenGLSemaphore fd = do
+      semObj <- alloca $ \ptr -> glGenSemaphoresEXT 1 ptr >> peek ptr
+      glImportSemaphoreFdEXT semObj GL_HANDLE_TYPE_OPAQUE_FD_EXT (fromIntegral fd)
+      checkForErrors
+      return semObj
+    
       
         
 
@@ -305,18 +338,18 @@ beginCommand info = with VkCommandBufferBeginInfo { vkSType = VK_STRUCTURE_TYPE_
                                              , vkPInheritanceInfo = nullPtr
                                              } $ \beginInfo -> vkBeginCommandBuffer (info ^. vulkanCommandBuffer) beginInfo
 
-endCommand :: VulkanInfo -> IO VkResult
-endCommand info = do
+endCommand :: VulkanInfo -> Maybe VkSemaphore -> IO VkResult
+endCommand info maybeSem = do
       vkEndCommandBuffer (info ^. vulkanCommandBuffer)
-
-      with (info ^. vulkanCommandBuffer) $ \cmdBufferPtr ->
+      withMaybeSem $ \(semPtr, maskPtr) ->
+        with (info ^. vulkanCommandBuffer) $ \cmdBufferPtr ->
         with VkSubmitInfo { vkSType = VK_STRUCTURE_TYPE_SUBMIT_INFO
                           , vkPNext = nullPtr
                           , vkCommandBufferCount = 1
                           , vkPCommandBuffers = cmdBufferPtr
-                          , vkWaitSemaphoreCount = 0
-                          , vkPWaitSemaphores = nullPtr
-                          , vkPWaitDstStageMask = nullPtr
+                          , vkWaitSemaphoreCount = if semPtr == nullPtr then 0 else 1
+                          , vkPWaitSemaphores = semPtr
+                          , vkPWaitDstStageMask = maskPtr
                           , vkSignalSemaphoreCount = 0
                           , vkPSignalSemaphores = nullPtr
                           } $ \submitInfo ->
@@ -324,11 +357,20 @@ endCommand info = do
       vkQueueWaitIdle (info^.vulkanQueue)
       vkResetCommandBuffer (info^.vulkanCommandBuffer) zeroBits
 
---TODO: this is technically no longer needed
+  where
+    withMaybeSem f =
+      case maybeSem of
+        Just sem -> with sem $ \semPtr
+          -> with VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT $ \maskPtr
+          -> f (semPtr, maskPtr)
+        Nothing -> f (nullPtr, nullPtr)
+
 transitionImage :: VulkanInfo -> VulkanImage
                 -> VkImageLayout -> VkImageLayout
-                -> VkAccessFlagBits -> VkAccessFlagBits -> IO ()
-transitionImage info image src dst srcMask dstMask = do
+                -> VkAccessFlagBits -> VkAccessFlagBits
+                -> Bool -- ^ True if we want to wait on the image semaphore
+                -> IO ()
+transitionImage info image src dst srcMask dstMask waitSem = do
   beginCommand info
   with VkImageMemoryBarrier { vkSType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER
                             , vkPNext = nullPtr
@@ -342,9 +384,8 @@ transitionImage info image src dst srcMask dstMask = do
                             , vkSubresourceRange = VkImageSubresourceRange VK_IMAGE_ASPECT_COLOR_BIT 0 1 0 1
                             } $ \barrier ->
     vkCmdPipelineBarrier (info^.vulkanCommandBuffer) VK_PIPELINE_STAGE_TRANSFER_BIT VK_PIPELINE_STAGE_TRANSFER_BIT zeroBits 0 nullPtr 0 nullPtr 1 barrier
-  endCommand info
+  endCommand info $ if waitSem then Just (image ^. imageSemaphore) else Nothing
   return ()
-
 
 newViveCompositor :: Bool -> IO ViveCompositor
 newViveCompositor verbose = do
@@ -574,8 +615,12 @@ viveCompositorRender viveComp = do
   let image = viveComp^.viveCompositorVulkanImage
   let (VkImage handle) = image^.imageImage
 
+  with (coerce (image^.imageTexture) :: GLuint) $ \texPtr ->
+    with GL_LAYOUT_GENERAL_EXT $ \layoutPtr ->
+    glSignalSemaphoreEXT (image ^. imageOpenGLSemaphoreObject) 0 nullPtr 1 texPtr layoutPtr
+
   let (VkFormat format) = VK_FORMAT_R8G8B8A8_UNORM
-  transitionImage info image  VK_IMAGE_LAYOUT_GENERAL VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL VK_ACCESS_TRANSFER_WRITE_BIT VK_ACCESS_TRANSFER_READ_BIT
+  transitionImage info image VK_IMAGE_LAYOUT_GENERAL VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL VK_ACCESS_TRANSFER_WRITE_BIT VK_ACCESS_TRANSFER_READ_BIT True
 
   let (VkExtent3D width height _) = image^.imageExtents 
 
@@ -596,7 +641,7 @@ viveCompositorRender viveComp = do
       when (err /= VRCompositorError_None) $ print err
 
 
-  transitionImage info image VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL VK_IMAGE_LAYOUT_GENERAL VK_ACCESS_TRANSFER_READ_BIT VK_ACCESS_TRANSFER_WRITE_BIT
+  transitionImage info image VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL VK_IMAGE_LAYOUT_GENERAL VK_ACCESS_TRANSFER_READ_BIT VK_ACCESS_TRANSFER_WRITE_BIT False
 
   Some seat <- compositorSeat comp
   pointer <- seatPointer seat

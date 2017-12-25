@@ -33,5 +33,5 @@ library
       pixman-1
     , egl
     , wayland-server
-    , libweston-2
-    , libweston-desktop-2
+    , libweston-3
+    , libweston-desktop-3
