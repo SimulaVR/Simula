@@ -1,3 +1,12 @@
+installNix() {
+  curl https://nixos.org/nix/install | sh
+  source ~/.nix-profile/etc/profile.d/nix.sh
+
+  mkdir -p ~/.config/nixpkgs
+  echo "{ allowUnfree = true; }" >> ~/.config/nixpkgs/config.nix
+}
+
+
 addViveUdevRules() {
   local VIVE_RULES="/lib/udev/rules.d/60-HTC-Vive-perms.rules";
 
@@ -37,7 +46,8 @@ upgradeStack() {
 buildSimulaOnNix() {
   addViveUdevRules
   make init
-  stack --nix build
+  stack --nix build --ghc-options="-pgmc++ -pgmlg++"
+  source ./swrast.sh
   echo "Remember to open steam and install and run SteamVR before launching Simula."
 }
 
