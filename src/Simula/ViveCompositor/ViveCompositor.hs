@@ -76,7 +76,7 @@ data ViveCompositor = ViveCompositor {
   _viveCompositorVulkanImage :: VulkanImage,
   _viveCompositorModels :: MVar (M.Map TrackedDeviceIndex SimulaVRModel),
   _viveCompositorControllers :: MVar (M.Map TrackedDeviceIndex WestonPointer),
-  _viveCompositorTargetedWindows :: MVar (M.Map TrackedDeviceIndex RaySurfaceIntersection)
+  _viveCompositorTargetedWindows :: MVar (M.Map TrackedDeviceIndex (M44 Float, RaySurfaceIntersection))
 }
 
 makeLenses ''VulkanInfo
@@ -683,7 +683,7 @@ setupRenderModel viveComp idx = do
   case devClass of
     TrackedDeviceClass_Controller -> do
       (seat:_) <- westonCompositorSeats (viveComp ^. viveCompositorBaseCompositor . baseCompositorWestonCompositor)
-      pointer <- weston_pointer_create seat
+      pointer <- weston_seat_get_pointer seat
       modifyMVar' (viveComp ^. viveCompositorControllers) (M.insert idx pointer)
     _ -> return ()
 
@@ -747,16 +747,17 @@ sendButtonPress viveComp idx ety edt = do
   case (M.lookup idx models, M.lookup idx cts) of
     (Just model, Just pointer) -> go model pointer
     _ -> return ()
+
+  when (ety == VREvent_ButtonUnpress && isTouchpadButton edt) $ do
+     modifyMVar' (viveComp ^. viveCompositorTargetedWindows) (M.delete idx)
+     
   where
 
-    isTriggerButton (VREvent_Controller EButton_SteamVR_Trigger) = True
+    isTriggerButton (VREvent_Controller EButton_Axis1) = True
     isTriggerButton _ = False
 
-    isTouchpadButton (VREvent_Controller EButton_SteamVR_Touchpad) = True
+    isTouchpadButton (VREvent_Controller EButton_Axis0) = True
     isTouchpadButton _ = False
-
-    act VREvent_ButtonPress idx rsi = M.insert idx rsi
-    act VREvent_ButtonUnpress idx _ = M.delete idx
     
     go model pointer = do
       tf <- nodeWorldTransform model
@@ -773,8 +774,14 @@ sendButtonPress viveComp idx ety edt = do
           putStr "Intersection coords: "
           print coords
 
-          when (isTouchpadButton edt) $ do
-            modifyMVar' (viveComp ^. viveCompositorTargetedWindows) (act ety idx rsi)
+          putStr "Button: "
+          let (VREvent_Controller edb) = edt
+          print edb
+
+          when (isTouchpadButton edt && ety == VREvent_ButtonPress) $ do
+            tf <- nodeTransform node
+            modifyMVar' (viveComp ^. viveCompositorTargetedWindows) (M.insert idx (tf, rsi))
+            putStrLn $ "targeted something with" ++ show idx
 
           when (isTriggerButton edt) $ do
             Some seat <- compositorSeat viveComp
@@ -806,14 +813,15 @@ updateVrModelPoses viveComp renderPoses = do
     setNodeTransform model (renderPoses !! fromIntegral idx)
 
   --HACKHACK: this assumes that at most 2 buttons are pressed
-  let groups = groupBy ((==) `on` view (_2.rsiSurfaceNode) ) $ M.toList targets
+  let groups = groupBy ((==) `on` view (_2._2.rsiSurfaceNode) ) $ M.toList targets
+  when (not.null $ groups) $ print $ map (map (view _1)) groups
   forM_ groups $ \grp -> case length grp of
     2 -> resizeWindow models grp
     1 -> dragWindow models grp
     _ -> return ()
 
   where
-    updatedRay models (idx, rsi) = case M.lookup idx models of
+    updatedRay models (idx, (_,rsi)) = case M.lookup idx models of
       Just model -> do
         tf <- nodeWorldTransform model
         return $ transformRay (Ray 0 (V3 0 0 (negate 1))) tf
@@ -825,20 +833,26 @@ updateVrModelPoses viveComp renderPoses = do
         vec2 = solveRay r2 t2
 
     -- invariant: node is equal for rsi1 and rsi2
-    resizeWindow models xs@[(_, rsi1), (_, rsi2)] = do
+    resizeWindow models xs@[(_, (tf, rsi1)), (_, (_, rsi2))] = do
+     putStrLn "resizing"
      Some node <- pure $ rsi1 ^. rsiSurfaceNode
      let dold = calcDistance (rsi1 ^. rsiRay) (rsi1 ^. rsiT) (rsi2 ^. rsiRay) (rsi2 ^. rsiT)
      [ray1n, ray2n] <- mapM (updatedRay models) xs
      let dnew = calcDistance ray1n (rsi1 ^. rsiT) ray2n (rsi2 ^. rsiT)
      let ratio = dnew/dold
-     tf <- nodeTransform node
-     setNodeTransform node (scale (V3 ratio ratio ratio) !*! tf)
+     print ratio
+     setNodeTransform node (tf !*! (scale (V3 ratio ratio 1)))
 
-    dragWindow models [(idx, rsi)] = do
+    dragWindow models [x@(idx, (tf, rsi))] = do
+     putStrLn "dragging"
      Some node <- pure $ rsi ^. rsiSurfaceNode
-     rayn <- updatedRay models (idx, rsi)
-     tf <- nodeTransform node
-     setNodeTransform node (translate (solveRay rayn (rsi ^. rsiT) - solveRay (rsi ^. rsiRay) (rsi ^. rsiT)) !*! tf)
+     rayn <- updatedRay models x
+     let newRayVec = solveRay rayn (rsi ^. rsiT)
+     let oldRayVec = solveRay (rsi ^. rsiRay) (rsi ^. rsiT)
+     let diff = newRayVec - oldRayVec
+     
+     print diff
+     setNodeTransform node (translate diff !*! tf)
      
 
 instance Compositor ViveCompositor where

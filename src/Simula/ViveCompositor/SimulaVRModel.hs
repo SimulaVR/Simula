@@ -62,9 +62,9 @@ newSimulaVrModel parent name rm rmTex = do
   vertexAttribPointer aPosition $= (ToFloat, VertexArrayDescriptor 3 Float sizeOfRenderModelVertex offsetOfRenderModelVertexPosition)
   checkForErrors
 
-  vertexAttribArray aNormal $= Enabled
-  vertexAttribPointer aNormal $= (ToFloat, VertexArrayDescriptor 3 Float sizeOfRenderModelVertex offsetOfRenderModelVertexNormal)
-  checkForErrors
+--  vertexAttribArray aNormal $= Enabled
+--  vertexAttribPointer aNormal $= (ToFloat, VertexArrayDescriptor 3 Float sizeOfRenderModelVertex offsetOfRenderModelVertexNormal)
+--  checkForErrors
 
   vertexAttribArray aTextureCoord $= Enabled
   vertexAttribPointer aTextureCoord $= (ToFloat, VertexArrayDescriptor 2 Float sizeOfRenderModelVertex offsetOfRenderModelVertexTextureCoord)
