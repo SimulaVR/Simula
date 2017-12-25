@@ -5,9 +5,12 @@ import Control.Concurrent
 import Control.Lens
 import Control.Monad
 import qualified Data.Map as M
+import qualified Data.Set as S
 import Control.Concurrent.MVar
 import Data.Coerce
+import Data.Function (on)
 import Data.Hashable
+import qualified Data.HashMap.Strict as HM
 import Data.Word
 import Data.Typeable
 import Data.Maybe
@@ -72,7 +75,8 @@ data ViveCompositor = ViveCompositor {
   _viveCompositorVulkanInfo :: VulkanInfo,
   _viveCompositorVulkanImage :: VulkanImage,
   _viveCompositorModels :: MVar (M.Map TrackedDeviceIndex SimulaVRModel),
-  _viveCompositorControllers :: MVar (M.Map TrackedDeviceIndex WestonPointer)
+  _viveCompositorControllers :: MVar (M.Map TrackedDeviceIndex WestonPointer),
+  _viveCompositorTargetedWindows :: MVar (M.Map TrackedDeviceIndex RaySurfaceIntersection)
 }
 
 makeLenses ''VulkanInfo
@@ -458,10 +462,7 @@ newViveCompositor verbose = do
     glCtxMakeCurrent glctx
     image <- newVulkanImage info recVSize
     display <- newDisplay glctx recVSize (V2 0.325 0.1) scene dpTf (Just (image ^. imageTexture))
-
-    putStrLn "bluh"
     wm <- newWindowManager scene seat
-    putStrLn "foo"
 
   let near = 0.01
       far = 100
@@ -503,7 +504,10 @@ newViveCompositor verbose = do
 
   -- hackhack
 
-  viveComp <- ViveCompositor baseCompositor info image <$> newMVar mempty <*> newMVar mempty
+  viveComp <- ViveCompositor baseCompositor info image
+              <$> newMVar mempty
+              <*> newMVar mempty
+              <*> newMVar mempty
 
   -- setup render models
   forM_ [k_unTrackedDeviceIndex_Hmd + 1 .. k_unMaxTrackedDeviceCount] $ \idx' -> do
@@ -716,7 +720,10 @@ handleVrInput viveComp = loop
   where
     processEvent event = case eventType event of
       KnownEvent VREvent_TrackedDeviceActivated -> setupRenderModel viveComp (eventTrackedDeviceIndex event)
-      KnownEvent btn | isButtonEvent btn -> sendButtonPress viveComp (eventTrackedDeviceIndex event) btn (eventData event)
+      KnownEvent btn
+        | isButtonEvent btn
+          -> sendButtonPress viveComp (eventTrackedDeviceIndex event) btn (eventData event)
+
       other -> putStr "EVENT: " >> print other
 
     loop = do
@@ -731,14 +738,26 @@ handleVrInput viveComp = loop
     isButtonEvent VREvent_ButtonUnpress = True
     isButtonEvent _ = False
 
+
+
 sendButtonPress :: ViveCompositor -> TrackedDeviceIndex -> EVREventType -> VREvent_Data -> IO ()
-sendButtonPress viveComp idx ety _ = do
+sendButtonPress viveComp idx ety edt = do
   models <- readMVar (viveComp ^. viveCompositorModels)
   cts <- readMVar (viveComp ^. viveCompositorControllers)
   case (M.lookup idx models, M.lookup idx cts) of
     (Just model, Just pointer) -> go model pointer
     _ -> return ()
   where
+
+    isTriggerButton (VREvent_Controller EButton_SteamVR_Trigger) = True
+    isTriggerButton _ = False
+
+    isTouchpadButton (VREvent_Controller EButton_SteamVR_Touchpad) = True
+    isTouchpadButton _ = False
+
+    act VREvent_ButtonPress idx rsi = M.insert idx rsi
+    act VREvent_ButtonUnpress idx _ = M.delete idx
+    
     go model pointer = do
       tf <- nodeWorldTransform model
       let ray = transformRay (Ray 0 (V3 0 0 (negate 1))) tf
@@ -753,20 +772,25 @@ sendButtonPress viveComp idx ety _ = do
           let coords = rsi ^. rsiSurfaceCoordinates
           putStr "Intersection coords: "
           print coords
-          Some seat <- compositorSeat viveComp
-          Some surface <- wsnSurface node
-          case cast surface of
-            Nothing -> return ()
-            Just surface -> do
-              weston_pointer_set_focus pointer (surface ^. simulaSurfaceView) (truncate (256 * coords ^. _x)) (truncate (256 * coords ^. _y))
-              seat <- westonPointerSeat pointer
-              kbd <- weston_seat_get_keyboard seat
-              ws <- weston_desktop_surface_get_surface $ surface ^. simulaSurfaceWestonDesktopSurface
-              weston_keyboard_set_focus kbd ws
 
-              time <- getTime Realtime
-              let usec = fromIntegral $ toNanoSecs time `div` 1000
-              weston_pointer_send_button pointer usec 0x110 (toState ety) --see libinput and wayland for enums; converting later
+          when (isTouchpadButton edt) $ do
+            modifyMVar' (viveComp ^. viveCompositorTargetedWindows) (act ety idx rsi)
+
+          when (isTriggerButton edt) $ do
+            Some seat <- compositorSeat viveComp
+            Some surface <- wsnSurface node
+            case cast surface of
+              Nothing -> return ()
+              Just surface -> do
+                weston_pointer_set_focus pointer (surface ^. simulaSurfaceView) (truncate (256 * coords ^. _x)) (truncate (256 * coords ^. _y))
+                seat <- westonPointerSeat pointer
+                kbd <- weston_seat_get_keyboard seat
+                ws <- weston_desktop_surface_get_surface $ surface ^. simulaSurfaceWestonDesktopSurface
+                weston_keyboard_set_focus kbd ws
+  
+                time <- getTime Realtime
+                let usec = fromIntegral $ toNanoSecs time `div` 1000
+                weston_pointer_send_button pointer usec 0x110 (toState ety) --see libinput and wayland for enums; converting later
               
     toState VREvent_ButtonPress = 1
     toState VREvent_ButtonUnpress = 0
@@ -776,7 +800,46 @@ sendButtonPress viveComp idx ety _ = do
 updateVrModelPoses :: ViveCompositor -> [M44 Float] -> IO ()
 updateVrModelPoses viveComp renderPoses = do
   models <- readMVar (viveComp ^. viveCompositorModels)
-  forM_ (M.toList models) $ \(idx, model) -> when (fromIntegral idx < length renderPoses) $ setNodeTransform model (renderPoses !! fromIntegral idx)
+  targets <- readMVar (viveComp ^. viveCompositorTargetedWindows)
+  
+  forM_ (M.toList models) $ \(idx, model) -> when (fromIntegral idx < length renderPoses) $ 
+    setNodeTransform model (renderPoses !! fromIntegral idx)
+
+  --HACKHACK: this assumes that at most 2 buttons are pressed
+  let groups = groupBy ((==) `on` view (_2.rsiSurfaceNode) ) $ M.toList targets
+  forM_ groups $ \grp -> case length grp of
+    2 -> resizeWindow models grp
+    1 -> dragWindow models grp
+    _ -> return ()
+
+  where
+    updatedRay models (idx, rsi) = case M.lookup idx models of
+      Just model -> do
+        tf <- nodeWorldTransform model
+        return $ transformRay (Ray 0 (V3 0 0 (negate 1))) tf
+      Nothing -> return (rsi ^. rsiRay)
+
+    calcDistance r1 t1 r2 t2 = norm (vec2 - vec1)
+      where
+        vec1 = solveRay r1 t1
+        vec2 = solveRay r2 t2
+
+    -- invariant: node is equal for rsi1 and rsi2
+    resizeWindow models xs@[(_, rsi1), (_, rsi2)] = do
+     Some node <- pure $ rsi1 ^. rsiSurfaceNode
+     let dold = calcDistance (rsi1 ^. rsiRay) (rsi1 ^. rsiT) (rsi2 ^. rsiRay) (rsi2 ^. rsiT)
+     [ray1n, ray2n] <- mapM (updatedRay models) xs
+     let dnew = calcDistance ray1n (rsi1 ^. rsiT) ray2n (rsi2 ^. rsiT)
+     let ratio = dnew/dold
+     tf <- nodeTransform node
+     setNodeTransform node (scale (V3 ratio ratio ratio) !*! tf)
+
+    dragWindow models [(idx, rsi)] = do
+     Some node <- pure $ rsi ^. rsiSurfaceNode
+     rayn <- updatedRay models (idx, rsi)
+     tf <- nodeTransform node
+     setNodeTransform node (translate (solveRay rayn (rsi ^. rsiT) - solveRay (rsi ^. rsiRay) (rsi ^. rsiT)) !*! tf)
+     
 
 instance Compositor ViveCompositor where
   startCompositor viveComp = do

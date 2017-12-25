@@ -72,7 +72,7 @@ data RaySurfaceIntersection = RaySurfaceIntersection {
   _rsiSurfaceCoordinates :: V2 Float,
   _rsiRay :: Ray,
   _rsiT :: Float
-  }
+  } deriving Eq
 
 makeLenses ''RaySurfaceIntersection
 
