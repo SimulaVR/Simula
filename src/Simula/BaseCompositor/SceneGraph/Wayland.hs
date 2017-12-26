@@ -177,7 +177,7 @@ defaultWSNIntersectWithSurface this ray = do
 instance SceneGraphNode BaseWaylandSurfaceNode where
   nodeOnFrameBegin this _ = do
     checkForErrors
---    computeSurfaceTransform this 8
+    computeSurfaceTransform this 8
     Some surface <- readMVar $ _waylandSurfaceNodeSurface this
     wsPrepare surface
     

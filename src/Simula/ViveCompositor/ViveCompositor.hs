@@ -76,7 +76,8 @@ data ViveCompositor = ViveCompositor {
   _viveCompositorVulkanImage :: VulkanImage,
   _viveCompositorModels :: MVar (M.Map TrackedDeviceIndex SimulaVRModel),
   _viveCompositorControllers :: MVar (M.Map TrackedDeviceIndex WestonPointer),
-  _viveCompositorTargetedWindows :: MVar (M.Map TrackedDeviceIndex (M44 Float, RaySurfaceIntersection))
+  _viveCompositorTargetedWindows :: MVar (M.Map TrackedDeviceIndex (M44 Float, RaySurfaceIntersection)),
+  _viveCompositorIsResizing :: MVar Bool
 }
 
 makeLenses ''VulkanInfo
@@ -508,6 +509,7 @@ newViveCompositor verbose = do
               <$> newMVar mempty
               <*> newMVar mempty
               <*> newMVar mempty
+              <*> newMVar False
 
   -- setup render models
   forM_ [k_unTrackedDeviceIndex_Hmd + 1 .. k_unMaxTrackedDeviceCount] $ \idx' -> do
@@ -812,13 +814,16 @@ updateVrModelPoses viveComp renderPoses = do
   forM_ (M.toList models) $ \(idx, model) -> when (fromIntegral idx < length renderPoses) $ 
     setNodeTransform model (renderPoses !! fromIntegral idx)
 
+  isResizing <- readMVar (viveComp  ^. viveCompositorIsResizing)
   --HACKHACK: this assumes that at most 2 buttons are pressed
   let groups = groupBy ((==) `on` view (_2._2.rsiSurfaceNode) ) $ M.toList targets
   when (not.null $ groups) $ print $ map (map (view _1)) groups
   forM_ groups $ \grp -> case length grp of
     2 -> resizeWindow models grp
-    1 -> dragWindow models grp
+    1 | not isResizing -> dragWindow models grp
     _ -> return ()
+
+  when (null groups && isResizing) $ writeMVar (viveComp ^. viveCompositorIsResizing) False
 
   where
     updatedRay models (idx, (_,rsi)) = case M.lookup idx models of
@@ -835,6 +840,7 @@ updateVrModelPoses viveComp renderPoses = do
     -- invariant: node is equal for rsi1 and rsi2
     resizeWindow models xs@[(_, (tf, rsi1)), (_, (_, rsi2))] = do
      putStrLn "resizing"
+     writeMVar (viveComp ^. viveCompositorIsResizing) True
      Some node <- pure $ rsi1 ^. rsiSurfaceNode
      let dold = calcDistance (rsi1 ^. rsiRay) (rsi1 ^. rsiT) (rsi2 ^. rsiRay) (rsi2 ^. rsiT)
      [ray1n, ray2n] <- mapM (updatedRay models) xs
@@ -846,13 +852,14 @@ updateVrModelPoses viveComp renderPoses = do
     dragWindow models [x@(idx, (tf, rsi))] = do
      putStrLn "dragging"
      Some node <- pure $ rsi ^. rsiSurfaceNode
-     rayn <- updatedRay models x
-     let newRayVec = solveRay rayn (rsi ^. rsiT)
-     let oldRayVec = solveRay (rsi ^. rsiRay) (rsi ^. rsiT)
-     let diff = newRayVec - oldRayVec
-     
-     print diff
-     setNodeTransform node (translate diff !*! tf)
+     let ro = rsi ^. rsiRay
+     rn <- updatedRay models x
+
+     let mkPos r = solveRay r (rsi ^. rsiT)
+     let posDiff = mkPos rn - mkPos ro
+     print posDiff
+
+     setNodeTransform node (translate posDiff !*! tf)
      
 
 instance Compositor ViveCompositor where
