@@ -24,7 +24,7 @@
  * SOFTWARE.
  */
 
-#include "config.h"
+//#include "config.h"
 
 #include <signal.h>
 #include <sys/socket.h>
@@ -51,6 +51,7 @@ handle_sigusr1(int signal_number, void *data)
 	/* We'd be safer if we actually had the struct
 	 * signalfd_siginfo from the signalfd data and could verify
 	 * this came from Xwayland.*/
+	printf("%s", "xserver loaded");
 	wxw->api->xserver_loaded(wxw->xwayland, wxw->client, wxw->wm_fd);
 	wl_event_source_remove(wxw->sigusr1_source);
 
@@ -109,7 +110,7 @@ spawn_xserver(void *user_data, const char *display, int abstract_fd, int unix_fd
 		 * it's done with that. */
 		signal(SIGUSR1, SIG_IGN);
 
-		if (execl("Xwayland",
+		if (execlp("Xwayland",
 			  "Xwayland",
 			  display,
 			  "-rootless",
@@ -121,7 +122,7 @@ spawn_xserver(void *user_data, const char *display, int abstract_fd, int unix_fd
 			weston_log("exec of '%s %s -rootless "
 				   "-listen %s -listen %s -wm %s "
 				   "-terminate' failed: %m\n",
-				   xserver, display,
+				   "Xwayland", display,
 				   abstract_fd_str, unix_fd_str, wm_fd_str);
 	fail:
 		_exit(EXIT_FAILURE);

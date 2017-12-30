@@ -27,6 +27,7 @@ import Linear.OpenGL
 import System.Clock
 import System.Environment
 import System.Mem.StableName
+import System.Posix.Signals
 import Simula.WaylandServer
 import Simula.Weston
 import Simula.WestonDesktop
@@ -494,6 +495,7 @@ newViveCompositor verbose = do
 
   
   westonDesktopCreate wcomp api nullPtr
+  installHandler sigUSR1 Ignore Nothing
   wet_load_xwayland wcomp
 
   let interface = defaultWestonPointerGrabInterface {
