@@ -494,6 +494,7 @@ newViveCompositor verbose = do
 
   
   westonDesktopCreate wcomp api nullPtr
+  wet_load_xwayland wcomp
 
   let interface = defaultWestonPointerGrabInterface {
         grabPointerFocus = onPointerFocus baseCompositor,

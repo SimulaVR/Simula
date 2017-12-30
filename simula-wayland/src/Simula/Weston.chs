@@ -564,5 +564,7 @@ foreign import ccall "dynamic" fromXWaylandApiXserverExitedFuncPtr :: FunPtr XWa
 {#fun weston_pointer_move { `WestonPointer'
                           , `WestonPointerMotionEventPtr'} -> `()' #}
 
+{#fun wet_load_xwayland {`WestonCompositor'} -> `CInt' #}
+
 --setWestonPointerFocus :: WestonPointer -> WestonView -> IO ()
 --setWestonPointerFocus wp wv = {#set weston_pointer->focus#} wp wv
