@@ -753,7 +753,7 @@ sendButtonPress viveComp idx ety edt = do
     (Just model, Just pointer) -> go model pointer
     _ -> return ()
 
-  when (ety == VREvent_ButtonUnpress && isTouchpadButton edt) $ do
+  when (ety == VREvent_ButtonUnpress && isGripButton edt) $ do
      modifyMVar' (viveComp ^. viveCompositorTargetedWindows) (M.delete idx)
      
   where
@@ -761,8 +761,8 @@ sendButtonPress viveComp idx ety edt = do
     isTriggerButton (VREvent_Controller EButton_Axis1) = True
     isTriggerButton _ = False
 
-    isTouchpadButton (VREvent_Controller EButton_Axis0) = True
-    isTouchpadButton _ = False
+    isGripButton (VREvent_Controller EButton_Grip) = True
+    isGripButton _ = False
     
     go model pointer = do
       tf <- nodeWorldTransform model
@@ -783,7 +783,7 @@ sendButtonPress viveComp idx ety edt = do
           let (VREvent_Controller edb) = edt
           print edb
 
-          when (isTouchpadButton edt && ety == VREvent_ButtonPress) $ do
+          when (isGripButton edt && ety == VREvent_ButtonPress) $ do
             tf <- nodeTransform node
             modifyMVar' (viveComp ^. viveCompositorTargetedWindows) (M.insert idx (tf, rsi))
             putStrLn $ "targeted something with" ++ show idx
