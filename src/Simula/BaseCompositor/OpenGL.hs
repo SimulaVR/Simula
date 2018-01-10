@@ -69,6 +69,7 @@ data MotorcarShader
   | ShaderTextureBlitter
   | ShaderMousePointer
   | ShaderSimulaVRModel
+  | ShaderSimulaVRModelRay
   deriving (Show, Eq, Ord, Enum)
 
 vertexSource, fragSource :: MotorcarShader -> ByteString
@@ -79,6 +80,7 @@ vertexSource ShaderDepthCompositedSurfaceBlitter = $(embedFile "shaders/depthcom
 vertexSource ShaderTextureBlitter = $(embedFile "shaders/textureblitter.vert")
 vertexSource ShaderMousePointer = $(embedFile "shaders/mousepointer.vert")
 vertexSource ShaderSimulaVRModel = $(embedFile "shaders/simulavrmodel.vert")
+vertexSource ShaderSimulaVRModelRay = $(embedFile "shaders/simulavrmodelray.vert")
 
 fragSource ShaderMotorcarLine = $(embedFile "shaders/motorcarline.frag")
 fragSource ShaderMotorcarSurface =  $(embedFile "shaders/motorcarsurface.frag")
@@ -87,6 +89,8 @@ fragSource ShaderDepthCompositedSurfaceBlitter = $(embedFile "shaders/depthcompo
 fragSource ShaderTextureBlitter = $(embedFile "shaders/textureblitter.frag")
 fragSource ShaderMousePointer = $(embedFile "shaders/mousepointer.frag")
 fragSource ShaderSimulaVRModel = $(embedFile "shaders/simulavrmodel.frag")
+fragSource ShaderSimulaVRModelRay = $(embedFile "shaders/simulavrmodelray.frag")
+
 
 getProgram :: MotorcarShader -> IO Program
 getProgram shader = do

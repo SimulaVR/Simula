@@ -25,7 +25,7 @@ data SimulaVRModel = SimulaVRModel
   , _simulaVRModelTexture :: TextureObject
   , _simulaVRModelProgram :: Program
   , _simulaVRModelMatrixUniform :: UniformLocation
-  , _simulaVRModelPointerRay :: SimulaVRModelRay
+--  , _simulaVRModelPointerRay :: SimulaVRModelRay
   } deriving Eq
 
 data SimulaVRModelRay = SimulaVRModelRay
@@ -121,24 +121,24 @@ newSimulaVrModel parent name rm rmTex = do
 
   textureBinding Texture2D $= Nothing
 
-  uMatrix <- uniformLocation program "uMatrix"
+  uMatrix <- get $ uniformLocation program "uMatrix"
   currentProgram $= Nothing
   checkForErrors
 
   rec
-    let model = SimulaVRModel base name vertCount vertBuffer indexBuffer vao tex program uMatrix ray
+    let model = SimulaVRModel base name vertCount vertBuffer indexBuffer vao tex program uMatrix
     base <- newBaseDrawable model (Just (Some parent)) identity
-    ray <- newSimulaVRModelRay model vao
+  newSimulaVRModelRay model
   return model
 
-newSimulaVRModelRay :: SceneGraphNode a => a -> VertexArrayObject ->  IO SimulaVRModelRay
-newSimulaVRModelRay parent vao = do
-  program <- getProgram ShaderMotorcarLine
+newSimulaVRModelRay :: SceneGraphNode a => a ->  IO SimulaVRModelRay
+newSimulaVRModelRay parent = do
+  program <- getProgram ShaderSimulaVRModelRay
   currentProgram $= Just program
   aPosition <- get $ attribLocation program "aPosition"
-  uMatrix <- uniformLocation program "uMVPMatrix"
-  uColor <- uniformLocation program "uColor"
   checkForErrors
+
+  vao <- genObjectName
   
   bindVertexArrayObject $= Just vao
   checkForErrors
@@ -148,13 +148,19 @@ newSimulaVRModelRay parent vao = do
 
   
   withArrayLen vertices $ \len ptr -> 
-    bufferData ArrayBuffer $= (fromIntegral len, ptr, StaticDraw)
+    bufferData ArrayBuffer $= (fromIntegral $ len * sizeOf (undefined :: Float), ptr, StaticDraw)
   checkForErrors
 
   vertexAttribArray aPosition $= Enabled
-  vertexAttribPointer aPosition $= (ToFloat, VertexArrayDescriptor 3 Float (fromIntegral $ length vertices `div` 3) nullPtr)
+  vertexAttribPointer aPosition $= (ToFloat, VertexArrayDescriptor 4 Float 0 nullPtr)
   checkForErrors
+
+  uMatrix <- get $ uniformLocation program "uMVPMatrix"
+  uColor <- get $ uniformLocation program "uColor"
+
+
   bindVertexArrayObject $= Nothing
+  currentProgram $= Nothing
 
   rec
     let ray = SimulaVRModelRay base vertBuffer vao program uMatrix uColor
@@ -162,8 +168,9 @@ newSimulaVRModelRay parent vao = do
   return ray
 
   where
-    vertices = [ 0, 0, 0
-               , 0, 0, -1 ] :: [Float]
+    vertices = [ 0, 0, 0, 1
+               , 0, 0,-1, 1
+               ] :: [Float]
   
 
 instance Drawable SimulaVRModel where
@@ -198,14 +205,18 @@ instance Drawable SimulaVRModel where
   
 instance Drawable SimulaVRModelRay where
   drawableDraw ray scene display = do
+    depthFunc $= Nothing
     oldVao <- get bindVertexArrayObject
     currentProgram $= Just (ray ^. simulaVRModelRayProgram)
     bindVertexArrayObject $= Just (ray ^. simulaVRModelRayVertexArray)
     checkForErrors
 
     let uMatrix = ray ^. simulaVRModelRayMatrixUniform
-    let uColor = ray ^. simulaVRModelRayMatrixUniform
+    let uColor = ray ^. simulaVRModelRayColorUniform
     worldTf <- nodeWorldTransform ray
+
+    uniform uColor $= (Color3 1 1 0 :: Color3 Float)
+    checkForErrors
 
     viewpoints <- readMVar $ display ^. displayViewpoints
     forM_ viewpoints $ \vp -> do
@@ -214,7 +225,6 @@ instance Drawable SimulaVRModelRay where
       
       let mat = (projMatrix !*! viewMatrix !*! worldTf) ^. m44GLmatrix
       uniform uMatrix $= mat
-      uniform uColor $= (Color3 0 0 0 :: Color3 Float)
       checkForErrors
 
 
@@ -222,4 +232,7 @@ instance Drawable SimulaVRModelRay where
       setViewPort port
       drawArrays Lines 0 2
       checkForErrors
+    depthFunc $= Just Less
+    bindVertexArrayObject $= oldVao
+    currentProgram $= Nothing
 
