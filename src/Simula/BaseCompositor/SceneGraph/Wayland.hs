@@ -78,7 +78,7 @@ data MotorcarSurfaceNode = MotorcarSurfaceNode {
 makeClassy ''BaseWaylandSurfaceNode
 makeClassy ''MotorcarSurfaceNode
 
-class Drawable a => WaylandSurfaceNode a where
+class (Eq a, Drawable a, Typeable a) => WaylandSurfaceNode a where
   wsnSurface :: a -> IO (Some WaylandSurface)
   default wsnSurface :: HasBaseWaylandSurfaceNode a => a -> IO (Some WaylandSurface)
   wsnSurface = views waylandSurfaceNodeSurface readMVar
@@ -130,6 +130,11 @@ class Drawable a => WaylandSurfaceNode a where
     writeMVar (this ^. waylandSurfaceNodeSurfaceTransform) $ rotM !*! scaleM !*! offsetM
     
     setNodeTransform (this ^. waylandSurfaceNodeDecorations) $ rotM !*! scaleM !*! scale (V3 1.04 1.04 0)
+
+instance Eq (Some WaylandSurfaceNode) where
+  Some a == Some b = case cast a of
+    Just a -> a == b
+    _ -> False
 
 instance HasBaseSceneGraphNode BaseWaylandSurfaceNode where
   baseSceneGraphNode = baseDrawable.baseSceneGraphNode

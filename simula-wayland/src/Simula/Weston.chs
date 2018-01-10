@@ -19,7 +19,6 @@ import Linear
 {#context lib="libweston-1"#}
 {#import Simula.WaylandServer#}
 
-
 -- needs pkgconfig for libweston
 #include "compositor.h"
 #include "compositor-wayland.h"
@@ -57,6 +56,7 @@ deriving instance Storable WestonSurface
 
 {#pointer *weston_view as WestonView newtype#}
 deriving instance Eq WestonView
+deriving instance Storable WestonView
 
 instance WlListElement WestonCompositor WestonSeat where
   linkOffset _ _ = {#offsetof weston_seat->link#}
@@ -122,13 +122,15 @@ westonX11BackendConfigVersion = {#const WESTON_X11_BACKEND_CONFIG_VERSION#}
 
 westonCompositorOutputs :: WestonCompositor -> IO [WestonOutput]
 westonCompositorOutputs wc = do
-   list <- WlList <$> {#get weston_compositor->output_list#} wc
+   let (WestonCompositor ptr) = wc
+   let list = WlList . castPtr $ ptr `plusPtr` {#offsetof weston_compositor->output_list#}
    ptrs <- wlListAll (Proxy :: Proxy WestonCompositor) list
    return (WestonOutput <$> ptrs)
 
 westonCompositorSeats :: WestonCompositor -> IO [WestonSeat]
 westonCompositorSeats wc = do
-   list <- WlList <$> {#get weston_compositor->seat_list#} wc
+   let (WestonCompositor ptr) = wc
+   let list = WlList . castPtr $ ptr `plusPtr` {#offsetof weston_compositor->seat_list#}
    ptrs <- wlListAll (Proxy :: Proxy WestonCompositor) list
    return (WestonSeat <$> ptrs)
 
@@ -149,7 +151,8 @@ instance WlListElement WestonSurface WestonView where
 
 westonSurfaceViews :: WestonSurface -> IO [WestonView]
 westonSurfaceViews ws = do
-   list <- WlList <$> {#get weston_surface->views#} ws
+   let (WestonSurface ptr) = ws
+   let list = WlList . castPtr $ ptr `plusPtr` {#offsetof weston_surface->views#}
    ptrs <- wlListAll (Proxy :: Proxy WestonSurface) list
    return (WestonView <$> ptrs)
 
@@ -399,11 +402,44 @@ westonViewSetOutput = {#set weston_view->output#}
 
 {#pointer *weston_pointer_grab as WestonPointerGrab newtype#}
 {#pointer *weston_pointer_grab_interface  as WestonPointerGrabInterfacePtr -> WestonPointerGrabInterface#}
-{#pointer *weston_pointer_motion_event as WestonPointerMotionEvent newtype#}
+
+{#enum weston_pointer_motion_mask as WestonPointerMotionMask {underscoreToCase}
+  deriving (Show, Eq) #}
+
+data WestonPointerMotionEvent = WestonPointerMotionEvent
+  { motionMask :: WestonPointerMotionMask
+  , motionTimeUsec :: CULong
+  , motionX, motionY, motionDx, motionDy, motionDxUnaccel, motionDyUnaccel :: CDouble
+  } deriving (Show, Eq)
+
+{#pointer *weston_pointer_motion_event as WestonPointerMotionEventPtr -> WestonPointerMotionEvent#}
+
+instance Storable WestonPointerMotionEvent where
+  sizeOf _ = {#sizeof weston_pointer_motion_event#}
+  alignment _ = {#alignof weston_pointer_motion_event#}
+  peek ptr = WestonPointerMotionEvent
+             <$> (toEnum . fromIntegral) <$> {#get weston_pointer_motion_event->mask#} ptr
+             <*> {#get weston_pointer_motion_event->time_usec#} ptr
+             <*> {#get weston_pointer_motion_event->x#} ptr
+             <*> {#get weston_pointer_motion_event->y#} ptr
+             <*> {#get weston_pointer_motion_event->dx#} ptr
+             <*> {#get weston_pointer_motion_event->dy#} ptr
+             <*> {#get weston_pointer_motion_event->dx_unaccel#} ptr
+             <*> {#get weston_pointer_motion_event->dy_unaccel#} ptr
+  poke ptr WestonPointerMotionEvent{..} = do
+    {#set weston_pointer_motion_event->mask#} ptr . fromIntegral $ fromEnum motionMask
+    {#set weston_pointer_motion_event->time_usec#} ptr motionTimeUsec
+    {#set weston_pointer_motion_event->x#} ptr motionX
+    {#set weston_pointer_motion_event->y#} ptr motionY
+    {#set weston_pointer_motion_event->dx#} ptr motionDx
+    {#set weston_pointer_motion_event->dy#} ptr motionDy
+    {#set weston_pointer_motion_event->dx_unaccel#} ptr motionDxUnaccel
+    {#set weston_pointer_motion_event->dy_unaccel#} ptr motionDyUnaccel
+
 {#pointer *weston_pointer_axis_event as WestonPointerAxisEvent newtype#}
 
 type PointerGrabUnaryFunc = WestonPointerGrab -> IO ()
-type PointerGrabMotionFunc = WestonPointerGrab -> CUInt -> WestonPointerMotionEvent -> IO ()
+type PointerGrabMotionFunc = WestonPointerGrab -> CUInt -> WestonPointerMotionEventPtr -> IO ()
 type PointerGrabButtonFunc = WestonPointerGrab -> CUInt -> CUInt -> CUInt -> IO ()
 type PointerGrabAxisFunc = WestonPointerGrab -> CUInt -> WestonPointerAxisEvent -> IO ()
 type PointerGrabAxisSourceFunc = WestonPointerGrab -> CUInt -> IO ()
@@ -439,7 +475,7 @@ instance Storable WestonPointerGrabInterface where
 
 
 {#fun weston_pointer_set_focus {`WestonPointer',`WestonView', `Int', `Int'} -> `()'#}
-{#fun weston_pointer_send_motion {`WestonPointer', `CUInt', `WestonPointerMotionEvent'} -> `()'#}
+{#fun weston_pointer_send_motion {`WestonPointer', `CUInt', `WestonPointerMotionEventPtr'} -> `()'#}
 {#fun weston_pointer_send_button {`WestonPointer', `CUInt', `CUInt', `CUInt'} -> `()'#}
 {#fun weston_pointer_send_axis {`WestonPointer', `CUInt', `WestonPointerAxisEvent'} -> `()'#}
 {#fun weston_pointer_send_axis_source {`WestonPointer', `CUInt'} -> `()'#}
@@ -523,3 +559,12 @@ foreign import ccall "dynamic" fromXWaylandApiXserverExitedFuncPtr :: FunPtr XWa
 
 {#fun weston_xwayland_get_api {`WestonCompositor'} -> `WestonXWaylandApiPtr' #}
 
+{#fun weston_pointer_create {`WestonSeat'} -> `WestonPointer' #}
+
+{#fun weston_pointer_move { `WestonPointer'
+                          , `WestonPointerMotionEventPtr'} -> `()' #}
+
+{#fun wet_load_xwayland {`WestonCompositor'} -> `CInt' #}
+
+--setWestonPointerFocus :: WestonPointer -> WestonView -> IO ()
+--setWestonPointerFocus wp wv = {#set weston_pointer->focus#} wp wv

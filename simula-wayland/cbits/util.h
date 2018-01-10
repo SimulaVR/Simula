@@ -48,4 +48,5 @@ void* weston_buffer_get_legacy_buffer(struct weston_buffer* buffer);
 
 EGLContext makeContext(EGLDisplay dp, EGLContext conf);
 
+int wet_load_xwayland(struct weston_compositor *comp);
 #endif
