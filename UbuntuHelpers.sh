@@ -90,7 +90,7 @@ installNvidiaDrivers() {
   # see https://github.com/ValveSoftware/SteamVR-for-Linux
   sudo add-apt-repository ppa:graphics-drivers/ppa
   sudo apt-get update
-  sudo apt-get install nvidia-384
+  sudo apt-get install nvidia-387
 }
 
 # Unclear if this is needed long-term.
@@ -146,6 +146,7 @@ installStack() {
 # Use this if you already have stack installed via apt-get install.
 upgradeStack() {
   cd ~
+  stack upgrade
   stack setup
   stack install hpack                                    # Same with old versions of hpack
 }
