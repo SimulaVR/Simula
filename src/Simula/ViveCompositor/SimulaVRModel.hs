@@ -25,27 +25,49 @@ data SimulaVRModel = SimulaVRModel
   , _simulaVRModelTexture :: TextureObject
   , _simulaVRModelProgram :: Program
   , _simulaVRModelMatrixUniform :: UniformLocation
+  , _simulaVRModelPointerRay :: SimulaVRModelRay
   } deriving Eq
 
+data SimulaVRModelRay = SimulaVRModelRay
+  { _simulaVRModelRayBase :: BaseDrawable
+  , _simulaVRModelRayVertexBuffer :: BufferObject
+  , _simulaVRModelRayVertexArray :: VertexArrayObject
+  , _simulaVRModelRayProgram :: Program
+  , _simulaVRModelRayMatrixUniform :: UniformLocation
+  , _simulaVRModelRayColorUniform :: UniformLocation
+  } deriving Eq
+
+
 makeLenses ''SimulaVRModel
+makeLenses ''SimulaVRModelRay
 
 instance HasBaseSceneGraphNode SimulaVRModel where
+  baseSceneGraphNode = baseDrawable.baseSceneGraphNode
+
+instance HasBaseSceneGraphNode SimulaVRModelRay where
   baseSceneGraphNode = baseDrawable.baseSceneGraphNode
 
 instance HasBaseDrawable SimulaVRModel where
   baseDrawable = simulaVRModelBase
 
+instance HasBaseDrawable SimulaVRModelRay where
+  baseDrawable = simulaVRModelRayBase
+
 instance SceneGraphNode SimulaVRModel where
   nodeOnFrameDraw = drawableOnFrameDraw
 
+instance SceneGraphNode SimulaVRModelRay where
+  nodeOnFrameDraw = drawableOnFrameDraw
+
 instance VirtualNode SimulaVRModel
+instance VirtualNode SimulaVRModelRay
 
 newSimulaVrModel :: SceneGraphNode a => a -> String -> RenderModel -> RenderModel_TextureMap -> IO SimulaVRModel
 newSimulaVrModel parent name rm rmTex = do
   program <- getProgram ShaderSimulaVRModel
   currentProgram $= Just program
   aPosition <- get $ attribLocation program "aPosition"
-  aNormal <- get $ attribLocation program "aNormal"
+--  aNormal <- get $ attribLocation program "aNormal"
   aTextureCoord <- get $ attribLocation program "aTextureCoord"
   checkForErrors
   
@@ -104,10 +126,45 @@ newSimulaVrModel parent name rm rmTex = do
   checkForErrors
 
   rec
-    let model = SimulaVRModel base name vertCount vertBuffer indexBuffer vao tex program uMatrix
+    let model = SimulaVRModel base name vertCount vertBuffer indexBuffer vao tex program uMatrix ray
     base <- newBaseDrawable model (Just (Some parent)) identity
+    ray <- newSimulaVRModelRay model vao
   return model
 
+newSimulaVRModelRay :: SceneGraphNode a => a -> VertexArrayObject ->  IO SimulaVRModelRay
+newSimulaVRModelRay parent vao = do
+  program <- getProgram ShaderMotorcarLine
+  currentProgram $= Just program
+  aPosition <- get $ attribLocation program "aPosition"
+  uMatrix <- uniformLocation program "uMVPMatrix"
+  uColor <- uniformLocation program "uColor"
+  checkForErrors
+  
+  bindVertexArrayObject $= Just vao
+  checkForErrors
+  
+  vertBuffer <- genObjectName
+  bindBuffer ArrayBuffer $= Just vertBuffer
+
+  
+  withArrayLen vertices $ \len ptr -> 
+    bufferData ArrayBuffer $= (fromIntegral len, ptr, StaticDraw)
+  checkForErrors
+
+  vertexAttribArray aPosition $= Enabled
+  vertexAttribPointer aPosition $= (ToFloat, VertexArrayDescriptor 3 Float (fromIntegral $ length vertices `div` 3) nullPtr)
+  checkForErrors
+  bindVertexArrayObject $= Nothing
+
+  rec
+    let ray = SimulaVRModelRay base vertBuffer vao program uMatrix uColor
+    base <- newBaseDrawable ray (Just (Some parent)) identity
+  return ray
+
+  where
+    vertices = [ 0, 0, 0
+               , 0, 0, -1 ] :: [Float]
+  
 
 instance Drawable SimulaVRModel where
   drawableDraw model scene display = do
@@ -139,3 +196,30 @@ instance Drawable SimulaVRModel where
     textureBinding Texture2D $= Nothing
     currentProgram $= Nothing
   
+instance Drawable SimulaVRModelRay where
+  drawableDraw ray scene display = do
+    oldVao <- get bindVertexArrayObject
+    currentProgram $= Just (ray ^. simulaVRModelRayProgram)
+    bindVertexArrayObject $= Just (ray ^. simulaVRModelRayVertexArray)
+    checkForErrors
+
+    let uMatrix = ray ^. simulaVRModelRayMatrixUniform
+    let uColor = ray ^. simulaVRModelRayMatrixUniform
+    worldTf <- nodeWorldTransform ray
+
+    viewpoints <- readMVar $ display ^. displayViewpoints
+    forM_ viewpoints $ \vp -> do
+      projMatrix <- readMVar (vp ^. viewPointProjectionMatrix)
+      viewMatrix <- readMVar (vp ^. viewPointViewMatrix)
+      
+      let mat = (projMatrix !*! viewMatrix !*! worldTf) ^. m44GLmatrix
+      uniform uMatrix $= mat
+      uniform uColor $= (Color3 0 0 0 :: Color3 Float)
+      checkForErrors
+
+
+      port <- readMVar (vp ^. viewPointViewPort)
+      setViewPort port
+      drawArrays Lines 0 2
+      checkForErrors
+

@@ -759,6 +759,7 @@ sendButtonPress viveComp idx ety edt = do
   where
 
     isTriggerButton (VREvent_Controller EButton_Axis1) = True
+    isTriggerButton (VREvent_Controller EButton_ApplicationMenu) = True
     isTriggerButton _ = False
 
     isGripButton (VREvent_Controller EButton_Grip) = True
@@ -802,11 +803,15 @@ sendButtonPress viveComp idx ety edt = do
   
                 time <- getTime Realtime
                 let usec = fromIntegral $ toNanoSecs time `div` 1000
-                weston_pointer_send_button pointer usec 0x110 (toState ety) --see libinput and wayland for enums; converting later
+                weston_pointer_send_button pointer usec (toWestonButton edt) (toState ety) --see libinput and wayland for enums; converting later
               
     toState VREvent_ButtonPress = 1
     toState VREvent_ButtonUnpress = 0
     toState _ = error "didn't get a button event"
+
+    toWestonButton (VREvent_Controller EButton_Axis1) = 0x110
+    toWestonButton (VREvent_Controller EButton_ApplicationMenu) = 0x111
+    toWestonButton _ = error "invalid vr button"
 
 -- this is pretty horrible. optimize away from list asap
 updateVrModelPoses :: ViveCompositor -> [M44 Float] -> IO ()
