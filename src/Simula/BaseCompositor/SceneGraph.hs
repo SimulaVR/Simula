@@ -568,7 +568,7 @@ displayPrepareForDraw this = do
   glCtxMakeCurrent glctx
 
   bindFramebuffer Framebuffer $= this ^. displayScratchFrameBuffer
-  clearColor $= Color4 1 1 1 1
+  clearColor $= Color4 0.19 0.23 0.29 1
   clearStencil $= 0
   stencilMask $= 0xff
   clear [ColorBuffer, DepthBuffer, StencilBuffer]

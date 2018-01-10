@@ -35,4 +35,3 @@ library
     , wayland-server
     , libweston-3
     , libweston-desktop-3
-  
