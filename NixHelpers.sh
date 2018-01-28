@@ -46,7 +46,7 @@ upgradeStack() {
 buildSimulaOnNix() {
   addViveUdevRules
   make init
-  stack --nix build --ghc-options="-pgmc++ -pgmlg++"
+  stack --nix build
   source ./swrast.sh
   echo "Remember to open steam and install and run SteamVR before launching Simula."
 }
