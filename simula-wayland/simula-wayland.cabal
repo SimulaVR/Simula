@@ -15,6 +15,7 @@ library
       cbits/motorcar-wayland-extensions.c
       cbits/stub.c
       cbits/util.c      
+      cbits/xwayland.c      
   build-depends:
       base >= 4.9 && < 5
     , containers

@@ -625,12 +625,12 @@ viveCompositorRender viveComp = do
   let image = viveComp^.viveCompositorVulkanImage
   let (VkImage handle) = image^.imageImage
 
-  with (coerce (image^.imageTexture) :: GLuint) $ \texPtr ->
-    with GL_LAYOUT_GENERAL_EXT $ \layoutPtr ->
-    glSignalSemaphoreEXT (image ^. imageOpenGLSemaphoreObject) 0 nullPtr 1 texPtr layoutPtr
+--  with (coerce (image^.imageTexture) :: GLuint) $ \texPtr ->
+--    with GL_LAYOUT_GENERAL_EXT $ \layoutPtr ->
+--    glSignalSemaphoreEXT (image ^. imageOpenGLSemaphoreObject) 0 nullPtr 1 texPtr layoutPtr
 
   let (VkFormat format) = VK_FORMAT_R8G8B8A8_UNORM
-  transitionImage info image VK_IMAGE_LAYOUT_GENERAL VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL VK_ACCESS_TRANSFER_WRITE_BIT VK_ACCESS_TRANSFER_READ_BIT True
+  transitionImage info image VK_IMAGE_LAYOUT_GENERAL VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL VK_ACCESS_TRANSFER_WRITE_BIT VK_ACCESS_TRANSFER_READ_BIT False -- True
 
   let (VkExtent3D width height _) = image^.imageExtents 
 
