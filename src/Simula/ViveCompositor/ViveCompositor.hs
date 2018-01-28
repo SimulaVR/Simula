@@ -20,7 +20,7 @@ import Data.Void
 import Foreign hiding (void)
 import Foreign.C
 import Foreign.Ptr
-import Graphics.Rendering.OpenGL hiding (scale, translate, rotate, Rect)
+import Graphics.Rendering.OpenGL hiding (scale, translate, rotate, lookAt, Rect)
 import Graphics.GL
 import Linear
 import Linear.OpenGL
@@ -864,11 +864,9 @@ updateVrModelPoses viveComp renderPoses = do
      let ro = rsi ^. rsiRay
      rn <- updatedRay models x
 
-     let mkPos r = solveRay r (rsi ^. rsiT)
-     let posDiff = mkPos rn - mkPos ro
-     print posDiff
+     let mkRayTf r = lookAt (r ^. rayPos) (solveRay r (rsi ^. rsiT)) (V3 0 1 0)
 
-     setNodeTransform node (translate posDiff !*! tf)
+     setNodeTransform node (mkRayTf rn !*! inv44 (mkRayTf ro) !*! tf)
      
 
 instance Compositor ViveCompositor where
