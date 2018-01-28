@@ -9,7 +9,7 @@ pkgs.haskell.lib.buildStackProject {
                              wayland
                              xorg.libX11
                              libxkbcommon
-                            (callPackage ./weston3.nix { })
+                             weston
                           ];
   LANG = "en_US.UTF-8";
   TMPDIR = "/tmp";
