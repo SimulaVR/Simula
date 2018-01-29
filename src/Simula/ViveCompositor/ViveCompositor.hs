@@ -498,14 +498,14 @@ newViveCompositor verbose = do
   installHandler sigUSR1 Ignore Nothing
   wet_load_xwayland wcomp
 
-  let interface = defaultWestonPointerGrabInterface {
+{-  let interface = defaultWestonPointerGrabInterface {
         grabPointerFocus = onPointerFocus baseCompositor,
         grabPointerButton = onPointerButton baseCompositor
         }
 
   interfacePtr <- new interface
   weston_compositor_set_default_pointer_grab wcomp interfacePtr
-
+-}
   -- hackhack
 
   viveComp <- ViveCompositor baseCompositor info image
@@ -742,6 +742,8 @@ handleVrInput viveComp = loop
 
     isButtonEvent VREvent_ButtonPress = True
     isButtonEvent VREvent_ButtonUnpress = True
+--    isButtonEvent VREvent_ButtonTouch = True
+--    isButtonEvent VREvent_ButtonUntouch = True
     isButtonEvent _ = False
 
 
@@ -758,6 +760,12 @@ sendButtonPress viveComp idx ety edt = do
      modifyMVar' (viveComp ^. viveCompositorTargetedWindows) (M.delete idx)
      
   where
+    isButtonPress VREvent_ButtonPress = True
+    isButtonPress VREvent_ButtonUnpress = True
+    isButtonPress _ = False
+
+    isTouchpadButton (VREvent_Controller EButton_Axis0) = True
+    isTouchpadButton _ = False
 
     isTriggerButton (VREvent_Controller EButton_Axis1) = True
     isTriggerButton (VREvent_Controller EButton_ApplicationMenu) = True
@@ -769,43 +777,44 @@ sendButtonPress viveComp idx ety edt = do
     go model pointer = do
       tf <- nodeWorldTransform model
       let ray = transformRay (Ray 0 (V3 0 0 (negate 1))) tf
-      putStr $ show ety ++ ": "
-      print ray
 
       inter <- nodeIntersectWithSurfaces (viveComp ^. viveCompositorBaseCompositor. baseCompositorScene) ray
       case inter of
         Nothing -> return ()
         Just rsi -> do
           Some node <- return (rsi ^. rsiSurfaceNode)
-          let coords = rsi ^. rsiSurfaceCoordinates
-          putStr "Intersection coords: "
-          print coords
 
-          putStr "Button: "
-          let (VREvent_Controller edb) = edt
-          print edb
-
-          when (isGripButton edt && ety == VREvent_ButtonPress) $ do
+          when (ety == VREvent_ButtonPress && isGripButton edt) $ do
             ntf <- nodeTransform node
             modifyMVar' (viveComp ^. viveCompositorTargetedWindows) (M.insert idx ((tf, ntf), rsi))
             putStrLn $ "targeted something with" ++ show idx
 
-          when (isTriggerButton edt) $ do
-            Some seat <- compositorSeat viveComp
-            Some surface <- wsnSurface node
-            case cast surface of
-              Nothing -> return ()
-              Just surface -> do
-                weston_pointer_set_focus pointer (surface ^. simulaSurfaceView) (truncate (256 * coords ^. _x)) (truncate (256 * coords ^. _y))
+          Some seat <- compositorSeat viveComp
+          Some surface <- wsnSurface node
+          case cast surface of
+            Nothing -> return ()
+            Just surface -> do
+              time <- getTime Realtime
+              let usec = fromIntegral $ toNanoSecs time `div` 1000
+              let msec = fromIntegral $ toNanoSecs time `div` 1000000
+              let coords = rsi ^. rsiSurfaceCoordinates
+              let sx = truncate (256 * coords ^. _x)
+                  sy = truncate (256 * coords ^. _y)
+{-              psx <- westonPointerSx pointer
+              psy <- westonPointerSy pointer
+-}
+              pointer_send_motion pointer msec sx sy
+              when (ety == VREvent_ButtonPress && isTriggerButton edt) $
+                weston_pointer_set_focus pointer (surface ^. simulaSurfaceView) sx sy
+                
+              when (isButtonPress ety && isTriggerButton edt) $ do
                 seat <- westonPointerSeat pointer
                 kbd <- weston_seat_get_keyboard seat
                 ws <- weston_desktop_surface_get_surface $ surface ^. simulaSurfaceWestonDesktopSurface
+                putStr "Sending event: " >> print (toWestonButton edt)
                 weston_keyboard_set_focus kbd ws
-  
-                time <- getTime Realtime
-                let usec = fromIntegral $ toNanoSecs time `div` 1000
-                weston_pointer_send_button pointer usec (toWestonButton edt) (toState ety) --see libinput and wayland for enums; converting later
-              
+                notify_button seat msec (toWestonButton edt) (toState ety) --see libinput and wayland for enums; converting later
+
     toState VREvent_ButtonPress = 1
     toState VREvent_ButtonUnpress = 0
     toState _ = error "didn't get a button event"
@@ -822,6 +831,7 @@ updateVrModelPoses viveComp renderPoses = do
   
   forM_ (M.toList models) $ \(idx, model) -> when (fromIntegral idx < length renderPoses) $ 
     setNodeTransform model (renderPoses !! fromIntegral idx)
+    >> sendButtonPress viveComp idx VREvent_None (VREvent_Reserved 0 0)
 
   isResizing <- readMVar (viveComp  ^. viveCompositorIsResizing)
   --HACKHACK: this assumes that at most 2 buttons are pressed

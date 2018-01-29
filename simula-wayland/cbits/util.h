@@ -49,4 +49,6 @@ void* weston_buffer_get_legacy_buffer(struct weston_buffer* buffer);
 EGLContext makeContext(EGLDisplay dp, EGLContext conf);
 
 int wet_load_xwayland(struct weston_compositor *comp);
+
+void pointer_send_motion(struct weston_pointer *pointer, uint32_t time, wl_fixed_t sx, wl_fixed_t sy);
 #endif
