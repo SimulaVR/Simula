@@ -77,7 +77,7 @@ data ViveCompositor = ViveCompositor {
   _viveCompositorVulkanImage :: VulkanImage,
   _viveCompositorModels :: MVar (M.Map TrackedDeviceIndex SimulaVRModel),
   _viveCompositorControllers :: MVar (M.Map TrackedDeviceIndex WestonPointer),
-  _viveCompositorTargetedWindows :: MVar (M.Map TrackedDeviceIndex (M44 Float, RaySurfaceIntersection)),
+  _viveCompositorTargetedWindows :: MVar (M.Map TrackedDeviceIndex ((M44 Float, M44 Float), RaySurfaceIntersection)),
   _viveCompositorIsResizing :: MVar Bool
 }
 
@@ -786,8 +786,8 @@ sendButtonPress viveComp idx ety edt = do
           print edb
 
           when (isGripButton edt && ety == VREvent_ButtonPress) $ do
-            tf <- nodeTransform node
-            modifyMVar' (viveComp ^. viveCompositorTargetedWindows) (M.insert idx (tf, rsi))
+            ntf <- nodeTransform node
+            modifyMVar' (viveComp ^. viveCompositorTargetedWindows) (M.insert idx ((tf, ntf), rsi))
             putStrLn $ "targeted something with" ++ show idx
 
           when (isTriggerButton edt) $ do
@@ -841,13 +841,14 @@ updateVrModelPoses viveComp renderPoses = do
         return $ transformRay (Ray 0 (V3 0 0 (negate 1))) tf
       Nothing -> return (rsi ^. rsiRay)
 
+
     calcDistance r1 t1 r2 t2 = norm (vec2 - vec1)
       where
         vec1 = solveRay r1 t1
         vec2 = solveRay r2 t2
 
     -- invariant: node is equal for rsi1 and rsi2
-    resizeWindow models xs@[(_, (tf, rsi1)), (_, (_, rsi2))] = do
+    resizeWindow models xs@[(_, ((_, tf), rsi1)), (_, (_, rsi2))] = do
      putStrLn "resizing"
      writeMVar (viveComp ^. viveCompositorIsResizing) True
      Some node <- pure $ rsi1 ^. rsiSurfaceNode
@@ -858,15 +859,14 @@ updateVrModelPoses viveComp renderPoses = do
      print ratio
      setNodeTransform node (tf !*! (scale (V3 ratio ratio 1)))
 
-    dragWindow models [x@(idx, (tf, rsi))] = do
+    dragWindow models [x@(idx, ((tf, ntf), rsi))] = do
      putStrLn "dragging"
      Some node <- pure $ rsi ^. rsiSurfaceNode
-     let ro = rsi ^. rsiRay
-     rn <- updatedRay models x
+     newTf <- case M.lookup idx models of
+       Just model -> nodeWorldTransform model
+       Nothing -> return tf
 
-     let mkRayTf r = lookAt (r ^. rayPos) (solveRay r (rsi ^. rsiT)) (V3 0 1 0)
-
-     setNodeTransform node (mkRayTf rn !*! inv44 (mkRayTf ro) !*! tf)
+     setNodeTransform node (newTf !*! inv44 tf !*! ntf)
      
 
 instance Compositor ViveCompositor where
