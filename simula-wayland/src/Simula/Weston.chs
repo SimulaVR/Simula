@@ -16,7 +16,7 @@ import Foreign
 import Foreign.C
 import Linear
 
-{#context lib="libweston-1"#}
+{#context lib="libweston-3"#}
 {#import Simula.WaylandServer#}
 
 -- needs pkgconfig for libweston
@@ -475,8 +475,10 @@ instance Storable WestonPointerGrabInterface where
 
 
 {#fun weston_pointer_set_focus {`WestonPointer',`WestonView', `Int', `Int'} -> `()'#}
+{#fun pointer_send_motion {`WestonPointer', `CUInt', `Int', `Int'} -> `()'#}
 {#fun weston_pointer_send_motion {`WestonPointer', `CUInt', `WestonPointerMotionEventPtr'} -> `()'#}
 {#fun weston_pointer_send_button {`WestonPointer', `CUInt', `CUInt', `CUInt'} -> `()'#}
+{#fun notify_button {`WestonSeat', `CUInt', `CUInt', `CUInt'} -> `()'#}
 {#fun weston_pointer_send_axis {`WestonPointer', `CUInt', `WestonPointerAxisEvent'} -> `()'#}
 {#fun weston_pointer_send_axis_source {`WestonPointer', `CUInt'} -> `()'#}
 {#fun weston_pointer_send_frame {`WestonPointer'} -> `()'#}
@@ -563,6 +565,12 @@ foreign import ccall "dynamic" fromXWaylandApiXserverExitedFuncPtr :: FunPtr XWa
 
 {#fun weston_pointer_move { `WestonPointer'
                           , `WestonPointerMotionEventPtr'} -> `()' #}
+
+westonPointerSx :: WestonPointer -> IO Int
+westonPointerSx ptr = fromIntegral <$> {#get weston_pointer->sx#} ptr
+
+westonPointerSy :: WestonPointer -> IO Int
+westonPointerSy ptr = fromIntegral <$> {#get weston_pointer->sy#} ptr
 
 {#fun wet_load_xwayland {`WestonCompositor'} -> `CInt' #}
 

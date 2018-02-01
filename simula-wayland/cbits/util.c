@@ -73,3 +73,22 @@ EGLContext makeContext(EGLDisplay display, EGLContext shared) {
   return eglCreateContext(display, config, shared, contextAttr);
 
 }
+
+
+void pointer_send_motion(struct weston_pointer *pointer, uint32_t time, wl_fixed_t sx, wl_fixed_t sy)
+{
+	struct wl_list *resource_list;
+	struct wl_resource *resource;
+
+	if (sx == pointer->sx && sy == pointer->sy) return;
+	pointer->grab->interface->focus(pointer->grab);
+	wl_signal_emit(&pointer->motion_signal, pointer);
+	
+	if (!pointer->focus_client)
+		return;
+
+	resource_list = &pointer->focus_client->pointer_resources;
+	wl_resource_for_each(resource, resource_list)
+		wl_pointer_send_motion(resource, time, sx, sy);
+
+}
