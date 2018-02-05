@@ -8,6 +8,7 @@ pkgs.haskell.lib.buildStackProject {
                              wayland-protocols
                              wayland
                              xorg.libX11
+                             libxkbcommon
                             (callPackage ./weston3.nix { })
                           ];
   LANG = "en_US.UTF-8";

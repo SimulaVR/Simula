@@ -24,6 +24,8 @@ library
     , unix
   build-tools:
       c2hs
+  cpp-options:
+      "-D_BITS_FLOATN_H"
   exposed-modules:
       Simula.WaylandServer
       Simula.MotorcarServer
