@@ -26,7 +26,7 @@ If you're interested in a future where Linux and VR co-exist, you can donate to 
 ---
 
 > **Bitcoin.** 17YLp6kJswxa8gGKwXqLrNtnM9Fgye6dfQ
-
+>
 > **Ethereum.** 0x373227b43Fe1eFe8da9d30ED1Ee45E7488F6cab3
 
 ---
