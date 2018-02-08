@@ -23,12 +23,15 @@ Project documentation with user and developer information is hosted at [simulavr
 
 If you're interested in a future where Linux and VR co-exist, you can donate to the following crypto addresses:
 
-**Bitcoin.** 17YLp6kJswxa8gGKwXqLrNtnM9Fgye6dfQ
+---
 
-**Ethereum.** 0x373227b43Fe1eFe8da9d30ED1Ee45E7488F6cab3
+> **Bitcoin.** 17YLp6kJswxa8gGKwXqLrNtnM9Fgye6dfQ
 
-Donations to the project pay for the following expenses:
+> **Ethereum.** 0x373227b43Fe1eFe8da9d30ED1Ee45E7488F6cab3
 
-**Project Expenses.** 
+---
+
+**Project Expenses.** Donations to the project pay for the following expenses:
+
   - Part-time developers (x 1)
   - Vive donations to contributors (x 3)
