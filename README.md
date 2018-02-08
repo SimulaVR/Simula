@@ -19,3 +19,15 @@ Project documentation with user and developer information is hosted at [simulavr
 
 **Contributors:** We're looking for open-source contributors. If you're interested in using Haskell to (cleanly) bring VR and Linux together, but don't have an HTC Vive, PM or email me at georgewsinger@gmail.com.
 
+## Donations
+
+If you're interested in a future where Linux and VR co-exist, you can donate to the following crypto addresses:
+
+**Bitcoin.** 17YLp6kJswxa8gGKwXqLrNtnM9Fgye6dfQ
+**Ethereum.** 0x373227b43Fe1eFe8da9d30ED1Ee45E7488F6cab3
+
+Donations to the project pay for the following expenses:
+
+**Project Expenses.** 
+  - Part-time developers (x 1)
+  - Vive donations to contributors (x 3)
