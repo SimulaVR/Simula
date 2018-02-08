@@ -14,7 +14,7 @@
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: lts-10.0
+resolver: lts-10.4
 
 ghc-options: 
   "*": -pgmlg++
