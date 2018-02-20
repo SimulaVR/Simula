@@ -3,18 +3,20 @@
 
 # This script will build the project using either Nix or optionally, in the case of Ubuntu, Apt.
 
-# Simula project root dir
-SIM_ROOT=`dirname $0`
+SIM_ROOT=`dirname $0` # Simula project root dir
 
-usage() { echo "Usage: $0 [-h | --help] [--nix] [--clean]" 1>&2; exit 1; }
+USE_NIX=1 # Use Nix by default
+
+usage() { echo "Usage: $0 [-h | --help] [--[no]-nix] [--clean]" 1>&2; exit 1; }
 
 while getopts ":h-:" o; do
     case "${o}" in
         -)
             case ${OPTARG} in
-                "help"  ) usage ;;
-                "nix"   ) USE_NIX=1 ;;
-                "clean" ) CLEAN=1 ;;
+                "help"   ) usage ;;
+                "nix"    ) USE_NIX=1 ;;
+                "no-nix" ) USE_NIX=0 ;;
+                "clean"  ) CLEAN=1 ;;
             esac
             ;;
         h|*)
