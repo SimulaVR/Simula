@@ -13,10 +13,10 @@ while getopts ":h-:" o; do
     case "${o}" in
         -)
             case ${OPTARG} in
-                "help"   ) usage ;;
-                "nix"    ) USE_NIX=1 ;;
-                "no-nix" ) USE_NIX=0 ;;
-                "clean"  ) CLEAN=1 ;;
+                "nix"      ) USE_NIX=1 ;;
+                "no-nix"   ) USE_NIX=0 ;;
+                "clean"    ) find . -name ".stack-work" -type d -exec rm -r {} + 2>/dev/null; stack clean ;;
+                "help" | * ) usage ;;
             esac
             ;;
         h|*)
@@ -27,19 +27,18 @@ done
 shift $((OPTIND-1))
 
 
-if [ $CLEAN ]; then
-    find . -name ".stack-work" -type d -exec rm -r {} + 2>/dev/null
-    stack clean
-fi
-
-
 DISTROID=`cat /etc/os-release | tail -n +2 | head -n 1 | cut -d '=' -f 2 -`
 case $DISTROID in
     "nixos")
-        source $SIM_ROOT/util/NixHelpers.sh
-        checkIfUnfreeAllowed
-        echo "Building project.."
-        buildSimulaOnNixOS
+        if [ ! $USE_NIX ]; then
+            echo "Not using Nix on NixOS makes no sense."
+            exit 1
+        else
+            source $SIM_ROOT/util/NixHelpers.sh
+            checkIfUnfreeAllowed
+            echo "Building project.."
+            buildSimulaOnNixOS
+        fi
         ;;
     "ubuntu")
         if [ $USE_NIX ]; then
