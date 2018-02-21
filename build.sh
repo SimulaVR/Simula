@@ -55,7 +55,7 @@ case $DISTROID in
             source $SIM_ROOT/util/NixHelpers.sh
             checkIfUnfreeAllowed
 
-            if [ $INSTALL ]; then
+            if [ $INSTALL ] || [ $RUN ]; then
                 installSimulaOnNixOS;
             else
                 buildSimulaOnNixOS
