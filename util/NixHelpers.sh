@@ -76,15 +76,15 @@ launchSteamVRWithNix() {
 launchSimulaWithNix() {
     echo "Remember to open steam and install and run SteamVR before launching Simula."
 
-    if [ -z `pidof steam` ]; then
-        echo "Launching Steam.."
-        steam &>/dev/null &
-        sleep 5
+    if [ -z `pidof --single-shot steam` ]; then
+        echo "Steam not running. Launch Steam and then re-run script."
+        exit 1
     fi
 
-    if [ -z `pidof vrmonitor` ]; then
-        echo "Launching SteamVR.."
+    if [ -z `pidof --single-shot vrmonitor` ] || [ -z `pidof --single-shot vrserver` ]; then
+        echo "SteamVR not running. I'll start SteamVR for you, but you must manually re-run script once it is running."
         launchSteamVRWithNix &>/dev/null &
+        exit 1
     fi
 
     echo "Launching Simula.."
