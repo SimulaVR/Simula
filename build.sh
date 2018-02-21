@@ -3,7 +3,7 @@
 
 # This script will build the project using either Nix or optionally, in the case of Ubuntu, Apt.
 
-SIM_ROOT=`dirname $0` # Simula project root dir
+SIM_ROOT=$(cd "${0%/*}" && echo ${PWD})
 
 USE_NIX=1 # Use Nix by default
 
@@ -55,13 +55,16 @@ case $DISTROID in
             source $SIM_ROOT/util/NixHelpers.sh
             checkIfUnfreeAllowed
 
-            if [ $INSTALL ] || [ $RUN ]; then
-                installSimulaOnNixOS;
-            else
-                buildSimulaOnNixOS
-            fi
 
-            if [ $RUN ]; then launchSimulaWithNix; fi
+            if [ $RUN ]; then
+                launchSimula
+            else
+                if [ $INSTALL ]; then
+                    installSimula
+                else
+                    buildSimula
+                fi
+            fi
         fi
         ;;
     "ubuntu")
@@ -70,7 +73,7 @@ case $DISTROID in
             source $SIM_ROOT/util/NixHelpers.sh
             installNix
             checkIfUnfreeAllowed
-            buildSimulaWithNix
+            buildSimula
         else
             # TODO: Test this process.
             source $SIM_ROOT/util/UbuntuHelpers.sh
@@ -86,6 +89,6 @@ case $DISTROID in
         installNix
         checkIfUnfreeAllowed
         echo "Building project using Stack + Nix.."
-        buildSimulaWithNix
+        buildSimula
         ;;
 esac
