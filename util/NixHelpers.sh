@@ -131,7 +131,7 @@ fixSteamVROnNixOS() {
 
 postBuildNixOS() {
     DISTROID=`cat /etc/os-release | tail -n +2 | head -n 1 | cut -d '=' -f 2 -`
-    if [ $DISTROID -eq "nixos" ]; then
+    if [ $DISTROID == "nixos" ]; then
         fixswrast
         fixSteamVROnNixOS
     fi
