@@ -48,10 +48,8 @@ addViveUdevRules() {
 
 # For non-NixOS
 buildSimulaWithNix() {
-  addViveUdevRules
-  make init
   stack --nix build
-  echo "Remember to open steam and install and run SteamVR before launching Simula."
+  postBuild
 }
 
 
@@ -129,24 +127,30 @@ fixSteamVROnNixOS() {
     fi
 }
 
-postBuildNixOS() {
+postBuild() {
     DISTROID=`cat /etc/os-release | tail -n +2 | head -n 1 | cut -d '=' -f 2 -`
+
     if [ $DISTROID == "nixos" ]; then
         fixswrast
         fixSteamVROnNixOS
+    else
+        addViveUdevRules
     fi
+
+    nix-shell -p stdenv --run 'make init'
+
     echo "Remember to open steam and install and run SteamVR before launching Simula."
 }
 
 buildSimulaOnNixOS() {
     echo "Building Simula.."
     stack --nix build
-    postBuildNixOS
+    postBuild
 }
 
 # FIXME: The name of this function is a lie (as of yet)--it does not install into the Nix store.
 installSimulaOnNixOS() {
     echo "Installing Simula.."
     stack --nix --local-bin-path ./bin install
-    postBuildNixOS
+    postBuild
 }
