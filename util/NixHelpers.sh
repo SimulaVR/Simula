@@ -5,6 +5,8 @@ else
     echo "Project root: $SIM_ROOT"
 fi
 
+LOGDIR=$SIM_ROOT/logs
+
 ######################
 ## Distro-agnostic ##
 ####################
@@ -18,19 +20,19 @@ checkIfUnfreeAllowed() {
     fi
 }
 
-postBuild() {
-    DISTROID=`cat /etc/os-release | tail -n +2 | head -n 1 | cut -d '=' -f 2 -`
+outputStageBegin() {
+    local HEADER=$1
 
-    if [ $DISTROID == "nixos" ]; then
-        fixswrast
-        fixSteamVROnNixOS
-    else
-        addViveUdevRules
-    fi
+    echo ""
+    echo $HEADER
+    echo "---------------------------"
+    echo ""
+}
 
-    nix-shell -p stdenv --run 'make init'
-
-    echo "Remember to open steam and install and run SteamVR before launching Simula."
+outputStageEnd() {
+    echo ""
+    # echo "--------------------------"
+    echo ""
 }
 
 # $1 should be basename of log file (no path)
@@ -42,7 +44,7 @@ logTo() {
     fi
 
 
-    local LOGDIR=$SIM_ROOT/logs
+    # local LOGDIR=$SIM_ROOT/logs
     local LOG=$LOGDIR/$1
 
     if [ -z $2 ]; then
@@ -58,16 +60,24 @@ logTo() {
                 || echo "Couldn't create log directory: $LOGDIR"
     fi
 
-    # if [ ! -f $LOG ]; then
-
-    #     echo "" > $LOG #\
-    #         # && echo "Created log file: $LOG" \
-    #         #     || echo "Couldn't create log file: $LOG"
-    # else
-        echo "Logging command: $2"
-        eval $2 | tee -a $LOG
-        echo "Output logged to $LOG"
+    # echo "Logging command: $2"
+    eval $2 | tee -a $LOG
+    echo ""
+    echo "Output logged to $LOG"
     # fi
+}
+
+postBuild() {
+    DISTROID=`cat /etc/os-release | tail -n +2 | head -n 1 | cut -d '=' -f 2 -`
+
+    outputStageBegin "Post build configuration.."
+    if [ $DISTROID == "nixos" ]; then
+        fixswrast
+        fixSteamVROnNixOS
+    else
+        addViveUdevRules
+    fi
+    outputStageEnd
 }
 
 # Will launch SteamVR (if installed) via steam-run (with extra runtime deps)
@@ -89,46 +99,39 @@ launchSteamVR() {
 }
 
 launchSimula() {
-    local LOGNAME=simulavr.log
-
     if [ -z `pidof --single-shot steam` ]; then
         echo "Steam not running. Launch Steam and then re-run script."
         exit 1
     fi
 
     if [ -z `pidof --single-shot vrmonitor` ] || [ -z `pidof --single-shot vrserver` ]; then
-        echo "SteamVR not running. I'll start SteamVR for you, but you must manually re-run script once it is running."
+        echo "SteamVR not running. I'll start SteamVR for you, but you need to manually re-run script once it is running."
         launchSteamVR &
         exit 1
     fi
 
-    echo ""
-    echo "Launching Simula.."
-    echo "------------------"
+    local LOGNAME=simulavr.log
+
+    # Get the most recently built binary
+    local LATEST_BUILD=`find ${SIM_ROOT}/.stack-work -name simulavr -type f -exec ls -1t {} + | head -n 1`
+
+    outputStageBegin "Launching Simula.."
+    echo "Using most recently built binary: ${LATEST_BUILD}"
+
     # stack --nix exec -- simulavr
-    logTo $LOGNAME "$SIM_ROOT/bin/simulavr"
-    echo "------------------"
-    echo ""
+    logTo $LOGNAME "$LATEST_BUILD"
+
+    outputStageEnd
 }
 
 buildSimula() {
-    echo ""
-    echo "Building Simula.."
-    echo "-----------------"
-    stack --nix build
-    echo "-----------------"
-    echo ""
-    postBuild
-}
+    outputStageBegin "Building Simula.."
 
-# FIXME: The name of this function is a lie (as of yet)--it does not install into the Nix store.
-installSimula() {
-    echo ""
-    echo "Installing Simula.."
-    echo "-------------------"
-    stack --nix --local-bin-path $SIM_ROOT/bin install
-    echo "-------------------"
-    echo ""
+    nix-shell -p stdenv --run 'make init'
+    stack --nix --nix-pure build
+
+    outputStageEnd
+
     postBuild
 }
 
@@ -152,7 +155,7 @@ fixswrast() {
         if [ ! -z $SWRAST ]; then
             echo "Happily surprised to find $SWRAST"
         else
-            echo "Warning: There's no swrast in $OUT"
+            echo "There's no swrast in $OUT. This may or may not be a problem."
         fi
     fi
 }
@@ -193,6 +196,7 @@ addViveUdevRules() {
   local VIVE_RULES="/lib/udev/rules.d/60-HTC-Vive-perms.rules";
 
   if [ ! -f /lib/udev/rules.d/60-HTC-Vive-perms.rules ]; then
+    echo "Adding HTC Vive udev rules to /lib/udev/rules.d"
     echo '# HTC Vive HID Sensor naming and permissioning'                                                            >> $VIVE_RULES
     echo 'KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0bb4", ATTRS{idProduct}=="2c87", TAG+="uaccess"' >> $VIVE_RULES
     echo 'KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="28de", ATTRS{idProduct}=="2101", TAG+="uaccess"' >> $VIVE_RULES

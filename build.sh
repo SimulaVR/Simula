@@ -7,7 +7,7 @@ SIM_ROOT=$(cd "${0%/*}" && echo ${PWD})
 
 USE_NIX=1 # Use Nix by default
 
-usage() { echo "Usage: $0 [--help | -h] [--[no-]nix] [--clean] [--install | -i] [--run]" 1>&2; exit 1; }
+usage() { echo "Usage: $0 [--help | -h] [--[no-]nix] [--clean] [--[only-]run]" 1>&2; exit 1; }
 
 while getopts ":hi-:" o; do
     case "${o}" in
@@ -23,19 +23,17 @@ while getopts ":hi-:" o; do
                     find . -name ".stack-work" -type d -exec rm -r {} + 2>/dev/null
                     stack clean
                     ;;
-                "install")
-                    INSTALL=1
-                    ;;
                 "run")
                     RUN=1
+                    ;;
+                "only-run")
+                    RUN=1
+                    NO_BUILD=1
                     ;;
                 "help"|*)
                     usage
                     ;;
             esac
-            ;;
-        i)
-            INSTALL=1
             ;;
         h|*)
             usage
@@ -55,15 +53,12 @@ case $DISTROID in
             source $SIM_ROOT/util/NixHelpers.sh
             checkIfUnfreeAllowed
 
+            if [ ! $NO_BUILD ]; then
+                buildSimula
+            fi
 
             if [ $RUN ]; then
                 launchSimula
-            else
-                if [ $INSTALL ]; then
-                    installSimula
-                else
-                    buildSimula
-                fi
             fi
         fi
         ;;
