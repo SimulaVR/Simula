@@ -54,8 +54,11 @@ buildSimulaWithNix() {
   echo "Remember to open steam and install and run SteamVR before launching Simula."
 }
 
+
+## Distro-agnostic ##
+
 # Will launch SteamVR (if installed) via steam-run (with extra runtime deps)
-launchSteamVR() {
+launchSteamVRWithNix() {
     local VRMONITOR=$HOME/.local/share/Steam/steamapps/common/SteamVR/bin/vrmonitor.sh
 
     if [ ! -e $VRMONITOR ]; then
@@ -81,11 +84,12 @@ launchSimulaWithNix() {
 
     if [ -z `pidof vrmonitor` ]; then
         echo "Launching SteamVR.."
-        launchSteamVR &>/dev/null &
+        launchSteamVRWithNix &>/dev/null &
     fi
 
     echo "Launching Simula.."
-    stack --nix exec -- simulavr
+    # stack --nix exec -- simulavr
+    ./bin/simulavr
 }
 
 ## NixOS ##
@@ -125,22 +129,24 @@ fixSteamVROnNixOS() {
     fi
 }
 
-fixNixOS() {
-    fixswrast
-    fixSteamVROnNixOS
+postBuildNixOS() {
+    DISTROID=`cat /etc/os-release | tail -n +2 | head -n 1 | cut -d '=' -f 2 -`
+    if [ $DISTROID -eq "nixos" ]; then
+        fixswrast
+        fixSteamVROnNixOS
+    fi
+    echo "Remember to open steam and install and run SteamVR before launching Simula."
 }
 
 buildSimulaOnNixOS() {
     echo "Building Simula.."
     stack --nix build
-    fixNixOS
-    echo "Remember to open steam and install and run SteamVR before launching Simula."
+    postBuildNixOS
 }
 
 # FIXME: The name of this function is a lie (as of yet)--it does not install into the Nix store.
 installSimulaOnNixOS() {
     echo "Installing Simula.."
-    stack --nix --local-bin-path ./build install
-    fixNixOS
-    echo "Remember to open steam and install and run SteamVR before launching Simula."
+    stack --nix --local-bin-path ./bin install
+    postBuildNixOS
 }
