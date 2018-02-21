@@ -63,4 +63,5 @@ case $DISTROID in
         checkIfUnfreeAllowed
         echo "Building project using Stack + Nix.."
         buildSimulaWithNix
+        ;;
 esac

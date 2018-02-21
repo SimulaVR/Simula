@@ -23,6 +23,8 @@ checkIfUnfreeAllowed() {
     fi
 }
 
+# For non-NixOS
+# If adding Vive udev rules is required for NixOS, they need to be added via the system's /etc/nixos/configuration.nix
 addViveUdevRules() {
   local VIVE_RULES="/lib/udev/rules.d/60-HTC-Vive-perms.rules";
 
@@ -44,6 +46,7 @@ addViveUdevRules() {
   fi
 }
 
+# For non-NixOS
 buildSimulaWithNix() {
   addViveUdevRules
   make init
@@ -51,6 +54,7 @@ buildSimulaWithNix() {
   echo "Remember to open steam and install and run SteamVR before launching Simula."
 }
 
+# Will launch SteamVR (if installed) via steam-run (with extra runtime deps)
 launchSteamVR() {
     local VRMONITOR=$HOME/.local/share/Steam/steamapps/common/SteamVR/bin/vrmonitor.sh
 
@@ -59,13 +63,11 @@ launchSteamVR() {
         exit 1
     fi
 
-    if [ ! -e $HOME/.steam/steam/ubuntu12_32/steam-runtime/run.sh ]; then
-        source ./util/NixHelpers.sh && \
-            fixSteamVROnNixos
-    fi
+    if [ ! -e $HOME/.steam/steam/ubuntu12_32/steam-runtime/run.sh ]; then fixSteamVROnNixos; fi
 
     echo "Launching SteamVR.."
-    nix-shell -p lsb-release usbutils procps --run 'steam-run bash -c "export PATH=$PATH ; ~/.local/share/Steam/steamapps/common/SteamVR/bin/vrmonitor.sh"'
+    # Using env var assignment trickery to add extra runtime deps to steam-run
+    nix-shell -p bash steam-run lsb-release usbutils procps --run 'steam-run bash -c "export PATH=$PATH ; ~/.local/share/Steam/steamapps/common/SteamVR/bin/vrmonitor.sh"'
 }
 
 launchSimulaWithNix() {
@@ -78,6 +80,7 @@ launchSimulaWithNix() {
     fi
 
     if [ -z `pidof vrmonitor` ]; then
+        echo "Launching SteamVR.."
         launchSteamVR &>/dev/null &
     fi
 
@@ -92,7 +95,7 @@ launchSimulaWithNix() {
 #    > libEGL warning: DRI2: failed to open swrast (search paths /run/opengl-driver/lib/dri)
 # Fix was found here https://github.com/NixOS/nixpkgs/issues/9415#issuecomment-336494579
 fixswrast() {
-    OUT=/run/opengl-driver
+    local OUT=/run/opengl-driver
 
     if [ ! -d $OUT ]; then
         echo "$OUT does not exist, so we're creating it. Write access to /run requires sudo:"
@@ -103,7 +106,7 @@ fixswrast() {
     fi
 
     if [ -d $OUT ]; then
-        SWRAST=`find $OUT -follow -name "swrast*"`
+        local SWRAST=`find $OUT -follow -name "swrast*"`
         if [ ! -z $SWRAST ]; then
             echo "Happily surprised to find $SWRAST"
         else
