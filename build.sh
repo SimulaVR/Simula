@@ -7,17 +7,35 @@ SIM_ROOT=`dirname $0` # Simula project root dir
 
 USE_NIX=1 # Use Nix by default
 
-usage() { echo "Usage: $0 [-h | --help] [--[no-]nix] [--clean]" 1>&2; exit 1; }
+usage() { echo "Usage: $0 [--help | -h] [--[no-]nix] [--clean] [--install | -i] [--run]" 1>&2; exit 1; }
 
-while getopts ":h-:" o; do
+while getopts ":hi-:" o; do
     case "${o}" in
         -)
             case "${OPTARG}" in
-                "nix"      ) USE_NIX=1 ;;
-                "no-nix"   ) USE_NIX="" ;;
-                "clean"    ) find . -name ".stack-work" -type d -exec rm -r {} + 2>/dev/null; stack clean ;;
-                "help" | * ) usage ;;
+                "nix")
+                    USE_NIX=1
+                    ;;
+                "no-nix")
+                    USE_NIX=""
+                    ;;
+                "clean")
+                    find . -name ".stack-work" -type d -exec rm -r {} + 2>/dev/null
+                    stack clean
+                    ;;
+                "install")
+                    INSTALL=1
+                    ;;
+                "run")
+                    RUN=1
+                    ;;
+                "help"|*)
+                    usage
+                    ;;
             esac
+            ;;
+        i)
+            INSTALL=1
             ;;
         h|*)
             usage
@@ -36,8 +54,14 @@ case $DISTROID in
         else
             source $SIM_ROOT/util/NixHelpers.sh
             checkIfUnfreeAllowed
-            echo "Building project.."
-            buildSimulaOnNixOS
+
+            if [ $INSTALL ]; then
+                installSimulaOnNixOS;
+            else
+                buildSimulaOnNixOS
+            fi
+
+            if [ $RUN ]; then launchSimulaWithNix; fi
         fi
         ;;
     "ubuntu")

@@ -125,9 +125,22 @@ fixSteamVROnNixOS() {
     fi
 }
 
-buildSimulaOnNixOS() {
-    stack --nix build
+fixNixOS() {
     fixswrast
     fixSteamVROnNixOS
+}
+
+buildSimulaOnNixOS() {
+    echo "Building Simula.."
+    stack --nix build
+    fixNixOS
+    echo "Remember to open steam and install and run SteamVR before launching Simula."
+}
+
+# FIXME: The name of this function is a lie (as of yet)--it does not install into the Nix store.
+installSimulaOnNixOS() {
+    echo "Installing Simula.."
+    stack --nix --local-bin-path ./build install
+    fixNixOS
     echo "Remember to open steam and install and run SteamVR before launching Simula."
 }
