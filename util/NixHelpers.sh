@@ -128,6 +128,8 @@ buildSimula() {
     outputStageBegin "Building Simula.."
 
     nix-shell -p stdenv --run 'make init'
+    echo ""
+    echo "stack --nix --nix-pure build:"
     stack --nix --nix-pure build
 
     outputStageEnd
