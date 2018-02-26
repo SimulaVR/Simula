@@ -5,7 +5,7 @@ else
     echo "Project root: $SIM_ROOT"
 fi
 
-LOGDIR=$SIM_ROOT/logs
+LOGDIR="$SIM_ROOT/logs"
 
 ######################
 ## Distro-agnostic ##
@@ -21,10 +21,10 @@ checkIfUnfreeAllowed() {
 }
 
 outputStageBegin() {
-    local HEADER=$1
+    local HEADER="$1"
 
     echo ""
-    echo $HEADER
+    echo "$HEADER"
     echo "---------------------------"
     echo ""
 }
@@ -38,30 +38,30 @@ outputStageEnd() {
 # $1 should be basename of log file (no path)
 # $@ should be command to log
 logTo() {
-    if [ -z $1 ]; then
+    if [ -z "$1" ]; then
         echo "Attempted to log without log name nor any command to run."
         exit 1
     fi
 
 
     # local LOGDIR=$SIM_ROOT/logs
-    local LOG=$LOGDIR/$1
+    local LOG="$LOGDIR/$1"
 
-    if [ -z $2 ]; then
+    if [ -z "$2" ]; then
         echo "Attempted to log to $LOG but no command to run."
         exit 1
     fi
 
     # shift
 
-    if [ ! -d $LOGDIR ]; then
-        mkdir -p $LOGDIR \
+    if [ ! -d "$LOGDIR" ]; then
+        mkdir -p "$LOGDIR" \
             && echo "Created log directory: $LOGDIR" \
                 || echo "Couldn't create log directory: $LOGDIR"
     fi
 
     # echo "Logging command: $2"
-    eval $2 | tee -a $LOG
+    eval "$2" | tee -a "$LOG"
     echo ""
     echo "Output logged to $LOG"
     # fi
@@ -71,7 +71,7 @@ postBuild() {
     DISTROID=`cat /etc/os-release | tail -n +2 | head -n 1 | cut -d '=' -f 2 -`
 
     outputStageBegin "Post build configuration.."
-    if [ $DISTROID == "nixos" ]; then
+    if [ "$DISTROID" == "nixos" ]; then
         fixswrast
         fixSteamVROnNixOS
     else
@@ -82,20 +82,20 @@ postBuild() {
 
 # Will launch SteamVR (if installed) via steam-run (with extra runtime deps)
 launchSteamVR() {
-    local VRMONITOR=$HOME/.local/share/Steam/steamapps/common/SteamVR/bin/vrmonitor.sh
+    local VRMONITOR="$HOME/.local/share/Steam/steamapps/common/SteamVR/bin/vrmonitor.sh"
     local LOGNAME=steamvr.log
 
-    if [ ! -e $VRMONITOR ]; then
+    if [ ! -e "$VRMONITOR" ]; then
         echo "SteamVR must first be installed through Steam."
         exit 1
     fi
 
-    if [ ! -e $HOME/.steam/steam/ubuntu12_32/steam-runtime/run.sh ]; then fixSteamVROnNixos; fi
+    if [ ! -e "$HOME/.steam/steam/ubuntu12_32/steam-runtime/run.sh" ]; then fixSteamVROnNixos; fi
 
     echo "Launching SteamVR.."
     # Using env var assignment trickery to add extra runtime deps to steam-run
     STEAMRUN_CMD='steam-run bash -c "export PATH=$PATH ; ~/.local/share/Steam/steamapps/common/SteamVR/bin/vrmonitor.sh"'
-    logTo $LOGNAME "nix-shell -p bash steam-run lsb-release usbutils procps --run '${STEAMRUN_CMD}'" &>/dev/null
+    logTo "$LOGNAME" "nix-shell -p bash steam-run lsb-release usbutils procps --run '${STEAMRUN_CMD}'" &>/dev/null
 }
 
 launchSimula() {
@@ -119,7 +119,7 @@ launchSimula() {
     echo "Using most recently built binary: ${LATEST_BUILD}"
 
     # stack --nix exec -- simulavr
-    logTo $LOGNAME "$LATEST_BUILD"
+    logTo "$LOGNAME" "$LATEST_BUILD"
 
     outputStageEnd
 }
@@ -144,17 +144,17 @@ buildSimula() {
 fixswrast() {
     local OUT=/run/opengl-driver
 
-    if [ ! -d $OUT ]; then
+    if [ ! -d "$OUT" ]; then
         echo "$OUT does not exist, so we're creating it. Write access to /run requires sudo:"
         sudo nix-build '<nixpkgs>' -A 'mesa_noglu.drivers' -o /run/opengl && \
-            sudo mv /run/opengl-drivers $OUT && \
+            sudo mv /run/opengl-drivers "$OUT" && \
             echo "Successfully created $OUT." || \
                 echo "Failed at creating $OUT."
     fi
 
-    if [ -d $OUT ]; then
+    if [ -d "$OUT" ]; then
         local SWRAST=`find $OUT -follow -name "swrast*"`
-        if [ ! -z $SWRAST ]; then
+        if [ ! -z "$SWRAST" ]; then
             echo "Happily surprised to find $SWRAST"
         else
             echo "There's no swrast in $OUT. This may or may not be a problem."
@@ -163,11 +163,11 @@ fixswrast() {
 }
 
 fixSteamVROnNixOS() {
-    local RUNTIMEDIR=$HOME/.steam/steam/ubuntu12_32/steam-runtime
+    local RUNTIMEDIR="$HOME/.steam/steam/ubuntu12_32/steam-runtime"
 
-    if [ ! -e $RUNTIMEDIR/run.sh ]; then
-        mkdir -p $RUNTIMEDIR
-        cp $SIM_ROOT/nixos/run.sh $RUNTIMEDIR/run.sh && \
+    if [ ! -e "$RUNTIMEDIR/run.sh" ]; then
+        mkdir -p "$RUNTIMEDIR"
+        cp "$SIM_ROOT/nixos/run.sh" "$RUNTIMEDIR/run.sh" && \
             echo "Required script has been installed: $RUNTIMEDIR/run.sh"
     fi
 }
