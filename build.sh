@@ -7,7 +7,12 @@ SIM_ROOT=$(cd "${0%/*}" && echo ${PWD})
 
 USE_NIX=1 # Use Nix by default
 
-usage() { echo "Usage: $0 [--help | -h] [--[no-]nix] [--clean] [--[only-]run] [--ubuntu-build-deps]" 1>&2; exit 1; }
+usage() {
+    echo "Usage: $0 [--help | -h] [--[no-]nix] [--clean] [--[only-]run] [--ubuntu-build-deps]" 1>&2; exit 1;
+    echo ""
+    echo "The project is built and run using Nix by default."
+    echo "Specify --no-nix to use a build method specific to your distribution (only Ubuntu is currently supported)."
+}
 
 while getopts ":hi-:" o; do
     case "${o}" in
@@ -86,14 +91,17 @@ case "$DISTROID" in
 
             if [ ! $NO_BUILD ]; then
                 buildSimula \
-                    || echo "-------"; \
-                    echo "If dependencies appear to be missing, use the option --ubuntu-build-deps to install them."
+                    || echo "If dependencies appear to be missing, use the option --ubuntu-build-deps to install them."
             fi
 
             if [ $RUN ]; then launchSimula; fi
         fi
         ;;
     *)
-        withNix
+        if [ $USE_NIX ]; then
+            withNix
+        else
+            echo "Your distribution has no specific build instructions. Nix is your only option at this time, sorry."
+        fi
         ;;
 esac

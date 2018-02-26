@@ -1,10 +1,3 @@
-if [ -z $SIM_ROOT ]; then
-    echo "$SIM_ROOT is empty. Need to know project root path."
-    exit 1
-else
-    echo "Project root: $SIM_ROOT"
-fi
-
 LOGDIR="$SIM_ROOT/logs"
 
 outputStageBegin() {

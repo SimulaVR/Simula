@@ -83,7 +83,7 @@ buildSimula() {
 
     nix-shell -p stdenv --run 'make init'
     echo ""
-    echo "stack --nix --nix-pure build:"
+    echo "stack --nix --nix-pure build"
     stack --nix --nix-pure build
 
     outputStageEnd
