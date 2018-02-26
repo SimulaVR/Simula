@@ -42,33 +42,38 @@ while getopts ":hi-:" o; do
 done
 shift $((OPTIND-1))
 
+buildWithNix() {
+    echo "Building project using Stack + Nix.."
 
-DISTROID=`cat /etc/os-release | grep '^ID=' | cut -d '=' -f 2 -`
-case $DISTROID in
+    source $SIM_ROOT/util/NixHelpers.sh
+
+    installNix
+    checkIfUnfreeAllowed
+
+    if [ ! $NO_BUILD ]; then buildSimula;  fi
+    if [ $RUN ];        then launchSimula; fi
+}
+
+getDistroID() {
+    cat /etc/os-release \
+        | grep '^ID=' \
+        | cut -d '=' -f 2 -
+}
+
+DISTROID="$(getDistroID)"
+echo "Distribution ID: $DISTROID"
+case "$DISTROID" in
     "nixos")
         if [ ! $USE_NIX ]; then
             echo "Not using Nix on NixOS makes no sense."
             exit 1
         else
-            source $SIM_ROOT/util/NixHelpers.sh
-            checkIfUnfreeAllowed
-
-            if [ ! $NO_BUILD ]; then
-                buildSimula
-            fi
-
-            if [ $RUN ]; then
-                launchSimula
-            fi
+            buildWithNix
         fi
         ;;
     "ubuntu")
         if [ $USE_NIX ]; then
-            echo "Building project using Stack + Nix.."
-            source $SIM_ROOT/util/NixHelpers.sh
-            installNix
-            checkIfUnfreeAllowed
-            buildSimula
+            buildWithNix
         else
             # TODO: Test this process.
             source $SIM_ROOT/util/UbuntuHelpers.sh
@@ -79,11 +84,6 @@ case $DISTROID in
         fi
         ;;
     *)
-        echo "Defaulting to building project with Nix.."
-        source $SIM_ROOT/util/NixHelpers.sh
-        installNix
-        checkIfUnfreeAllowed
-        echo "Building project using Stack + Nix.."
-        buildSimula
+        buildWithNix
         ;;
 esac
