@@ -99,12 +99,12 @@ launchSteamVR() {
 }
 
 launchSimula() {
-    if [ -z `pidof --single-shot steam` ]; then
+    if [ -z `pidof -s steam` ]; then
         echo "Steam not running. Launch Steam and then re-run script."
         exit 1
     fi
 
-    if [ -z `pidof --single-shot vrmonitor` ] || [ -z `pidof --single-shot vrserver` ]; then
+    if [ -z `pidof -s vrmonitor` ] || [ -z `pidof -s vrserver` ]; then
         echo "SteamVR not running. I'll start SteamVR for you, but you need to manually re-run script once it is running."
         launchSteamVR &
         exit 1
