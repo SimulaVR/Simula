@@ -43,7 +43,7 @@ done
 shift $((OPTIND-1))
 
 
-DISTROID=`cat /etc/os-release | tail -n +2 | head -n 1 | cut -d '=' -f 2 -`
+DISTROID=`cat /etc/os-release | grep '^ID=' | cut -d '=' -f 2 -`
 case $DISTROID in
     "nixos")
         if [ ! $USE_NIX ]; then
