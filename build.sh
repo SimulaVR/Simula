@@ -82,17 +82,15 @@ case "$DISTROID" in
 
             source $SIM_ROOT/util/UbuntuHelpers.sh
 
-            if [ $UBUNTU_BUILD_DEPS ]; then
-                outputStageBegin "Building project using Stack.."
-                buildSimulaDependencies
-                outputStageEnd
+            if [ $UBUNTU_BUILD_DEPS ]; then buildSimulaDependencies; fi
+
+            if [ ! $NO_BUILD ]; then
+                buildSimula \
+                    || echo "-------"; \
+                    echo "If dependencies appear to be missing, use the option --ubuntu-build-deps to install them."
             fi
 
-            outputStageBegin "Building project using Stack.."
-            buildSimula \
-                || echo "-------"; \
-                   echo "If dependencies appear to be missing, use the option --ubuntu-build-deps to install them."
-            outputStageEnd
+            if [ $RUN ]; then launchSimula; fi
         fi
         ;;
     *)
