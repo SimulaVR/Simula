@@ -5,13 +5,12 @@ else
     echo "Project root: $SIM_ROOT"
 fi
 
-LOGDIR="$SIM_ROOT/logs"
+source $SIM_ROOT/util/Helpers.sh
+
 
 ######################
 ## Distro-agnostic ##
 ####################
-
-source $SIM_ROOT/util/Helpers.sh
 
 checkIfUnfreeAllowed() {
     if [ ! $NIXPKGS_ALLOW_UNFREE ]; then
