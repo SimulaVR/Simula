@@ -152,6 +152,7 @@ upgradeStack() {
 }
 
 buildSimulaDependencies() {
+  echo "Building dependencies."
   installUbuntuDependencies
   installWaylandProtocols
   installWeston

@@ -7,7 +7,7 @@ SIM_ROOT=$(cd "${0%/*}" && echo ${PWD})
 
 USE_NIX=1 # Use Nix by default
 
-usage() { echo "Usage: $0 [--help | -h] [--[no-]nix] [--clean] [--[only-]run]" 1>&2; exit 1; }
+usage() { echo "Usage: $0 [--help | -h] [--[no-]nix] [--clean] [--[only-]run] [--ubuntu-build-deps]" 1>&2; exit 1; }
 
 while getopts ":hi-:" o; do
     case "${o}" in
@@ -29,6 +29,9 @@ while getopts ":hi-:" o; do
                 "only-run")
                     RUN=1
                     NO_BUILD=1
+                    ;;
+                "ubuntu-build-deps")
+                    UBUNTU_BUILD_DEPS=1
                     ;;
                 "help"|*)
                     usage
@@ -77,10 +80,11 @@ case "$DISTROID" in
         else
             # TODO: Test this process.
             source $SIM_ROOT/util/UbuntuHelpers.sh
-            echo "Setting up dependencies and whatnot.."
-            buildSimulaDependencies
+            if [ $UBUNTU_BUILD_DEPS ]; then buildSimulaDependencies; fi
             echo "Building project using Stack.."
-            buildSimula
+            buildSimula \
+                || echo "-------"; \
+                   echo "If dependencies appear to be missing, use the option --ubuntu-build-deps to install them."
         fi
         ;;
     *)
