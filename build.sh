@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# set -x
 
 # This script will build the project using either Nix or optionally, in the case of Ubuntu, Apt.
 
 SIM_ROOT=$(cd "${0%/*}" && echo ${PWD})
 
 USE_NIX=1 # Use Nix by default
+
+source $SIM_ROOT/util/Helpers.sh
 
 usage() {
     echo "Usage: $0 [--help | -h] [--[no-]nix] [--clean] [--[only-]run] [--ubuntu-build-deps]" 1>&2; exit 1;
@@ -62,13 +63,6 @@ withNix() {
     if [ $RUN ];        then launchSimula; fi
 }
 
-getDistroID() {
-    cat /etc/os-release \
-        | grep '^ID=' \
-        | cut -d '=' -f 2 -
-}
-
-DISTROID="$(getDistroID)"
 echo "Distribution ID: $DISTROID"
 case "$DISTROID" in
     "nixos")
@@ -82,9 +76,9 @@ case "$DISTROID" in
     "ubuntu")
         if [ $USE_NIX ]; then
             withNix
+            echo ""
+            echo "If you encounter issues with the build, try building with the --no-nix option."
         else
-            # TODO: Test this process.
-
             source $SIM_ROOT/util/UbuntuHelpers.sh
 
             if [ $UBUNTU_BUILD_DEPS ]; then buildSimulaDependencies; fi
@@ -105,3 +99,6 @@ case "$DISTROID" in
         fi
         ;;
 esac
+
+# TODO: Figure out why this one keeps being created by Steam
+if [ -d "$SIM_ROOT/fontconfig" ]; then rm -r "$SIM_ROOT/fontconfig"; fi

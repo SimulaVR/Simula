@@ -5,17 +5,12 @@ else
     echo "Project root: $SIM_ROOT"
 fi
 
-source $SIM_ROOT/util/Helpers.sh
-
-
-######################
-## Distro-agnostic ##
-####################
-
 checkIfUnfreeAllowed() {
     if [ ! $NIXPKGS_ALLOW_UNFREE ]; then
-        echo "Regrettably, the project currently relies on SteamVR, which is proprietary software."
-        echo "If you are okay with this, allow unfree packages temporarily with \`export NIXPKS_ALLOW_UNFREE=1\` and re-run this script."
+        echo ""
+        echo "The project currently only works with SteamVR, which is proprietary software."
+        echo "By default, installation of unfree software is disallowed."
+        echo "To bypass this restriction temporarily, enter \`export NIXPKS_ALLOW_UNFREE=1\` and re-run this script."
         echo "We intend to free the project from any proprietary dependencies in the future."
         exit 1
     fi
@@ -31,50 +26,6 @@ postBuild() {
     else
         addViveUdevRules
     fi
-    outputStageEnd
-}
-
-# Will launch SteamVR (if installed) via steam-run (with extra runtime deps)
-launchSteamVR() {
-    local VRMONITOR="$HOME/.local/share/Steam/steamapps/common/SteamVR/bin/vrmonitor.sh"
-    local LOGNAME=steamvr.log
-
-    if [ ! -e "$VRMONITOR" ]; then
-        echo "SteamVR must first be installed through Steam."
-        exit 1
-    fi
-
-    if [ ! -e "$HOME/.steam/steam/ubuntu12_32/steam-runtime/run.sh" ]; then fixSteamVROnNixos; fi
-
-    echo "Launching SteamVR.."
-    # Using env var assignment trickery to add extra runtime deps to steam-run
-    STEAMRUN_CMD='steam-run bash -c "export PATH=$PATH ; ~/.local/share/Steam/steamapps/common/SteamVR/bin/vrmonitor.sh"'
-    logTo "$LOGNAME" "nix-shell -p bash steam-run lsb-release usbutils procps --run '${STEAMRUN_CMD}'" &>/dev/null
-}
-
-launchSimula() {
-    if [ -z `pidof -s steam` ]; then
-        echo "Steam not running. Launch Steam and then re-run script."
-        exit 1
-    fi
-
-    if [ -z `pidof -s vrmonitor` ] || [ -z `pidof -s vrserver` ]; then
-        echo "SteamVR not running. I'll start SteamVR for you, but you need to manually re-run script once it is running."
-        launchSteamVR &
-        exit 1
-    fi
-
-    local LOGNAME=simulavr.log
-
-    # Get the most recently built binary
-    local LATEST_BUILD=`find ${SIM_ROOT}/.stack-work -name simulavr -type f -exec ls -1t {} + | head -n 1`
-
-    outputStageBegin "Launching Simula.."
-    echo "Using most recently built binary: ${LATEST_BUILD}"
-
-    # stack --nix exec -- simulavr
-    logTo "$LOGNAME" "$LATEST_BUILD"
-
     outputStageEnd
 }
 
@@ -126,10 +77,6 @@ fixSteamVROnNixOS() {
     fi
 }
 
-
-####################
-## For non-NixOS ##
-###################
 
 # This is safe to run even when Nix is installed.
 installNix() {
