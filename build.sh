@@ -45,7 +45,7 @@ while getopts ":hi-:" o; do
 done
 shift $((OPTIND-1))
 
-buildWithNix() {
+withNix() {
     echo "Building project using Stack + Nix.."
 
     source $SIM_ROOT/util/NixHelpers.sh
@@ -71,12 +71,12 @@ case "$DISTROID" in
             echo "Not using Nix on NixOS makes no sense."
             exit 1
         else
-            buildWithNix
+            withNix
         fi
         ;;
     "ubuntu")
         if [ $USE_NIX ]; then
-            buildWithNix
+            withNix
         else
             # TODO: Test this process.
 
@@ -96,6 +96,6 @@ case "$DISTROID" in
         fi
         ;;
     *)
-        buildWithNix
+        withNix
         ;;
 esac
