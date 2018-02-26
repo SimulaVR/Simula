@@ -1,3 +1,12 @@
+if [ -z $SIM_ROOT ]; then
+    echo "$SIM_ROOT is empty. Need to know project root path."
+    exit 1
+else
+    echo "Project root: $SIM_ROOT"
+fi
+
+source $SIM_ROOT/util/Helpers.sh
+
 installUbuntuDependencies() {
   sudo apt install \
       g++ \
@@ -111,28 +120,6 @@ installOpenVR() {
     #       store, i.e.:
     cd "$SIMULA_DIR"
     sudo cp ./simula-openvr/openvr/lib/linux64/libopenvr_api.so /usr/local/lib
-}
-
-# If you have Ubuntu 17.10 you can just run `sudo apt-get install steam-devices` instead of this command
-addViveUdevRules() {
-  local VIVE_RULES="/lib/udev/rules.d/60-HTC-Vive-perms.rules";
-
-  if [ ! -f /lib/udev/rules.d/60-HTC-Vive-perms.rules ]; then
-    echo '# HTC Vive HID Sensor naming and permissioning'                                                            >> $VIVE_RULES
-    echo 'KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0bb4", ATTRS{idProduct}=="2c87", TAG+="uaccess"' >> $VIVE_RULES
-    echo 'KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="28de", ATTRS{idProduct}=="2101", TAG+="uaccess"' >> $VIVE_RULES
-    echo 'KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="28de", ATTRS{idProduct}=="2000", TAG+="uaccess"' >> $VIVE_RULES
-    echo 'KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="28de", ATTRS{idProduct}=="1043", TAG+="uaccess"' >> $VIVE_RULES
-    echo 'KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="28de", ATTRS{idProduct}=="2050", TAG+="uaccess"' >> $VIVE_RULES
-    echo 'KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="28de", ATTRS{idProduct}=="2011", TAG+="uaccess"' >> $VIVE_RULES
-    echo 'KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="28de", ATTRS{idProduct}=="2012", TAG+="uaccess"' >> $VIVE_RULES
-    echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="0bb4", ATTRS{idProduct}=="2c87", TAG+="uaccess"'                       >> $VIVE_RULES
-    echo '# HTC Camera USB Node'                                                                                     >> $VIVE_RULES
-    echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="114d", ATTRS{idProduct}=="8328", TAG+="uaccess"'                       >> $VIVE_RULES
-    echo '# HTC Mass Storage Node'                                                                                   >> $VIVE_RULES
-    echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="114d", ATTRS{idProduct}=="8200", TAG+="uaccess"'                       >> $VIVE_RULES
-    echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="114d", ATTRS{idProduct}=="8a12", TAG+="uaccess"'                       >> $VIVE_RULES
-  fi
 }
 
 # It is best to install stack via curl to avoid
