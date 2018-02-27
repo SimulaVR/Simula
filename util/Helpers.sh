@@ -73,7 +73,13 @@ logTo() {
     fi
 
     echo "Logging command: $CMD"
+
+    echo "---------------" >> "$LOG"
+    echo "" >> "$LOG"
+    echo `date` >> "$LOG"
+    echo "" >> "$LOG"
     eval $CMD | tee -a "$LOG"
+
     echo ""
     echo "Output logged to $LOG"
 }
