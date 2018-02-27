@@ -4,7 +4,8 @@
 
 SIM_ROOT=$(cd "${0%/*}" && echo ${PWD})
 
-USE_NIX=1 # Use Nix by default
+# USE_NIX=1 # Use Nix by default
+USE_NIX="" # Don't use Nix by default because of https://github.com/NixOS/nixpkgs/issues/9415
 
 source $SIM_ROOT/util/Helpers.sh
 
@@ -66,12 +67,12 @@ withNix() {
 echo "Distribution ID: $DISTROID"
 case "$DISTROID" in
     "nixos")
-        if [ ! $USE_NIX ]; then
-            echo "Not using Nix on NixOS makes no sense."
-            exit 1
-        else
+        # if [ ! $USE_NIX ]; then
+        #     echo "Not using Nix on NixOS makes no sense."
+        #     exit 1
+        # else
             withNix
-        fi
+        # fi
         ;;
     "ubuntu")
         if [ $USE_NIX ]; then
