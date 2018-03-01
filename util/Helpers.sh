@@ -53,8 +53,6 @@ logTo() {
     local LOG=$LOGDIR/$1
     local CMD=$2
 
-    echo "$LOG"
-    echo "$CMD"
     if [ -z "$LOG" ]; then
         echo "Attempted to log without log name nor any command to run."
         exit 1
@@ -74,11 +72,12 @@ logTo() {
 
     echo "Logging command: $CMD"
 
-    echo "---------------" >> "$LOG"
-    echo "" >> "$LOG"
-    echo `date` >> "$LOG"
-    echo "" >> "$LOG"
-    eval $CMD | tee -a "$LOG"
+    echo "---------------" >> $LOG
+    echo "" >> $LOG
+    echo `date` >> $LOG
+    echo "" >> $LOG
+    # eval $CMD | tee -a "$LOG"
+    eval $CMD &>$LOG
 
     echo ""
     echo "Output logged to $LOG"
@@ -97,7 +96,6 @@ launchSteamVR() {
     if [ ! -e "$HOME/.steam/steam/ubuntu12_32/steam-runtime/run.sh" ]; then fixSteamVROnNixos; fi
 
     echo "Launching SteamVR.."
-    echo "Distro ID: $DISTROID"
     if [ "$DISTROID" == "nixos" ]; then
         echo "Using steam-run to launch process. "
         # Using env var assignment trickery to add extra runtime deps to steam-run

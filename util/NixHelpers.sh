@@ -72,7 +72,8 @@ fixSteamVROnNixOS() {
 
     if [ ! -e "$RUNTIMEDIR/run.sh" ]; then
         mkdir -p "$RUNTIMEDIR"
-        cp "$SIM_ROOT/nixos/run.sh" "$RUNTIMEDIR/run.sh" && \
+        # steam-run cp "/steamrt/run.sh" "$RUNTIMEDIR/run.sh" && \
+        steam-run cp "${SIM_ROOT}/util/res/run.sh" "$RUNTIMEDIR/run.sh" && \
             echo "Required script has been installed: $RUNTIMEDIR/run.sh"
     fi
 }
