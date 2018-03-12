@@ -52,52 +52,62 @@ installUbuntuDependencies() {
 }
 
 installWaylandProtocols() {
-  cd /tmp
-  git clone https://github.com/wayland-project/wayland-protocols.git wayland-protocols
-  cd /tmp/wayland-protocols
-  ./autogen.sh
-  ./configure
-  make 
-  sudo make install
+    if [ ! -e "/usr/local/share/wayland-protocols" ]; then
+        cd /tmp
+        git clone https://github.com/wayland-project/wayland-protocols.git wayland-protocols
+        cd /tmp/wayland-protocols
+        ./autogen.sh
+        ./configure
+        make 
+        sudo make install
+    fi
 }
 
 # requires Wayland Protocols
 installWeston() {
-  cd /tmp
-  git clone https://github.com/wayland-project/weston.git weston
-  cd /tmp/weston
-  if [ -z $1 ]; then
-    git checkout -b v3.0.0 3.0.0
-  else
-    git checkout -b v"$1" "$1" # allows us to opt in to alternative versions i.e. "2.0.0"
-  fi
-  ./autogen.sh
-  ./configure
-  make
-  sudo make install
+    if [ ! -e "/usr/local/lib/libweston-3" ]; then
+      cd /tmp
+      git clone https://github.com/wayland-project/weston.git weston
+      cd /tmp/weston
+      if [ -z $1 ]; then
+        git checkout -b v3.0.0 3.0.0
+      else
+        git checkout -b v"$1" "$1" # allows us to opt in to alternative versions i.e. "2.0.0"
+      fi
+      ./autogen.sh
+      ./configure
+      make
+      sudo make install
+    fi
 }
 
 update_gcc_to_7.2() {
-  sudo add-apt-repository ppa:ubuntu-toolchain-r/test
-  sudo apt-get update
-  sudo apt-get install gcc-7
-  sudo apt-get install g++-7
-  sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 60 --slave /usr/bin/g++ g++ /usr/bin/g++-7
-  # `gcc -v` should yield version 7.2
-  # `g++ -v` should yield version 7.2
+    if [ ! -e "/usr/bin/gcc-7" ]; then
+        if [ -z `ls /etc/apt/sources.list.d/ubuntu-toolchain-r-ubuntu-test-*.list` ]; then
+            sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+            sudo apt-get update
+        fi
+        sudo apt-get install gcc-7
+        sudo apt-get install g++-7
+        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 60 --slave /usr/bin/g++ g++ /usr/bin/g++-7
+    fi
 }
 
 installSteam() {
-  sudo add-apt-repository multiverse
-  sudo apt update
-  sudo apt install steam
+    if [ -z `which steam` ]; then
+        sudo add-apt-repository multiverse
+        sudo apt update
+        sudo apt install steam
+    fi
 }
 
 installNvidiaDrivers() {
-  # see https://github.com/ValveSoftware/SteamVR-for-Linux
-  sudo add-apt-repository ppa:graphics-drivers/ppa
-  sudo apt-get update
-  sudo apt-get install nvidia-387
+    # see https://github.com/ValveSoftware/SteamVR-for-Linux
+    if [ -z `ls /etc/apt/sources.list.d/graphics-drivers-ubuntu-ppa-*.list` ]; then
+        sudo add-apt-repository ppa:graphics-drivers/ppa
+        sudo apt-get update
+    fi
+    sudo apt-get install nvidia-387
 }
 
 # Unclear if this is needed long-term.
@@ -123,14 +133,14 @@ installOpenVR() {
 # It is best to install stack via curl to avoid
 # old versions found in Ubuntu's package stores.
 installStack() {
-    curl -sSL https://get.haskellstack.org/ | sh
+    curl -sSL https://get.haskellstack.org/ | sh -s - f
     echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc # ensures stack programs like hpack are on your PATH
     . ~/.bashrc
 }
 
 # Use this if you already have stack installed via apt-get install.
 upgradeStack() {
-  cd ~
+  #cd ~
   stack upgrade
   stack setup
   stack install hpack                                    # Same with old versions of hpack

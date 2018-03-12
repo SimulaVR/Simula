@@ -82,7 +82,9 @@ case "$DISTROID" in
         else
             source $SIM_ROOT/util/UbuntuHelpers.sh
 
-            if [ $UBUNTU_BUILD_DEPS ]; then buildSimulaDependencies; fi
+            if [ $UBUNTU_BUILD_DEPS ]; then 
+                buildSimulaDependencies
+            fi
 
             if [ ! $NO_BUILD ]; then
                 buildSimula \
