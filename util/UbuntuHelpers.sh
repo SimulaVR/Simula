@@ -118,7 +118,7 @@ installOpenVR() {
     cd /tmp/openvr
     mkdir build
     cd build
-    cmake ..
+    cmake -DBUILD_SHARED=ON .. # This forces openvr to build `libopenvr_api.so` as opposed to `libopenvr_api.a`, so that GHCi works
     make
     sudo make install
     sudo ldconfig # OpenVR's `make install` fails to run this on its own
