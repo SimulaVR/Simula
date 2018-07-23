@@ -1,0 +1,1022 @@
+[gd_scene load_steps=21 format=2]
+
+[ext_resource path="res://addons/godot-haskell-plugin/demo/scenes/Room/entities/room_01/room_01.obj" type="ArrayMesh" id=1]
+[ext_resource path="res://addons/godot-haskell-plugin/demo/scenes/Room/materials/wall/Bricks_1024_albedo.jpg" type="Texture" id=2]
+[ext_resource path="res://addons/godot-haskell-plugin/demo/scenes/Room/materials/wall/Bricks_1024_normal.jpg" type="Texture" id=3]
+[ext_resource path="res://addons/godot-haskell-plugin/demo/scenes/Room/materials/wall/Bricks_1024_roughness.jpg" type="Texture" id=4]
+[ext_resource path="res://addons/godot-haskell-plugin/demo/scenes/Room/door/Door.tscn" type="PackedScene" id=5]
+[ext_resource path="res://addons/godot-haskell-plugin/demo/scenes/Room/entities/Ceiling_Lamp.tscn" type="PackedScene" id=6]
+
+
+
+[sub_resource type="CubeMesh" id=1]
+
+size = Vector3( 2, 2, 2 )
+subdivide_width = 0
+subdivide_height = 0
+subdivide_depth = 0
+
+[sub_resource type="SpatialMaterial" id=2]
+
+render_priority = 0
+flags_transparent = false
+flags_unshaded = false
+flags_vertex_lighting = false
+flags_no_depth_test = false
+flags_use_point_size = false
+flags_world_triplanar = false
+flags_fixed_size = false
+flags_albedo_tex_force_srgb = false
+vertex_color_use_as_albedo = false
+vertex_color_is_srgb = false
+params_diffuse_mode = 0
+params_specular_mode = 0
+params_blend_mode = 0
+params_cull_mode = 0
+params_depth_draw_mode = 0
+params_line_width = 1.0
+params_point_size = 1.0
+params_billboard_mode = 0
+params_grow = false
+params_use_alpha_scissor = false
+albedo_color = Color( 1, 1, 1, 1 )
+metallic = 0.0
+metallic_specular = 0.0
+metallic_texture_channel = 0
+roughness = 1.0
+roughness_texture_channel = 0
+emission_enabled = false
+normal_enabled = true
+normal_scale = 1.0
+rim_enabled = false
+clearcoat_enabled = false
+anisotropy_enabled = false
+ao_enabled = false
+depth_enabled = false
+subsurf_scatter_enabled = false
+transmission_enabled = false
+refraction_enabled = false
+detail_enabled = false
+uv1_scale = Vector3( 1, 1, 100 )
+uv1_offset = Vector3( 0, 0, 0 )
+uv1_triplanar = true
+uv1_triplanar_sharpness = 1.0
+uv2_scale = Vector3( 1, 1, 1 )
+uv2_offset = Vector3( 0, 0, 0 )
+uv2_triplanar = false
+uv2_triplanar_sharpness = 1.0
+proximity_fade_enable = false
+distance_fade_enable = false
+_sections_unfolded = [ "Albedo", "Metallic", "NormalMap", "Roughness", "UV1" ]
+
+[sub_resource type="CubeMesh" id=3]
+
+size = Vector3( 2, 2, 2 )
+subdivide_width = 0
+subdivide_height = 0
+subdivide_depth = 0
+
+[sub_resource type="SpatialMaterial" id=4]
+
+render_priority = 0
+flags_transparent = false
+flags_unshaded = false
+flags_vertex_lighting = false
+flags_no_depth_test = false
+flags_use_point_size = false
+flags_world_triplanar = false
+flags_fixed_size = false
+flags_albedo_tex_force_srgb = false
+vertex_color_use_as_albedo = false
+vertex_color_is_srgb = false
+params_diffuse_mode = 0
+params_specular_mode = 0
+params_blend_mode = 0
+params_cull_mode = 0
+params_depth_draw_mode = 0
+params_line_width = 1.0
+params_point_size = 1.0
+params_billboard_mode = 0
+params_grow = false
+params_use_alpha_scissor = false
+albedo_color = Color( 0.203125, 0.203125, 0.203125, 1 )
+metallic = 0.0
+metallic_specular = 0.5
+metallic_texture_channel = 0
+roughness = 0.75
+roughness_texture_channel = 0
+emission_enabled = false
+normal_enabled = false
+rim_enabled = false
+clearcoat_enabled = false
+anisotropy_enabled = false
+ao_enabled = false
+depth_enabled = false
+subsurf_scatter_enabled = false
+transmission_enabled = false
+refraction_enabled = false
+detail_enabled = false
+uv1_scale = Vector3( 1, 1, 1 )
+uv1_offset = Vector3( 0, 0, 0 )
+uv1_triplanar = false
+uv1_triplanar_sharpness = 1.0
+uv2_scale = Vector3( 1, 1, 1 )
+uv2_offset = Vector3( 0, 0, 0 )
+uv2_triplanar = false
+uv2_triplanar_sharpness = 1.0
+proximity_fade_enable = false
+distance_fade_enable = false
+_sections_unfolded = [ "Albedo", "Roughness" ]
+
+[sub_resource type="PlaneMesh" id=5]
+
+size = Vector2( 2, 2 )
+subdivide_width = 0
+subdivide_depth = 0
+
+[sub_resource type="SpatialMaterial" id=6]
+
+render_priority = 0
+flags_transparent = false
+flags_unshaded = false
+flags_vertex_lighting = false
+flags_no_depth_test = false
+flags_use_point_size = false
+flags_world_triplanar = false
+flags_fixed_size = false
+flags_albedo_tex_force_srgb = false
+vertex_color_use_as_albedo = false
+vertex_color_is_srgb = false
+params_diffuse_mode = 0
+params_specular_mode = 0
+params_blend_mode = 0
+params_cull_mode = 0
+params_depth_draw_mode = 0
+params_line_width = 1.0
+params_point_size = 1.0
+params_billboard_mode = 0
+params_grow = false
+params_use_alpha_scissor = false
+albedo_color = Color( 1, 0.718316, 0.527344, 1 )
+metallic = 0.0
+metallic_specular = 0.0
+metallic_texture_channel = 0
+roughness = 1.0
+roughness_texture_channel = 0
+emission_enabled = false
+normal_enabled = false
+rim_enabled = false
+clearcoat_enabled = false
+anisotropy_enabled = false
+ao_enabled = false
+depth_enabled = false
+subsurf_scatter_enabled = false
+transmission_enabled = false
+refraction_enabled = false
+detail_enabled = false
+uv1_scale = Vector3( 1, 1, 1 )
+uv1_offset = Vector3( 0, 0, 0 )
+uv1_triplanar = false
+uv1_triplanar_sharpness = 1.0
+uv2_scale = Vector3( 1, 1, 1 )
+uv2_offset = Vector3( 0, 0, 0 )
+uv2_triplanar = false
+uv2_triplanar_sharpness = 1.0
+proximity_fade_enable = false
+distance_fade_enable = false
+_sections_unfolded = [ "Albedo", "Roughness" ]
+
+[sub_resource type="CubeMesh" id=7]
+
+size = Vector3( 2, 2, 2 )
+subdivide_width = 0
+subdivide_height = 0
+subdivide_depth = 0
+
+[sub_resource type="SpatialMaterial" id=8]
+
+render_priority = 0
+flags_transparent = false
+flags_unshaded = false
+flags_vertex_lighting = false
+flags_no_depth_test = false
+flags_use_point_size = false
+flags_world_triplanar = false
+flags_fixed_size = false
+flags_albedo_tex_force_srgb = false
+vertex_color_use_as_albedo = false
+vertex_color_is_srgb = false
+params_diffuse_mode = 0
+params_specular_mode = 0
+params_blend_mode = 0
+params_cull_mode = 0
+params_depth_draw_mode = 0
+params_line_width = 1.0
+params_point_size = 1.0
+params_billboard_mode = 0
+params_grow = false
+params_use_alpha_scissor = false
+albedo_color = Color( 0.195312, 0.195312, 0.195312, 1 )
+metallic = 0.0
+metallic_specular = 1.0
+metallic_texture_channel = 0
+roughness = 1.0
+roughness_texture_channel = 0
+emission_enabled = false
+normal_enabled = false
+rim_enabled = false
+clearcoat_enabled = false
+anisotropy_enabled = false
+ao_enabled = false
+depth_enabled = false
+subsurf_scatter_enabled = false
+transmission_enabled = false
+refraction_enabled = false
+detail_enabled = false
+uv1_scale = Vector3( 1, 1, 1 )
+uv1_offset = Vector3( 0, 0, 0 )
+uv1_triplanar = false
+uv1_triplanar_sharpness = 1.0
+uv2_scale = Vector3( 1, 1, 1 )
+uv2_offset = Vector3( 0, 0, 0 )
+uv2_triplanar = false
+uv2_triplanar_sharpness = 1.0
+proximity_fade_enable = false
+distance_fade_enable = false
+_sections_unfolded = [ "Albedo", "Metallic", "Roughness", "UV1" ]
+
+[sub_resource type="ConcavePolygonShape" id=9]
+
+data = PoolVector3Array( -1, 1, 1, 1, 1, 1, -1, -1, 1, 1, 1, 1, 1, -1, 1, -1, -1, 1, 1, 1, -1, -1, 1, -1, 1, -1, -1, -1, 1, -1, -1, -1, -1, 1, -1, -1, 1, 1, 1, 1, 1, -1, 1, -1, 1, 1, 1, -1, 1, -1, -1, 1, -1, 1, -1, 1, -1, -1, 1, 1, -1, -1, -1, -1, 1, 1, -1, -1, 1, -1, -1, -1, 1, 1, 1, -1, 1, 1, 1, 1, -1, -1, 1, 1, -1, 1, -1, 1, 1, -1, -1, -1, 1, 1, -1, 1, -1, -1, -1, 1, -1, 1, 1, -1, -1, -1, -1, -1 )
+
+[sub_resource type="ConcavePolygonShape" id=10]
+
+data = PoolVector3Array( -1, 1, 1, 1, 1, 1, -1, -1, 1, 1, 1, 1, 1, -1, 1, -1, -1, 1, 1, 1, -1, -1, 1, -1, 1, -1, -1, -1, 1, -1, -1, -1, -1, 1, -1, -1, 1, 1, 1, 1, 1, -1, 1, -1, 1, 1, 1, -1, 1, -1, -1, 1, -1, 1, -1, 1, -1, -1, 1, 1, -1, -1, -1, -1, 1, 1, -1, -1, 1, -1, -1, -1, 1, 1, 1, -1, 1, 1, 1, 1, -1, -1, 1, 1, -1, 1, -1, 1, 1, -1, -1, -1, 1, 1, -1, 1, -1, -1, -1, 1, -1, 1, 1, -1, -1, -1, -1, -1 )
+
+[sub_resource type="ConcavePolygonShape" id=11]
+
+data = PoolVector3Array( -1, 1, 1, 1, 1, 1, -1, -1, 1, 1, 1, 1, 1, -1, 1, -1, -1, 1, 1, 1, -1, -1, 1, -1, 1, -1, -1, -1, 1, -1, -1, -1, -1, 1, -1, -1, 1, 1, 1, 1, 1, -1, 1, -1, 1, 1, 1, -1, 1, -1, -1, 1, -1, 1, -1, 1, -1, -1, 1, 1, -1, -1, -1, -1, 1, 1, -1, -1, 1, -1, -1, -1, 1, 1, 1, -1, 1, 1, 1, 1, -1, -1, 1, 1, -1, 1, -1, 1, 1, -1, -1, -1, 1, 1, -1, 1, -1, -1, -1, 1, -1, 1, 1, -1, -1, -1, -1, -1 )
+
+[sub_resource type="ConcavePolygonShape" id=12]
+
+data = PoolVector3Array( -1, 1, 1, 1, 1, 1, -1, -1, 1, 1, 1, 1, 1, -1, 1, -1, -1, 1, 1, 1, -1, -1, 1, -1, 1, -1, -1, -1, 1, -1, -1, -1, -1, 1, -1, -1, 1, 1, 1, 1, 1, -1, 1, -1, 1, 1, 1, -1, 1, -1, -1, 1, -1, 1, -1, 1, -1, -1, 1, 1, -1, -1, -1, -1, 1, 1, -1, -1, 1, -1, -1, -1, 1, 1, 1, -1, 1, 1, 1, 1, -1, -1, 1, 1, -1, 1, -1, 1, 1, -1, -1, -1, 1, 1, -1, 1, -1, -1, -1, 1, -1, 1, 1, -1, -1, -1, -1, -1 )
+
+[sub_resource type="SpatialMaterial" id=13]
+
+render_priority = 0
+flags_transparent = false
+flags_unshaded = false
+flags_vertex_lighting = false
+flags_no_depth_test = false
+flags_use_point_size = false
+flags_world_triplanar = false
+flags_fixed_size = false
+flags_albedo_tex_force_srgb = false
+vertex_color_use_as_albedo = false
+vertex_color_is_srgb = false
+params_diffuse_mode = 0
+params_specular_mode = 0
+params_blend_mode = 0
+params_cull_mode = 0
+params_depth_draw_mode = 0
+params_line_width = 1.0
+params_point_size = 1.0
+params_billboard_mode = 0
+params_grow = false
+params_use_alpha_scissor = false
+albedo_color = Color( 0.9375, 0.973633, 1, 1 )
+albedo_texture = ExtResource( 2 )
+metallic = 0.2
+metallic_specular = 0.0
+metallic_texture_channel = 0
+roughness = 0.85
+roughness_texture = ExtResource( 4 )
+roughness_texture_channel = 0
+emission_enabled = false
+normal_enabled = true
+normal_scale = 1.0
+normal_texture = ExtResource( 3 )
+rim_enabled = false
+clearcoat_enabled = false
+anisotropy_enabled = false
+ao_enabled = false
+depth_enabled = false
+subsurf_scatter_enabled = false
+transmission_enabled = false
+refraction_enabled = false
+detail_enabled = false
+uv1_scale = Vector3( 0.2, 0.2, 0.2 )
+uv1_offset = Vector3( 0, 0, 0 )
+uv1_triplanar = true
+uv1_triplanar_sharpness = 1.0
+uv2_scale = Vector3( 1, 1, 1 )
+uv2_offset = Vector3( 0, 0, 0 )
+uv2_triplanar = false
+uv2_triplanar_sharpness = 1.0
+proximity_fade_enable = false
+distance_fade_enable = false
+_sections_unfolded = [ "Metallic", "NormalMap", "Roughness", "UV1" ]
+
+[sub_resource type="ConcavePolygonShape" id=14]
+
+data = PoolVector3Array( -8.0938, 5.7617, -14.9766, -8.0938, -5.8398, -14.9766, 8.0938, 5.7617, -14.9766, 8.0938, 5.7617, -14.9766, -8.0938, -5.8398, -14.9766, 8.0938, -5.8398, -14.9766, 8.0938, 5.7617, -14.9766, 8.0938, -5.8398, -14.9766, 8.0938, 5.7617, 14.9766, 8.0938, 5.7617, 14.9766, 8.0938, -5.8398, -14.9766, 8.0938, -5.8398, 14.9766, 8.0938, 5.7617, 14.9766, 8.0938, -5.8398, 14.9766, -8.0938, 5.7617, 14.9766, -8.0938, 5.7617, 14.9766, 8.0938, -5.8398, 14.9766, -8.0938, -5.8398, 14.9766, -8.0938, 5.7617, 14.9766, -8.0938, -5.8398, 14.9766, -8.0938, 5.7617, -14.9766, -8.0938, 5.7617, -14.9766, -8.0938, -5.8398, 14.9766, -8.0938, -5.8398, -14.9766, 8.0938, 5.7617, -14.9766, 8.0938, 5.7617, 14.9766, 7.7852, 5.7617, -14.7031, 7.7852, 5.7617, -14.7031, 8.0938, 5.7617, 14.9766, 7.7852, 5.7617, 14.7031, 7.7852, 5.7617, -14.7031, -7.7852, 5.7617, -14.7031, 8.0938, 5.7617, -14.9766, 8.0938, 5.7617, -14.9766, -7.7852, 5.7617, -14.7031, -8.0938, 5.7617, -14.9766, -7.7852, 5.7617, -14.7031, -7.7852, 5.7617, 14.7031, -8.0938, 5.7617, -14.9766, -8.0938, 5.7617, -14.9766, -7.7852, 5.7617, 14.7031, -8.0938, 5.7617, 14.9766, 8.0938, 5.7617, 14.9766, -8.0938, 5.7617, 14.9766, 7.7852, 5.7617, 14.7031, 7.7852, 5.7617, 14.7031, -8.0938, 5.7617, 14.9766, -7.7852, 5.7617, 14.7031, -8.0938, -5.8398, -14.9766, -8.0938, -5.8398, 14.9766, 8.0938, -5.8398, -14.9766, 8.0938, -5.8398, -14.9766, -8.0938, -5.8398, 14.9766, 8.0938, -5.8398, 14.9766, 7.7852, 5.7617, -14.7031, 7.7852, -5.2773, -14.7031, -7.7852, 5.7617, -14.7031, -7.7852, 5.7617, -14.7031, 7.7852, -5.2773, -14.7031, -7.7852, -5.2773, -14.7031, 7.7852, 5.7617, 14.7031, 7.7852, -5.2773, 14.7031, 7.7852, 5.7617, -14.7031, 7.7852, 5.7617, -14.7031, 7.7852, -5.2773, 14.7031, 7.7852, -5.2773, -14.7031, -7.7852, 5.7617, 14.7031, -7.7852, -5.2773, 14.7031, 7.7852, 5.7617, 14.7031, 7.7852, 5.7617, 14.7031, -7.7852, -5.2773, 14.7031, 7.7852, -5.2773, 14.7031, -7.7852, 5.7617, -14.7031, -7.7852, -5.2773, -14.7031, -7.7852, 5.7617, 14.7031, -7.7852, 5.7617, 14.7031, -7.7852, -5.2773, -14.7031, -7.7852, -5.2773, 14.7031, -7.7852, -5.2773, 14.7031, -7.7852, -5.2773, -14.7031, 7.7852, -5.2773, 14.7031, 7.7852, -5.2773, 14.7031, -7.7852, -5.2773, -14.7031, 7.7852, -5.2773, -14.7031 )
+
+[node name="Room" type="Spatial"]
+
+[node name="MeshInstance3" type="MeshInstance" parent="." index="0"]
+
+transform = Transform( 0.2, 0, 0, 0, 0.15, 0, 0, 0, 11.6375, -6, 0, 0 )
+visible = false
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = true
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 1 )
+skeleton = NodePath("..")
+material/0 = SubResource( 2 )
+
+[node name="MeshInstance4" type="MeshInstance" parent="." index="1"]
+
+transform = Transform( 0.2, 0, 0, 0, 0.15, 0, 0, 0, 11.6375, 6, 0, 0 )
+visible = false
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = true
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 1 )
+skeleton = NodePath("..")
+material/0 = SubResource( 2 )
+
+[node name="MeshInstance5" type="MeshInstance" parent="." index="2"]
+
+transform = Transform( -8.74228e-09, 0, 5.81875, 0, 0.15, 0, -0.2, 0, -2.54346e-07, -4.95985e-07, 0, -11.3468 )
+visible = false
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = true
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 1 )
+skeleton = NodePath("..")
+material/0 = SubResource( 2 )
+
+[node name="MeshInstance6" type="MeshInstance" parent="." index="3"]
+
+transform = Transform( -8.74228e-09, 0, 5.81875, 0, 0.15, 0, -0.2, 0, -2.54346e-07, 4.93028e-07, 0, 11.2792 )
+visible = false
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = true
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 1 )
+skeleton = NodePath("..")
+material/0 = SubResource( 2 )
+_sections_unfolded = [ "material" ]
+
+[node name="floor" type="MeshInstance" parent="." index="4"]
+
+transform = Transform( 6.05, 0, 0, 0, 0.05, 0, 0, 0, 11.25, 0, -0.0426321, 0 )
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = true
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 3 )
+skeleton = NodePath("..")
+material/0 = SubResource( 4 )
+_sections_unfolded = [ "material" ]
+
+[node name="ceiling" type="MeshInstance" parent="." index="5"]
+
+transform = Transform( -6.16583, 8.74228e-08, 0, -5.39034e-07, -1, 0, 0, 0, 11.6728, -0.00774586, 8.48176, -0.0179863 )
+visible = false
+layers = 1
+material_override = null
+cast_shadow = 0
+extra_cull_margin = 0.0
+use_in_baked_light = true
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 5 )
+skeleton = NodePath("..")
+material/0 = SubResource( 6 )
+_sections_unfolded = [ "Geometry", "LOD", "material" ]
+
+[node name="stairs" type="Spatial" parent="." index="6"]
+
+editor/display_folded = true
+transform = Transform( 1.70968, 0, 0, 0, 1.15, 0, 0, 0, 2.0139, 2.25, 0, 0.135 )
+_sections_unfolded = [ "Transform" ]
+
+[node name="MeshInstance3" type="MeshInstance" parent="stairs" index="0"]
+
+transform = Transform( 1, 0, 0, 0, 0.12301, 0, 0, 0, 0.3, 0, 0.231669, 0 )
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = true
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 7 )
+skeleton = NodePath("..")
+material/0 = SubResource( 8 )
+_sections_unfolded = [ "Geometry", "Transform", "material" ]
+
+[node name="StaticBody" type="StaticBody" parent="stairs/MeshInstance3" index="0"]
+
+input_ray_pickable = true
+input_capture_on_drag = false
+collision_layer = 1
+collision_mask = 7
+friction = 1.0
+bounce = 0.0
+constant_linear_velocity = Vector3( 0, 0, 0 )
+constant_angular_velocity = Vector3( 0, 0, 0 )
+_sections_unfolded = [ "Collision" ]
+
+[node name="CollisionShape" type="CollisionShape" parent="stairs/MeshInstance3/StaticBody" index="0"]
+
+shape = SubResource( 9 )
+disabled = false
+
+[node name="MeshInstance7" type="MeshInstance" parent="stairs" index="1"]
+
+transform = Transform( 1, 0, 0, 0, 0.12301, 0, 0, 0, 0.3, 0, 2.23167, 2 )
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = true
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 7 )
+skeleton = NodePath("..")
+material/0 = SubResource( 8 )
+_sections_unfolded = [ "Geometry", "Transform" ]
+
+[node name="StaticBody" type="StaticBody" parent="stairs/MeshInstance7" index="0"]
+
+input_ray_pickable = true
+input_capture_on_drag = false
+collision_layer = 1
+collision_mask = 7
+friction = 1.0
+bounce = 0.0
+constant_linear_velocity = Vector3( 0, 0, 0 )
+constant_angular_velocity = Vector3( 0, 0, 0 )
+_sections_unfolded = [ "Collision" ]
+
+[node name="CollisionShape" type="CollisionShape" parent="stairs/MeshInstance7/StaticBody" index="0"]
+
+shape = SubResource( 9 )
+disabled = false
+
+[node name="MeshInstance5" type="MeshInstance" parent="stairs" index="2"]
+
+transform = Transform( 1, 0, 0, 0, 0.12301, 0, 0, 0, 0.3, 0, 1.23167, 1 )
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = true
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 7 )
+skeleton = NodePath("..")
+material/0 = SubResource( 8 )
+_sections_unfolded = [ "Geometry", "Transform" ]
+
+[node name="StaticBody" type="StaticBody" parent="stairs/MeshInstance5" index="0"]
+
+input_ray_pickable = true
+input_capture_on_drag = false
+collision_layer = 1
+collision_mask = 7
+friction = 1.0
+bounce = 0.0
+constant_linear_velocity = Vector3( 0, 0, 0 )
+constant_angular_velocity = Vector3( 0, 0, 0 )
+
+[node name="CollisionShape" type="CollisionShape" parent="stairs/MeshInstance5/StaticBody" index="0"]
+
+shape = SubResource( 10 )
+disabled = false
+
+[node name="MeshInstance9" type="MeshInstance" parent="stairs" index="3"]
+
+transform = Transform( 1, 0, 0, 0, 0.12301, 0, 0, 0, 0.3, 0, 3.23167, 3 )
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = true
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 7 )
+skeleton = NodePath("..")
+material/0 = SubResource( 8 )
+_sections_unfolded = [ "Geometry", "Transform" ]
+
+[node name="StaticBody" type="StaticBody" parent="stairs/MeshInstance9" index="0"]
+
+input_ray_pickable = true
+input_capture_on_drag = false
+collision_layer = 1
+collision_mask = 7
+friction = 1.0
+bounce = 0.0
+constant_linear_velocity = Vector3( 0, 0, 0 )
+constant_angular_velocity = Vector3( 0, 0, 0 )
+
+[node name="CollisionShape" type="CollisionShape" parent="stairs/MeshInstance9/StaticBody" index="0"]
+
+shape = SubResource( 10 )
+disabled = false
+
+[node name="MeshInstance4" type="MeshInstance" parent="stairs" index="4"]
+
+transform = Transform( 1, 0, 0, 0, 0.12301, 0, 0, 0, 0.3, 0, 0.731669, 0.5 )
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = true
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 7 )
+skeleton = NodePath("..")
+material/0 = SubResource( 8 )
+_sections_unfolded = [ "Geometry", "Transform" ]
+
+[node name="StaticBody" type="StaticBody" parent="stairs/MeshInstance4" index="0"]
+
+input_ray_pickable = true
+input_capture_on_drag = false
+collision_layer = 1
+collision_mask = 7
+friction = 1.0
+bounce = 0.0
+constant_linear_velocity = Vector3( 0, 0, 0 )
+constant_angular_velocity = Vector3( 0, 0, 0 )
+
+[node name="CollisionShape" type="CollisionShape" parent="stairs/MeshInstance4/StaticBody" index="0"]
+
+shape = SubResource( 11 )
+disabled = false
+
+[node name="MeshInstance8" type="MeshInstance" parent="stairs" index="5"]
+
+transform = Transform( 1, 0, 0, 0, 0.12301, 0, 0, 0, 0.3, 0, 2.73167, 2.5 )
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = true
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 7 )
+skeleton = NodePath("..")
+material/0 = SubResource( 8 )
+_sections_unfolded = [ "Geometry", "Transform" ]
+
+[node name="StaticBody" type="StaticBody" parent="stairs/MeshInstance8" index="0"]
+
+input_ray_pickable = true
+input_capture_on_drag = false
+collision_layer = 1
+collision_mask = 7
+friction = 1.0
+bounce = 0.0
+constant_linear_velocity = Vector3( 0, 0, 0 )
+constant_angular_velocity = Vector3( 0, 0, 0 )
+
+[node name="CollisionShape" type="CollisionShape" parent="stairs/MeshInstance8/StaticBody" index="0"]
+
+shape = SubResource( 11 )
+disabled = false
+
+[node name="MeshInstance6" type="MeshInstance" parent="stairs" index="6"]
+
+transform = Transform( 1, 0, 0, 0, 0.12301, 0, 0, 0, 0.3, 0, 1.73167, 1.5 )
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = true
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 7 )
+skeleton = NodePath("..")
+material/0 = SubResource( 8 )
+_sections_unfolded = [ "Geometry", "Transform" ]
+
+[node name="StaticBody" type="StaticBody" parent="stairs/MeshInstance6" index="0"]
+
+input_ray_pickable = true
+input_capture_on_drag = false
+collision_layer = 1
+collision_mask = 7
+friction = 1.0
+bounce = 0.0
+constant_linear_velocity = Vector3( 0, 0, 0 )
+constant_angular_velocity = Vector3( 0, 0, 0 )
+
+[node name="CollisionShape" type="CollisionShape" parent="stairs/MeshInstance6/StaticBody" index="0"]
+
+shape = SubResource( 12 )
+disabled = false
+
+[node name="MeshInstance10" type="MeshInstance" parent="stairs" index="7"]
+
+transform = Transform( 1, 0, 0, 0, 0.12301, 0, 0, 0, 0.3, 0, 3.73167, 3.5 )
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = true
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 7 )
+skeleton = NodePath("..")
+material/0 = SubResource( 8 )
+_sections_unfolded = [ "Geometry", "Transform" ]
+
+[node name="StaticBody" type="StaticBody" parent="stairs/MeshInstance10" index="0"]
+
+input_ray_pickable = true
+input_capture_on_drag = false
+collision_layer = 1
+collision_mask = 7
+friction = 1.0
+bounce = 0.0
+constant_linear_velocity = Vector3( 0, 0, 0 )
+constant_angular_velocity = Vector3( 0, 0, 0 )
+
+[node name="CollisionShape" type="CollisionShape" parent="stairs/MeshInstance10/StaticBody" index="0"]
+
+shape = SubResource( 12 )
+disabled = false
+
+[node name="stairs2" type="Spatial" parent="stairs" index="8"]
+
+transform = Transform( -4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, -1, 3.5, 4.5 )
+
+[node name="MeshInstance3" type="MeshInstance" parent="stairs/stairs2" index="0"]
+
+transform = Transform( 1, 0, 0, 0, 0.12301, 0, 0, 0, 1.1486, 0, 0.231669, -0.855305 )
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = false
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 7 )
+skeleton = NodePath("..")
+material/0 = SubResource( 8 )
+_sections_unfolded = [ "Geometry", "Transform" ]
+
+[node name="StaticBody" type="StaticBody" parent="stairs/stairs2/MeshInstance3" index="0"]
+
+input_ray_pickable = true
+input_capture_on_drag = false
+collision_layer = 1
+collision_mask = 1
+friction = 1.0
+bounce = 0.0
+constant_linear_velocity = Vector3( 0, 0, 0 )
+constant_angular_velocity = Vector3( 0, 0, 0 )
+_sections_unfolded = [ "Collision" ]
+
+[node name="CollisionShape" type="CollisionShape" parent="stairs/stairs2/MeshInstance3/StaticBody" index="0"]
+
+shape = SubResource( 9 )
+disabled = false
+
+[node name="MeshInstance7" type="MeshInstance" parent="stairs/stairs2" index="1"]
+
+editor/display_folded = true
+transform = Transform( 1, 0, 0, 0, 0.12301, 0, 0, 0, 0.3, 0, 2.23167, 2 )
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = false
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 7 )
+skeleton = NodePath("..")
+material/0 = SubResource( 8 )
+_sections_unfolded = [ "Geometry", "Transform" ]
+
+[node name="StaticBody" type="StaticBody" parent="stairs/stairs2/MeshInstance7" index="0"]
+
+input_ray_pickable = true
+input_capture_on_drag = false
+collision_layer = 1
+collision_mask = 1
+friction = 1.0
+bounce = 0.0
+constant_linear_velocity = Vector3( 0, 0, 0 )
+constant_angular_velocity = Vector3( 0, 0, 0 )
+
+[node name="CollisionShape" type="CollisionShape" parent="stairs/stairs2/MeshInstance7/StaticBody" index="0"]
+
+shape = SubResource( 9 )
+disabled = false
+
+[node name="MeshInstance5" type="MeshInstance" parent="stairs/stairs2" index="2"]
+
+editor/display_folded = true
+transform = Transform( 1, 0, 0, 0, 0.12301, 0, 0, 0, 0.3, 0, 1.23167, 1 )
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = false
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 7 )
+skeleton = NodePath("..")
+material/0 = SubResource( 8 )
+_sections_unfolded = [ "Geometry", "Transform" ]
+
+[node name="StaticBody" type="StaticBody" parent="stairs/stairs2/MeshInstance5" index="0"]
+
+input_ray_pickable = true
+input_capture_on_drag = false
+collision_layer = 1
+collision_mask = 1
+friction = 1.0
+bounce = 0.0
+constant_linear_velocity = Vector3( 0, 0, 0 )
+constant_angular_velocity = Vector3( 0, 0, 0 )
+
+[node name="CollisionShape" type="CollisionShape" parent="stairs/stairs2/MeshInstance5/StaticBody" index="0"]
+
+shape = SubResource( 10 )
+disabled = false
+
+[node name="MeshInstance9" type="MeshInstance" parent="stairs/stairs2" index="3"]
+
+editor/display_folded = true
+transform = Transform( 1, 0, 0, 0, 0.12301, 0, 0, 0, 0.3, 0, 3.23167, 3 )
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = false
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 7 )
+skeleton = NodePath("..")
+material/0 = SubResource( 8 )
+_sections_unfolded = [ "Geometry", "Transform" ]
+
+[node name="StaticBody" type="StaticBody" parent="stairs/stairs2/MeshInstance9" index="0"]
+
+input_ray_pickable = true
+input_capture_on_drag = false
+collision_layer = 1
+collision_mask = 1
+friction = 1.0
+bounce = 0.0
+constant_linear_velocity = Vector3( 0, 0, 0 )
+constant_angular_velocity = Vector3( 0, 0, 0 )
+
+[node name="CollisionShape" type="CollisionShape" parent="stairs/stairs2/MeshInstance9/StaticBody" index="0"]
+
+shape = SubResource( 10 )
+disabled = false
+
+[node name="MeshInstance4" type="MeshInstance" parent="stairs/stairs2" index="4"]
+
+editor/display_folded = true
+transform = Transform( 1, 0, 0, 0, 0.12301, 0, 0, 0, 0.3, 0, 0.731669, 0.5 )
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = false
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 7 )
+skeleton = NodePath("..")
+material/0 = SubResource( 8 )
+_sections_unfolded = [ "Geometry", "Transform" ]
+
+[node name="StaticBody" type="StaticBody" parent="stairs/stairs2/MeshInstance4" index="0"]
+
+input_ray_pickable = true
+input_capture_on_drag = false
+collision_layer = 1
+collision_mask = 1
+friction = 1.0
+bounce = 0.0
+constant_linear_velocity = Vector3( 0, 0, 0 )
+constant_angular_velocity = Vector3( 0, 0, 0 )
+
+[node name="CollisionShape" type="CollisionShape" parent="stairs/stairs2/MeshInstance4/StaticBody" index="0"]
+
+shape = SubResource( 11 )
+disabled = false
+
+[node name="MeshInstance8" type="MeshInstance" parent="stairs/stairs2" index="5"]
+
+editor/display_folded = true
+transform = Transform( 1, 0, 0, 0, 0.12301, 0, 0, 0, 0.3, 0, 2.73167, 2.5 )
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = false
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 7 )
+skeleton = NodePath("..")
+material/0 = SubResource( 8 )
+_sections_unfolded = [ "Geometry", "Transform" ]
+
+[node name="StaticBody" type="StaticBody" parent="stairs/stairs2/MeshInstance8" index="0"]
+
+input_ray_pickable = true
+input_capture_on_drag = false
+collision_layer = 1
+collision_mask = 1
+friction = 1.0
+bounce = 0.0
+constant_linear_velocity = Vector3( 0, 0, 0 )
+constant_angular_velocity = Vector3( 0, 0, 0 )
+
+[node name="CollisionShape" type="CollisionShape" parent="stairs/stairs2/MeshInstance8/StaticBody" index="0"]
+
+shape = SubResource( 11 )
+disabled = false
+
+[node name="MeshInstance6" type="MeshInstance" parent="stairs/stairs2" index="6"]
+
+editor/display_folded = true
+transform = Transform( 1, 0, 0, 0, 0.12301, 0, 0, 0, 0.3, 0, 1.73167, 1.5 )
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = false
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 7 )
+skeleton = NodePath("..")
+material/0 = SubResource( 8 )
+_sections_unfolded = [ "Geometry", "Transform" ]
+
+[node name="StaticBody" type="StaticBody" parent="stairs/stairs2/MeshInstance6" index="0"]
+
+input_ray_pickable = true
+input_capture_on_drag = false
+collision_layer = 1
+collision_mask = 1
+friction = 1.0
+bounce = 0.0
+constant_linear_velocity = Vector3( 0, 0, 0 )
+constant_angular_velocity = Vector3( 0, 0, 0 )
+
+[node name="CollisionShape" type="CollisionShape" parent="stairs/stairs2/MeshInstance6/StaticBody" index="0"]
+
+shape = SubResource( 12 )
+disabled = false
+
+[node name="MeshInstance10" type="MeshInstance" parent="stairs/stairs2" index="7"]
+
+editor/display_folded = true
+transform = Transform( 1, 0, 0, 0, 0.12301, 0, 0, 0, 0.3, 0, 3.73167, 3.5 )
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = false
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 7 )
+skeleton = NodePath("..")
+material/0 = SubResource( 8 )
+_sections_unfolded = [ "Geometry", "Transform" ]
+
+[node name="StaticBody" type="StaticBody" parent="stairs/stairs2/MeshInstance10" index="0"]
+
+input_ray_pickable = true
+input_capture_on_drag = false
+collision_layer = 1
+collision_mask = 1
+friction = 1.0
+bounce = 0.0
+constant_linear_velocity = Vector3( 0, 0, 0 )
+constant_angular_velocity = Vector3( 0, 0, 0 )
+
+[node name="CollisionShape" type="CollisionShape" parent="stairs/stairs2/MeshInstance10/StaticBody" index="0"]
+
+shape = SubResource( 12 )
+disabled = false
+
+[node name="room" type="MeshInstance" parent="." index="7"]
+
+transform = Transform( 0.765425, 0, 0, 0, 0.765425, 0, 0, 0, 0.765425, 0.006687, 4, -0.046813 )
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = false
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = ExtResource( 1 )
+skeleton = NodePath("..")
+material/0 = null
+material/1 = SubResource( 13 )
+_sections_unfolded = [ "Geometry", "Transform", "material" ]
+
+[node name="StaticBody" type="StaticBody" parent="room" index="0"]
+
+input_ray_pickable = true
+input_capture_on_drag = false
+collision_layer = 1
+collision_mask = 7
+friction = 1.0
+bounce = 0.0
+constant_linear_velocity = Vector3( 0, 0, 0 )
+constant_angular_velocity = Vector3( 0, 0, 0 )
+_sections_unfolded = [ "Collision" ]
+
+[node name="CollisionShape" type="CollisionShape" parent="room/StaticBody" index="0"]
+
+shape = SubResource( 14 )
+disabled = false
+
+[node name="Door" parent="." index="8" instance=ExtResource( 5 )]
+
+transform = Transform( -8.74228e-08, 0, 2, 0, 2, 0, -2, 0, -8.74228e-08, -6, 0, 0 )
+_sections_unfolded = [ "Transform" ]
+
+[node name="Ceiling_Lamp2" parent="." index="9" instance=ExtResource( 6 )]
+
+_sections_unfolded = [ "Collision" ]
+
+

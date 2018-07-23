@@ -1,0 +1,69 @@
+-- This file has been generated from package.yaml by hpack version 0.20.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 9dd8efd2e45c2898fb76a533380ee709713ad59d98865274345e6eac9e30c25b
+
+name:           godot-haskell-plugin
+version:        0.1.0.0
+description:    Please see the README on Github at <https://github.com/KaneTW/godot-haskell-plugin#readme>
+homepage:       https://github.com/KaneTW/godot-haskell-plugin#readme
+bug-reports:    https://github.com/KaneTW/godot-haskell-plugin/issues
+author:         David Kraeutmann
+maintainer:     kane@kane.cx
+copyright:      2018 David Kraeutmann
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+cabal-version:  >= 1.10
+
+extra-source-files:
+    ChangeLog.md
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/KaneTW/godot-haskell-plugin
+
+library
+  hs-source-dirs:
+      src
+  build-depends:
+      base >=4.7 && <5
+    , lens
+    , godot-haskell
+    , linear
+    , text
+    , vector
+    , stm
+  exposed-modules:
+      Plugin
+      Plugin.Imports
+      Plugin.CubeMaker
+      Plugin.Types
+      Plugin.Util
+      Plugin.Util.Operators
+      Plugin.Util.Variants
+  default-language: Haskell2010
+  default-extensions:  OverloadedStrings
+
+foreign-library godot-haskell-plugin
+  type: native-shared
+  if os(Windows)
+    options: standalone
+  other-modules: FLib
+  include-dirs:
+      godot_headers
+  hs-source-dirs:
+      flib
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+     base >=4.7 && <5
+    , godot-haskell
+    , godot-haskell-plugin
+    , linear
+    , text
+    , vector
+  c-sources:
+      cbits/flib.c
+  default-language: Haskell2010

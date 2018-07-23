@@ -1,0 +1,20 @@
+[remap]
+
+importer="wavefront_obj"
+type="Mesh"
+path="res://.import/ceiling_lamp.obj-ca1ffc0ad64520efdd795e322502f345.mesh"
+
+[deps]
+
+files=[ "res://.import/ceiling_lamp.obj-ca1ffc0ad64520efdd795e322502f345.mesh" ]
+
+source_file="res://addons/godot-haskell-plugin/demo/scenes/Room/entities/Ceiling_Lamp/ceiling_lamp.obj"
+source_md5="a508a4ce9d1419de53c16bdab8412a53"
+
+dest_files=[ "res://.import/ceiling_lamp.obj-ca1ffc0ad64520efdd795e322502f345.mesh", "res://.import/ceiling_lamp.obj-ca1ffc0ad64520efdd795e322502f345.mesh" ]
+dest_md5="661a851cb4d24507c21639d6e0f8c0cb"
+
+[params]
+
+generate_tangents=true
+scale_mesh=Vector3( 0.05, 0.05, 0.05 )
