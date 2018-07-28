@@ -1,15 +1,13 @@
 [gd_scene load_steps=3 format=2]
 
-[ext_resource path="res://addons/godot-haskell-plugin/demo/scenes/Room.tscn" type="PackedScene" id=1]
-[ext_resource path="res://addons/godot-haskell-plugin/CubeMaker.gdns" type="Script" id=2]
+[ext_resource path="res://assets/maujoe.camera_control/scripts/camera_control.gd" type="Script" id=1]
+[ext_resource path="res://addons/godot-haskell-plugin/WestonCompositor.gdns" type="Script" id=2]
 
 [node name="Demo" type="Spatial" index="0"]
 
-[node name="Room" parent="." index="0" instance=ExtResource( 1 )]
+[node name="Camera" type="Camera" parent="." index="0"]
 
-[node name="Camera" type="Camera" parent="." index="1"]
-
-transform = Transform( -1, 0, -8.74228e-08, -3.92944e-08, 0.893293, 0.449475, 7.80941e-08, 0.449475, -0.893293, 0, 3.02112, -7.47497 )
+transform = Transform( -0.999825, 0, -0.0186987, 0, 1, 0, 0.0186987, 0, -0.999825, 0, 4.98498, -10.5469 )
 keep_aspect = 1
 cull_mask = 1048575
 environment = null
@@ -22,9 +20,37 @@ fov = 70.0
 size = 1.0
 near = 0.05
 far = 100.0
+script = ExtResource( 1 )
+_sections_unfolded = [ "Transform" ]
+enabled = true
+mouse_mode = 0
+mouselook = true
+sensitivity = 0.02
+smoothness = 0.5
+privot = null
+distance = 5.0
+rotate_privot = false
+collisions = true
+yaw_limit = 360
+pitch_limit = 360
+movement = true
+acceleration = 1.0
+deceleration = 0.1
+max_speed = Vector3( 1, 1, 1 )
+local = true
+forward_action = "ui_up"
+backward_action = "ui_down"
+left_action = "ui_left"
+right_action = "ui_right"
+up_action = "ui_page_up"
+down_action = "ui_page_down"
+use_gui = true
+gui_action = "ui_cancel"
 
-[node name="CubeMaker" type="Spatial" parent="." index="2"]
+[node name="Node" type="Spatial" parent="." index="1"]
 
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.09818, 0 )
 script = ExtResource( 2 )
+_sections_unfolded = [ "Transform", "Visibility" ]
 
 

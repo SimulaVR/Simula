@@ -15,7 +15,7 @@
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: lts-11.3
+resolver: nightly-2018-07-26
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -37,19 +37,16 @@ resolver: lts-11.3
 # will not be run. This is useful for tweaking upstream packages.
 packages:
 - .
+- simula-wayland
 - location:
     git: https://github.com/SimulaVR/godot-haskell
-    commit: fcdff6c
-  extra-dep: true
-- location:
-    git: https://github.com/KaneTW/haskell-src-exts-qq
-    commit: 3c68481
+    commit: f4159bf229
   extra-dep: true
 
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
-# extra-deps:
-#   - vector-0.12.0.1
+
+
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

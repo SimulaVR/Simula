@@ -36,16 +36,22 @@ library
     , text
     , vector
     , stm
+    , simula-wayland
+    , containers
+    , unix
   exposed-modules:
       Plugin
       Plugin.Imports
-      Plugin.CubeMaker
       Plugin.Types
       Plugin.Util
       Plugin.Util.Operators
       Plugin.Util.Variants
+      Plugin.WaylandSurface
+      Plugin.Weston
+
   default-language: Haskell2010
   default-extensions:  OverloadedStrings
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
 
 foreign-library godot-haskell-plugin
   type: native-shared

@@ -9,6 +9,7 @@ import           Control.Category        ((>>>))
 import           Control.Monad           ((>=>))
 import           Data.Function           ((&))
 import           Data.Text               as T
+import Data.Typeable
 
 import           Godot.Gdnative.Types
 import           Godot.Gdnative.Internal
@@ -102,5 +103,5 @@ hsFromVariant (VT v) =
       >=> return . Just
 
 
-withVariant :: AsVariant a => (a -> IO b) -> GodotVariant -> IO b
+withVariant :: (Typeable a, AsVariant a) => (a -> IO b) -> GodotVariant -> IO b
 withVariant f v = fromGodotVariant v >>= f
