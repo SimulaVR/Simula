@@ -8,7 +8,7 @@ import qualified Data.Text               as T
 import           Godot.Gdnative.Internal
 import           Godot.Nativescript
 
-import           Plugin.WaylandSurface
+import           Plugin.WestonSurfaceTexture
 import           Plugin.Weston
 import           Plugin.Types
 import           Plugin.Util             (godotPrint)
@@ -21,7 +21,7 @@ type RegisterClassFunc a = GdnativeHandle -> (GodotObject -> IO a) -> IO ()
 registerClasses :: GdnativeHandle -> IO ()
 registerClasses desc = do
   let reg f = f desc classInit
-  reg (registerClass' :: RegisterClassFunc GodotWestonSurface)
+  reg (registerClass' :: RegisterClassFunc GodotWestonSurfaceTexture)
   reg (registerClass' :: RegisterClassFunc GodotWestonCompositor)
 
 

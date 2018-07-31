@@ -46,7 +46,7 @@ library
       Plugin.Util
       Plugin.Util.Operators
       Plugin.Util.Variants
-      Plugin.WaylandSurface
+      Plugin.WestonSurfaceTexture
       Plugin.Weston
 
   default-language: Haskell2010
