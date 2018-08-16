@@ -27,17 +27,24 @@ import qualified Godot.Core.GodotImage as Image
 
 import Foreign
 
+import System.IO.Unsafe
+
 data GodotWestonSurfaceTexture = GodotWestonSurfaceTexture
-  { _gwsObj      :: GodotObject
-  , _gwsSurface :: TVar WestonSurface
-  , _gwsImage :: TVar GodotImage
+  { _gwstObj      :: GodotObject
+  , _gwstSurface :: TVar WestonSurface
+  , _gwstView :: TVar WestonView
+  , _gwstImage :: TVar GodotImage
+  , _gwstImageData :: TVar GodotPoolByteArray
   }
 
 instance GodotClass GodotWestonSurfaceTexture where
   godotClassName = "WestonSurfaceTexture"
 
 instance ClassExport GodotWestonSurfaceTexture where
-  classInit obj = GodotWestonSurfaceTexture obj <$> atomically (newTVar undefined) <*> atomically (newTVar undefined)
+  classInit obj = do
+    img <- GodotImage <$> mkClassInstance "Image"
+    imgdt <- godot_pool_byte_array_new
+    GodotWestonSurfaceTexture obj <$> atomically (newTVar undefined) <*> atomically (newTVar undefined) <*> atomically (newTVar img) <*> atomically (newTVar imgdt)
   --classInit obj = atomically $
     -- CubeMaker obj <$> newTVar [] <*> newTVar ""
   classExtends = "ImageTexture"
@@ -45,13 +52,7 @@ instance ClassExport GodotWestonSurfaceTexture where
 
 instance HasBaseClass GodotWestonSurfaceTexture where
   type BaseClass GodotWestonSurfaceTexture = GodotImageTexture         
-  super (GodotWestonSurfaceTexture obj _ _) = GodotImageTexture obj
-
-getVisualServer :: IO GodotVisualServer
-getVisualServer = GodotVisualServer <$> getSingleton "VisualServer"
-
-getResourceLoader :: IO Godot_ResourceLoader
-getResourceLoader = Godot_ResourceLoader <$> getSingleton "ResourceLoader"
+  super (GodotWestonSurfaceTexture obj _ _ _ _) = GodotImageTexture obj
 
 newGodotWestonSurfaceTexture :: IO GodotWestonSurfaceTexture
 newGodotWestonSurfaceTexture = do
@@ -61,17 +62,21 @@ newGodotWestonSurfaceTexture = do
   (GodotResource obj) <- G.load rl url typeHint False
   let ns = GodotNativeScript obj
   ret <- G.new ns []
-  classInit ret
+  objPtr <- godot_nativescript_get_userdata ret
+  deRefStablePtr $ castPtrToStablePtr objPtr
 
-setWestonSurface :: GodotWestonSurfaceTexture -> WestonSurface -> IO ()
-setWestonSurface gws ws = do 
-  atomically $ writeTVar (_gwsSurface gws) ws
+setWestonSurface :: GodotWestonSurfaceTexture -> WestonSurface -> WestonView -> IO ()
+setWestonSurface gws ws view = do 
+  atomically $ writeTVar (_gwstSurface gws) ws
+  atomically $ writeTVar (_gwstView gws) view
   updateWestonSurfaceTexture gws
+
+freeName :: GodotString
+freeName = unsafePerformIO $ toLowLevel "free"
 
 updateWestonSurfaceTexture :: GodotWestonSurfaceTexture -> IO ()
 updateWestonSurfaceTexture gws = do
-  ws <- atomically $ readTVar (_gwsSurface gws)
-  visualServer <- getVisualServer
+  ws <- atomically $ readTVar (_gwstSurface gws)
 
   buffer <- westonSurfaceBuffer ws
   when (coerce buffer /= nullPtr) $ do
@@ -87,13 +92,14 @@ updateWestonSurfaceTexture gws = do
       let fmt = asGodotFormat shmFmt
       let size :: Integral a => a 
           size = fromIntegral (stride * height)
-
+    
+      img <- atomically $ readTVar (_gwstImage gws)
       byteArray <- godot_pool_byte_array_new
-      godot_pool_byte_array_resize byteArray size
+      cursize <- godot_pool_byte_array_size byteArray
+      when (cursize /= size) $ godot_pool_byte_array_resize byteArray size
+
       writeAccess <- godot_pool_byte_array_write byteArray
       writePtr <- godot_pool_byte_array_write_access_ptr writeAccess
-
-      img <- GodotImage <$> mkClassInstance "Image"
 
       wl_shm_buffer_begin_access shmbuf
       copyBytes writePtr (castPtr dt) size
@@ -101,13 +107,10 @@ updateWestonSurfaceTexture gws = do
       godot_pool_byte_array_write_access_destroy writeAccess -- TODO helper function
 
       G.create_from_data img width height False fmt byteArray
-      godot_pool_byte_array_destroy byteArray -- same
 
-      atomically $ writeTVar (_gwsImage gws) img
-      name <- toLowLevel "create_from_image"
-      G.call_deferred gws name [toVariant img, toVariant (7 :: Int)]
---      str <- toLowLevel  "test.png" :: IO GodotString
---      G.save_png img str
+      G.create_from_image gws img (7 :: Int)
+      godot_pool_byte_array_destroy byteArray
+      
       return ()
 
   where

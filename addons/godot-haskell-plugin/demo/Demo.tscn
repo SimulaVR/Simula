@@ -1,7 +1,6 @@
-[gd_scene load_steps=3 format=2]
+[gd_scene load_steps=2 format=2]
 
-[ext_resource path="res://assets/maujoe.camera_control/scripts/camera_control.gd" type="Script" id=1]
-[ext_resource path="res://addons/godot-haskell-plugin/WestonCompositor.gdns" type="Script" id=2]
+[ext_resource path="res://addons/godot-haskell-plugin/WestonCompositor.gdns" type="Script" id=1]
 
 [node name="Demo" type="Spatial" index="0"]
 
@@ -20,37 +19,12 @@ fov = 70.0
 size = 1.0
 near = 0.05
 far = 100.0
-script = ExtResource( 1 )
 _sections_unfolded = [ "Transform" ]
-enabled = true
-mouse_mode = 0
-mouselook = true
-sensitivity = 0.02
-smoothness = 0.5
-privot = null
-distance = 5.0
-rotate_privot = false
-collisions = true
-yaw_limit = 360
-pitch_limit = 360
-movement = true
-acceleration = 1.0
-deceleration = 0.1
-max_speed = Vector3( 1, 1, 1 )
-local = true
-forward_action = "ui_up"
-backward_action = "ui_down"
-left_action = "ui_left"
-right_action = "ui_right"
-up_action = "ui_page_up"
-down_action = "ui_page_down"
-use_gui = true
-gui_action = "ui_cancel"
 
 [node name="Node" type="Spatial" parent="." index="1"]
 
 transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.09818, 0 )
-script = ExtResource( 2 )
+script = ExtResource( 1 )
 _sections_unfolded = [ "Transform", "Visibility" ]
 
 

@@ -39,6 +39,9 @@ library
     , simula-wayland
     , containers
     , unix
+    , clock
+    , extra
+    , lens
   exposed-modules:
       Plugin
       Plugin.Imports
@@ -47,11 +50,13 @@ library
       Plugin.Util.Operators
       Plugin.Util.Variants
       Plugin.WestonSurfaceTexture
+      Plugin.WestonSurfaceSprite
       Plugin.Weston
 
   default-language: Haskell2010
-  default-extensions:  OverloadedStrings
+  default-extensions:  OverloadedStrings TypeOperators FlexibleContexts FlexibleInstances
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  
 
 foreign-library godot-haskell-plugin
   type: native-shared

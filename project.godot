@@ -14,6 +14,17 @@ config/name="haskell-test"
 run/main_scene="res://addons/godot-haskell-plugin/demo/Demo.tscn"
 config/icon="res://icon.png"
 
+[debug]
+
+settings/stdout/print_fps=true
+
+[physics]
+
+2d/physics_engine="GodotPhysics"
+3d/physics_engine="GodotPhysics"
+2d/thread_model=2
+
 [rendering]
 
+threads/thread_model=2
 environment/default_environment="res://default_env.tres"

@@ -31,7 +31,7 @@ data HighLevelOf low = HighLevel (TypeOf 'HaskellTy low)
 
 
 -- Properties
-
+{-}
 -- | Get the value of a property
 (^.)
   :: forall low high. (AsVariant low, GodotFFI low high)
@@ -90,7 +90,7 @@ retn (HighLevel high) = high
         >>> (toLowLevel :: Variant 'GodotTy -> IO GodotVariant))
 
 retnil = godot_variant_new_nil
-
+-}
 
 hsFromVariant
   :: forall low high. (AsVariant low, GodotFFI low high)

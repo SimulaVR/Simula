@@ -166,6 +166,17 @@ westonCompositorOutputPendingSignal (WestonCompositor ptr) = WlSignal $ plusPtr 
 westonCompositorOutputCreatedSignal :: WestonCompositor -> WlSignal
 westonCompositorOutputCreatedSignal (WestonCompositor ptr) = WlSignal $ plusPtr (castPtr ptr) {#offsetof weston_compositor->output_created_signal#}
 
+{#pointer *xkb_keymap as XkbKeymap newtype#}
+{#fun weston_seat_init {`WestonSeat', `WestonCompositor', `String'} -> `()' #}
+{#fun weston_seat_init_pointer {`WestonSeat'} -> `()' #}
+{#fun weston_seat_init_keyboard {`WestonSeat', `XkbKeymap'} -> `()' #}
+
+newSeat :: WestonCompositor -> String -> IO WestonSeat
+newSeat wc nm = do
+  seat <- WestonSeat <$> mallocBytes {#sizeof weston_seat#}
+  weston_seat_init seat wc nm
+  return seat
+
 {#fun weston_seat_get_keyboard {`WestonSeat'} -> `WestonKeyboard' #}
 {#fun weston_seat_get_pointer {`WestonSeat'} -> `WestonPointer' #}
 
