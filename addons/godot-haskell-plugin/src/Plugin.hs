@@ -4,10 +4,12 @@ module Plugin (registerClasses) where
 
 import           Control.Monad           (forM)
 import qualified Data.Text               as T
+import Data.Typeable
 
 import           Godot.Gdnative.Internal
 import           Godot.Nativescript
 
+import           Plugin.SimulaController
 import           Plugin.WestonSurfaceSprite
 import           Plugin.WestonSurfaceTexture
 import           Plugin.Weston
@@ -25,9 +27,10 @@ registerClasses desc = do
   reg (registerClass' :: RegisterClassFunc GodotWestonSurfaceSprite)
   reg (registerClass' :: RegisterClassFunc GodotWestonSurfaceTexture)
   reg (registerClass' :: RegisterClassFunc GodotWestonCompositor)
+  reg (registerClass' :: RegisterClassFunc GodotSimulaController)
 
 
-registerClass' :: forall a . ClassExport a
+registerClass' :: forall a . (ClassExport a, Typeable a)
   => GdnativeHandle -> (GodotObject -> IO a) -> IO ()
 registerClass' desc constr = do
   registerClass desc extends constr destr

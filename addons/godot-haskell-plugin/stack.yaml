@@ -40,7 +40,7 @@ packages:
 - simula-wayland
 - location:
     git: https://github.com/SimulaVR/godot-haskell
-    commit: 535edb2
+    commit: 6376d60
   extra-dep: true
 
 # Dependency packages to be pulled from upstream that are not in the resolver

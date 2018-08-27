@@ -22,6 +22,7 @@ import qualified Godot.Methods               as G
 import qualified Data.Map.Strict as M
 import Plugin.WestonSurfaceSprite
 import Plugin.WestonSurfaceTexture
+import Plugin.SimulaController
 
 import Control.Monad
 import Control.Concurrent
@@ -30,6 +31,8 @@ import System.Environment
 import System.Posix.Signals
 
 import Data.Bits
+
+import Control.Lens
 
 import Foreign hiding (void)
 
@@ -50,10 +53,21 @@ instance ClassExport GodotWestonCompositor where
     
   classExtends = "Node"
   classMethods = [ Func NoRPC "_ready" startBaseCompositor
-                 , Func NoRPC "_input" input ]
+                 , Func NoRPC "_input" input
+                 , Func NoRPC "on_button_signal" on_button_signal ]
 
 startBaseCompositor :: GodotFunc GodotWestonCompositor 
-startBaseCompositor _ compositor _ = (\_ -> installHandler sigUSR1 Ignore Nothing >> toLowLevel VariantNil) =<< (forkOS $ do
+startBaseCompositor _ compositor _ = do
+  onReady compositor
+  startBaseThread compositor
+  toLowLevel VariantNil
+
+onReady :: GodotWestonCompositor -> IO ()
+onReady compositor = return ()
+
+
+startBaseThread :: GodotWestonCompositor -> IO ()
+startBaseThread compositor = void $ forkOS $ do
   wldp <- wl_display_create
   wcomp <- weston_compositor_create wldp nullPtr
   atomically $ writeTVar (_gwcCompositor compositor) wcomp
@@ -114,7 +128,7 @@ startBaseCompositor _ compositor _ = (\_ -> installHandler sigUSR1 Ignore Nothin
 
   weston_compositor_wake wcomp
   putStrLn "starting compositor"
-  wl_display_run wldp)
+  wl_display_run wldp
 
   where
     onOutputPending windowedApi compositor _ outputPtr = do
@@ -173,12 +187,36 @@ startBaseCompositor _ compositor _ = (\_ -> installHandler sigUSR1 Ignore Nothin
       surface <- weston_desktop_surface_get_surface desktopSurface
       Just sprite <- M.lookup surface <$> atomically (readTVar (_gwcSurfaces compositor))
       updateWestonSurfaceSprite sprite
-{-
-    onFlushDamage compositor surface = do
-      putStrLn "flush"
-      Just (gws, _) <- M.lookup surface <$> atomically (readTVar (_gwcSurfaces compositor))
-      updateWestonSurface gws
--}
+      move <- spriteShouldMove sprite
+      when move $ do
+        setSpriteShouldMove sprite False
+        moveToUnoccupied compositor sprite
+
+
+moveToUnoccupied :: GodotWestonCompositor -> GodotWestonSurfaceSprite -> IO ()
+moveToUnoccupied gwc gwss = do
+  surfaces <- atomically $ readTVar (_gwcSurfaces gwc)
+  let elems = M.elems surfaces
+
+  extents <- forM elems $ \westonSprite -> do
+    sprite <- getSprite westonSprite
+    aabb <- G.get_transformed_aabb sprite
+    size <- Api.godot_aabb_get_size aabb >>= fromLowLevel
+    pos <- Api.godot_aabb_get_position aabb >>= fromLowLevel
+
+    return (pos, size + pos)
+  
+  let minX = minimum $ map (view $ _1._x) extents
+  let maxX = minimum $ map (view $ _2._x) extents
+  sprite <- getSprite gwss
+  aabb <- G.get_aabb sprite
+  size <- Api.godot_aabb_get_size aabb >>= fromLowLevel
+  let sizeX = size ^. _x
+  let newPos = if abs minX < abs maxX then V3 (minX - sizeX/2) 0 0 else V3 (maxX + sizeX/2) 0 0
+  tlVec <- toLowLevel newPos
+  G.translate sprite tlVec
+
+
 instance HasBaseClass GodotWestonCompositor where
   type BaseClass GodotWestonCompositor = GodotNode         
   super (GodotWestonCompositor obj  _ _ _ _) = GodotNode obj
@@ -226,6 +264,36 @@ input _ self args = do
                     | otherwise = WlKeyboardKeyStateReleased
 
 
+
+on_button_signal :: GodotFunc GodotWestonCompositor
+on_button_signal _ self args = do
+  case toList args of
+    [buttonVar, controllerVar, pressedVar] -> do
+      button <- fromGodotVariant buttonVar
+      controllerObj <- fromGodotVariant controllerVar
+      Just controller <- tryObjectCast controllerObj
+      pressed <- fromGodotVariant pressedVar
+      onButton self controller button pressed
+    _ -> return ()
+  toLowLevel VariantNil
+
+
+onButton :: GodotWestonCompositor -> GodotSimulaController -> Int -> Bool -> IO ()
+onButton self gsc button pressed = do
+  whenM (G.is_colliding rc) $ do
+    obj <- G.get_collider rc
+    maybeSprite <- tryObjectCast @GodotWestonSurfaceSprite obj
+    case maybeSprite of
+      Just sprite -> do
+        onSpriteButton sprite
+      Nothing -> return ()
+  where
+    rc = _gscRayCast gsc
+    onSpriteButton sprite = return ()
+      -- if axis1: send lclick
+      -- if appmenu: send rclick
+      -- if grip: drag/resize handling
+                      
 
 keyTranslation :: M.Map Int Int
 keyTranslation = M.fromList 
