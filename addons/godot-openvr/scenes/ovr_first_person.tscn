@@ -1,0 +1,61 @@
+[gd_scene load_steps=3 format=2]
+
+[ext_resource path="res://addons/godot-openvr/scenes/ovr_controller.tscn" type="PackedScene" id=1]
+
+[sub_resource type="GDScript" id=1]
+
+script/source = "extends Spatial
+
+func _physics_process(delta):
+	# we keep this in line with our camera but we remove the tilt
+	var new_transform = get_node(\"../ARVRCamera\").transform
+	
+	var new_basis = Basis()
+	new_basis.z = Vector3(new_transform.basis.z.x, 0.0, new_transform.basis.z.z).normalized()
+	if new_basis.z.length() > 0.5:
+		new_basis.y - Vector3(0.0, 1.0, 0.0)
+		new_basis.x = new_basis.y.cross(new_basis.z)
+		new_transform.basis = new_basis
+	
+		transform = new_transform
+	else:
+		# we're looking straight up or down, ignore this
+		pass"
+
+[node name="OVRFirstPerson" type="ARVROrigin" index="0"]
+
+world_scale = 1.0
+
+[node name="ARVRCamera" type="ARVRCamera" parent="." index="0"]
+
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.85, 0 )
+keep_aspect = 1
+cull_mask = 1048575
+environment = null
+h_offset = 0.0
+v_offset = 0.0
+doppler_tracking = 0
+projection = 0
+current = false
+fov = 65.0
+size = 1.0
+near = 0.01
+far = 1000.01
+_sections_unfolded = [ "Transform" ]
+
+[node name="HUD_Anchor" type="Spatial" parent="." index="1"]
+
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.85, 0 )
+script = SubResource( 1 )
+_sections_unfolded = [ "Transform" ]
+
+[node name="Left_Hand" parent="." index="2" instance=ExtResource( 1 )]
+
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5, 1.25, 0 )
+
+[node name="Right_Hand" parent="." index="3" instance=ExtResource( 1 )]
+
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 1.25, 0 )
+controller_id = 2
+
+

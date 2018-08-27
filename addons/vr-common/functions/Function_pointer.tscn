@@ -1,0 +1,162 @@
+[gd_scene load_steps=4 format=2]
+
+[sub_resource type="GDScript" id=1]
+
+script/source = "\"res://addons/vr-common/functions/Function_pointer.tscn\"extends Spatial
+
+var target = null
+var last_collided_at = Vector3(0, 0, 0)
+var laser_y = -0.05
+onready var ws = ARVRServer.world_scale
+
+func set_enabled(p_enabled):
+	$Laser.visible = p_enabled
+	$Laser/RayCast.enabled = p_enabled
+
+func _on_button_pressed(p_button):
+	if p_button == 15 and $Laser/RayCast.enabled:
+		if $Laser/RayCast.is_colliding():
+			target = $Laser/RayCast.get_collider()
+			last_collided_at = $Laser/RayCast.get_collision_point()
+			# print(\"Button pressed on \" + target.get_name() + \" at \" + str(last_collided_at))
+			if target.has_method(\"_on_pointer_pressed\"):
+				target._on_pointer_pressed(last_collided_at)
+
+func _on_button_release(p_button):
+	if p_button == 15 and target:
+		# let object know button was released
+		# print(\"Button released on \" + target.get_name())
+		if target.has_method(\"_on_pointer_release\"):
+			target._on_pointer_release(last_collided_at)
+
+		target = false
+		last_collided_at = Vector3(0, 0, 0)
+
+func _ready():
+	# Get button press feedback from our parent (should be an ARVRController)
+	get_parent().connect(\"button_pressed\", self, \"_on_button_pressed\")
+	get_parent().connect(\"button_release\", self, \"_on_button_release\")
+	
+	# apply our world scale to our laser position
+	$Laser.translation.y = laser_y * ws
+
+func _process(delta):
+	var new_ws = ARVRServer.world_scale
+	if (ws != new_ws):
+		ws = new_ws
+	$Laser.translation.y = laser_y * ws
+	
+	if $Laser/RayCast.enabled and $Laser/RayCast.is_colliding():
+		var new_at = $Laser/RayCast.get_collision_point()
+		var new_target = $Laser/RayCast.get_collider()
+		
+		if new_at == last_collided_at:
+			pass
+		elif target:
+			# if target is set our mouse must be down, we keep sending events to our target
+			if target.has_method(\"_on_pointer_moved\"):
+				target._on_pointer_moved(new_at, last_collided_at)
+		else:
+			if new_target.has_method(\"_on_pointer_moved\"):
+				new_target._on_pointer_moved(new_at, last_collided_at)
+		
+		last_collided_at = new_at
+
+"
+
+[sub_resource type="SpatialMaterial" id=2]
+
+render_priority = 0
+flags_transparent = false
+flags_unshaded = true
+flags_vertex_lighting = false
+flags_no_depth_test = false
+flags_use_point_size = false
+flags_world_triplanar = false
+flags_fixed_size = false
+flags_albedo_tex_force_srgb = false
+vertex_color_use_as_albedo = false
+vertex_color_is_srgb = false
+params_diffuse_mode = 1
+params_specular_mode = 0
+params_blend_mode = 0
+params_cull_mode = 0
+params_depth_draw_mode = 0
+params_line_width = 1.0
+params_point_size = 1.0
+params_billboard_mode = 0
+params_grow = false
+params_use_alpha_scissor = false
+albedo_color = Color( 1, 0.15625, 0.15625, 0.740314 )
+metallic = 0.0
+metallic_specular = 0.5
+metallic_texture_channel = 0
+roughness = 0.0
+roughness_texture_channel = 0
+emission_enabled = true
+emission = Color( 1, 0.171875, 0.171875, 1 )
+emission_energy = 1.0
+emission_operator = 0
+emission_on_uv2 = false
+normal_enabled = false
+rim_enabled = false
+clearcoat_enabled = false
+anisotropy_enabled = false
+ao_enabled = false
+depth_enabled = false
+subsurf_scatter_enabled = false
+transmission_enabled = false
+refraction_enabled = false
+detail_enabled = false
+uv1_scale = Vector3( 1, 1, 1 )
+uv1_offset = Vector3( 0, 0, 0 )
+uv1_triplanar = false
+uv1_triplanar_sharpness = 1.0
+uv2_scale = Vector3( 1, 1, 1 )
+uv2_offset = Vector3( 0, 0, 0 )
+uv2_triplanar = false
+uv2_triplanar_sharpness = 1.0
+proximity_fade_enable = false
+distance_fade_enable = false
+_sections_unfolded = [ "Albedo", "Emission", "Flags", "Metallic", "Vertex Color" ]
+
+[sub_resource type="CubeMesh" id=3]
+
+material = SubResource( 2 )
+size = Vector3( 0.002, 0.002, 10 )
+subdivide_width = 0
+subdivide_height = 0
+subdivide_depth = 20
+
+[node name="Function_pointer" type="Spatial"]
+
+transform = Transform( 1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 0, 0 )
+script = SubResource( 1 )
+_sections_unfolded = [ "Transform" ]
+
+[node name="Laser" type="MeshInstance" parent="." index="0"]
+
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, -5 )
+layers = 1
+material_override = null
+cast_shadow = 0
+extra_cull_margin = 0.0
+use_in_baked_light = false
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 3 )
+skeleton = NodePath("..")
+material/0 = null
+_sections_unfolded = [ "Geometry", "Transform" ]
+
+[node name="RayCast" type="RayCast" parent="Laser" index="0"]
+
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 5 )
+enabled = true
+exclude_parent = true
+cast_to = Vector3( 0, 0, -10 )
+collision_mask = 1
+
+

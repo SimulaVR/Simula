@@ -1,0 +1,112 @@
+[gd_scene load_steps=5 format=2]
+
+[sub_resource type="PlaneMesh" id=1]
+
+size = Vector2( 0.3, 0.15 )
+subdivide_width = 10
+subdivide_depth = 10
+
+[sub_resource type="Shader" id=2]
+
+code = "shader_type spatial;
+render_mode unshaded;
+
+uniform sampler2D viewport_texture : hint_albedo;
+
+void vertex() {
+	VERTEX.y = 1.0 - cos(VERTEX.x + 0.3) * 0.5 - cos(VERTEX.z + 0.15) * 0.5;
+}
+
+void fragment() {
+	vec4 col = texture(viewport_texture, vec2(1.0-UV.x, UV.y));
+	ALBEDO = col.rgb;
+	ALPHA = col.a;
+}"
+
+[sub_resource type="ShaderMaterial" id=3]
+
+render_priority = 0
+shader = SubResource( 2 )
+_sections_unfolded = [ "Resource", "shader_param" ]
+
+[sub_resource type="GDScript" id=4]
+
+script/source = "extends MeshInstance
+
+func _ready():
+	get_surface_material(0).set_shader_param(\"viewport_texture\", $Viewport.get_texture())
+
+func _process(delta):
+	$Viewport/World/Label.text = str(Engine.get_frames_per_second()) + \" FPS\""
+
+[node name="FPS" type="MeshInstance" index="0"]
+
+transform = Transform( 1, 0, 0, 0, -4.37114e-08, -1, 0, 1, -4.37114e-08, 0, 0, 0 )
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = false
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 1 )
+skeleton = NodePath("..")
+material/0 = SubResource( 3 )
+script = SubResource( 4 )
+_sections_unfolded = [ "Transform", "material" ]
+
+[node name="Viewport" type="Viewport" parent="." index="0"]
+
+arvr = false
+size = Vector2( 200, 100 )
+own_world = false
+world = null
+transparent_bg = true
+msaa = 0
+hdr = false
+disable_3d = false
+usage = 0
+debug_draw = 0
+render_target_v_flip = false
+render_target_clear_mode = 0
+render_target_update_mode = 3
+audio_listener_enable_2d = false
+audio_listener_enable_3d = false
+physics_object_picking = false
+gui_disable_input = false
+gui_snap_controls_to_pixels = true
+shadow_atlas_size = 0
+shadow_atlas_quad_0 = 2
+shadow_atlas_quad_1 = 2
+shadow_atlas_quad_2 = 3
+shadow_atlas_quad_3 = 4
+_sections_unfolded = [ "Render Target", "Rendering" ]
+
+[node name="World" type="Node2D" parent="Viewport" index="0"]
+
+_sections_unfolded = [ "Transform", "Z" ]
+
+[node name="Label" type="Label" parent="Viewport/World" index="0"]
+
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 0.0
+margin_right = 200.0
+margin_bottom = 100.0
+rect_scale = Vector2( 3, 3 )
+rect_pivot_offset = Vector2( 0, 0 )
+mouse_filter = 2
+size_flags_horizontal = 1
+size_flags_vertical = 4
+custom_colors/font_color = Color( 1, 1, 1, 1 )
+custom_colors/font_color_shadow = Color( 0, 0, 0, 1 )
+text = "FPS"
+percent_visible = 1.0
+lines_skipped = 0
+max_lines_visible = -1
+_sections_unfolded = [ "Anchor", "Grow Direction", "Margin", "Material", "Rect", "Visibility", "custom_colors" ]
+
+

@@ -1,0 +1,259 @@
+[gd_scene load_steps=11 format=2]
+
+[ext_resource path="res://addons/vr-common/functions/Function_Teleport.gd" type="Script" id=1]
+[ext_resource path="res://addons/vr-common/images/teleport_arrow.png" type="Texture" id=2]
+[ext_resource path="res://addons/vr-common/images/teleport_target.png" type="Texture" id=3]
+
+[sub_resource type="PlaneMesh" id=1]
+
+size = Vector2( 0.05, 1 )
+subdivide_width = 0
+subdivide_depth = 40
+
+[sub_resource type="Shader" id=2]
+
+code = "shader_type spatial;
+render_mode unshaded, cull_disabled, skip_vertex_transform;
+
+uniform float scale_t = 0.2;
+uniform float length = 20.0;
+uniform float ws = 1.0;
+uniform vec4 mix_color : hint_color;
+uniform sampler2D arrow_texture : hint_albedo;
+
+void vertex() {
+	vec3 down = vec3(0.0, -1.0 / ws, 0.0);
+	
+	// offset our Z so we're projecting from our origin point
+	VERTEX.z -= 0.5;
+	VERTEX.z *= length;
+	
+	// now use that to create our arch
+	float t = VERTEX.z * scale_t;
+	float t2 = t * t;
+
+	// translate to our world vector
+	VERTEX = (WORLD_MATRIX * vec4(VERTEX, 1.0)).xyz; 
+	
+	// and now create our arch
+	VERTEX += down * t2;
+	
+	// and apply our camera matrix
+	VERTEX = (INV_CAMERA_MATRIX * vec4(VERTEX, 1.0)).xyz;
+}
+
+void fragment() {
+	// and do our color
+	float offset =  (TIME * 2.0);
+	vec4 col = texture(arrow_texture, vec2(UV.x, (UV.y * length * -4.0) + offset )).rgba;
+	ALBEDO = col.rgb * mix_color.rgb;
+	
+	// need to fix up our image and add an alpha channel
+	ALPHA = col.a;
+}
+"
+
+[sub_resource type="ShaderMaterial" id=3]
+
+render_priority = 0
+shader = SubResource( 2 )
+shader_param/scale_t = 0.2
+shader_param/length = 30.0
+shader_param/ws = null
+shader_param/mix_color = Color( 0.176471, 0.313726, 0.862745, 1 )
+shader_param/arrow_texture = ExtResource( 2 )
+_sections_unfolded = [ "shader_param" ]
+
+[sub_resource type="PlaneMesh" id=4]
+
+size = Vector2( 1, 1 )
+subdivide_width = 0
+subdivide_depth = 0
+
+[sub_resource type="SpatialMaterial" id=5]
+
+render_priority = 0
+flags_transparent = true
+flags_unshaded = true
+flags_vertex_lighting = false
+flags_no_depth_test = false
+flags_use_point_size = false
+flags_world_triplanar = false
+flags_fixed_size = false
+flags_albedo_tex_force_srgb = false
+vertex_color_use_as_albedo = false
+vertex_color_is_srgb = false
+params_diffuse_mode = 1
+params_specular_mode = 0
+params_blend_mode = 0
+params_cull_mode = 2
+params_depth_draw_mode = 0
+params_line_width = 1.0
+params_point_size = 1.0
+params_billboard_mode = 0
+params_grow = false
+params_use_alpha_scissor = false
+albedo_color = Color( 0.176471, 0.313726, 0.862745, 1 )
+albedo_texture = ExtResource( 3 )
+metallic = 0.0
+metallic_specular = 0.5
+metallic_texture_channel = 0
+roughness = 0.0
+roughness_texture_channel = 0
+emission_enabled = false
+normal_enabled = false
+rim_enabled = false
+clearcoat_enabled = false
+anisotropy_enabled = false
+ao_enabled = false
+depth_enabled = false
+subsurf_scatter_enabled = false
+transmission_enabled = false
+refraction_enabled = false
+detail_enabled = false
+uv1_scale = Vector3( 1, 1, 1 )
+uv1_offset = Vector3( 0, 0, 0 )
+uv1_triplanar = false
+uv1_triplanar_sharpness = 1.0
+uv2_scale = Vector3( 1, 1, 1 )
+uv2_offset = Vector3( 0, 0, 0 )
+uv2_triplanar = false
+uv2_triplanar_sharpness = 1.0
+proximity_fade_enable = false
+distance_fade_enable = false
+_sections_unfolded = [ "Albedo", "Flags", "Parameters" ]
+
+[sub_resource type="CapsuleMesh" id=6]
+
+radius = 0.3
+mid_height = 1.2
+radial_segments = 64
+rings = 8
+
+[sub_resource type="SpatialMaterial" id=7]
+
+render_priority = 0
+flags_transparent = true
+flags_unshaded = false
+flags_vertex_lighting = false
+flags_no_depth_test = false
+flags_use_point_size = false
+flags_world_triplanar = false
+flags_fixed_size = false
+flags_albedo_tex_force_srgb = false
+vertex_color_use_as_albedo = false
+vertex_color_is_srgb = false
+params_diffuse_mode = 0
+params_specular_mode = 0
+params_blend_mode = 0
+params_cull_mode = 0
+params_depth_draw_mode = 0
+params_line_width = 1.0
+params_point_size = 1.0
+params_billboard_mode = 0
+params_grow = false
+params_use_alpha_scissor = false
+albedo_color = Color( 0.0337219, 0.241112, 0.863281, 0.497255 )
+metallic = 0.0
+metallic_specular = 0.5
+metallic_texture_channel = 0
+roughness = 0.0
+roughness_texture_channel = 0
+emission_enabled = false
+normal_enabled = false
+rim_enabled = false
+clearcoat_enabled = false
+anisotropy_enabled = false
+ao_enabled = false
+depth_enabled = false
+subsurf_scatter_enabled = false
+transmission_enabled = false
+refraction_enabled = false
+detail_enabled = false
+uv1_scale = Vector3( 1, 1, 1 )
+uv1_offset = Vector3( 0, 0, 0 )
+uv1_triplanar = false
+uv1_triplanar_sharpness = 1.0
+uv2_scale = Vector3( 1, 1, 1 )
+uv2_offset = Vector3( 0, 0, 0 )
+uv2_triplanar = false
+uv2_triplanar_sharpness = 1.0
+proximity_fade_enable = false
+distance_fade_enable = false
+_sections_unfolded = [ "Albedo", "Flags" ]
+
+[node name="Function_Teleport" type="KinematicBody" index="0"]
+
+input_ray_pickable = false
+input_capture_on_drag = false
+collision_layer = 1
+collision_mask = 1
+axis_lock_linear_x = false
+axis_lock_linear_y = false
+axis_lock_linear_z = false
+axis_lock_angular_x = false
+axis_lock_angular_y = false
+axis_lock_angular_z = false
+collision/safe_margin = 0.01
+script = ExtResource( 1 )
+_sections_unfolded = [ "Axis Lock", "Collision", "Transform", "collision" ]
+origin = null
+can_teleport_color = Color( 0, 1, 0, 1 )
+cant_teleport_color = Color( 1, 0, 0, 1 )
+no_collision_color = Color( 0.176471, 0.313726, 0.862745, 1 )
+player_height = 1.8
+player_radius = 0.4
+strength = 5.0
+
+[node name="Teleport" type="MeshInstance" parent="." index="0"]
+
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = false
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 1 )
+skeleton = NodePath("..")
+material/0 = SubResource( 3 )
+_sections_unfolded = [ "Transform", "material" ]
+
+[node name="Target" type="MeshInstance" parent="." index="1"]
+
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = false
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 4 )
+skeleton = NodePath("..")
+material/0 = SubResource( 5 )
+_sections_unfolded = [ "material" ]
+
+[node name="Player_figure" type="Position3D" parent="Target" index="0"]
+
+[node name="Capsule" type="MeshInstance" parent="Target/Player_figure" index="0"]
+
+transform = Transform( 1, 0, 0, 0, -4.37114e-08, -1, 0, 1, -4.37114e-08, 0, 0.9, 0 )
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = false
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = SubResource( 6 )
+skeleton = NodePath("..")
+material/0 = SubResource( 7 )
+_sections_unfolded = [ "Transform", "material" ]
+
+

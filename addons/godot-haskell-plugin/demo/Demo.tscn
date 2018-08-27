@@ -1,11 +1,14 @@
-[gd_scene load_steps=2 format=2]
+[gd_scene load_steps=4 format=2]
 
-[ext_resource path="res://addons/godot-haskell-plugin/WestonCompositor.gdns" type="Script" id=1]
+[ext_resource path="res://addons/godot-haskell-plugin/demo/Demo.gd" type="Script" id=1]
+[ext_resource path="res://addons/godot-haskell-plugin/WestonCompositor.gdns" type="Script" id=2]
+[ext_resource path="res://addons/godot-haskell-plugin/SimulaController.gdns" type="Script" id=3]
 
-[node name="Demo" type="Spatial" index="0"]
+[node name="Root" type="Spatial"]
+script = ExtResource( 1 )
+_sections_unfolded = [ "Script" ]
 
-[node name="Camera" type="Camera" parent="." index="0"]
-
+[node name="Camera" type="Camera" parent="."]
 transform = Transform( -0.999825, 0, -0.0186987, 0, 1, 0, 0.0186987, 0, -0.999825, 0, 4.98498, -10.5469 )
 keep_aspect = 1
 cull_mask = 1048575
@@ -21,10 +24,37 @@ near = 0.05
 far = 100.0
 _sections_unfolded = [ "Transform" ]
 
-[node name="Node" type="Spatial" parent="." index="1"]
-
+[node name="Weston" type="Spatial" parent="."]
 transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.09818, 0 )
-script = ExtResource( 1 )
+script = ExtResource( 2 )
 _sections_unfolded = [ "Transform", "Visibility" ]
 
+[node name="ARVROrigin" type="ARVROrigin" parent="."]
+world_scale = 1.0
+
+[node name="ARVRCamera" type="ARVRCamera" parent="ARVROrigin"]
+keep_aspect = 1
+cull_mask = 1048575
+environment = null
+h_offset = 0.0
+v_offset = 0.0
+doppler_tracking = 0
+projection = 0
+current = false
+fov = 70.0
+size = 1.0
+near = 0.05
+far = 100.0
+
+[node name="LeftController" type="ARVRController" parent="ARVROrigin"]
+controller_id = 1
+rumble = 0.0
+script = ExtResource( 3 )
+_sections_unfolded = [ "Script" ]
+
+[node name="RightController" type="ARVRController" parent="ARVROrigin"]
+controller_id = 2
+rumble = 0.0
+script = ExtResource( 3 )
+_sections_unfolded = [ "Script" ]
 
