@@ -11,6 +11,8 @@ module Plugin.WestonSurfaceSprite
   , updateWestonSurfaceSprite
   , spriteShouldMove, setSpriteShouldMove
   , getSprite
+  , InputEventType(..)
+  , processClickEvent
   ) where
 
 import Simula.WaylandServer
@@ -147,15 +149,26 @@ input _ self args = do
     [_cam, evObj, clickPosObj, _clickNormal, _shapeIdx] ->  do
       ev <- fromGodotVariant evObj
       clickPos <- fromGodotVariant clickPosObj
-      processClickEvent self ev clickPos
+      processInputEvent self ev clickPos
       godot_object_destroy ev
     _ -> putStrLn "expected 5 arguments in _input_event"
   toLowLevel VariantNil
 
+data InputEventType 
+  = Motion
+  | Button Bool Int
 
-    
-processClickEvent :: GodotWestonSurfaceSprite -> GodotObject -> GodotVector3 -> IO ()
-processClickEvent gwss ev clickPos = do
+processInputEvent :: GodotWestonSurfaceSprite -> GodotObject -> GodotVector3 -> IO ()
+processInputEvent gwss ev clickPos = do
+  whenM (ev `is_class` "InputEventMouseMotion") $ processClickEvent gwss Motion clickPos 
+  whenM (ev `is_class` "InputEventMouseButton") $ do
+    let ev' = GodotInputEventMouseButton (coerce ev)
+    pressed <- G.is_pressed ev'
+    button <- G.get_button_index ev'
+    processClickEvent gwss (Button pressed button) clickPos
+
+processClickEvent :: GodotWestonSurfaceSprite -> InputEventType -> GodotVector3 -> IO ()
+processClickEvent gwss evt clickPos = do
   lpos <- G.to_local gwss clickPos >>= fromLowLevel
   print lpos
   print (safeCast gwss :: GodotObject)
@@ -174,13 +187,16 @@ processClickEvent gwss ev clickPos = do
   -- coords = surface coordinates in pixel with (0,0) at top left
   let sx = truncate (256 * coords ^. _x)
       sy = truncate (256 * coords ^. _y)
-  processMouseButtonEvent sx sy >> processMouseMotionEvent sx sy
+  case evt of
+    Motion -> processMouseMotionEvent sx sy
+    Button pressed button ->  processMouseButtonEvent sx sy pressed button
+
   where
     getMsec = do
       time <- getTime Realtime
       let msec = fromIntegral $ toNanoSecs time `div` 1000000
       return msec
-    processMouseMotionEvent sx sy = whenM (ev `is_class` "InputEventMouseMotion") $ do
+    processMouseMotionEvent sx sy =  do
       msec <- getMsec
       seat <- atomically $ readTVar (_gwssSeat gwss)
       pointer <- weston_seat_get_pointer seat
@@ -189,12 +205,11 @@ processClickEvent gwss ev clickPos = do
       
       pointer_send_motion pointer msec sx sy
 
-    processMouseButtonEvent sx sy = whenM (ev `is_class` "InputEventMouseButton") $ do
-      let ev' = GodotInputEventMouseButton (coerce ev)
+    processMouseButtonEvent sx sy pressed button = do
+  
       msec <- getMsec
       gwst <- atomically $ readTVar $ _gwssTexture gwss
       view <- atomically $ readTVar $ _gwstView gwst
-      pressed <- G.is_pressed ev'
       putStr "Button "
       print (sx,sy)
 
@@ -205,7 +220,6 @@ processClickEvent gwss ev clickPos = do
       when pressed $ weston_pointer_set_focus pointer view sx sy
 
       ws <- atomically $ readTVar $ _gwstSurface gwst
-      button <- G.get_button_index ev'
       weston_keyboard_set_focus kbd ws
       weston_pointer_send_button pointer msec (toWestonButton button) (fromIntegral $ fromEnum pressed) --see libinput and wayland for enums; converting later
 

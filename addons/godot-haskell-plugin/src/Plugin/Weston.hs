@@ -24,6 +24,9 @@ import Plugin.WestonSurfaceSprite
 import Plugin.WestonSurfaceTexture
 import Plugin.SimulaController
 
+import Godot.Core.GodotGlobalConstants
+
+
 import Control.Monad
 import Control.Concurrent
 import System.Environment
@@ -291,11 +294,22 @@ onButton self gsc button pressed = do
       Nothing -> return ()
   where
     rc = _gscRayCast gsc
-    onSpriteButton sprite = return ()
-      -- if axis1: send lclick
-      -- if appmenu: send rclick
-      -- if grip: drag/resize handling
-                      
+    onSpriteButton sprite = case button of
+      OVR_Button_Grip -> return () -- if grip: drag/resize handling 
+      OVR_Button_Trigger -> G.get_collision_point rc >>= processClickEvent sprite (Button pressed BUTTON_LEFT)
+      OVR_Button_AppMenu -> G.get_collision_point rc >>= processClickEvent sprite (Button pressed BUTTON_RIGHT)
+      
+pattern OVR_Button_Touchpad :: Int
+pattern OVR_Button_Touchpad = 32
+
+pattern OVR_Button_Trigger :: Int
+pattern OVR_Button_Trigger = 33
+
+pattern OVR_Button_AppMenu :: Int
+pattern OVR_Button_AppMenu = 1
+
+pattern OVR_Button_Grip :: Int
+pattern OVR_Button_Grip = 2
 
 keyTranslation :: M.Map Int Int
 keyTranslation = M.fromList 
