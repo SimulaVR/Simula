@@ -192,11 +192,11 @@ startBaseThread compositor = void $ forkOS $ do
         setSpriteShouldMove sprite False
         moveToUnoccupied compositor sprite
 
-
+-- TODO: check the origin plane?
 moveToUnoccupied :: GodotWestonCompositor -> GodotWestonSurfaceSprite -> IO ()
 moveToUnoccupied gwc gwss = do
   surfaces <- atomically $ readTVar (_gwcSurfaces gwc)
-  let elems = M.elems surfaces
+  let elems = filter (\x -> (safeCast x :: GodotObject) /= safeCast gwss) $ M.elems surfaces
 
   extents <- forM elems $ \westonSprite -> do
     sprite <- getSprite westonSprite
@@ -206,13 +206,15 @@ moveToUnoccupied gwc gwss = do
 
     return (pos, size + pos)
   
-  let minX = minimum $ map (view $ _1._x) extents
-  let maxX = minimum $ map (view $ _2._x) extents
+  let minX = minimum $ 0 : map (view $ _1._x) extents
+  let maxX = maximum $ 0 :  map (view $ _2._x) extents
   sprite <- getSprite gwss
   aabb <- G.get_aabb sprite
   size <- Api.godot_aabb_get_size aabb >>= fromLowLevel
   let sizeX = size ^. _x
   let newPos = if abs minX < abs maxX then V3 (minX - sizeX/2) 0 0 else V3 (maxX + sizeX/2) 0 0
+  print extents
+  print newPos
   tlVec <- toLowLevel newPos
   G.translate sprite tlVec
 
