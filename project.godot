@@ -23,6 +23,10 @@ config/icon="res://icon.png"
 
 settings/stdout/print_fps=true
 
+[gdnative]
+
+singletons=[ "res://addons/godot-openvr/godot_openvr.gdnlib" ]
+
 [physics]
 
 2d/physics_engine="GodotPhysics"

@@ -7,10 +7,7 @@ path="res://.import/icon.png-a89ecb8be28ea6c50eeae0c3cb0cd271.stex"
 [deps]
 
 source_file="res://addons/godot-openvr/icon.png"
-source_md5="eafe02953c96cfe709ce402d99f14cc0"
-
 dest_files=[ "res://.import/icon.png-a89ecb8be28ea6c50eeae0c3cb0cd271.stex" ]
-dest_md5="0224238a728908d9266cd1ac2f8f0cc0"
 
 [params]
 
