@@ -41,6 +41,7 @@ data GodotSimulaController = GodotSimulaController
   , _gscRayCast :: GodotRayCast
   , _gscOpenvrMesh :: TVar (Maybe GodotArrayMesh)
   , _gscMeshInstance :: GodotMeshInstance
+  , _gscLaser :: GodotNode
   }
 
 instance Eq GodotSimulaController where
@@ -52,7 +53,7 @@ instance GodotClass GodotSimulaController where
 instance ClassExport GodotSimulaController where
   classInit obj = do
     rc <- GodotRayCast <$> mkClassInstance "RayCast"
-    toLowLevel (V3 0 0 (negate 1)) >>= G.set_cast_to rc
+    toLowLevel (V3 0 0 (negate 10)) >>= G.set_cast_to rc
     G.set_enabled rc True
     G.add_child (GodotNode obj) (safeCast rc) True
 
@@ -60,10 +61,19 @@ instance ClassExport GodotSimulaController where
     G.add_child (GodotNode obj) (safeCast mi) True
     toLowLevel ".." >>= G.set_skeleton_path mi 
 
+    rl <- getResourceLoader
+    url <- toLowLevel "res://Laser.tscn"
+    typeHint <- toLowLevel ""
+    (GodotResource laserObj) <- G.load rl url typeHint False
+    let laserScene = GodotPackedScene laserObj
+    laser <- G.instance' laserScene 0
+
+    G.add_child (GodotNode obj) (safeCast laser) True
+
     G.set_visible (GodotSpatial obj) False
 
     mesh <- newTVarIO Nothing
-    return $ GodotSimulaController obj rc mesh mi
+    return $ GodotSimulaController obj rc mesh mi laser
 
   classExtends = "ARVRController"
   classMethods =
@@ -73,7 +83,7 @@ instance ClassExport GodotSimulaController where
 
 instance HasBaseClass GodotSimulaController where
   type BaseClass GodotSimulaController = GodotARVRController       
-  super (GodotSimulaController obj  _ _ _) = GodotARVRController obj
+  super (GodotSimulaController obj  _ _ _ _) = GodotARVRController obj
 
 load_controller_mesh :: GodotSimulaController -> Text -> IO (Maybe GodotMesh)
 load_controller_mesh gsc name = do

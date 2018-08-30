@@ -47,12 +47,14 @@ near = 0.05
 far = 100.0
 
 [node name="LeftController" type="ARVRController" parent="ARVROrigin"]
+visible = false
 controller_id = 1
 rumble = 0.0
 script = ExtResource( 3 )
 _sections_unfolded = [ "Script" ]
 
 [node name="RightController" type="ARVRController" parent="ARVROrigin"]
+visible = false
 controller_id = 2
 rumble = 0.0
 script = ExtResource( 3 )
