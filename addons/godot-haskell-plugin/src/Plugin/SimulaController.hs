@@ -43,6 +43,9 @@ data GodotSimulaController = GodotSimulaController
   , _gscMeshInstance :: GodotMeshInstance
   }
 
+instance Eq GodotSimulaController where
+  (==) = (==) `on` _gscObj
+
 instance GodotClass GodotSimulaController where
   godotClassName = "SimulaController"
 

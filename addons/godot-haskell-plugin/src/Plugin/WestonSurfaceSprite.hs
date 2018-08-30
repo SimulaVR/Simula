@@ -49,6 +49,9 @@ data GodotWestonSurfaceSprite = GodotWestonSurfaceSprite
   , _gwssSeat :: TVar WestonSeat
   }
 
+instance Eq GodotWestonSurfaceSprite where
+  (==) = (==) `on` _gwssObj
+ 
 instance GodotClass GodotWestonSurfaceSprite where
   godotClassName = "WestonSurfaceSprite"
 

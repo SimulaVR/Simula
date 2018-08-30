@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE LambdaCase #-}
 module Plugin.Weston where
 
 import Simula.WaylandServer
@@ -39,12 +40,18 @@ import Control.Lens
 
 import Foreign hiding (void)
 
+data GrabState
+  = NoGrab
+  | Dragging (GodotSimulaController, GodotVector3) GodotWestonSurfaceSprite
+  | Resizing [(GodotSimulaController, GodotVector3)] GodotWestonSurfaceSprite Float -- distance
+
 data GodotWestonCompositor = GodotWestonCompositor
   { _gwcObj      :: GodotObject
   , _gwcCompositor :: TVar WestonCompositor
   , _gwcSurfaces :: TVar (M.Map WestonSurface GodotWestonSurfaceSprite)
   , _gwcOutput :: TVar WestonOutput
   , _gwcNormalLayer :: TVar WestonLayer
+  , _gwcGrabState :: TVar GrabState
   }
 
 instance GodotClass GodotWestonCompositor where
@@ -52,7 +59,7 @@ instance GodotClass GodotWestonCompositor where
 
 instance ClassExport GodotWestonCompositor where
   classInit obj  = GodotWestonCompositor obj <$> atomically (newTVar undefined) <*> atomically (newTVar mempty) <*> atomically (newTVar undefined)
-                   <*> atomically (newTVar undefined)
+                   <*> atomically (newTVar undefined) <*> atomically (newTVar NoGrab)
     
   classExtends = "Node"
   classMethods = [ Func NoRPC "_ready" startBaseCompositor
@@ -223,7 +230,7 @@ moveToUnoccupied gwc gwss = do
 
 instance HasBaseClass GodotWestonCompositor where
   type BaseClass GodotWestonCompositor = GodotNode         
-  super (GodotWestonCompositor obj  _ _ _ _) = GodotNode obj
+  super (GodotWestonCompositor obj  _ _ _ _ _) = GodotNode obj
 
 getSeat :: GodotWestonCompositor -> IO WestonSeat
 getSeat gwc = do 
@@ -287,20 +294,62 @@ onButton self gsc button pressed = do
   whenM (G.is_colliding rc) $ do
     obj <- G.get_collider rc
     maybeSprite <- tryObjectCast @GodotWestonSurfaceSprite obj
-    case button of
-      OVR_Button_Grip -> G.get_collision_point rc >>= processGrabEvent self gsc obj pressed
-      _ -> case maybeSprite of
-        Just sprite -> onSpriteButton sprite
-        Nothing -> return ()
+    case maybeSprite of
+      Just sprite -> onSpriteButton sprite
+      Nothing -> return ()
   where
     rc = _gscRayCast gsc
     onSpriteButton sprite = G.get_collision_point rc >>= case button of
+      OVR_Button_Grip -> processGrabEvent self gsc sprite pressed
       OVR_Button_Trigger -> processClickEvent sprite (Button pressed BUTTON_LEFT)
       OVR_Button_AppMenu -> processClickEvent sprite (Button pressed BUTTON_RIGHT)
-      
+  
+process :: GodotFunc GodotWestonCompositor
+process _ self _ = do
+  state <- atomically $ readTVar (_gwcGrabState self)
+  case state of
+    Resizing [(ct1, origpos1), (ct2, origpos2)] window origDistance -> do
+      newpos1 <- G.to_global ct1 origpos1
+      newpos2 <- G.to_global ct2 origpos2
+      distance <-  realToFrac <$> Api.godot_vector3_distance_to newpos1 newpos2
+      let scale = distance/origDistance
+      toLowLevel (V3 scale scale scale) >>= G.scale_object_local window
+    _ -> return ()
+  toLowLevel VariantNil
 
-processGrabEvent :: GodotWestonCompositor -> GodotSimulaController -> GodotObject -> Bool -> GodotVector3 -> IO ()
-processGrabEvent gwcomp gsc obj pressed clickPos = return ()
+processGrabEvent :: GodotWestonCompositor -> GodotSimulaController -> GodotWestonSurfaceSprite -> Bool -> GodotVector3 -> IO ()
+processGrabEvent gwcomp gsc obj pressed clickPos = atomically (readTVar (_gwcGrabState gwcomp)) >>= \case
+  NoGrab | pressed -> startDrag
+  Dragging ct1@(ctrlr,_) curWindow 
+    | pressed && obj /= curWindow -> putStrLn "tried to grab multiple windows, unsupported right now"
+    | pressed && ctrlr == gsc -> putStrLn "tried to press with the same controller without releasing"
+    | pressed -> stopDrag ctrlr curWindow >> startResize [ct1, (gsc, clickPos)] curWindow
+    | otherwise -> stopDrag ctrlr curWindow
+  Resizing cts curWindow _ | pressed -> putStrLn "invalid: pressed during resize"
+                           | otherwise -> stopResize cts curWindow
+
+  where
+    startDrag = do
+      atomically $ writeTVar (_gwcGrabState gwcomp) $ Dragging (gsc, clickPos) obj
+      G.remove_child gwcomp (safeCast obj)
+      G.add_child gsc (safeCast obj) True
+
+    stopDrag ctrlr curWindow = do
+      atomically $ writeTVar (_gwcGrabState gwcomp) NoGrab
+      G.remove_child ctrlr (safeCast curWindow)
+      G.add_child gwcomp (safeCast curWindow) True
+
+    startResize [(ct1, pos1),(ct2, pos2)] curWindow = do
+      distance <- realToFrac <$> Api.godot_vector3_distance_to pos1 pos2
+      -- inverse transform pos1/pos2 and store that
+      newpos1 <- G.to_local ct1 pos1
+      newpos2 <- G.to_local ct2 pos2
+      atomically $ writeTVar (_gwcGrabState gwcomp) $ Resizing [(ct1, newpos1), (ct2, newpos2)] curWindow distance
+    
+    stopResize cts@[ct1,ct2] curWindow = do
+      atomically $ writeTVar (_gwcGrabState gwcomp) NoGrab
+
+    
   -- if 1 controller hits: drag
   -- if 2 controllers hit same surface: resize
   -- * release once any controller is released

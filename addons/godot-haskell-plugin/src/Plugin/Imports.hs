@@ -8,7 +8,7 @@ module Plugin.Imports
 -- Things I wish were in Prelude
 import           Control.Category                 as B ((<<<), (>>>))
 import           Control.Monad                    as B ((<=<), (>=>))
-import           Data.Function                    as B ((&))
+import           Data.Function                    as B 
 import           Data.Text                        as B (Text, append, pack,
                                                         unpack)
 
