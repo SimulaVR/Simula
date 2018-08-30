@@ -247,7 +247,7 @@ moveToUnoccupied gwc gwss = do
   print extents
   print newPos
   tlVec <- toLowLevel newPos
-  G.translate sprite tlVec
+  G.translate gwss tlVec
 
 
 instance HasBaseClass GodotWestonCompositor where
