@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 module Plugin.SimulaController
   ( GodotSimulaController(..)
 
@@ -11,6 +11,7 @@ module Plugin.SimulaController
 import Simula.WaylandServer
 import Simula.Weston
 
+import Control.Concurrent.STM.TVar
 import Control.Monad
 import Data.Coerce
 
@@ -38,7 +39,7 @@ import System.IO.Unsafe
 data GodotSimulaController = GodotSimulaController
   { _gscObj     :: GodotObject
   , _gscRayCast :: GodotRayCast
-  , _gscOpenvrMesh :: GodotArrayMesh
+  , _gscOpenvrMesh :: TVar (Maybe GodotArrayMesh)
   , _gscMeshInstance :: GodotMeshInstance
   }
 
@@ -56,44 +57,44 @@ instance ClassExport GodotSimulaController where
     G.add_child (GodotNode obj) (safeCast mi) True
     toLowLevel ".." >>= G.set_skeleton_path mi 
 
-    rl <- getResourceLoader
-    url <- toLowLevel "res://addons/godot-openvr/OpenVRRenderModel.gdns"
-    typeHint <- toLowLevel ""
-    (GodotResource obj) <- G.load rl url typeHint False
-    let ns = GodotNativeScript obj
-    mesh <- G.new ns []
-
     G.set_visible (GodotSpatial obj) False
 
-    return $ GodotSimulaController obj rc (GodotArrayMesh mesh) mi
+    mesh <- newTVarIO Nothing
+    return $ GodotSimulaController obj rc mesh mi
+
   classExtends = "ARVRController"
-  classMethods = [ Func NoRPC "_process" process ]
+  classMethods =
+    [ Func NoRPC "_process" process
+    , Func NoRPC "_ready" ready
+    ]
 
 instance HasBaseClass GodotSimulaController where
   type BaseClass GodotSimulaController = GodotARVRController       
   super (GodotSimulaController obj  _ _ _) = GodotARVRController obj
 
-
-
-load_controller_mesh :: GodotSimulaController -> Text -> IO GodotMesh
+load_controller_mesh :: GodotSimulaController -> Text -> IO (Maybe GodotMesh)
 load_controller_mesh gsc name = do
-  nameStr <- toLowLevel $ T.dropEnd 2 name 
-  ret <- G.call (_gscOpenvrMesh gsc) loadModelStr [toVariant (nameStr :: GodotString)] >>= fromGodotVariant
-  if ret then return $ safeCast (_gscOpenvrMesh gsc)
-  else do
-    ret <- G.call (_gscOpenvrMesh gsc) loadModelStr [toVariant genericControllerStr] >>= fromGodotVariant
-    if ret then return $ safeCast (_gscOpenvrMesh gsc)
-    else newMesh
+  nameStr <- toLowLevel $ T.dropEnd 2 name
+  mMsh <- readTVarIO (_gscOpenvrMesh gsc)
+  case mMsh of
+    Just msh -> do
+      ret <- G.call msh loadModelStr [toVariant (nameStr :: GodotString)] >>= fromGodotVariant
+      if ret
+        then
+          return $ Just $ safeCast msh
+        else do
+          ret <- G.call msh loadModelStr [toVariant genericControllerStr] >>= fromGodotVariant
+          if ret then return $ Just $ safeCast msh
+          else Just <$> GodotMesh <$> mkClassInstance "Mesh"
 
+    Nothing -> return Nothing
 
-  where
-    loadModelStr, genericControllerStr :: GodotString
-    loadModelStr = unsafePerformIO $ toLowLevel "load_model"
-    {-# NOINLINE loadModelStr #-}
-    genericControllerStr = unsafePerformIO $ toLowLevel "generic_controller"
-    {-# NOINLINE genericControllerStr #-}
-
-    newMesh = GodotMesh <$> mkClassInstance "Mesh"
+ where
+  loadModelStr, genericControllerStr :: GodotString
+  loadModelStr = unsafePerformIO $ toLowLevel "load_model"
+  {-# NOINLINE loadModelStr #-}
+  genericControllerStr = unsafePerformIO $ toLowLevel "generic_controller"
+  {-# NOINLINE genericControllerStr #-}
 
 
 process :: GodotFunc GodotSimulaController
@@ -107,8 +108,22 @@ process _ self _ = do
     return ()
   else do
     cname <- G.get_controller_name self >>= fromLowLevel
-    mesh <- load_controller_mesh self  cname
-    G.set_mesh (_gscMeshInstance self) mesh
+    mMesh <- load_controller_mesh self  cname
+    case mMesh of
+      Just mesh -> G.set_mesh (_gscMeshInstance self) mesh
+      Nothing -> return ()
     G.set_visible self True
   toLowLevel VariantNil
 
+ready :: GodotFunc GodotSimulaController
+ready _ self _ = do
+  -- Load and set controller mesh
+  rl <- getResourceLoader
+  url <- toLowLevel "res://addons/godot-openvr/OpenVRRenderModel.gdns"
+  typeHint <- toLowLevel ""
+  (GodotResource obj) <- G.load rl url typeHint False
+  let ns = GodotNativeScript obj
+  mesh <- GodotArrayMesh <$> G.new ns []
+  atomically $ writeTVar (_gscOpenvrMesh self) $ Just mesh
+
+  toLowLevel VariantNil
