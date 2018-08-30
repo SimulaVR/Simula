@@ -126,7 +126,7 @@ startBaseThread compositor = void $ forkOS $ do
   weston_seat_init_keyboard seat (XkbKeymap nullPtr)
 
   installHandler sigUSR1 Ignore Nothing
-  wet_load_xwayland wcomp
+  {-wet_load_xwayland wcomp-}
 
   weston_compositor_wake wcomp
   putStrLn "starting compositor"
