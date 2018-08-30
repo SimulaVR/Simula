@@ -14,7 +14,7 @@ OSX.64="res://addons/godot-openvr/bin/osx/libgodot_openvr.dylib"
 
 [dependencies]
 
-X11.64=["res://addons/godot-openvr/bin/x11/libopenvr_api.so"]
-Windows.32=["res://addons/godot-openvr/bin/win32/openvr_api.dll"]
-Windows.64=["res://addons/godot-openvr/bin/win64/openvr_api.dll"]
-OSX.64=[""]
+X11.64=[ "res://addons/godot-openvr/bin/x11/libopenvr_api.so" ]
+Windows.32=[ "res://addons/godot-openvr/bin/win32/openvr_api.dll" ]
+Windows.64=[ "res://addons/godot-openvr/bin/win64/openvr_api.dll" ]
+OSX.64=[ "" ]

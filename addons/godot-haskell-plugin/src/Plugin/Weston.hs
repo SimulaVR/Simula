@@ -66,8 +66,7 @@ startBaseCompositor _ compositor _ = do
   toLowLevel VariantNil
 
 onReady :: GodotWestonCompositor -> IO ()
-onReady compositor = return ()
-
+onReady gwc = return ()
 
 startBaseThread :: GodotWestonCompositor -> IO ()
 startBaseThread compositor = void $ forkOS $ do
@@ -288,17 +287,24 @@ onButton self gsc button pressed = do
   whenM (G.is_colliding rc) $ do
     obj <- G.get_collider rc
     maybeSprite <- tryObjectCast @GodotWestonSurfaceSprite obj
-    case maybeSprite of
-      Just sprite -> do
-        onSpriteButton sprite
-      Nothing -> return ()
+    case button of
+      OVR_Button_Grip -> G.get_collision_point rc >>= processGrabEvent self gsc obj pressed
+      _ -> case maybeSprite of
+        Just sprite -> onSpriteButton sprite
+        Nothing -> return ()
   where
     rc = _gscRayCast gsc
-    onSpriteButton sprite = case button of
-      OVR_Button_Grip -> return () -- if grip: drag/resize handling 
-      OVR_Button_Trigger -> G.get_collision_point rc >>= processClickEvent sprite (Button pressed BUTTON_LEFT)
-      OVR_Button_AppMenu -> G.get_collision_point rc >>= processClickEvent sprite (Button pressed BUTTON_RIGHT)
+    onSpriteButton sprite = G.get_collision_point rc >>= case button of
+      OVR_Button_Trigger -> processClickEvent sprite (Button pressed BUTTON_LEFT)
+      OVR_Button_AppMenu -> processClickEvent sprite (Button pressed BUTTON_RIGHT)
       
+
+processGrabEvent :: GodotWestonCompositor -> GodotSimulaController -> GodotObject -> Bool -> GodotVector3 -> IO ()
+processGrabEvent gwcomp gsc obj pressed clickPos = return ()
+  -- if 1 controller hits: drag
+  -- if 2 controllers hit same surface: resize
+  -- * release once any controller is released
+
 pattern OVR_Button_Touchpad :: Int
 pattern OVR_Button_Touchpad = 32
 
