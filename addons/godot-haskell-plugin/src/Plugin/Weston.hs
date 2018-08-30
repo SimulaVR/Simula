@@ -35,6 +35,7 @@ import System.Environment
 import System.Posix.Signals
 
 import Data.Bits
+import qualified Data.Vector as V
 
 import Control.Lens
 
@@ -73,7 +74,28 @@ startBaseCompositor _ compositor _ = do
   toLowLevel VariantNil
 
 onReady :: GodotWestonCompositor -> IO ()
-onReady gwc = return ()
+onReady gwc = do
+  leftCt <- toLowLevel "../ARVROrigin/LeftController" >>= G.get_node gwc
+  rightCt <- toLowLevel "../ARVROrigin/RightController" >>= G.get_node gwc
+
+  connectController leftCt
+  connectController rightCt
+  where
+    connectController ct = do
+      btnPressed <- toLowLevel "button_pressed"
+      btnReleased <- toLowLevel "button_released"
+      btnSignal <- toLowLevel "on_button_signal"
+      argsPressed <- Api.godot_array_new 
+      toLowLevel (toVariant ct) >>= Api.godot_array_append  argsPressed
+      toLowLevel (toVariant True) >>= Api.godot_array_append argsPressed
+      
+      argsReleased <- Api.godot_array_new 
+      toLowLevel (toVariant ct) >>= Api.godot_array_append  argsReleased
+      toLowLevel (toVariant False) >>= Api.godot_array_append argsReleased
+
+      G.connect ct btnPressed (safeCast gwc) btnSignal argsPressed 0
+      G.connect ct btnReleased (safeCast gwc) btnSignal argsReleased 0
+      return ()
 
 startBaseThread :: GodotWestonCompositor -> IO ()
 startBaseThread compositor = void $ forkOS $ do
