@@ -1,3 +1,5 @@
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiWayIf            #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -41,7 +43,7 @@ data GodotSimulaController = GodotSimulaController
   , _gscRayCast :: GodotRayCast
   , _gscOpenvrMesh :: TVar (Maybe GodotArrayMesh)
   , _gscMeshInstance :: GodotMeshInstance
-  , _gscLaser :: GodotNode
+  , _gscLaser :: GodotMeshInstance
   }
 
 instance Eq GodotSimulaController where
@@ -73,7 +75,7 @@ instance ClassExport GodotSimulaController where
     G.set_visible (GodotSpatial obj) False
 
     mesh <- newTVarIO Nothing
-    return $ GodotSimulaController obj rc mesh mi laser
+    return $ GodotSimulaController obj rc mesh mi (GodotMeshInstance $ safeCast laser)
 
   classExtends = "ARVRController"
   classMethods =
@@ -115,17 +117,27 @@ process _ self _ = do
   active <- G.get_is_active self
   visible <- G.is_visible self
 
-  if not active then do
-    G.set_visible self False
-  else if visible then
-    return ()
-  else do
-    cname <- G.get_controller_name self >>= fromLowLevel
-    mMesh <- load_controller_mesh self  cname
-    case mMesh of
-      Just mesh -> G.set_mesh (_gscMeshInstance self) mesh
-      Nothing -> return ()
-    G.set_visible self True
+  if | not active -> G.set_visible self False
+     | visible -> do
+         isColliding <- G.is_colliding (_gscRayCast self)
+         G.set_visible (_gscLaser self) isColliding
+
+         if | isColliding ->
+                G.get_collider (_gscRayCast self)
+                  >>= tryObjectCast @GodotWestonSurfaceSprite
+                  >>= \case
+                    Just window -> do
+                      pos <- G.get_collision_point (_gscRayCast self)
+                      processClickEvent window Motion pos
+                    Nothing -> return ()
+            | otherwise -> return ()
+     | otherwise -> do
+         cname <- G.get_controller_name self >>= fromLowLevel
+         mMesh <- load_controller_mesh self  cname
+         case mMesh of
+           Just mesh -> G.set_mesh (_gscMeshInstance self) mesh
+           Nothing -> return ()
+         G.set_visible self True
   toLowLevel VariantNil
 
 ready :: GodotFunc GodotSimulaController

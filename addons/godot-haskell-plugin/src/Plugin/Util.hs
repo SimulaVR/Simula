@@ -12,7 +12,6 @@ import           Foreign.C               (withCString)
 import           Godot.Api               
 import           Godot.Gdnative.Internal
 import           Godot.Gdnative.Types
-import           Godot.Methods           (get_class, instance')
 import qualified Godot.Methods as G
 import Godot.Internal.Dispatch 
 
@@ -28,9 +27,28 @@ mkClassInstance :: Text -> IO GodotObject
 mkClassInstance className = do
   classDB <- getClassDB
   cls <- className
-    >># instance' classDB
+    >># G.instance' classDB
     >>= fromGodotVariant
   return cls
+
+
+reparentSpatial :: GodotSpatial -> GodotNode -> IO ()
+reparentSpatial node newParent = do
+  tf <- G.get_global_transform node
+  parent <- G.get_parent node
+  G.remove_child parent (safeCast node)
+  G.add_child newParent (safeCast node) True
+  G.set_global_transform node tf
+
+reparent :: GodotNode -> GodotNode -> IO ()
+reparent node newParent = do
+  isSpatial <- G.is_class node #<< "Spatial"
+  if isSpatial
+    then reparentSpatial (GodotSpatial (safeCast node)) newParent
+    else do
+      parent <- G.get_parent node
+      G.remove_child parent (safeCast node)
+      G.add_child newParent (safeCast node) True
 
 
 getSingleton :: Text -> IO GodotObject
