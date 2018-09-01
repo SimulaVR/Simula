@@ -9,7 +9,7 @@ script = ExtResource( 1 )
 _sections_unfolded = [ "Script" ]
 
 [node name="Camera" type="Camera" parent="."]
-transform = Transform( -0.999825, 0, -0.0186987, 0, 1, 0, 0.0186987, 0, -0.999825, 0, 4.98498, -10.5469 )
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.37183 )
 keep_aspect = 1
 cull_mask = 1048575
 environment = null

@@ -214,6 +214,7 @@ westonViewPos view = V2 <$> westonViewPosX view <*> westonViewPosY view
 {#enum wl_keyboard_key_state as WlKeyboardKeyState {underscoreToCase} #}
 
 {#fun weston_keyboard_send_key {`WestonKeyboard', `CUInt', `CUInt', `WlKeyboardKeyState'} -> `()'#}
+{#fun weston_keyboard_send_modifiers {`WestonKeyboard', `CUInt', `CUInt', `CUInt', `CUInt', `CUInt'} -> `()'#}
 {#fun weston_keyboard_set_focus {`WestonKeyboard', `WestonSurface'} -> `()'#}
 
 {#fun weston_seat_set_keyboard_focus {`WestonSeat', `WestonSurface'} -> `()'#}

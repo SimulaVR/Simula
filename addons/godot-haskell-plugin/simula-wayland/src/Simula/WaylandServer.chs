@@ -67,7 +67,7 @@ deriving instance Eq WlDisplay
 {#fun wl_display_create {} -> `WlDisplay' #}
 {#fun wl_display_add_socket_auto {`WlDisplay'} -> `String'#}
 {#fun wl_display_run {`WlDisplay'} -> `()' #}
-
+{#fun wl_display_next_serial {`WlDisplay'} -> `CUInt' #}
 
 
 {#pointer *wl_global as WlGlobal newtype #}

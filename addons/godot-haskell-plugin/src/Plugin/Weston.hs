@@ -50,6 +50,7 @@ data GrabState
 data GodotWestonCompositor = GodotWestonCompositor
   { _gwcObj      :: GodotObject
   , _gwcCompositor :: TVar WestonCompositor
+  , _gwcWlDisplay :: TVar WlDisplay
   , _gwcSurfaces :: TVar (M.Map WestonSurface GodotWestonSurfaceSprite)
   , _gwcOutput :: TVar WestonOutput
   , _gwcNormalLayer :: TVar WestonLayer
@@ -60,7 +61,7 @@ instance GodotClass GodotWestonCompositor where
   godotClassName = "WestonCompositor"
 
 instance ClassExport GodotWestonCompositor where
-  classInit obj  = GodotWestonCompositor obj <$> atomically (newTVar undefined) <*> atomically (newTVar mempty) <*> atomically (newTVar undefined)
+  classInit obj  = GodotWestonCompositor obj <$> atomically (newTVar undefined) <*> atomically (newTVar undefined) <*> atomically (newTVar mempty) <*> atomically (newTVar undefined)
                    <*> atomically (newTVar undefined) <*> atomically (newTVar NoGrab)
     
   classExtends = "Spatial"
@@ -145,6 +146,7 @@ startBaseThread compositor = void $ forkOS $ do
   wldp <- wl_display_create
   wcomp <- weston_compositor_create wldp nullPtr
   atomically $ writeTVar (_gwcCompositor compositor) wcomp
+  atomically $ writeTVar (_gwcWlDisplay compositor) wldp
   westonCompositorSetRepaintMsec wcomp 1000
 
   setup_weston_log_handler
@@ -297,7 +299,7 @@ moveToUnoccupied gwc gwss = do
 
 instance HasBaseClass GodotWestonCompositor where
   type BaseClass GodotWestonCompositor = GodotSpatial
-  super (GodotWestonCompositor obj  _ _ _ _ _) = GodotSpatial obj
+  super (GodotWestonCompositor obj  _ _ _ _ _ _) = GodotSpatial obj
 
 getSeat :: GodotWestonCompositor -> IO WestonSeat
 getSeat gwc = do 
@@ -331,10 +333,23 @@ input _ self args = do
       godotcode <- G.get_scancode ev'
       case M.lookup godotcode keyTranslation of
         Just code -> do
+          wldp <- atomically $ readTVar (_gwcWlDisplay self)
+          serial <- wl_display_next_serial wldp
+
+          altPressed <- fromEnum <$> G.get_alt ev'
+          shiftPressed <- fromEnum <$> G.get_shift ev'
+          ctrlPressed <- fromEnum <$> G.get_control ev'
+          superPressed <- fromEnum <$> G.get_metakey ev'
+          let mods = fromIntegral $ shiftPressed + superPressed * 2 + ctrlPressed * 4 + altPressed * 8
+
+          weston_keyboard_send_modifiers kbd serial mods mods 0 mods
+          
           pressed <- G.is_pressed ev'
           time <- getTime Realtime
           let msec = fromIntegral $ toNanoSecs time `div` 1000000
           weston_keyboard_send_key kbd msec (fromIntegral code) (toState pressed)
+          
+          
           setInputHandled
         Nothing -> return ()
 
