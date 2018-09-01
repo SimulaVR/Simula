@@ -8,7 +8,9 @@ module Plugin.Imports
 -- Things I wish were in Prelude
 import           Control.Category                 as B ((<<<), (>>>))
 import           Control.Monad                    as B ((<=<), (>=>))
-import           Data.Function                    as B 
+import           Control.Lens                     as B ((^.), (.~), (%~))
+import           Data.Function                    as B
+import           Data.Functor                     as B ((<&>))
 import           Data.Text                        as B (Text, append, pack,
                                                         unpack)
 
@@ -33,8 +35,9 @@ import           Godot.Nativescript               as G
 -- Convenience
 import           Plugin.Types                     as P
 import           Plugin.Util                      as P
-import           Plugin.Util.Operators            as P
+import           Plugin.Util.Types                as P
 import           Plugin.Util.Variants             as P
+import           Plugin.Instances                 as P ()
 
 import System.Clock as P
 import Control.Monad.Extra as P (whenM)

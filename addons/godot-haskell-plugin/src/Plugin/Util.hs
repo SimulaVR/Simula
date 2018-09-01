@@ -13,21 +13,18 @@ import           Godot.Api
 import           Godot.Gdnative.Internal
 import           Godot.Gdnative.Types
 import qualified Godot.Methods as G
-import Godot.Internal.Dispatch 
-
-import           Plugin.Util.Operators
-
+import           Godot.Internal.Dispatch
 
 
 godotPrint :: Text -> IO ()
-godotPrint str = godot_print #<< str
+godotPrint str = godot_print =<< toLowLevel str
 
 
 mkClassInstance :: Text -> IO GodotObject
 mkClassInstance className = do
   classDB <- getClassDB
-  cls <- className
-    >># G.instance' classDB
+  cls <- toLowLevel className
+    >>= G.instance' classDB
     >>= fromGodotVariant
   return cls
 
@@ -42,7 +39,7 @@ reparentSpatial node newParent = do
 
 reparent :: GodotNode -> GodotNode -> IO ()
 reparent node newParent = do
-  isSpatial <- G.is_class node #<< "Spatial"
+  isSpatial <- G.is_class node =<< toLowLevel "Spatial"
   if isSpatial
     then reparentSpatial (GodotSpatial (safeCast node)) newParent
     else do
@@ -71,17 +68,7 @@ getVisualServer = GodotVisualServer <$> getSingleton "VisualServer"
 
 getResourceLoader :: IO Godot_ResourceLoader
 getResourceLoader = Godot_ResourceLoader <$> getSingleton "ResourceLoader"
-  
 
-is_class :: GodotObject :< a => a -> Text -> IO Bool
-is_class obj cls = do
-  clsStr <- toLowLevel cls
-  G.is_class (safeCast obj :: GodotObject) clsStr
+getInput :: IO GodotInput
+getInput = GodotInput <$> getSingleton "Input"
 
--- Extras
-
-
-type instance TypeOf 'HaskellTy () = ()
-instance GodotFFI () () where
-  fromLowLevel = return . const ()
-  toLowLevel = return . const ()

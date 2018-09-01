@@ -31,6 +31,7 @@ import qualified Godot.Core.GodotImage as Image
 import Godot.Core.GodotGlobalConstants
 
 import Plugin.WestonSurfaceSprite
+import Plugin.Telekinesis
 
 import Control.Lens
 
@@ -44,6 +45,7 @@ data GodotSimulaController = GodotSimulaController
   , _gscOpenvrMesh :: TVar (Maybe GodotArrayMesh)
   , _gscMeshInstance :: GodotMeshInstance
   , _gscLaser :: GodotMeshInstance
+  , _gscTelekinesis :: TVar Telekinesis
   }
 
 instance Eq GodotSimulaController where
@@ -74,18 +76,22 @@ instance ClassExport GodotSimulaController where
 
     G.set_visible (GodotSpatial obj) False
 
+    tf <- G.get_global_transform (GodotSpatial obj) >>= fromLowLevel
+    tk <- newTVarIO $ initTk (GodotSpatial obj) rc tf
+
     mesh <- newTVarIO Nothing
-    return $ GodotSimulaController obj rc mesh mi (GodotMeshInstance $ safeCast laser)
+    return $ GodotSimulaController obj rc mesh mi (GodotMeshInstance $ safeCast laser) tk
 
   classExtends = "ARVRController"
   classMethods =
     [ Func NoRPC "_process" process
+    , Func NoRPC "_physics_process" physicsProcess
     , Func NoRPC "_ready" ready
     ]
 
 instance HasBaseClass GodotSimulaController where
   type BaseClass GodotSimulaController = GodotARVRController       
-  super (GodotSimulaController obj  _ _ _ _) = GodotARVRController obj
+  super (GodotSimulaController obj _ _ _ _ _) = GodotARVRController obj
 
 load_controller_mesh :: GodotSimulaController -> Text -> IO (Maybe GodotMesh)
 load_controller_mesh gsc name = do
@@ -140,6 +146,18 @@ process _ self _ = do
            Nothing -> return ()
          G.set_visible self True
   toLowLevel VariantNil
+
+
+physicsProcess :: GodotFunc GodotSimulaController
+physicsProcess _ self _ = do
+  btnId <- G.get_joystick_id $ (safeCast self :: GodotARVRController)
+  isGripPressed <- getInput >>= \inp -> G.is_joy_button_pressed inp btnId 2
+
+  tk <- readTVarIO (_gscTelekinesis self) >>= telekinesis isGripPressed
+  atomically $ writeTVar (_gscTelekinesis self) tk
+
+  retnil
+
 
 ready :: GodotFunc GodotSimulaController
 ready _ self _ = do

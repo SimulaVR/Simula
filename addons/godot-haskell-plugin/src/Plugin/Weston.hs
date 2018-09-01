@@ -93,13 +93,15 @@ startBaseCompositor _ compositor _ = do
 
   toLowLevel VariantNil
  where
+  posInfront :: GodotARVRCamera -> GodotSpatial -> IO ()
   posInfront cam comp = do
-    TF b _ <- comp & G.get_global_transform >>= fromLowLevel
+    TF b _ <- G.get_global_transform (comp `as` GodotSpatial) >>= fromLowLevel
     TF camBasis camPos <- G.get_global_transform cam >>= fromLowLevel
     let dist = 1 -- ^ Distance from camera
         fw = negate $ camBasis ^. _z
         newPos = camPos + fw ^* dist + V3 0 0.5 0
-    G.set_global_transform comp #<< TF b newPos
+    tf <- toLowLevel (TF b newPos) :: IO GodotTransform
+    G.set_global_transform comp tf
 
   faceCamera :: GodotARVRCamera -> GodotSpatial -> IO ()
   faceCamera hmd spatial = do
@@ -108,7 +110,7 @@ startBaseCompositor _ compositor _ = do
     spatialOrig <- G.get_global_transform spatial
       >>= Api.godot_transform_get_origin
     whenM (not <$> isSameHoriz spatialOrig camPos)
-      $ (spatial `G.look_at` camPos) #<< V3 0 1 0
+      $ toLowLevel (V3 0 1 0) >>= spatial `G.look_at` camPos
 
   isSameHoriz :: GodotVector3 -> GodotVector3 -> IO Bool
   isSameHoriz a b = do
@@ -384,12 +386,12 @@ onButton self gsc button pressed = do
   where
     rc = _gscRayCast gsc
     onSpriteButton sprite = G.get_collision_point rc >>= case button of
-      OVR_Button_Grip -> processGrabEvent self gsc sprite pressed
+      {-OVR_Button_Grip -> processGrabEvent self gsc sprite pressed-}
       -- FIXME: Input produces a crash
       OVR_Button_Trigger -> processClickEvent sprite (Button pressed BUTTON_LEFT)
       OVR_Button_AppMenu -> processClickEvent sprite (Button pressed BUTTON_RIGHT)
       _ -> \_ -> return ()
-  
+
 process :: GodotFunc GodotWestonCompositor
 process _ self _ = do
   atomically (readTVar (_gwcGrabState self))
