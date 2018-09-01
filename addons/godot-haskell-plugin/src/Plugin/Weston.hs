@@ -63,16 +63,57 @@ instance ClassExport GodotWestonCompositor where
   classInit obj  = GodotWestonCompositor obj <$> atomically (newTVar undefined) <*> atomically (newTVar mempty) <*> atomically (newTVar undefined)
                    <*> atomically (newTVar undefined) <*> atomically (newTVar NoGrab)
     
-  classExtends = "Node"
+  classExtends = "Spatial"
   classMethods = [ Func NoRPC "_ready" startBaseCompositor
                  , Func NoRPC "_input" input
+                 , Func NoRPC "_process" process
                  , Func NoRPC "on_button_signal" on_button_signal ]
 
-startBaseCompositor :: GodotFunc GodotWestonCompositor 
+startBaseCompositor :: GodotFunc GodotWestonCompositor
 startBaseCompositor _ compositor _ = do
   onReady compositor
+
+  getCamera (safeCast compositor) >>= \case
+    Just hmd -> do
+      let comp = safeCast compositor :: GodotSpatial
+      -- | Position in front of camera
+      -- FIXME: Messes with moveToUnoccupied and makes windows stack
+      posInfront hmd comp
+
+      -- | Face the camera
+      faceCamera hmd comp
+    Nothing -> return ()
+
   startBaseThread compositor
   toLowLevel VariantNil
+ where
+  posInfront cam comp = do
+    TF b _ <- comp & G.get_global_transform >>= fromLowLevel
+    TF camBasis camPos <- G.get_global_transform cam >>= fromLowLevel
+    let dist = 1 -- ^ Distance from camera
+        fw = negate $ camBasis ^. _z
+        newPos = camPos + fw ^* dist + V3 0 0.5 0
+    G.set_global_transform comp #<< TF b newPos
+
+  faceCamera :: GodotARVRCamera -> GodotSpatial -> IO ()
+  faceCamera hmd spatial = do
+    camPos <- G.get_global_transform (safeCast hmd :: GodotSpatial)
+      >>= Api.godot_transform_get_origin
+    spatialOrig <- G.get_global_transform spatial
+      >>= Api.godot_transform_get_origin
+    whenM (not <$> isSameHoriz spatialOrig camPos)
+      $ (spatial `G.look_at` camPos) #<< V3 0 1 0
+
+  isSameHoriz :: GodotVector3 -> GodotVector3 -> IO Bool
+  isSameHoriz a b = do
+    (V3 x _ z) <- fromLowLevel a :: IO (V3 Float)
+    (V3 x' _ z') <- fromLowLevel b :: IO (V3 Float)
+    return $ (V2 x z) == (V2 x' z')
+
+  getCamera :: GodotNode -> IO (Maybe GodotARVRCamera)
+  getCamera nd = nd `getNode` "../ARVROrigin/ARVRCamera" >>= \case
+    Just cam -> return $ Just $ GodotARVRCamera $ safeCast cam
+    Nothing -> return Nothing
 
 onReady :: GodotWestonCompositor -> IO ()
 onReady gwc = do
@@ -245,16 +286,18 @@ moveToUnoccupied gwc gwss = do
   aabb <- G.get_aabb sprite
   size <- Api.godot_aabb_get_size aabb >>= fromLowLevel
   let sizeX = size ^. _x
-  let newPos = if abs minX < abs maxX then V3 (minX - sizeX/2) 0 0 else V3 (maxX + sizeX/2) 0 0
+  let newPos =
+        if abs minX < abs maxX
+        then V3 (minX - sizeX/2) 0 0
+        else V3 (maxX + sizeX/2) 0 0
   print extents
   print newPos
   tlVec <- toLowLevel newPos
   G.translate gwss tlVec
 
-
 instance HasBaseClass GodotWestonCompositor where
-  type BaseClass GodotWestonCompositor = GodotNode         
-  super (GodotWestonCompositor obj  _ _ _ _ _) = GodotNode obj
+  type BaseClass GodotWestonCompositor = GodotSpatial
+  super (GodotWestonCompositor obj  _ _ _ _ _) = GodotSpatial obj
 
 getSeat :: GodotWestonCompositor -> IO WestonSeat
 getSeat gwc = do 
@@ -322,22 +365,34 @@ onButton self gsc button pressed = do
     rc = _gscRayCast gsc
     onSpriteButton sprite = G.get_collision_point rc >>= case button of
       OVR_Button_Grip -> processGrabEvent self gsc sprite pressed
+      -- FIXME: Input produces a crash
       OVR_Button_Trigger -> processClickEvent sprite (Button pressed BUTTON_LEFT)
       OVR_Button_AppMenu -> processClickEvent sprite (Button pressed BUTTON_RIGHT)
       _ -> \_ -> return ()
   
 process :: GodotFunc GodotWestonCompositor
 process _ self _ = do
-  state <- atomically $ readTVar (_gwcGrabState self)
-  case state of
+  atomically (readTVar (_gwcGrabState self))
+    >>= handleState
+    >>= atomically . writeTVar (_gwcGrabState self)
+
+  toLowLevel VariantNil
+ where
+  handleState = \case
     Resizing ((ct1, origpos1), (ct2, origpos2)) window origDistance -> do
       newpos1 <- G.to_global ct1 origpos1
       newpos2 <- G.to_global ct2 origpos2
       dist <-  realToFrac <$> Api.godot_vector3_distance_to newpos1 newpos2
+
+      newpos1' <- G.to_local ct1 newpos1
+      newpos2' <- G.to_local ct2 newpos2
+
       let scale = dist/origDistance
       toLowLevel (V3 scale scale scale) >>= G.scale_object_local window
-    _ -> return ()
-  toLowLevel VariantNil
+
+      return $ Resizing ((ct1, newpos1'), (ct2, newpos2')) window dist
+
+    state -> return state
 
 processGrabEvent :: GodotWestonCompositor -> GodotSimulaController -> GodotWestonSurfaceSprite -> Bool -> GodotVector3 -> IO ()
 processGrabEvent gwcomp gsc obj pressed clickPos = atomically (readTVar (_gwcGrabState gwcomp)) >>= \case

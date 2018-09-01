@@ -50,6 +50,13 @@ reparent node newParent = do
       G.remove_child parent (safeCast node)
       G.add_child newParent (safeCast node) True
 
+getNode :: (GodotNode :< a) => a -> NodePath -> IO (Maybe GodotNode)
+getNode self np = do
+  np' <- toLowLevel np :: IO GodotNodePath
+  hasNode <- (safeCast self :: GodotNode) `G.has_node` np'
+  if hasNode
+    then Just <$> G.get_node (safeCast self :: GodotNode) np'
+    else return Nothing
 
 getSingleton :: Text -> IO GodotObject
 getSingleton name = godot_global_get_singleton

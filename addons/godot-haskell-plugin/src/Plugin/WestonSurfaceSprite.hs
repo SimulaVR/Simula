@@ -26,13 +26,12 @@ import qualified Data.Text                   as T
 import           Linear
 import           Plugin.Imports
 
-import Godot.Gdnative.Internal.Api
+import qualified Godot.Core.GodotImage       as Image
+import           Godot.Core.GodotGlobalConstants
+import qualified Godot.Core.GodotRigidBody   as RigidBody
+import           Godot.Gdnative.Internal.Api
 import           Godot.Gdnative.Types        (GodotFFI, LibType, TypeOf)
 import qualified Godot.Methods               as G
-
-import qualified Godot.Core.GodotImage as Image
-
-import Godot.Core.GodotGlobalConstants
 
 import Plugin.WestonSurfaceTexture 
 
@@ -61,12 +60,15 @@ instance ClassExport GodotWestonSurfaceSprite where
                   <$> atomically (newTVar True)
                   <*> atomically (newTVar (error "didn't init sprite")) <*> atomically (newTVar (error "didn't init shape")) 
                   <*> atomically (newTVar (error "didn't init texture")) <*> atomically (newTVar (error "didn't init seat"))
-  classExtends = "KinematicBody"
-  classMethods = [Func NoRPC "_input_event" input]
+  classExtends = "RigidBody"
+  classMethods =
+    [ Func NoRPC "_input_event" input
+    , Func NoRPC "_ready" ready
+    ]
 
 instance HasBaseClass GodotWestonSurfaceSprite where
-  type BaseClass GodotWestonSurfaceSprite = GodotKinematicBody       
-  super (GodotWestonSurfaceSprite obj _ _ _ _ _ ) = GodotKinematicBody obj
+  type BaseClass GodotWestonSurfaceSprite = GodotRigidBody
+  super (GodotWestonSurfaceSprite obj _ _ _ _ _ ) = GodotRigidBody obj
 
 newGodotWestonSurfaceSprite :: GodotWestonSurfaceTexture -> WestonSeat -> IO GodotWestonSurfaceSprite
 newGodotWestonSurfaceSprite tex seat = do
@@ -81,6 +83,7 @@ newGodotWestonSurfaceSprite tex seat = do
   obj <- deRefStablePtr $ castPtrToStablePtr objPtr
 
   sprite <- (GodotSprite3D <$> mkClassInstance "Sprite3D")
+  G.set_pixel_size sprite 0.001
   G.add_child obj (safeCast sprite) True
   G.set_flip_h sprite True
 
@@ -145,6 +148,10 @@ spriteShouldMove gwss = do
 setSpriteShouldMove :: GodotWestonSurfaceSprite -> Bool -> IO ()   
 setSpriteShouldMove gwss = atomically . writeTVar (_gwssShouldMove gwss)
 
+ready :: GodotFunc GodotWestonSurfaceSprite
+ready _ self args = do
+  G.set_mode self RigidBody.MODE_KINEMATIC
+  toLowLevel VariantNil
 
 input :: GodotFunc GodotWestonSurfaceSprite
 input _ self args = do

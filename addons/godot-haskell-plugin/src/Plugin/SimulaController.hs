@@ -120,16 +120,17 @@ process _ self _ = do
   if | not active -> G.set_visible self False
      | visible -> do
          isColliding <- G.is_colliding (_gscRayCast self)
-         G.set_visible (_gscLaser self) isColliding
-
          if | isColliding ->
                 G.get_collider (_gscRayCast self)
                   >>= tryObjectCast @GodotWestonSurfaceSprite
                   >>= \case
                     Just window -> do
+                      G.set_visible (_gscLaser self) True
                       pos <- G.get_collision_point (_gscRayCast self)
                       processClickEvent window Motion pos
-                    Nothing -> return ()
+                    Nothing -> do
+                      G.set_visible (_gscLaser self) False
+                      return ()
             | otherwise -> return ()
      | otherwise -> do
          cname <- G.get_controller_name self >>= fromLowLevel

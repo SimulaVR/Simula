@@ -25,7 +25,6 @@ far = 100.0
 _sections_unfolded = [ "Transform" ]
 
 [node name="Weston" type="Spatial" parent="."]
-transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.09818, 0 )
 script = ExtResource( 2 )
 _sections_unfolded = [ "Transform", "Visibility" ]
 
