@@ -30,7 +30,7 @@ singletons=[ "res://addons/godot-openvr/godot_openvr.gdnlib" ]
 [physics]
 
 2d/physics_engine="GodotPhysics"
-3d/physics_engine="GodotPhysics - deprecated"
+3d/physics_engine="GodotPhysics"
 2d/thread_model=2
 
 [rendering]

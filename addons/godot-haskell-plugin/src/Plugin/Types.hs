@@ -8,8 +8,7 @@ import           Data.Text               (Text)
 import           Data.Vector             (Vector)
 
 import           Godot.Gdnative.Internal
-import           Godot.Gdnative.Types
-import           Godot.Nativescript      (GdnativeHandle, GodotClass (..))
+import           Godot.Nativescript      (GodotClass (..))
 
 -- Just lazily trying things and don't want to modify
 -- godot-haskell's GodotClass
@@ -28,12 +27,3 @@ data RPC
   | Sync
   | Master
   | Slave
-
-
--- Until implemented in godot-haskell
-
-data ObjectRef = ObjectRef GodotObject
-type instance TypeOf 'HaskellTy GodotObject = ObjectRef
-instance GodotFFI GodotObject ObjectRef where
-  fromLowLevel o = return $ ObjectRef o
-  toLowLevel (ObjectRef o) = return o

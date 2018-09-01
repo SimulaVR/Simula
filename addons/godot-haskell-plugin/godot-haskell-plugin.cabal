@@ -67,12 +67,15 @@ library
       Plugin.Imports
       Plugin.Types
       Plugin.Util
-      Plugin.Util.Operators
-      Plugin.Util.Variants
       Plugin.WestonSurfaceTexture
       Plugin.WestonSurfaceSprite
       Plugin.Weston
       Plugin.SimulaController
+      Plugin.Telekinesis
+  other-modules:
+      Plugin.Instances
+      Plugin.Util.Variants
+      Plugin.Util.Types
 
   default-language: Haskell2010
   default-extensions:  OverloadedStrings TypeOperators FlexibleContexts FlexibleInstances TypeApplications ScopedTypeVariables PatternSynonyms
