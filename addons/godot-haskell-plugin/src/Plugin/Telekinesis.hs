@@ -28,6 +28,7 @@ data PhysicsBodyConfig = PhysicsBodyConfig
   { _pbcGravityScale :: Float
   , _pbcLinearDamp   :: Float
   , _pbcAngularDamp  :: Float
+  , _pbcMode         :: Int
   }
 
 initTk :: GodotSpatial -> GodotRayCast -> Transform -> Telekinesis
@@ -46,6 +47,7 @@ physicsConfig = PhysicsBodyConfig
   { _pbcGravityScale = 0.0
   , _pbcLinearDamp   = 0.5
   , _pbcAngularDamp  = 0.7
+  , _pbcMode         = RigidBody.MODE_RIGID
   }
 
 getPhysics :: GodotRigidBody -> IO PhysicsBodyConfig
@@ -54,72 +56,76 @@ getPhysics body =
     <$> G.get_gravity_scale body
     <*> G.get_linear_damp body
     <*> G.get_angular_damp body
+    <*> G.get_mode body
 
 setPhysics :: PhysicsBodyConfig -> GodotRigidBody -> IO ()
 setPhysics config body = do
   body `G.set_gravity_scale` (_pbcGravityScale config)
   body `G.set_linear_damp`   (_pbcLinearDamp   config)
   body `G.set_angular_damp`  (_pbcAngularDamp  config)
+  body `G.set_mode`          (_pbcMode         config)
 
 
 grab :: GodotRigidBody -> Telekinesis -> IO Telekinesis
 grab body tk = do
-  G.set_mode body RigidBody.MODE_RIGID
+  tf <- tk & _tkController & G.get_global_transform >>= fromLowLevel
   -- Get current values before overwriting
   cfg <- getPhysics body
   setPhysics physicsConfig body
   -- Disable ray so we don't pick up any new objects
   G.set_enabled (_tkRayCast tk) False
   -- Store body with its original values
-  return $ tk { _tkBody = Just (body, cfg) }
+  return $ tk { _tkBody = Just (body, cfg), _tkLastTransform = tf }
 
 
 letGo :: Telekinesis -> IO Telekinesis
 letGo tk = do
   tk & _tkBody & \case
     Just (body, conf) -> do
-      parentName <- G.get_parent body >>= G.get_name >>= fromLowLevel
-      when (parentName == "Weston") $ G.set_mode body RigidBody.MODE_KINEMATIC
-
       -- Restore original physics config
       setPhysics conf body
 
       G.set_enabled (_tkRayCast tk) True
+
       return $ tk { _tkBody = Nothing, _tkRumble = 0 }
+
     _ -> return tk
+
 
 manipulate :: Bool -> Float -> Telekinesis -> IO Telekinesis
 manipulate isMove factor tk = do
+  tf@(TF bs pos) <- tk & _tkController & G.get_global_transform >>= fromLowLevel
   tk & _tkBody & \case
     Just (body, _) -> do
       mass      <- G.get_mass body
       weight    <- G.get_weight body
-      tf@(TF bs pos) <- tk & _tkController & G.get_global_transform >>= fromLowLevel
 
       let TF lastBs lastPos = _tkLastTransform tk
           power    = mass * factor * factor * _tkStrength tk :: Float
           tScale   = 0.01 -- Too sensitive otherwise
+
+          -- Angular impulse around each axis
           tImpX    = cross (lastBs^._z) (bs^._z) ^* power * tScale
           tImpY    = cross (lastBs^._x) (bs^._x) ^* power * tScale
           tImpZ    = cross (lastBs^._y) (bs^._y) ^* power * tScale
+
+          -- Linear impulse
           lImp     = power *^ (pos - lastPos)
+
           totalImp = if isMove then norm $ tImpX + tImpY + tImpZ + lImp else 0
-          rumble   = 0.005 * (weight + totalImp)
+          rumble   = 0.001 * (weight + totalImp)
 
       when isMove $ do
-        -- Angular
         G.apply_torque_impulse body =<< toLowLevel tImpX
         G.apply_torque_impulse body =<< toLowLevel tImpY
         G.apply_torque_impulse body =<< toLowLevel tImpZ
 
-        -- Linear
         p <- toLowLevel zero
         G.apply_impulse body p =<< toLowLevel lImp
 
       return tk { _tkLastTransform = tf, _tkRumble = rumble }
 
-    Nothing -> return tk { _tkRumble = 0 }
-
+    Nothing -> return tk { _tkLastTransform = tf, _tkRumble = 0 }
 
 
 telekinesis :: Bool -> Telekinesis -> IO Telekinesis
