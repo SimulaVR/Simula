@@ -29,6 +29,7 @@ singletons=[ "res://addons/godot-openvr/godot_openvr.gdnlib" ]
 
 [physics]
 
+common/physics_fps=90
 2d/physics_engine="GodotPhysics"
 3d/physics_engine="GodotPhysics"
 2d/thread_model=2
@@ -36,4 +37,6 @@ singletons=[ "res://addons/godot-openvr/godot_openvr.gdnlib" ]
 [rendering]
 
 threads/thread_model=2
+quality/filters/anisotropic_filter_level=16
+quality/filters/msaa=2
 environment/default_environment="res://default_env.tres"

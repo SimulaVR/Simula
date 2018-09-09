@@ -139,7 +139,7 @@ telekinesis isLev isMove tk = do
         then tryGrab (_tkRayCast tk) tk >>= manipulate isMove triggerPull
         else letGo tk
 
-      G.set_rumble ct (_tkRumble tk')
+      {-G.set_rumble ct (_tkRumble tk')-}
       return tk'
 
     Nothing -> return tk
