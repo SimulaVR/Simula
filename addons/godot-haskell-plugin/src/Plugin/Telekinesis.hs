@@ -45,7 +45,7 @@ initTk ct rc tf = Telekinesis
 physicsConfig :: PhysicsBodyConfig
 physicsConfig = PhysicsBodyConfig
   { _pbcGravityScale = 0.0
-  , _pbcLinearDamp   = 0.5
+  , _pbcLinearDamp   = 0.7
   , _pbcAngularDamp  = 0.7
   , _pbcMode         = RigidBody.MODE_RIGID
   }
@@ -128,15 +128,15 @@ manipulate isMove factor tk = do
     Nothing -> return tk { _tkLastTransform = tf, _tkRumble = 0 }
 
 
-telekinesis :: Bool -> Telekinesis -> IO Telekinesis
-telekinesis isLev tk = do
+telekinesis :: Bool -> Bool -> Telekinesis -> IO Telekinesis
+telekinesis isLev isMove tk = do
   _tkController tk `asClass` (GodotARVRController, "ARVRController") >>= \case
     Just ct -> do
       isActive    <- G.get_is_active ct
       triggerPull <- if isActive then G.get_joystick_axis ct 2 else return 0
       tk' <-
         if isLev
-        then tryGrab (_tkRayCast tk) tk >>= manipulate (triggerPull > 0.01) triggerPull
+        then tryGrab (_tkRayCast tk) tk >>= manipulate isMove triggerPull
         else letGo tk
 
       G.set_rumble ct (_tkRumble tk')

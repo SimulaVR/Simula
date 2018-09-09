@@ -46,8 +46,11 @@ import Telemetry
 
 data GrabState
   = NoGrab
-  | Dragging (GodotSimulaController, GodotVector3) GodotWestonSurfaceSprite
-  | Resizing ((GodotSimulaController, GodotVector3), (GodotSimulaController, GodotVector3)) GodotWestonSurfaceSprite Float -- dist
+  | Manipulating (GodotSimulaController, GodotWestonSurfaceSprite)
+  | ManipulatingDual
+      (GodotSimulaController, GodotWestonSurfaceSprite)
+      (GodotSimulaController, GodotWestonSurfaceSprite)
+  | Resizing (GodotSimulaController, GodotSimulaController) GodotWestonSurfaceSprite Float -- dist
 
 data GodotWestonCompositor = GodotWestonCompositor
   { _gwcObj      :: GodotObject
@@ -377,20 +380,20 @@ on_button_signal _ self args = do
 
 onButton :: GodotWestonCompositor -> GodotSimulaController -> Int -> Bool -> IO ()
 onButton self gsc button pressed = do
-  whenM (G.is_colliding rc) $ do
-    obj <- G.get_collider rc
-    maybeSprite <- tryObjectCast @GodotWestonSurfaceSprite obj
-    case maybeSprite of
-      Just sprite -> onSpriteButton sprite
-      Nothing -> return ()
-  where
-    rc = _gscRayCast gsc
-    onSpriteButton sprite = G.get_collision_point rc >>= case button of
-      {-OVR_Button_Grip -> processGrabEvent self gsc sprite pressed-}
-      -- FIXME: Input produces a crash
-      OVR_Button_Trigger -> processClickEvent sprite (Button pressed BUTTON_LEFT)
-      OVR_Button_AppMenu -> processClickEvent sprite (Button pressed BUTTON_RIGHT)
-      _ -> \_ -> return ()
+  if button == OVR_Button_Grip && not pressed -- Release grabbed
+  then processGrabEvent self gsc Nothing pressed
+  else do
+    whenM (G.is_colliding rc) $ do
+      G.get_collider rc >>= tryObjectCast @GodotWestonSurfaceSprite >>= \case
+        Just sprite -> onSpriteButton sprite
+        Nothing -> return ()
+ where
+  rc = _gscRayCast gsc
+  onSpriteButton sprite = G.get_collision_point rc >>= case button of
+    OVR_Button_Grip    -> \_ -> processGrabEvent self gsc (Just sprite) pressed
+    OVR_Button_Trigger -> processClickEvent sprite (Button pressed BUTTON_LEFT)
+    OVR_Button_AppMenu -> processClickEvent sprite (Button pressed BUTTON_RIGHT)
+    _ -> \_ -> return ()
 
 process :: GodotFunc GodotWestonCompositor
 process _ self _ = do
@@ -401,55 +404,60 @@ process _ self _ = do
   toLowLevel VariantNil
  where
   handleState = \case
-    Resizing ((ct1, origpos1), (ct2, origpos2)) window origDistance -> do
-      newpos1 <- G.to_global ct1 origpos1
-      newpos2 <- G.to_global ct2 origpos2
+    Resizing (ct1, ct2) window origDistance -> do
+      newpos1 <- G.get_global_transform ct1 >>= Api.godot_transform_get_origin
+      newpos2 <- G.get_global_transform ct2 >>= Api.godot_transform_get_origin
       dist <-  realToFrac <$> Api.godot_vector3_distance_to newpos1 newpos2
-
-      newpos1' <- G.to_local ct1 newpos1
-      newpos2' <- G.to_local ct2 newpos2
 
       let scale = dist/origDistance
       toLowLevel (V3 scale scale scale) >>= G.scale_object_local window
 
-      return $ Resizing ((ct1, newpos1'), (ct2, newpos2')) window dist
+      return $ Resizing (ct1, ct2) window dist
 
     state -> return state
 
-processGrabEvent :: GodotWestonCompositor -> GodotSimulaController -> GodotWestonSurfaceSprite -> Bool -> GodotVector3 -> IO ()
-processGrabEvent gwcomp gsc obj pressed clickPos = atomically (readTVar (_gwcGrabState gwcomp)) >>= \case
-  NoGrab | pressed -> startDrag
-         | otherwise -> return ()
-  Dragging ct1@(ctrlr,_) curWindow 
-    | pressed && obj /= curWindow -> putStrLn "tried to grab multiple windows, unsupported right now"
-    | pressed && ctrlr == gsc -> putStrLn "tried to press with the same controller without releasing"
-    | pressed -> stopDrag curWindow >> startResize (ct1, (gsc, clickPos)) curWindow
-    | otherwise -> stopDrag curWindow
-  Resizing cts curWindow _ | pressed -> putStrLn "invalid: pressed during resize"
-                           | otherwise -> stopResize cts curWindow
+processGrabEvent :: GodotWestonCompositor -> GodotSimulaController -> Maybe GodotWestonSurfaceSprite -> Bool -> IO ()
+processGrabEvent gwcomp gsc maybeWindow pressed = atomically (readTVar (_gwcGrabState gwcomp)) >>= \case
+  NoGrab
+    | pressed -> case maybeWindow of
+        Just window -> setManip (gsc, window)
+        Nothing     -> return ()
+    | otherwise -> return ()
+  Manipulating ct1@(gsc1, curWindow)
+    | pressed -> case maybeWindow of
+        Just window
+          | gsc == gsc1         -> putStrLn "Tried to press with the same controller without releasing"
+          | window == curWindow -> startResize gsc1 gsc window -- Second controller, same window
+          | otherwise           -> setManipDual ct1 (gsc, window)
+        Nothing -> return ()
+    | otherwise -> unset
+  ManipulatingDual ct1@(gsc1, _) ct2@(gsc2, _)
+    | not pressed && gsc == gsc2 -> setManip ct1
+    | not pressed && gsc == gsc1 -> setManip ct2
+    | otherwise -> putStrLn "Invalid: Input from a third controller"
+  Resizing (gsc1, gsc2) w _
+    | not pressed && gsc == gsc2 -> setManip (gsc1, w)
+    | not pressed && gsc == gsc1 -> setManip (gsc2, w)
+    | otherwise -> putStrLn "Invalid: Input from a third controller"
+ where
+  setManip ct =
+    atomically $ writeTVar (_gwcGrabState gwcomp) $ Manipulating ct
 
-  where
-    startDrag = do
-      atomically $ writeTVar (_gwcGrabState gwcomp) $ Dragging (gsc, clickPos) obj
-      reparent (safeCast obj) (safeCast gsc)
+  setManipDual ct1 ct2 =
+    atomically $ writeTVar (_gwcGrabState gwcomp) $ ManipulatingDual ct1 ct2
 
-    stopDrag curWindow = do
-      atomically $ writeTVar (_gwcGrabState gwcomp) NoGrab
-      reparent (safeCast curWindow) (safeCast gwcomp)
+  unset =
+    atomically $ writeTVar (_gwcGrabState gwcomp) NoGrab
 
-    startResize ((ct1, pos1),(ct2, pos2)) curWindow = do
-      dist <- realToFrac <$> Api.godot_vector3_distance_to pos1 pos2
-      -- inverse transform pos1/pos2 and store that
-      newpos1 <- G.to_local ct1 pos1
-      newpos2 <- G.to_local ct2 pos2
-      atomically $ writeTVar (_gwcGrabState gwcomp) $ Resizing ((ct1, newpos1), (ct2, newpos2)) curWindow dist
-    
-    stopResize cts@(ct1,ct2) curWindow =
-      atomically $ writeTVar (_gwcGrabState gwcomp) NoGrab
+  startResize gsc1 gsc2 curWindow = do
+    -- Position of this controller
+    pos1 <- G.get_global_transform gsc1 >>= Api.godot_transform_get_origin
+    -- Position of other controller
+    pos2 <- G.get_global_transform gsc2 >>= Api.godot_transform_get_origin
 
-  -- if 1 controller hits: drag
-  -- if 2 controllers hit same surface: resize
-  -- * release once any controller is released
+    dist <- realToFrac <$> Api.godot_vector3_distance_to pos1 pos2
+    atomically $ writeTVar (_gwcGrabState gwcomp) $ Resizing (gsc1, gsc2) curWindow dist
+
 
 pattern OVR_Button_Touchpad :: Int
 pattern OVR_Button_Touchpad = 14
