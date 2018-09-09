@@ -151,9 +151,13 @@ process _ self _ = do
 physicsProcess :: GodotFunc GodotSimulaController
 physicsProcess _ self _ = do
   btnId <- G.get_joystick_id $ (safeCast self :: GodotARVRController)
-  isGripPressed <- getInput >>= \inp -> G.is_joy_button_pressed inp btnId 2
 
-  tk <- readTVarIO (_gscTelekinesis self) >>= telekinesis isGripPressed
+  isGripPressed <- getInput >>= \inp -> G.is_joy_button_pressed inp btnId 2
+  triggerPull <- G.get_joystick_axis self 2
+  let levitateCond = isGripPressed && triggerPull > 0.01
+  let moveCond = triggerPull > 0.2
+
+  tk <- readTVarIO (_gscTelekinesis self) >>= telekinesis levitateCond moveCond
   atomically $ writeTVar (_gscTelekinesis self) tk
 
   retnil
