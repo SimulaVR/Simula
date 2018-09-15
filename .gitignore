@@ -1,4 +1,3 @@
 **/*.stack-work/
 *~
 .import/
-*.so
