@@ -40,4 +40,4 @@ import           Plugin.Util.Variants             as P
 import           Plugin.Instances                 as P ()
 
 import System.Clock as P
-import Control.Monad.Extra as P (whenM)
+import Control.Monad.Extra as P (when, whenM)

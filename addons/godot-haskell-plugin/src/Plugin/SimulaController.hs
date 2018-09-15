@@ -7,35 +7,20 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 module Plugin.SimulaController
   ( GodotSimulaController(..)
-
+  , isButtonPressed
+  , pointerWindow
   ) where
 
-import Simula.WaylandServer
-import Simula.Weston
-
 import Control.Concurrent.STM.TVar
-import Control.Monad
-import Data.Coerce
 
-import           Data.Maybe                  (catMaybes)
 import qualified Data.Text                   as T
 import           Linear
 import           Plugin.Imports
 
-import Godot.Gdnative.Internal.Api
-import           Godot.Gdnative.Types        (GodotFFI, LibType, TypeOf)
 import qualified Godot.Methods               as G
-
-import qualified Godot.Core.GodotImage as Image
-
-import Godot.Core.GodotGlobalConstants
 
 import Plugin.WestonSurfaceSprite
 import Plugin.Telekinesis
-
-import Control.Lens
-
-import Foreign
 
 import System.IO.Unsafe
 
@@ -46,6 +31,7 @@ data GodotSimulaController = GodotSimulaController
   , _gscMeshInstance :: GodotMeshInstance
   , _gscLaser :: GodotMeshInstance
   , _gscTelekinesis :: TVar Telekinesis
+  , _gscLastScrollPos :: TVar (V2 Float)
   }
 
 instance Eq GodotSimulaController where
@@ -79,8 +65,10 @@ instance ClassExport GodotSimulaController where
     tf <- G.get_global_transform (GodotSpatial obj) >>= fromLowLevel
     tk <- newTVarIO $ initTk (GodotSpatial obj) rc tf
 
+    lsp <- newTVarIO 0
+
     mesh <- newTVarIO Nothing
-    return $ GodotSimulaController obj rc mesh mi (GodotMeshInstance $ safeCast laser) tk
+    return $ GodotSimulaController obj rc mesh mi (GodotMeshInstance $ safeCast laser) tk lsp
 
   classExtends = "ARVRController"
   classMethods =
@@ -91,7 +79,7 @@ instance ClassExport GodotSimulaController where
 
 instance HasBaseClass GodotSimulaController where
   type BaseClass GodotSimulaController = GodotARVRController       
-  super (GodotSimulaController obj _ _ _ _ _) = GodotARVRController obj
+  super (GodotSimulaController obj _ _ _ _ _ _) = GodotARVRController obj
 
 load_controller_mesh :: GodotSimulaController -> Text -> IO (Maybe GodotMesh)
 load_controller_mesh gsc name = do
@@ -117,27 +105,70 @@ load_controller_mesh gsc name = do
   genericControllerStr = unsafePerformIO $ toLowLevel "generic_controller"
   {-# NOINLINE genericControllerStr #-}
 
+-- Because the ARVRController member method is_button_pressed returns Int, not Bool
+isButtonPressed :: Int -> GodotSimulaController -> IO Bool
+isButtonPressed btnId gsc = do
+  ctId <- G.get_joystick_id $ (safeCast gsc :: GodotARVRController)
+  getInput >>= \inp -> G.is_joy_button_pressed inp ctId btnId
+
+-- | Get the window pointed at if any.
+pointerWindow :: GodotSimulaController -> IO (Maybe GodotWestonSurfaceSprite)
+pointerWindow gsc = do
+  isColliding <- G.is_colliding $ _gscRayCast gsc
+  if isColliding
+    then G.get_collider (_gscRayCast gsc) >>= tryObjectCast @GodotWestonSurfaceSprite
+    else return Nothing
+
+resize :: GodotSimulaController -> Float -> IO ()
+resize ct delta = do
+  curPos <- V2 <$> (ct `G.get_joystick_axis` 0) <*> (ct `G.get_joystick_axis` 1)
+
+  _tkBody <$> (readTVarIO (_gscTelekinesis ct)) >>= \case
+    Just (obj, _) -> do
+      isGripPressed <- isButtonPressed 2 ct
+      lastPos <- readTVarIO (_gscLastScrollPos ct)
+      curScale <- G.get_scale (safeCast obj :: GodotSpatial) >>= fromLowLevel
+
+      let diff = curPos - lastPos
+          validChange = norm lastPos > 0.01 && norm curPos > 0.01
+          minScale = 1
+          maxScale = 4
+
+      if | norm curScale < minScale     -> scaleBy (V2 delta delta) obj
+         | norm curScale > maxScale     -> scaleBy (V2 (-delta) (-delta)) obj
+         | isGripPressed && validChange -> scaleBy diff obj
+         | otherwise                    -> return ()
+
+    Nothing -> return ()
+
+  atomically $ writeTVar (_gscLastScrollPos ct) curPos
+
+ where
+  -- TODO: Implement proper resizing (not scaling), vert and horiz
+  scaleBy :: (GodotSpatial :< child) => V2 Float -> child -> IO ()
+  scaleBy (V2 x y) a =
+    V3 1 1 1 ^* (1 + y * 0.5)
+      & toLowLevel
+      >>= G.scale_object_local (safeCast a :: GodotSpatial)
+
 
 process :: GodotFunc GodotSimulaController
-process _ self _ = do
+process _ self args = do
+  delta <- getArg' 0 args :: IO Float
   active <- G.get_is_active self
   visible <- G.is_visible self
 
   if | not active -> G.set_visible self False
      | visible -> do
-         isColliding <- G.is_colliding (_gscRayCast self)
-         if | isColliding ->
-                G.get_collider (_gscRayCast self)
-                  >>= tryObjectCast @GodotWestonSurfaceSprite
-                  >>= \case
-                    Just window -> do
-                      G.set_visible (_gscLaser self) True
-                      pos <- G.get_collision_point (_gscRayCast self)
-                      processClickEvent window Motion pos
-                    Nothing -> do
-                      G.set_visible (_gscLaser self) False
-                      return ()
-            | otherwise -> return ()
+         resize self delta
+         pointerWindow self >>= \case
+           Just window -> do
+             G.set_visible (_gscLaser self) True
+             pos <- G.get_collision_point $ _gscRayCast self
+             processClickEvent window Motion pos
+           Nothing -> do
+             G.set_visible (_gscLaser self) False
+             return ()
      | otherwise -> do
          cname <- G.get_controller_name self >>= fromLowLevel
          mMesh <- load_controller_mesh self  cname
@@ -145,20 +176,20 @@ process _ self _ = do
            Just mesh -> G.set_mesh (_gscMeshInstance self) mesh
            Nothing -> return ()
          G.set_visible self True
+
   toLowLevel VariantNil
 
 
 physicsProcess :: GodotFunc GodotSimulaController
 physicsProcess _ self _ = do
-  btnId <- G.get_joystick_id $ (safeCast self :: GodotARVRController)
+  whenM (G.get_is_active self) $ do
+    isGripPressed <- isButtonPressed 2 self
+    triggerPull <- G.get_joystick_axis self 2
+    let levitateCond = isGripPressed -- && triggerPull > 0.01
+    let moveCond = triggerPull > 0.2
 
-  isGripPressed <- getInput >>= \inp -> G.is_joy_button_pressed inp btnId 2
-  triggerPull <- G.get_joystick_axis self 2
-  let levitateCond = isGripPressed && triggerPull > 0.01
-  let moveCond = triggerPull > 0.2
-
-  tk <- readTVarIO (_gscTelekinesis self) >>= telekinesis levitateCond moveCond
-  atomically $ writeTVar (_gscTelekinesis self) tk
+    tk <- readTVarIO (_gscTelekinesis self) >>= telekinesis levitateCond moveCond
+    atomically $ writeTVar (_gscTelekinesis self) tk
 
   retnil
 
