@@ -10,4 +10,4 @@ run:
 	cp $(LIBFILE) $(PROJECTROOT)
 	godot --path $(GODOTPROJECT)
 watch:
-	stack build --file-watch --exec "cp $(LIBFILE) $(PROJECTROOT)"
+	stack build --file-watch --fast --exec "cp $(LIBFILE) $(PROJECTROOT)"
