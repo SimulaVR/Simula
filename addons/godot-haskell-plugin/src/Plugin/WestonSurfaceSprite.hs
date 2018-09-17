@@ -72,35 +72,30 @@ instance HasBaseClass GodotWestonSurfaceSprite where
 
 newGodotWestonSurfaceSprite :: GodotWestonSurfaceTexture -> WestonSeat -> IO GodotWestonSurfaceSprite
 newGodotWestonSurfaceSprite tex seat = do
-  rl <- getResourceLoader
-  url <- toLowLevel "res://addons/godot-haskell-plugin/WestonSurfaceSprite.gdns"
-  typeHint <- toLowLevel ""
-  (GodotResource obj) <- G.load rl url typeHint False
-  let ns = GodotNativeScript obj
-  ret <- G.new ns []
+  gwss <- "res://addons/godot-haskell-plugin/WestonSurfaceSprite.gdns"
+    & nsInstance id "Object" []
+    >>= godot_nativescript_get_userdata
+    >>= deRefStablePtr . castPtrToStablePtr
 
-  objPtr <- godot_nativescript_get_userdata ret
-  obj <- deRefStablePtr $ castPtrToStablePtr objPtr
-
-  sprite <- (GodotSprite3D <$> mkClassInstance "Sprite3D")
+  sprite <- classInstance GodotSprite3D "Sprite3D"
   G.set_pixel_size sprite 0.001
-  G.add_child obj (safeCast sprite) True
+  G.add_child gwss (safeCast sprite) True
   G.set_flip_h sprite True
 
-  shape <- (GodotBoxShape <$> mkClassInstance "BoxShape")
-  ownerId <- G.create_shape_owner obj (safeCast obj)
-  G.shape_owner_add_shape obj ownerId (safeCast shape)
+  shape <- classInstance GodotBoxShape "BoxShape"
+  ownerId <- G.create_shape_owner gwss (safeCast gwss)
+  G.shape_owner_add_shape gwss ownerId (safeCast shape)
 
-  atomically $ writeTVar (_gwssSprite obj) sprite
-  atomically $ writeTVar (_gwssShape obj) shape
-  atomically $ writeTVar (_gwssTexture obj) tex 
-  atomically $ writeTVar (_gwssSeat obj) seat
-  return obj
+  atomically $ writeTVar (_gwssSprite gwss) sprite
+  atomically $ writeTVar (_gwssShape gwss) shape
+  atomically $ writeTVar (_gwssTexture gwss) tex
+  atomically $ writeTVar (_gwssSeat gwss) seat
+  return gwss
 
 setWestonSurfaceTexture :: GodotWestonSurfaceSprite -> GodotWestonSurfaceTexture -> IO ()
-setWestonSurfaceTexture gwss tex = do 
+setWestonSurfaceTexture gwss tex = do
   atomically $ writeTVar (_gwssTexture gwss) tex
-  sprite <- atomically $ readTVar (_gwssSprite gwss) 
+  sprite <- atomically $ readTVar (_gwssSprite gwss)
   G.set_texture sprite (safeCast tex)
   sizeChanged gwss
 
@@ -181,7 +176,7 @@ processClickEvent :: GodotWestonSurfaceSprite -> InputEventType -> GodotVector3 
 processClickEvent gwss evt clickPos = do
   lpos <- G.to_local gwss clickPos >>= fromLowLevel
   print lpos
-  print (safeCast gwss :: GodotObject)
+  print (asObj gwss)
   sprite <- atomically $ readTVar (_gwssSprite gwss) 
   aabb <- G.get_aabb sprite
   size <- godot_aabb_get_size aabb >>= fromLowLevel

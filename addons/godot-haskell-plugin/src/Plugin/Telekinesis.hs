@@ -31,9 +31,9 @@ data PhysicsBodyConfig = PhysicsBodyConfig
   , _pbcMode         :: Int
   }
 
-initTk :: GodotSpatial -> GodotRayCast -> Transform -> Telekinesis
+initTk :: (GodotSpatial :< a) => a -> GodotRayCast -> Transform -> Telekinesis
 initTk ct rc tf = Telekinesis
-  { _tkController    = ct
+  { _tkController    = safeCast ct
   , _tkBody          = Nothing
   , _tkRayCast       = rc
   , _tkRange         = 15
@@ -130,7 +130,7 @@ manipulate isMove factor tk = do
 
 telekinesis :: Bool -> Bool -> Telekinesis -> IO Telekinesis
 telekinesis isLev isMove tk = do
-  _tkController tk `asClass` (GodotARVRController, "ARVRController") >>= \case
+  _tkController tk & asClass GodotARVRController "ARVRController" >>= \case
     Just ct -> do
       isActive    <- G.get_is_active ct
       triggerPull <- if isActive then G.get_joystick_axis ct 2 else return 0
@@ -151,6 +151,6 @@ telekinesis isLev isMove tk = do
         isColliding <- (&&) <$> G.is_enabled rc <*> G.is_colliding rc
         if isColliding
         then G.get_collider rc
-            >>= flip asClass (GodotRigidBody, "RigidBody")
+            >>= asClass GodotRigidBody "RigidBody"
             >>= maybe (return tk') (flip grab tk')
         else return tk'

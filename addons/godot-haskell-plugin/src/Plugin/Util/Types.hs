@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE DataKinds             #-}
 module Plugin.Util.Types where
@@ -7,6 +8,7 @@ import           Godot.Gdnative.Internal
 import           Godot.Internal.Dispatch
 import qualified Godot.Methods as G
 import           Data.Text               as T
+import           Data.Function           ((&))
 
 -- | Type to help with type conversions
 data HighLevelOf low where
@@ -25,22 +27,26 @@ withHigh
 withHigh f (High high) = f high
 
 
-as ::  (GodotObject :< a, b :< a) => a -> (GodotObject -> b) -> b
-as obj constr = constr $ safeCast obj
-
-
-asClass ::  (GodotObject :< a, a :< b) => a -> (GodotObject -> b, Text) -> IO (Maybe b)
-asClass a (constr, cls) = do
+asClass ::  (GodotObject :< a, a :< b) => (GodotObject -> b) -> Text -> a -> IO (Maybe b)
+asClass constr cls a = do
   isClass <- is_class a cls
   return $ if isClass
     then Just $ constr (safeCast a)
     else Nothing
 
+asClass' :: (GodotObject :< a, a :< b) => (GodotObject -> b) -> Text -> a -> IO b
+asClass' constr cls a =
+  asClass constr cls a >>= \case
+    Just a' -> return a'
+    Nothing -> error $ unpack $ "Could not cast to " `append` cls
+
+asObj :: (GodotObject :< a) => a -> GodotObject
+asObj a = safeCast a
 
 is_class :: GodotObject :< a => a -> Text -> IO Bool
 is_class obj cls = do
   clsStr <- toLowLevel cls
-  G.is_class (safeCast obj :: GodotObject) clsStr
+  G.is_class (asObj obj) clsStr
 
 
 {-

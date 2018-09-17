@@ -42,11 +42,13 @@ instance GodotClass GodotWestonSurfaceTexture where
 
 instance ClassExport GodotWestonSurfaceTexture where
   classInit obj = do
-    img <- GodotImage <$> mkClassInstance "Image"
+    img <- classInstance GodotImage "Image"
     imgdt <- godot_pool_byte_array_new
-    GodotWestonSurfaceTexture obj <$> atomically (newTVar undefined) <*> atomically (newTVar undefined) <*> atomically (newTVar img) <*> atomically (newTVar imgdt)
-  --classInit obj = atomically $
-    -- CubeMaker obj <$> newTVar [] <*> newTVar ""
+    GodotWestonSurfaceTexture obj
+      <$> atomically (newTVar undefined)
+      <*> atomically (newTVar undefined)
+      <*> atomically (newTVar img)
+      <*> atomically (newTVar imgdt)
   classExtends = "ImageTexture"
   classMethods = []
 

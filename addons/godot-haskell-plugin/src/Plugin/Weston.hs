@@ -98,7 +98,7 @@ startBaseCompositor _ compositor _ = do
  where
   posInfront :: GodotARVRCamera -> GodotSpatial -> IO ()
   posInfront cam comp = do
-    TF b _ <- G.get_global_transform (comp `as` GodotSpatial) >>= fromLowLevel
+    TF b _ <- G.get_global_transform (safeCast comp :: GodotSpatial) >>= fromLowLevel
     TF camBasis camPos <- G.get_global_transform cam >>= fromLowLevel
     let dist = 1 -- ^ Distance from camera
         fw = negate $ camBasis ^. _z
@@ -128,11 +128,12 @@ startBaseCompositor _ compositor _ = do
 
 onReady :: GodotWestonCompositor -> IO ()
 onReady gwc = do
-  leftCt <- toLowLevel "../ARVROrigin/LeftController" >>= G.get_node gwc
-  rightCt <- toLowLevel "../ARVROrigin/RightController" >>= G.get_node gwc
-
-  connectController leftCt
-  connectController rightCt
+  gwc `getNode` "../ARVROrigin/LeftController" >>= \case
+    Just leftCt -> connectController leftCt
+    Nothing -> putStrLn "Left controller node doesn't exist."
+  gwc `getNode` "../ARVROrigin/RightController" >>= \case
+    Just rightCt -> connectController rightCt
+    Nothing -> putStrLn "Right controller node doesn't exist."
   where
     connectController ct = do
       btnPressed <- toLowLevel "button_pressed"
@@ -282,7 +283,7 @@ startBaseThread compositor = void $ forkOS $ do
 moveToUnoccupied :: GodotWestonCompositor -> GodotWestonSurfaceSprite -> IO ()
 moveToUnoccupied gwc gwss = do
   surfaces <- atomically $ readTVar (_gwcSurfaces gwc)
-  let elems = filter (\x -> (safeCast x :: GodotObject) /= safeCast gwss) $ M.elems surfaces
+  let elems = filter (\x -> asObj x /= asObj gwss) $ M.elems surfaces
 
   extents <- forM elems $ \westonSprite -> do
     sprite <- getSprite westonSprite
