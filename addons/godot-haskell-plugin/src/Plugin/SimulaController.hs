@@ -42,21 +42,16 @@ instance GodotClass GodotSimulaController where
 
 instance ClassExport GodotSimulaController where
   classInit obj = do
-    rc <- GodotRayCast <$> mkClassInstance "RayCast"
+    rc <- classInstance GodotRayCast "RayCast"
     toLowLevel (V3 0 0 (negate 10)) >>= G.set_cast_to rc
     G.set_enabled rc True
     G.add_child (GodotNode obj) (safeCast rc) True
 
-    mi <- GodotMeshInstance <$> mkClassInstance "MeshInstance"
+    mi <- classInstance GodotMeshInstance "MeshInstance"
     G.add_child (GodotNode obj) (safeCast mi) True
     toLowLevel ".." >>= G.set_skeleton_path mi 
 
-    rl <- getResourceLoader
-    url <- toLowLevel "res://Laser.tscn"
-    typeHint <- toLowLevel ""
-    (GodotResource laserObj) <- G.load rl url typeHint False
-    let laserScene = GodotPackedScene laserObj
-    laser <- G.instance' laserScene 0
+    laser <- sceneInstance 0 GodotMeshInstance "MeshInstance" "res://Laser.tscn"
 
     G.add_child (GodotNode obj) (safeCast laser) True
 
@@ -68,7 +63,7 @@ instance ClassExport GodotSimulaController where
     lsp <- newTVarIO 0
 
     mesh <- newTVarIO Nothing
-    return $ GodotSimulaController obj rc mesh mi (GodotMeshInstance $ safeCast laser) tk lsp
+    return $ GodotSimulaController obj rc mesh mi (laser) tk lsp
 
   classExtends = "ARVRController"
   classMethods =
@@ -94,7 +89,7 @@ load_controller_mesh gsc name = do
         else do
           ret <- G.call msh loadModelStr [toVariant genericControllerStr] >>= fromGodotVariant
           if ret then return $ Just $ safeCast msh
-          else Just <$> GodotMesh <$> mkClassInstance "Mesh"
+          else safeInstance GodotMesh "Mesh"
 
     Nothing -> return Nothing
 
@@ -197,12 +192,8 @@ physicsProcess _ self _ = do
 ready :: GodotFunc GodotSimulaController
 ready _ self _ = do
   -- Load and set controller mesh
-  rl <- getResourceLoader
-  url <- toLowLevel "res://addons/godot-openvr/OpenVRRenderModel.gdns"
-  typeHint <- toLowLevel ""
-  (GodotResource obj) <- G.load rl url typeHint False
-  let ns = GodotNativeScript obj
-  mesh <- GodotArrayMesh <$> G.new ns []
+  mesh <- "res://addons/godot-openvr/OpenVRRenderModel.gdns"
+    & nsInstance GodotArrayMesh "ArrayMesh" []
   atomically $ writeTVar (_gscOpenvrMesh self) $ Just mesh
 
   toLowLevel VariantNil
