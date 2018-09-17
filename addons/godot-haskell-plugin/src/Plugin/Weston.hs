@@ -255,8 +255,6 @@ moveToUnoccupied gwc gwss = do
         if abs minX < abs maxX
         then V3 (minX - sizeX/2) 0 0
         else V3 (maxX + sizeX/2) 0 0
-  print extents
-  print newPos
   tlVec <- toLowLevel newPos
   G.translate gwss tlVec
 

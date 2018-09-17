@@ -165,9 +165,7 @@ processInputEvent gwss ev clickPos = do
 processClickEvent :: GodotWestonSurfaceSprite -> InputEventType -> GodotVector3 -> IO ()
 processClickEvent gwss evt clickPos = do
   lpos <- G.to_local gwss clickPos >>= fromLowLevel
-  print lpos
-  print (asObj gwss)
-  sprite <- atomically $ readTVar (_gwssSprite gwss) 
+  sprite <- atomically $ readTVar (_gwssSprite gwss)
   aabb <- G.get_aabb sprite
   size <- godot_aabb_get_size aabb >>= fromLowLevel
 
@@ -195,18 +193,14 @@ processClickEvent gwss evt clickPos = do
       msec <- getMsec
       seat <- atomically $ readTVar (_gwssSeat gwss)
       pointer <- weston_seat_get_pointer seat
-      putStr "Motion "
-      print (sx,sy)
-      
+
       pointer_send_motion pointer msec sx sy
 
     processMouseButtonEvent sx sy pressed button = do
-  
+
       msec <- getMsec
       gwst <- atomically $ readTVar $ _gwssTexture gwss
       view <- atomically $ readTVar $ _gwstView gwst
-      putStr "Button "
-      print (sx,sy)
 
       seat <- atomically $ readTVar (_gwssSeat gwss)
       kbd <- weston_seat_get_keyboard seat
