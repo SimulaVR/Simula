@@ -42,6 +42,8 @@ import Control.Lens
 
 import Foreign hiding (void)
 
+import Telemetry
+
 data GrabState
   = NoGrab
   | Dragging (GodotSimulaController, GodotVector3) GodotWestonSurfaceSprite
@@ -86,6 +88,9 @@ startBaseCompositor _ compositor _ = do
     Nothing -> return ()
 
   startBaseThread compositor
+
+  startTelemetry (_gwcSurfaces compositor)
+
   toLowLevel VariantNil
  where
   posInfront cam comp = do

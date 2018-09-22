@@ -71,3 +71,7 @@ require-stack-version: ">=1.7"
 #
 # Allow a newer minor version of GHC than the snapshot specifies
 # compiler-check: newer-minor
+
+nix:
+  enable: false
+  shell-file: shell.nix 
