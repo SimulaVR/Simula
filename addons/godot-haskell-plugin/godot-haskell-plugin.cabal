@@ -25,9 +25,16 @@ source-repository head
   type: git
   location: https://github.com/KaneTW/godot-haskell-plugin
 
+flag no-tracking
+  default:     False
+  manual:      True
+
 library
-  hs-source-dirs:
-      src
+  if flag(no-tracking)
+     hs-source-dirs: src, no-telemetry
+  else
+     hs-source-dirs: src, telemetry
+
   build-depends:
       base >=4.7 && <5
     , lens
@@ -42,7 +49,20 @@ library
     , clock
     , extra
     , lens
+    , bytestring
+    , http-client
+    , http-types
+    , http-client-tls
+    , aeson
+    , process
+    , base64-bytestring
+    , directory
+    , uuid
+    , time
+    , iso8601-time
+
   exposed-modules:
+      Telemetry
       Plugin
       Plugin.Imports
       Plugin.Types
