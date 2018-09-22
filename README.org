@@ -33,7 +33,6 @@ Simula has only been tested on Ubuntu bionic beaver (18.04), but the instruction
 
   installUbuntuDependencies
   installSteam # if you haven't already
-
   installGodot # Installs Godot 3.1 master branch; this will probably take a while.
   #+END_SRC
 
@@ -61,6 +60,10 @@ Simula has only been tested on Ubuntu bionic beaver (18.04), but the instruction
   # Ensure that SteamVR is launched.
   cd /path/to/simula-godot
   make run # this should take a while also
+
+  # Once Simula starts, launch some Wayland apps to interact with:
+  weston-terminal # Wayland terminal
+  epiphany        # Wayland web browser
   #+END_SRC
 
 ** COMMENT Arch
