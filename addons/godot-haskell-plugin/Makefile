@@ -3,9 +3,9 @@ PROJECTROOT = $(shell stack path --project-root)
 GODOTPROJECT = $(PROJECTROOT)/../../
 all:
 	stack clean godot-haskell-plugin
-	stack build
+	stack build godot-haskell-plugin $$TELEMETRY
 	cp $(LIBFILE) $(PROJECTROOT)
 run:
-	stack build
+	stack build godot-haskell-plugin $$TELEMETRY
 	cp $(LIBFILE) $(PROJECTROOT)
 	godot --path $(GODOTPROJECT)
