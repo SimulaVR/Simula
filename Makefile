@@ -1,6 +1,6 @@
 all: check
 	cd addons/godot-haskell-plugin && make && cd -
-run: check
+run:
 	cd addons/godot-haskell-plugin && make run && cd -
 watch:
 	cd addons/godot-haskell-plugin && make watch && cd -
