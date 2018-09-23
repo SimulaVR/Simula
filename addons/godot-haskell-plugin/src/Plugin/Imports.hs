@@ -30,14 +30,8 @@ import           Godot.Gdnative.Types             as G hiding (AsVariant,
                                                         GodotFFI, LibType,
                                                         TypeOf)
 import           Godot.Internal.Dispatch          as G
-import           Godot.Nativescript               as G
 
--- Convenience
-import           Plugin.Types                     as P
-import           Plugin.Util                      as P
-import           Plugin.Util.Types                as P
-import           Plugin.Util.Variants             as P
-import           Plugin.Instances                 as P ()
+import           Godot.Extra                      as P
 
 import System.Clock as P
 import Control.Monad.Extra as P (when, whenM)

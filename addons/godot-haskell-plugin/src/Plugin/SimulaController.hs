@@ -16,7 +16,9 @@ import Control.Concurrent.STM.TVar
 import qualified Data.Text                   as T
 import           Linear
 import           Plugin.Imports
+import           Godot.Nativescript
 
+import           Godot.Extra.Register
 import qualified Godot.Methods               as G
 
 import Plugin.WestonSurfaceSprite
@@ -42,16 +44,17 @@ instance GodotClass GodotSimulaController where
 
 instance ClassExport GodotSimulaController where
   classInit obj = do
-    rc <- classInstance GodotRayCast "RayCast"
+    rc <- unsafeInstance GodotRayCast "RayCast"
     toLowLevel (V3 0 0 (negate 10)) >>= G.set_cast_to rc
     G.set_enabled rc True
     G.add_child (GodotNode obj) (safeCast rc) True
 
-    mi <- classInstance GodotMeshInstance "MeshInstance"
+    mi <- unsafeInstance GodotMeshInstance "MeshInstance"
     G.add_child (GodotNode obj) (safeCast mi) True
     toLowLevel ".." >>= G.set_skeleton_path mi 
 
-    laser <- sceneInstance 0 GodotMeshInstance "MeshInstance" "res://Laser.tscn"
+    laser <- "res://Laser.tscn"
+      & sceneInstance 0 GodotMeshInstance "MeshInstance"
 
     G.add_child (GodotNode obj) (safeCast laser) True
 
@@ -67,9 +70,9 @@ instance ClassExport GodotSimulaController where
 
   classExtends = "ARVRController"
   classMethods =
-    [ Func NoRPC "_process" process
-    , Func NoRPC "_physics_process" physicsProcess
-    , Func NoRPC "_ready" ready
+    [ GodotMethod NoRPC "_process" process
+    , GodotMethod NoRPC "_physics_process" physicsProcess
+    , GodotMethod NoRPC "_ready" ready
     ]
 
 instance HasBaseClass GodotSimulaController where
@@ -88,8 +91,9 @@ load_controller_mesh gsc name = do
           return $ Just $ safeCast msh
         else do
           ret <- G.call msh loadModelStr [toVariant genericControllerStr] >>= fromGodotVariant
-          if ret then return $ Just $ safeCast msh
-          else safeInstance GodotMesh "Mesh"
+          if ret
+            then return $ Just $ safeCast msh
+            else instance' GodotMesh "Mesh"
 
     Nothing -> return Nothing
 
@@ -104,7 +108,7 @@ load_controller_mesh gsc name = do
 isButtonPressed :: Int -> GodotSimulaController -> IO Bool
 isButtonPressed btnId gsc = do
   ctId <- G.get_joystick_id $ (safeCast gsc :: GodotARVRController)
-  getInput >>= \inp -> G.is_joy_button_pressed inp ctId btnId
+  getSingleton GodotInput "Input" >>= \inp -> G.is_joy_button_pressed inp ctId btnId
 
 -- | Get the window pointed at if any.
 pointerWindow :: GodotSimulaController -> IO (Maybe GodotWestonSurfaceSprite)
@@ -147,8 +151,8 @@ resize ct delta = do
       >>= G.scale_object_local (safeCast a :: GodotSpatial)
 
 
-process :: GodotFunc GodotSimulaController
-process _ self args = do
+process :: GFunc GodotSimulaController
+process self args = do
   delta <- getArg' 0 args :: IO Float
   active <- G.get_is_active self
   visible <- G.is_visible self
@@ -175,8 +179,8 @@ process _ self args = do
   toLowLevel VariantNil
 
 
-physicsProcess :: GodotFunc GodotSimulaController
-physicsProcess _ self _ = do
+physicsProcess :: GFunc GodotSimulaController
+physicsProcess self _ = do
   whenM (G.get_is_active self) $ do
     isGripPressed <- isButtonPressed 2 self
     triggerPull <- G.get_joystick_axis self 2
@@ -189,11 +193,11 @@ physicsProcess _ self _ = do
   retnil
 
 
-ready :: GodotFunc GodotSimulaController
-ready _ self _ = do
+ready :: GFunc GodotSimulaController
+ready self _ = do
   -- Load and set controller mesh
   mesh <- "res://addons/godot-openvr/OpenVRRenderModel.gdns"
-    & nsInstance GodotArrayMesh "ArrayMesh" []
+    & newNS GodotArrayMesh "ArrayMesh" []
   atomically $ writeTVar (_gscOpenvrMesh self) $ Just mesh
 
   toLowLevel VariantNil
