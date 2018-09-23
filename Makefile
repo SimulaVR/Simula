@@ -2,6 +2,8 @@ all: check
 	cd addons/godot-haskell-plugin && make && cd -
 run: check
 	cd addons/godot-haskell-plugin && make run && cd -
+watch:
+	cd addons/godot-haskell-plugin && make watch && cd -
 
 .PHONY: check
 check:

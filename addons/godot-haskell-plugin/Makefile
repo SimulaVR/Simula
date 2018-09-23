@@ -9,3 +9,5 @@ run:
 	stack build godot-haskell-plugin $$TELEMETRY
 	cp $(LIBFILE) $(PROJECTROOT)
 	godot --path $(GODOTPROJECT)
+watch:
+	stack build --file-watch --exec "cp $(LIBFILE) $(PROJECTROOT)"
