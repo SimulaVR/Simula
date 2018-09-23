@@ -1,3 +1,4 @@
 **/*.stack-work/
 *~
 .import/
+addons/godot-haskell-plugin/libgodot-haskell-plugin.so
