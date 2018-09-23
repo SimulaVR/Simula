@@ -14,20 +14,16 @@ import Simula.Weston
 import Control.Monad
 import Data.Coerce
 
-import           Data.Maybe                  (catMaybes)
-import qualified Data.Text                   as T
-import           Linear
 import           Plugin.Imports
+import           Godot.Extra.Register
 
-import Godot.Gdnative.Internal.Api
-import           Godot.Gdnative.Types        (GodotFFI, LibType, TypeOf)
 import qualified Godot.Methods               as G
+import Godot.Gdnative.Internal.Api
 
 import qualified Godot.Core.GodotImage as Image
 
 import Foreign
 
-import System.IO.Unsafe
 
 data GodotWestonSurfaceTexture = GodotWestonSurfaceTexture
   { _gwstObj      :: GodotObject
@@ -42,7 +38,7 @@ instance GodotClass GodotWestonSurfaceTexture where
 
 instance ClassExport GodotWestonSurfaceTexture where
   classInit obj = do
-    img <- classInstance GodotImage "Image"
+    img <- unsafeInstance GodotImage "Image"
     imgdt <- godot_pool_byte_array_new
     GodotWestonSurfaceTexture obj
       <$> atomically (newTVar undefined)
@@ -58,12 +54,7 @@ instance HasBaseClass GodotWestonSurfaceTexture where
 
 newGodotWestonSurfaceTexture :: IO GodotWestonSurfaceTexture
 newGodotWestonSurfaceTexture = do
-  rl <- getResourceLoader
-  url <- toLowLevel "res://addons/godot-haskell-plugin/WestonSurfaceTexture.gdns"
-  typeHint <- toLowLevel ""
-  (GodotResource obj) <- G.load rl url typeHint False
-  let ns = GodotNativeScript obj
-  ret <- G.new ns []
+  ret <- newNS id "Object" [] "res://addons/godot-haskell-plugin/WestonSurfaceTexture.gdns"
   objPtr <- godot_nativescript_get_userdata ret
   deRefStablePtr $ castPtrToStablePtr objPtr
 
@@ -72,9 +63,6 @@ setWestonSurface gws ws view = do
   atomically $ writeTVar (_gwstSurface gws) ws
   atomically $ writeTVar (_gwstView gws) view
   updateWestonSurfaceTexture gws
-
-freeName :: GodotString
-freeName = unsafePerformIO $ toLowLevel "free"
 
 updateWestonSurfaceTexture :: GodotWestonSurfaceTexture -> IO ()
 updateWestonSurfaceTexture gws = do

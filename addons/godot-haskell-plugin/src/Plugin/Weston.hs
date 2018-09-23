@@ -10,16 +10,13 @@ import Simula.WaylandServer
 import Simula.Weston
 import Simula.WestonDesktop
 
-import Data.Coerce
-
-import           Data.Maybe                  (catMaybes)
-import qualified Data.Text                   as T
 import           Linear
 import           Plugin.Imports
 
 import qualified Godot.Gdnative.Internal.Api as Api
-import           Godot.Gdnative.Types        (GodotFFI, LibType, TypeOf)
 import qualified Godot.Methods               as G
+import           Godot.Nativescript
+import           Godot.Extra.Register
 
 import qualified Data.Map.Strict as M
 import Plugin.WestonSurfaceSprite
@@ -36,7 +33,6 @@ import System.Environment
 import System.Posix.Signals
 
 import Data.Bits
-import qualified Data.Vector as V
 
 import Control.Lens
 
@@ -70,13 +66,13 @@ instance ClassExport GodotWestonCompositor where
                    <*> atomically (newTVar undefined) <*> atomically (newTVar NoGrab)
     
   classExtends = "Spatial"
-  classMethods = [ Func NoRPC "_ready" startBaseCompositor
-                 , Func NoRPC "_input" input
-                 , Func NoRPC "_process" process
-                 , Func NoRPC "on_button_signal" on_button_signal ]
+  classMethods = [ GodotMethod NoRPC "_ready" startBaseCompositor
+                 , GodotMethod NoRPC "_input" input
+                 , GodotMethod NoRPC "_process" process
+                 , GodotMethod NoRPC "on_button_signal" on_button_signal ]
 
-startBaseCompositor :: GodotFunc GodotWestonCompositor
-startBaseCompositor _ compositor _ = do
+startBaseCompositor :: GFunc GodotWestonCompositor
+startBaseCompositor compositor _ = do
   onReady compositor
 
   getCamera (safeCast compositor) >>= \case
@@ -323,8 +319,8 @@ getKeyboard gwc = getSeat gwc >>= weston_seat_get_keyboard
 getPointer :: GodotWestonCompositor -> IO WestonPointer
 getPointer gwc = getSeat gwc >>= weston_seat_get_pointer
 
-input :: GodotFunc GodotWestonCompositor
-input _ self args = do
+input :: GFunc GodotWestonCompositor
+input self args = do
   case args !? 0 of
     Just hd -> fromLowLevel hd  >>= \mObj ->
       case fromVariant mObj of
@@ -338,7 +334,7 @@ input _ self args = do
       G.set_input_as_handled st
     processInputEvent = processKeyEvent
 
-    processKeyEvent ev = whenM (ev `is_class` "InputEventKey") $ do
+    processKeyEvent ev = whenM (ev `isClass` "InputEventKey") $ do
       let ev' = GodotInputEventKey ev
       kbd <- getKeyboard self
       godotcode <- G.get_scancode ev'
@@ -367,8 +363,8 @@ input _ self args = do
     toState pressed | pressed = WlKeyboardKeyStatePressed
                     | otherwise = WlKeyboardKeyStateReleased
 
-on_button_signal :: GodotFunc GodotWestonCompositor
-on_button_signal _ self args = do
+on_button_signal :: GFunc GodotWestonCompositor
+on_button_signal self args = do
   case toList args of
     [buttonVar, controllerVar, pressedVar] -> do
       button <- fromGodotVariant buttonVar
@@ -396,8 +392,8 @@ onButton self gsc button pressed = do
     OVR_Button_AppMenu -> processClickEvent sprite (Button pressed BUTTON_RIGHT)
     _ -> \_ -> return ()
 
-process :: GodotFunc GodotWestonCompositor
-process _ self _ = do
+process :: GFunc GodotWestonCompositor
+process self _ = do
   atomically (readTVar (_gwcGrabState self))
     >>= handleState
     >>= atomically . writeTVar (_gwcGrabState self)

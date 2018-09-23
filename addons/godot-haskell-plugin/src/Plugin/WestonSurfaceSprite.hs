@@ -15,27 +15,21 @@ module Plugin.WestonSurfaceSprite
   , processClickEvent
   ) where
 
-import Simula.WaylandServer
 import Simula.Weston
 
 import Control.Monad
 import Data.Coerce
 
-import           Data.Maybe                  (catMaybes)
-import qualified Data.Text                   as T
 import           Linear
 import           Plugin.Imports
 
-import qualified Godot.Core.GodotImage       as Image
+import           Godot.Extra.Register
 import           Godot.Core.GodotGlobalConstants
 import qualified Godot.Core.GodotRigidBody   as RigidBody
 import           Godot.Gdnative.Internal.Api
-import           Godot.Gdnative.Types        (GodotFFI, LibType, TypeOf)
 import qualified Godot.Methods               as G
 
 import Plugin.WestonSurfaceTexture 
-
-import Control.Lens
 
 import Foreign
 
@@ -62,8 +56,8 @@ instance ClassExport GodotWestonSurfaceSprite where
                   <*> atomically (newTVar (error "didn't init texture")) <*> atomically (newTVar (error "didn't init seat"))
   classExtends = "RigidBody"
   classMethods =
-    [ Func NoRPC "_input" input
-    , Func NoRPC "_ready" ready
+    [ GodotMethod NoRPC "_input" input
+    , GodotMethod NoRPC "_ready" ready
     ]
 
 instance HasBaseClass GodotWestonSurfaceSprite where
@@ -73,16 +67,16 @@ instance HasBaseClass GodotWestonSurfaceSprite where
 newGodotWestonSurfaceSprite :: GodotWestonSurfaceTexture -> WestonSeat -> IO GodotWestonSurfaceSprite
 newGodotWestonSurfaceSprite tex seat = do
   gwss <- "res://addons/godot-haskell-plugin/WestonSurfaceSprite.gdns"
-    & nsInstance id "Object" []
+    & newNS id "Object" []
     >>= godot_nativescript_get_userdata
     >>= deRefStablePtr . castPtrToStablePtr
 
-  sprite <- classInstance GodotSprite3D "Sprite3D"
+  sprite <- unsafeInstance GodotSprite3D "Sprite3D"
   G.set_pixel_size sprite 0.001
   G.add_child gwss (safeCast sprite) True
   G.set_flip_h sprite True
 
-  shape <- classInstance GodotBoxShape "BoxShape"
+  shape <- unsafeInstance GodotBoxShape "BoxShape"
   ownerId <- G.create_shape_owner gwss (safeCast gwss)
   G.shape_owner_add_shape gwss ownerId (safeCast shape)
 
@@ -104,8 +98,7 @@ getWestonSurfaceTexture gwss = atomically $ readTVar (_gwssTexture gwss)
 
 updateWestonSurfaceSprite :: GodotWestonSurfaceSprite -> IO ()
 updateWestonSurfaceSprite gwss = do
-  gwst <- getWestonSurfaceTexture gwss
-  sprite <- atomically $ readTVar (_gwssSprite gwss) 
+  sprite <- atomically $ readTVar (_gwssSprite gwss)
   tex <- atomically $ readTVar (_gwssTexture gwss)
   updateWestonSurfaceTexture tex
   G.set_texture sprite (safeCast tex)
@@ -125,9 +118,6 @@ sizeChanged gwss = do
 getSprite :: GodotWestonSurfaceSprite -> IO GodotSprite3D
 getSprite gwss = atomically $ readTVar (_gwssSprite gwss) 
 
-getAabb :: GodotWestonSurfaceSprite -> IO GodotAabb
-getAabb gwss = getSprite gwss >>= G.get_aabb
-
 spriteShouldMove :: GodotWestonSurfaceSprite -> IO Bool
 spriteShouldMove gwss = do
   en <- atomically $ readTVar (_gwssShouldMove gwss)
@@ -143,13 +133,13 @@ spriteShouldMove gwss = do
 setSpriteShouldMove :: GodotWestonSurfaceSprite -> Bool -> IO ()   
 setSpriteShouldMove gwss = atomically . writeTVar (_gwssShouldMove gwss)
 
-ready :: GodotFunc GodotWestonSurfaceSprite
-ready _ self args = do
+ready :: GFunc GodotWestonSurfaceSprite
+ready self _ = do
   G.set_mode self RigidBody.MODE_KINEMATIC
   toLowLevel VariantNil
 
-input :: GodotFunc GodotWestonSurfaceSprite
-input _ self args = do
+input :: GFunc GodotWestonSurfaceSprite
+input self args = do
   case toList args of
     [_cam, evObj, clickPosObj, _clickNormal, _shapeIdx] ->  do
       ev <- fromGodotVariant evObj
@@ -165,8 +155,8 @@ data InputEventType
 
 processInputEvent :: GodotWestonSurfaceSprite -> GodotObject -> GodotVector3 -> IO ()
 processInputEvent gwss ev clickPos = do
-  whenM (ev `is_class` "InputEventMouseMotion") $ processClickEvent gwss Motion clickPos 
-  whenM (ev `is_class` "InputEventMouseButton") $ do
+  whenM (ev `isClass` "InputEventMouseMotion") $ processClickEvent gwss Motion clickPos
+  whenM (ev `isClass` "InputEventMouseButton") $ do
     let ev' = GodotInputEventMouseButton (coerce ev)
     pressed <- G.is_pressed ev'
     button <- G.get_button_index ev'

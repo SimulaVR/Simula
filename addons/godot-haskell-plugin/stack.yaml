@@ -37,6 +37,10 @@ resolver: nightly-2018-07-26
 # will not be run. This is useful for tweaking upstream packages.
 packages:
 - .
+- location:
+    git: https://gitlab.com/lboklin/godot-extra
+    commit: 40f175d
+  extra-dep: true
 - simula-wayland
 - location:
     git: https://github.com/SimulaVR/godot-haskell
@@ -74,4 +78,4 @@ require-stack-version: ">=1.7"
 
 nix:
   enable: false
-  shell-file: shell.nix 
+  shell-file: shell.nix
