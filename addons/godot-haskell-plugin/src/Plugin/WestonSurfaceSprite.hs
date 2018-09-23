@@ -62,7 +62,7 @@ instance ClassExport GodotWestonSurfaceSprite where
                   <*> atomically (newTVar (error "didn't init texture")) <*> atomically (newTVar (error "didn't init seat"))
   classExtends = "RigidBody"
   classMethods =
-    [ Func NoRPC "_input_event" input
+    [ Func NoRPC "_input" input
     , Func NoRPC "_ready" ready
     ]
 
@@ -161,7 +161,7 @@ input _ self args = do
       clickPos <- fromGodotVariant clickPosObj
       processInputEvent self ev clickPos
       godot_object_destroy ev
-    _ -> putStrLn "expected 5 arguments in _input_event"
+    _ -> putStrLn "expected 5 arguments in _input"
   toLowLevel VariantNil
 
 data InputEventType 
