@@ -2,7 +2,7 @@ LIBFILE = $(shell stack path --local-install-root)/lib/libgodot-haskell-plugin.s
 PROJECTROOT = $(shell stack path --project-root)
 GODOTPROJECT = $(PROJECTROOT)/../../
 all:
-	stack clean godot-haskell-plugin
+	stack clean godot-haskell-plugin simula-wayland
 	stack build godot-haskell-plugin $$TELEMETRY
 	cp $(LIBFILE) $(PROJECTROOT)
 run:
