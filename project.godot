@@ -17,7 +17,6 @@ _global_script_class_icons={
 
 config/name="haskell-test"
 run/main_scene="res://addons/godot-haskell-plugin/demo/Demo.tscn"
-config/icon="res://icon.png"
 
 [debug]
 
@@ -30,8 +29,6 @@ singletons=[ "res://addons/godot-openvr/godot_openvr.gdnlib" ]
 [physics]
 
 common/physics_fps=90
-2d/physics_engine="GodotPhysics"
-3d/physics_engine="GodotPhysics"
 2d/thread_model=2
 
 [rendering]
