@@ -1,4 +1,6 @@
 **/*.stack-work/
 *~
 .import/
-addons/godot-haskell-plugin/libgodot-haskell-plugin.so
+/addons/godot-haskell-plugin/libgodot-haskell-plugin.so
+/UUID
+/bin
