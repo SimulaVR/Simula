@@ -74,53 +74,9 @@ instance ClassExport GodotWestonCompositor where
 startBaseCompositor :: GFunc GodotWestonCompositor
 startBaseCompositor compositor _ = do
   onReady compositor
-
-  getCamera (safeCast compositor) >>= \case
-    Just hmd -> do
-      let comp = safeCast compositor :: GodotSpatial
-      -- | Position in front of camera
-      -- FIXME: Messes with moveToUnoccupied and makes windows stack
-      posInfront hmd comp
-
-      -- | Face the camera
-      faceCamera hmd comp
-    Nothing -> return ()
-
   startBaseThread compositor
-
   startTelemetry (_gwcSurfaces compositor)
-
   toLowLevel VariantNil
- where
-  posInfront :: GodotARVRCamera -> GodotSpatial -> IO ()
-  posInfront cam comp = do
-    TF b _ <- G.get_global_transform (safeCast comp :: GodotSpatial) >>= fromLowLevel
-    TF camBasis camPos <- G.get_global_transform cam >>= fromLowLevel
-    let dist = 1 -- ^ Distance from camera
-        fw = negate $ camBasis ^. _z
-        newPos = camPos + fw ^* dist + V3 0 0.5 0
-    tf <- toLowLevel (TF b newPos) :: IO GodotTransform
-    G.set_global_transform comp tf
-
-  faceCamera :: GodotARVRCamera -> GodotSpatial -> IO ()
-  faceCamera hmd spatial = do
-    camPos <- G.get_global_transform (safeCast hmd :: GodotSpatial)
-      >>= Api.godot_transform_get_origin
-    spatialOrig <- G.get_global_transform spatial
-      >>= Api.godot_transform_get_origin
-    whenM (not <$> isSameHoriz spatialOrig camPos)
-      $ toLowLevel (V3 0 1 0) >>= spatial `G.look_at` camPos
-
-  isSameHoriz :: GodotVector3 -> GodotVector3 -> IO Bool
-  isSameHoriz a b = do
-    (V3 x _ z) <- fromLowLevel a :: IO (V3 Float)
-    (V3 x' _ z') <- fromLowLevel b :: IO (V3 Float)
-    return $ (V2 x z) == (V2 x' z')
-
-  getCamera :: GodotNode -> IO (Maybe GodotARVRCamera)
-  getCamera nd = nd `getNode` "../ARVROrigin/ARVRCamera" >>= \case
-    Just cam -> return $ Just $ GodotARVRCamera $ safeCast cam
-    Nothing -> return Nothing
 
 onReady :: GodotWestonCompositor -> IO ()
 onReady gwc = do
