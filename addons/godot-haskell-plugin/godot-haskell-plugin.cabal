@@ -74,7 +74,7 @@ library
 
   default-language: Haskell2010
   default-extensions:  OverloadedStrings TypeOperators FlexibleContexts FlexibleInstances TypeApplications ScopedTypeVariables PatternSynonyms
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N -Wall -fwarn-unused-do-bind -fwarn-tabs
+  ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind
 
 
 foreign-library godot-haskell-plugin
@@ -86,7 +86,7 @@ foreign-library godot-haskell-plugin
       godot_headers
   hs-source-dirs:
       flib
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind
   build-depends:
      base >=4.7 && <5
     , godot-haskell
