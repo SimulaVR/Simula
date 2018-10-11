@@ -6,7 +6,7 @@ all:
 	stack build godot-haskell-plugin $$TELEMETRY
 	cp $(LIBFILE) $(PROJECTROOT)
 run:
-	stack build godot-haskell-plugin $$TELEMETRY
+	stack --verbosity=error build godot-haskell-plugin $$TELEMETRY
 	cp $(LIBFILE) $(PROJECTROOT)
 	godot --path $(GODOTPROJECT)
 watch:
