@@ -39,7 +39,7 @@ packages:
 - .
 - location:
     git: https://gitlab.com/lboklin/godot-extra
-    commit: 9b77790
+    commit: cf48635
   extra-dep: true
 - simula-wayland
 - location:

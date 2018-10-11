@@ -67,7 +67,7 @@ instance HasBaseClass GodotWestonSurfaceSprite where
 newGodotWestonSurfaceSprite :: GodotWestonSurfaceTexture -> WestonSeat -> IO GodotWestonSurfaceSprite
 newGodotWestonSurfaceSprite tex seat = do
   gwss <- "res://addons/godot-haskell-plugin/WestonSurfaceSprite.gdns"
-    & newNS id "Object" []
+    & unsafeNewNS id "Object" []
     >>= godot_nativescript_get_userdata
     >>= deRefStablePtr . castPtrToStablePtr
 

@@ -29,7 +29,6 @@ import System.IO.Unsafe
 data GodotSimulaController = GodotSimulaController
   { _gscObj     :: GodotObject
   , _gscRayCast :: GodotRayCast
-  , _gscOpenvrMesh :: TVar (Maybe GodotArrayMesh)
   , _gscMeshInstance :: GodotMeshInstance
   , _gscLaser :: GodotMeshInstance
   , _gscTelekinesis :: TVar Telekinesis
@@ -54,7 +53,7 @@ instance ClassExport GodotSimulaController where
     toLowLevel ".." >>= G.set_skeleton_path mi 
 
     laser <- "res://Laser.tscn"
-      & sceneInstance 0 GodotMeshInstance "MeshInstance"
+      & unsafeSceneInstance 0 GodotMeshInstance "MeshInstance"
 
     G.add_child (GodotNode obj) (safeCast laser) True
 
@@ -64,38 +63,32 @@ instance ClassExport GodotSimulaController where
     tk <- newTVarIO $ initTk (GodotSpatial obj) rc tf
 
     lsp <- newTVarIO 0
-
-    mesh <- newTVarIO Nothing
-    return $ GodotSimulaController obj rc mesh mi (laser) tk lsp
+    return $ GodotSimulaController obj rc mi (laser) tk lsp
 
   classExtends = "ARVRController"
   classMethods =
     [ GodotMethod NoRPC "_process" process
     , GodotMethod NoRPC "_physics_process" physicsProcess
-    , GodotMethod NoRPC "_ready" ready
     ]
 
 instance HasBaseClass GodotSimulaController where
   type BaseClass GodotSimulaController = GodotARVRController       
-  super (GodotSimulaController obj _ _ _ _ _ _) = GodotARVRController obj
+  super (GodotSimulaController obj _ _ _ _ _) = GodotARVRController obj
 
 load_controller_mesh :: GodotSimulaController -> Text -> IO (Maybe GodotMesh)
 load_controller_mesh gsc name = do
+  msh <- "res://addons/godot-openvr/OpenVRRenderModel.gdns"
+    & unsafeNewNS GodotArrayMesh "ArrayMesh" []
   nameStr <- toLowLevel $ T.dropEnd 2 name
-  mMsh <- readTVarIO (_gscOpenvrMesh gsc)
-  case mMsh of
-    Just msh -> do
-      ret <- G.call msh loadModelStr [toVariant (nameStr :: GodotString)] >>= fromGodotVariant
+  ret <- G.call msh loadModelStr [toVariant (nameStr :: GodotString)] >>= fromGodotVariant
+  if ret
+    then
+      return $ Just $ safeCast msh
+    else do
+      ret <- G.call msh loadModelStr [toVariant genericControllerStr] >>= fromGodotVariant
       if ret
-        then
-          return $ Just $ safeCast msh
-        else do
-          ret <- G.call msh loadModelStr [toVariant genericControllerStr] >>= fromGodotVariant
-          if ret
-            then return $ Just $ safeCast msh
-            else instance' GodotMesh "Mesh"
-
-    Nothing -> return Nothing
+        then return $ Just $ safeCast msh
+        else return Nothing
 
  where
   loadModelStr, genericControllerStr :: GodotString
@@ -173,7 +166,7 @@ process self args = do
          mMesh <- load_controller_mesh self  cname
          case mMesh of
            Just mesh -> G.set_mesh (_gscMeshInstance self) mesh
-           Nothing -> return ()
+           Nothing -> godotPrint "Failed to set controller mesh"
          G.set_visible self True
 
   toLowLevel VariantNil
@@ -191,13 +184,3 @@ physicsProcess self _ = do
     atomically $ writeTVar (_gscTelekinesis self) tk
 
   retnil
-
-
-ready :: GFunc GodotSimulaController
-ready self _ = do
-  -- Load and set controller mesh
-  mesh <- "res://addons/godot-openvr/OpenVRRenderModel.gdns"
-    & newNS GodotArrayMesh "ArrayMesh" []
-  atomically $ writeTVar (_gscOpenvrMesh self) $ Just mesh
-
-  toLowLevel VariantNil

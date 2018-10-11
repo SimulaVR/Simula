@@ -73,7 +73,7 @@ library
       Plugin.Telekinesis
 
   default-language: Haskell2010
-  default-extensions:  OverloadedStrings TypeOperators FlexibleContexts FlexibleInstances TypeApplications ScopedTypeVariables PatternSynonyms
+  default-extensions:  OverloadedStrings TypeOperators FlexibleContexts FlexibleInstances TypeApplications ScopedTypeVariables PatternSynonyms LambdaCase
   ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind
 
 

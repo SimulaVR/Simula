@@ -54,7 +54,7 @@ instance HasBaseClass GodotWestonSurfaceTexture where
 
 newGodotWestonSurfaceTexture :: IO GodotWestonSurfaceTexture
 newGodotWestonSurfaceTexture = do
-  ret <- newNS id "Object" [] "res://addons/godot-haskell-plugin/WestonSurfaceTexture.gdns"
+  ret <- unsafeNewNS id "Object" [] "res://addons/godot-haskell-plugin/WestonSurfaceTexture.gdns"
   objPtr <- godot_nativescript_get_userdata ret
   deRefStablePtr $ castPtrToStablePtr objPtr
 
