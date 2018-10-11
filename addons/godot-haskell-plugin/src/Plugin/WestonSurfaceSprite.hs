@@ -3,7 +3,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Plugin.WestonSurfaceSprite 
+module Plugin.WestonSurfaceSprite
   ( GodotWestonSurfaceSprite(..)
   , newGodotWestonSurfaceSprite
   , setWestonSurfaceTexture
@@ -29,7 +29,7 @@ import qualified Godot.Core.GodotRigidBody   as RigidBody
 import           Godot.Gdnative.Internal.Api
 import qualified Godot.Methods               as G
 
-import Plugin.WestonSurfaceTexture 
+import Plugin.WestonSurfaceTexture
 
 import Foreign
 
@@ -44,19 +44,20 @@ data GodotWestonSurfaceSprite = GodotWestonSurfaceSprite
 
 instance Eq GodotWestonSurfaceSprite where
   (==) = (==) `on` _gwssObj
- 
+
 instance GodotClass GodotWestonSurfaceSprite where
   godotClassName = "WestonSurfaceSprite"
 
 instance ClassExport GodotWestonSurfaceSprite where
-  classInit obj = 
+  classInit obj =
     GodotWestonSurfaceSprite obj
                   <$> atomically (newTVar True)
-                  <*> atomically (newTVar (error "didn't init sprite")) <*> atomically (newTVar (error "didn't init shape")) 
+                  <*> atomically (newTVar (error "didn't init sprite")) <*> atomically (newTVar (error "didn't init shape"))
                   <*> atomically (newTVar (error "didn't init texture")) <*> atomically (newTVar (error "didn't init seat"))
   classExtends = "RigidBody"
   classMethods =
-    [ GodotMethod NoRPC "_ready" ready
+    [ GodotMethod NoRPC "_input_event" input
+    , GodotMethod NoRPC "_ready" ready
     ]
 
 instance HasBaseClass GodotWestonSurfaceSprite where
@@ -105,7 +106,7 @@ updateWestonSurfaceSprite gwss = do
 
 sizeChanged :: GodotWestonSurfaceSprite -> IO ()
 sizeChanged gwss = do
-  sprite <- atomically $ readTVar (_gwssSprite gwss) 
+  sprite <- atomically $ readTVar (_gwssSprite gwss)
   aabb <- G.get_aabb sprite
   size <- godot_aabb_get_size aabb
   shape <- atomically $ readTVar (_gwssShape gwss)
@@ -115,13 +116,13 @@ sizeChanged gwss = do
   G.set_extents shape size'
 
 getSprite :: GodotWestonSurfaceSprite -> IO GodotSprite3D
-getSprite gwss = atomically $ readTVar (_gwssSprite gwss) 
+getSprite gwss = atomically $ readTVar (_gwssSprite gwss)
 
 spriteShouldMove :: GodotWestonSurfaceSprite -> IO Bool
 spriteShouldMove gwss = do
   en <- atomically $ readTVar (_gwssShouldMove gwss)
   if en then do
-    sprite <- atomically $ readTVar (_gwssSprite gwss) 
+    sprite <- atomically $ readTVar (_gwssSprite gwss)
     aabb <- G.get_aabb sprite
     size <- godot_aabb_get_size aabb
     vsize <- fromLowLevel size
@@ -129,7 +130,7 @@ spriteShouldMove gwss = do
     else return False
 
 
-setSpriteShouldMove :: GodotWestonSurfaceSprite -> Bool -> IO ()   
+setSpriteShouldMove :: GodotWestonSurfaceSprite -> Bool -> IO ()
 setSpriteShouldMove gwss = atomically . writeTVar (_gwssShouldMove gwss)
 
 ready :: GFunc GodotWestonSurfaceSprite
@@ -137,7 +138,18 @@ ready self _ = do
   G.set_mode self RigidBody.MODE_KINEMATIC
   toLowLevel VariantNil
 
-data InputEventType 
+input :: GFunc GodotWestonSurfaceSprite
+input self args = do
+  case toList args of
+    [_cam, evObj, clickPosObj, _clickNormal, _shapeIdx] ->  do
+      ev <- fromGodotVariant evObj
+      clickPos <- fromGodotVariant clickPosObj
+      processInputEvent self ev clickPos
+      godot_object_destroy ev
+    _ -> putStrLn "expected 5 arguments in _input_event"
+  toLowLevel VariantNil
+
+data InputEventType
   = Motion
   | Button Bool Int
 
@@ -206,4 +218,3 @@ processClickEvent gwss evt clickPos = do
     toWestonButton BUTTON_WHEEL_UP = 0x151
     toWestonButton BUTTON_WHEEL_DOWN = 0x150
     toWestonButton _ = 0x110
-

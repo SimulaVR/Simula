@@ -9,7 +9,7 @@ script = ExtResource( 1 )
 _sections_unfolded = [ "Script" ]
 
 [node name="Camera" type="Camera" parent="."]
-transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.37183 )
+transform = Transform( -1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 0, 0, -0.62817 )
 keep_aspect = 1
 cull_mask = 1048575
 environment = null
@@ -32,6 +32,7 @@ _sections_unfolded = [ "Transform", "Visibility" ]
 world_scale = 1.0
 
 [node name="ARVRCamera" type="ARVRCamera" parent="ARVROrigin"]
+transform = Transform( -1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 0, 0, -1 )
 keep_aspect = 1
 cull_mask = 1048575
 environment = null
