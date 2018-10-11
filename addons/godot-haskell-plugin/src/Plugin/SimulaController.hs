@@ -60,7 +60,7 @@ instance ClassExport GodotSimulaController where
 
     G.set_visible (GodotSpatial obj) False
 
-    tf <- G.get_global_transform (GodotSpatial obj) >>= fromLowLevel
+    let tf = TF (identity :: M33 Float) (V3 0 0 0)
     tk <- newTVarIO $ initTk (GodotSpatial obj) rc tf
 
     lsp <- newTVarIO 0
