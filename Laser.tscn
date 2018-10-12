@@ -27,13 +27,17 @@ params_billboard_mode = 0
 params_billboard_keep_scale = false
 params_grow = false
 params_use_alpha_scissor = false
-albedo_color = Color( 1, 0.15625, 0.15625, 0.740314 )
+albedo_color = Color( 0.521569, 0.223529, 1, 1 )
 metallic = 0.0
 metallic_specular = 0.5
 metallic_texture_channel = 0
 roughness = 1.0
 roughness_texture_channel = 0
-emission_enabled = false
+emission_enabled = true
+emission = Color( 0.509804, 0.337255, 1, 1 )
+emission_energy = 1.0
+emission_operator = 0
+emission_on_uv2 = false
 normal_enabled = false
 rim_enabled = false
 clearcoat_enabled = false
@@ -53,8 +57,8 @@ uv2_offset = Vector3( 0, 0, 0 )
 uv2_triplanar = false
 uv2_triplanar_sharpness = 1.0
 proximity_fade_enable = false
-distance_fade_enable = false
-_sections_unfolded = [ "Albedo" ]
+distance_fade_mode = 0
+_sections_unfolded = [ "Albedo", "Emission", "Flags" ]
 
 [sub_resource type="CubeMesh" id=2]
 
@@ -67,7 +71,6 @@ subdivide_height = 0
 subdivide_depth = 0
 
 [node name="Laser" type="MeshInstance"]
-transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -5 )
 layers = 1
 material_override = null
 cast_shadow = 1
@@ -80,5 +83,5 @@ lod_max_hysteresis = 0.0
 mesh = SubResource( 2 )
 skeleton = NodePath("..")
 material/0 = null
-_sections_unfolded = [ "Transform" ]
+_sections_unfolded = [ "Transform", "Visibility", "material", "mesh" ]
 
