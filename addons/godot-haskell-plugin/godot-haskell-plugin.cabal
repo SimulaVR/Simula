@@ -40,6 +40,7 @@ library
     , lens
     , godot-haskell
     , godot-extra
+    , colour
     , linear
     , text
     , vector
@@ -66,6 +67,7 @@ library
       Telemetry
       Plugin
       Plugin.Imports
+      Plugin.Pointer
       Plugin.WestonSurfaceTexture
       Plugin.WestonSurfaceSprite
       Plugin.Weston

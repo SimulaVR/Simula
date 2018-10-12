@@ -9,22 +9,24 @@ module Plugin.SimulaController
   ( GodotSimulaController(..)
   , isButtonPressed
   , pointerWindow
-  ) where
+  )
+where
 
-import Control.Concurrent.STM.TVar
+import           Control.Concurrent.STM.TVar
 
-import qualified Data.Text                   as T
+import qualified Data.Text                     as T
 import           Linear
 import           Plugin.Imports
 import           Godot.Nativescript
 
 import           Godot.Extra.Register
-import qualified Godot.Methods               as G
+import qualified Godot.Methods                 as G
 
-import Plugin.WestonSurfaceSprite
-import Plugin.Telekinesis
+import           Plugin.WestonSurfaceSprite
+import           Plugin.Telekinesis
+import           Plugin.Pointer
 
-import System.IO.Unsafe
+import           System.IO.Unsafe
 
 data GodotSimulaController = GodotSimulaController
   { _gscObj     :: GodotObject
@@ -44,26 +46,25 @@ instance GodotClass GodotSimulaController where
 instance ClassExport GodotSimulaController where
   classInit obj = do
     rc <- unsafeInstance GodotRayCast "RayCast"
-    toLowLevel (V3 0 0 (negate 10)) >>= G.set_cast_to rc
+    G.set_cast_to rc =<< toLowLevel (V3 0 0 (negate 10))
     G.set_enabled rc True
     G.add_child (GodotNode obj) (safeCast rc) True
 
-    mi <- unsafeInstance GodotMeshInstance "MeshInstance"
-    G.add_child (GodotNode obj) (safeCast mi) True
-    toLowLevel ".." >>= G.set_skeleton_path mi 
+    ctMesh <- unsafeInstance GodotMeshInstance "MeshInstance"
+    G.set_skeleton_path ctMesh =<< toLowLevel ".."
+    G.add_child (GodotNode obj) (safeCast ctMesh) True
 
-    laser <- "res://Laser.tscn"
-      & unsafeSceneInstance 0 GodotMeshInstance "MeshInstance"
-
+    laser <- defaultPointer
     G.add_child (GodotNode obj) (safeCast laser) True
-
-    G.set_visible (GodotSpatial obj) False
 
     let tf = TF (identity :: M33 Float) (V3 0 0 0)
     tk <- newTVarIO $ initTk (GodotSpatial obj) rc tf
 
     lsp <- newTVarIO 0
-    return $ GodotSimulaController obj rc mi (laser) tk lsp
+
+    G.set_visible (GodotSpatial obj) False
+
+    return $ GodotSimulaController obj rc ctMesh (laser) tk lsp
 
   classExtends = "ARVRController"
   classMethods =
@@ -75,8 +76,8 @@ instance HasBaseClass GodotSimulaController where
   type BaseClass GodotSimulaController = GodotARVRController       
   super (GodotSimulaController obj _ _ _ _ _) = GodotARVRController obj
 
-load_controller_mesh :: GodotSimulaController -> Text -> IO (Maybe GodotMesh)
-load_controller_mesh gsc name = do
+load_controller_mesh :: Text -> IO (Maybe GodotMesh)
+load_controller_mesh name = do
   msh <- "res://addons/godot-openvr/OpenVRRenderModel.gdns"
     & unsafeNewNS GodotArrayMesh "ArrayMesh" []
   nameStr <- toLowLevel $ T.dropEnd 2 name
@@ -124,12 +125,13 @@ resize ct delta = do
       let diff = curPos - lastPos
           validChange = norm lastPos > 0.01 && norm curPos > 0.01
           minScale = 1
-          maxScale = 4
+          maxScale = 8
 
-      if | norm curScale < minScale     -> scaleBy (V2 delta delta) obj
-         | norm curScale > maxScale     -> scaleBy (V2 (-delta) (-delta)) obj
-         | isGripPressed && validChange -> scaleBy diff obj
-         | otherwise                    -> return ()
+      if
+        | norm curScale < minScale     -> resizeBy (V2 delta delta) obj
+        | norm curScale > maxScale     -> resizeBy (V2 (-delta) (-delta)) obj
+        | isGripPressed && validChange -> resizeBy diff obj
+        | otherwise                    -> return ()
 
     Nothing -> return ()
 
@@ -137,8 +139,8 @@ resize ct delta = do
 
  where
   -- TODO: Implement proper resizing (not scaling), vert and horiz
-  scaleBy :: (GodotSpatial :< child) => V2 Float -> child -> IO ()
-  scaleBy (V2 x y) a =
+  resizeBy :: (GodotSpatial :< child) => V2 Float -> child -> IO ()
+  resizeBy (V2 x y) a =
     V3 1 1 1 ^* (1 + y * 0.5)
       & toLowLevel
       >>= G.scale_object_local (safeCast a :: GodotSpatial)
@@ -150,24 +152,25 @@ process self args = do
   active <- G.get_is_active self
   visible <- G.is_visible self
 
-  if | not active -> G.set_visible self False
-     | visible -> do
-         resize self delta
-         pointerWindow self >>= \case
-           Just window -> do
-             G.set_visible (_gscLaser self) True
-             pos <- G.get_collision_point $ _gscRayCast self
-             processClickEvent window Motion pos
-           Nothing -> do
-             G.set_visible (_gscLaser self) False
-             return ()
-     | otherwise -> do
-         cname <- G.get_controller_name self >>= fromLowLevel
-         mMesh <- load_controller_mesh self  cname
-         case mMesh of
-           Just mesh -> G.set_mesh (_gscMeshInstance self) mesh
-           Nothing -> godotPrint "Failed to set controller mesh"
-         G.set_visible self True
+  if
+    | not active -> G.set_visible self False
+    | visible -> do
+      resize self delta
+      pointerWindow self >>= \case
+        Just window -> do
+          G.set_visible (_gscLaser self) True
+          pos <- G.get_collision_point $ _gscRayCast self
+          processClickEvent window Motion pos
+        Nothing -> do
+          G.set_visible (_gscLaser self) False
+          return ()
+    | otherwise -> do
+      cname <- G.get_controller_name self >>= fromLowLevel
+      mMesh <- load_controller_mesh cname
+      case mMesh of
+        Just mesh -> G.set_mesh (_gscMeshInstance self) mesh
+        Nothing   -> godotPrint "Failed to set controller mesh"
+      G.set_visible self True
 
   toLowLevel VariantNil
 
