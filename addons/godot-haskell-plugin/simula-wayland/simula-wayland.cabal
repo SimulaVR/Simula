@@ -36,5 +36,12 @@ library
       pixman-1
     ,  egl
     , wayland-server
-    , libweston-3
-    , libweston-desktop-3
+--    , libweston-3
+--    , libweston-desktop-3
+  extra-libraries:
+      weston-3
+    , weston-desktop-3
+
+  extra-lib-dirs:
+      install/weston/lib
+      -- or wherever the location of our compiled `libweston-3.so` and `libweston-desktop-3` are located
