@@ -63,15 +63,18 @@ installWeston() {
   local CURRENT_DIR=$(pwd)
   cd $INSTALL_DIR
 
-  installWayland
-  installWaylandProtocols
-  installMesa
-  installLibUnwind
-  installLibInput
+  # Omitted due to `installMesa` being problematic on Ubuntu bionic
+  # Simula currently only provides weston3 (and not any of its dependencies)
+    # installWayland
+    # installWaylandProtocols
+    # installMesa
+    # installLibUnwind
+    # installLibInput
 
   cd $INSTALL_DIR
   git clone git://anongit.freedesktop.org/wayland/weston
   cd weston
+  git checkout tags/3.0.0
   ./autogen.sh --prefix=$WLD
   make
   sudo make install

@@ -11,6 +11,6 @@ run: weston
 	godot --path $(GODOTPROJECT)
 watch: weston
 	stack build --file-watch --fast --exec "cp $(LIBFILE) $(PROJECTROOT)"
-weston: ./install/weston/lib/libweston-3.so ./install/weston/libweston-desktop-3.so
-  source ../../utils/InstallWeston.sh && installWeston
+weston: ./install/weston/.libs/libweston-3.so ./install/weston/.libs/libweston-desktop-3.so
+  source ../../../utils/InstallWeston.sh && installWeston
 
