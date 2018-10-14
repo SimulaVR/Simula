@@ -56,7 +56,7 @@ instance ClassExport GodotWestonSurfaceSprite where
                   <*> atomically (newTVar (error "didn't init texture")) <*> atomically (newTVar (error "didn't init seat"))
   classExtends = "RigidBody"
   classMethods =
-    [ GodotMethod NoRPC "_input_event" input
+    [ GodotMethod NoRPC "_input_event" inputEvent
     , GodotMethod NoRPC "_ready" ready
     ]
 
@@ -138,8 +138,8 @@ ready self _ = do
   G.set_mode self RigidBody.MODE_KINEMATIC
   toLowLevel VariantNil
 
-input :: GFunc GodotWestonSurfaceSprite
-input self args = do
+inputEvent :: GFunc GodotWestonSurfaceSprite
+inputEvent self args = do
   case toList args of
     [_cam, evObj, clickPosObj, _clickNormal, _shapeIdx] ->  do
       ev <- fromGodotVariant evObj
