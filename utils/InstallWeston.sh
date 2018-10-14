@@ -1,5 +1,7 @@
+# This script is assumed to be executed from ./addons/godot-haskell-plugin
+
 setInstallState() {
-  export SIMULA_WAYLAND_ROOT=$(cd ./addons/godot-haskell-plugin/simula-wayland && pwd)
+  export SIMULA_WAYLAND_ROOT=$(cd simula-wayland && pwd)
   export INSTALL_DIR=$SIMULA_WAYLAND_ROOT/install
 
   mkdir -p $INSTALL_DIR
