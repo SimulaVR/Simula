@@ -71,8 +71,10 @@ library
       Plugin.WestonSurfaceTexture
       Plugin.WestonSurfaceSprite
       Plugin.Weston
+      Plugin.Input
+      Plugin.Input.Grab
+      Plugin.Input.Telekinesis
       Plugin.SimulaController
-      Plugin.Telekinesis
 
   default-language: Haskell2010
   default-extensions:  OverloadedStrings TypeOperators FlexibleContexts FlexibleInstances TypeApplications ScopedTypeVariables PatternSynonyms LambdaCase

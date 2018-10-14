@@ -23,7 +23,7 @@ import           Godot.Extra.Register
 import qualified Godot.Methods                 as G
 
 import           Plugin.WestonSurfaceSprite
-import           Plugin.Telekinesis
+import           Plugin.Input.Telekinesis
 import           Plugin.Pointer
 
 import           System.IO.Unsafe
@@ -73,7 +73,7 @@ instance ClassExport GodotSimulaController where
     ]
 
 instance HasBaseClass GodotSimulaController where
-  type BaseClass GodotSimulaController = GodotARVRController       
+  type BaseClass GodotSimulaController = GodotARVRController
   super (GodotSimulaController obj _ _ _ _ _) = GodotARVRController obj
 
 load_controller_mesh :: Text -> IO (Maybe GodotMesh)
