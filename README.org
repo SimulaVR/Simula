@@ -36,7 +36,7 @@ Simula has only been tested on Ubuntu bionic beaver (18.04), but the instruction
   installGodot # Installs Godot 3.1 master branch; this will probably take a while.
   #+END_SRC
 
-2. *Ensure udev rules are up to date.* Ensure that ~/lib/udev/rules.d/60-HTC-60-HTC-Vive-perms.rules~ exists and contains the following:
+2. *Ensure udev rules are up to date.* Ensure that ~/lib/udev/rules.d/60-HTC-Vive-perms.rules~ exists and contains the following:
 
   #+BEGIN_SRC shell
   # HTC Vive HID Sensor naming and permissioning
