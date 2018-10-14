@@ -12,5 +12,5 @@ run: weston
 watch: weston
 	stack build --file-watch --fast --exec "cp $(LIBFILE) $(PROJECTROOT)"
 weston: ./install/weston/.libs/libweston-3.so ./install/weston/.libs/libweston-desktop-3.so
-  source ../../../utils/InstallWeston.sh && installWeston
+	source ../../../utils/InstallWeston.sh && installWeston
 
