@@ -52,7 +52,7 @@ extra-package-dbs: []
 #
 # Require a specific version of stack, using version ranges
 # require-stack-version: -any # Default
-# require-stack-version: ">=1.4"
+require-stack-version: ">=1.8"
 #
 # Override the architecture used by stack, especially useful on Windows
 # arch: i386
