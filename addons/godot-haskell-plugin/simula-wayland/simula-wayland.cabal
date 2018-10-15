@@ -40,11 +40,12 @@ library
       weston-3
     , weston-desktop-3
 
-  extra-lib-dirs:
-      ./install/weston/.libs
+  lib-dirs:
+      install/weston/.libs
 
-  extra-include-dirs:
-      ./install/weston/.libs
-    , ./install/weston/libweston-desktop
-    , ./install/weston/xwayland
-    , ./install/weston/libweston
+  include-dirs:
+      install/weston/.libs
+    , install/weston/libweston-desktop
+    , install/weston/xwayland
+    , install/weston/libweston
+    , install/weston/shared
