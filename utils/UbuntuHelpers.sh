@@ -8,8 +8,9 @@ installUbuntuDependencies() {
          curl                  \
          autoconf              \
          libtool               \
-         flex bison            \
-         python-make           \
+         flex                  \
+         bison                 \
+         python-mako           \
          wayland-protocols     \
          libgles2-mesa-dev     \
          libcairo2-dev         \
