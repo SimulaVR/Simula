@@ -79,7 +79,7 @@ installWeston() {
   git checkout tags/3.0.0
   ./autogen.sh --prefix=$WLD
   make
-  sudo make install
+  make install
   cd ..
 
   cd $CURRENT_DIR
