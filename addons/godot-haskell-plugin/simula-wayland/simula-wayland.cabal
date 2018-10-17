@@ -34,15 +34,10 @@ library
   default-language: Haskell2010
   pkgconfig-depends:
       pixman-1
-    ,  egl
+    , egl
     , wayland-server
-  extra-libraries:
-      weston-3
-    , weston-desktop-3
-
-  lib-dirs:
-      install/weston/.libs
-
+    , libweston-3
+    , libweston-desktop-3
   include-dirs:
       install/weston/.libs
     , install/weston/libweston-desktop
