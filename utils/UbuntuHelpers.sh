@@ -6,18 +6,18 @@ installUbuntuDependencies() {
          weston                \
          epiphany-browser      \
          curl                  \
-         autoconf              \
-         libtool               \
-         flex                  \
-         bison                 \
-         python-mako           \
-         wayland-protocols     \
-         libgles2-mesa-dev     \
-         libcairo2-dev         \
-         libxcb-composite0-dev \
-         libgbm-dev            \
-         libinput-dev          \
-         libpam0g-dev
+         # autoconf              \
+         # libtool               \
+         # flex                  \
+         # bison                 \
+         # python-mako           \
+         # wayland-protocols     \
+         # libgles2-mesa-dev     \
+         # libcairo2-dev         \
+         # libxcb-composite0-dev \
+         # libgbm-dev            \
+         # libinput-dev          \
+         # libpam0g-dev
 }
 
 installSteam() {
