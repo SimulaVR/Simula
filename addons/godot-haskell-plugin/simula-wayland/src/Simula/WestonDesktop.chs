@@ -64,6 +64,7 @@ type ResizeFunc a = WestonDesktopSurface -> WestonSeat -> CUInt -> WestonDesktop
 type FullscreenRequestedFunc a = WestonDesktopSurface -> Bool -> WestonOutput -> WithUserData a
 type MaximizedRequestedFunc a = WestonDesktopSurface -> Bool -> WithUserData a
 type MinimizedRequestedFunc a = WestonDesktopSurface -> WithUserData a
+type SetXwaylandPositionFunc a = WestonDesktopSurface -> CInt -> CInt -> WithUserData a
 
 
 foreign import ccall "wrapper" createPingTimeoutFuncPtr :: AsC (PingTimeoutFunc a) -> IO (FunPtr (AsC (PingTimeoutFunc a)))
@@ -78,6 +79,8 @@ foreign import ccall "wrapper" createResizeFuncPtr :: AsC (ResizeFunc a) -> IO (
 foreign import ccall "wrapper" createFullscreenRequestedFuncPtr :: AsC (FullscreenRequestedFunc a) -> IO (FunPtr (AsC (FullscreenRequestedFunc a)))
 foreign import ccall "wrapper" createMaximizedRequestedFuncPtr :: AsC (MaximizedRequestedFunc a) -> IO (FunPtr (AsC (MaximizedRequestedFunc a)))
 foreign import ccall "wrapper" createMinimizedRequestedFuncPtr :: AsC (MinimizedRequestedFunc a) -> IO (FunPtr (AsC (MinimizedRequestedFunc a)))
+foreign import ccall "wrapper" createSetXwaylandPositionFuncPtr :: AsC (SetXwaylandPositionFunc a) -> IO (FunPtr (AsC (SetXwaylandPositionFunc a)))
+
 
 data WestonDesktopApi a = WestonDesktopApi {
   apiPingTimeout :: PingTimeoutFunc a,
@@ -91,7 +94,8 @@ data WestonDesktopApi a = WestonDesktopApi {
   apiResize :: ResizeFunc a,
   apiFullscreenRequested :: FullscreenRequestedFunc a,
   apiMaximizedRequested :: MaximizedRequestedFunc a,
-  apiMinimizedRequested :: MinimizedRequestedFunc a
+  apiMinimizedRequested :: MinimizedRequestedFunc a,
+  apiSetXwaylandPosition :: SetXwaylandPositionFunc a
   }
 
 defaultWestonDesktopApi :: WestonDesktopApi a
@@ -107,7 +111,8 @@ defaultWestonDesktopApi = WestonDesktopApi {
   apiResize = \_ _ _ _ _ -> return (),
   apiFullscreenRequested = \_ _ _ _ -> return (),
   apiMaximizedRequested = \_ _ _ -> return (),
-  apiMinimizedRequested = \_ _ -> return ()
+  apiMinimizedRequested = \_ _ -> return (),
+  apiSetXwaylandPosition = \_ _ _ _-> return ()
   }
 
 {#pointer *weston_desktop_api as WestonDesktopApiPtr -> `WestonDesktopApi ()'#}
@@ -130,6 +135,7 @@ instance Storable (WestonDesktopApi a) where
     createFullscreenRequestedFuncPtr (fromHaskell apiFullscreenRequested) >>= {#set weston_desktop_api->fullscreen_requested#} ptr 
     createMaximizedRequestedFuncPtr (fromHaskell apiMaximizedRequested) >>= {#set weston_desktop_api->maximized_requested#} ptr 
     createMinimizedRequestedFuncPtr (fromHaskell apiMinimizedRequested) >>= {#set weston_desktop_api->minimized_requested#} ptr 
+    createSetXwaylandPositionFuncPtr (fromHaskell apiSetXwaylandPosition) >>= {#set weston_desktop_api->set_xwayland_position#} ptr 
 
 
 {#pointer *weston_desktop as WestonDesktop newtype#}

@@ -38,24 +38,21 @@ struct wet_xwayland {
 	struct weston_compositor *compositor;
 	const struct weston_xwayland_api *api;
 	struct weston_xwayland *xwayland;
-	struct wl_event_source *sigusr1_source;
 	struct wl_client *client;
 	int wm_fd;
 };
 
 static int
-handle_sigusr1(int signal_number, void *data)
+handle_sigusr1(void *data)
 {
 	struct wet_xwayland *wxw = data;
 
 	/* We'd be safer if we actually had the struct
 	 * signalfd_siginfo from the signalfd data and could verify
 	 * this came from Xwayland.*/
-	printf("%s", "xserver loaded");
+	printf("%s\n", "xserver loaded");
 	wxw->api->xserver_loaded(wxw->xwayland, wxw->client, wxw->wm_fd);
-	wl_event_source_remove(wxw->sigusr1_source);
-
-	return 1;
+	return 0;
 }
 
 static pid_t
@@ -108,7 +105,6 @@ spawn_xserver(void *user_data, const char *display, int abstract_fd, int unix_fd
 		 * block on the wayland compositor, so avoid making
 		 * blocking requests (like xcb_connect_to_fd) until
 		 * it's done with that. */
-		signal(SIGUSR1, SIG_IGN);
 
 		if (execlp("Xwayland",
 			  "Xwayland",
@@ -133,6 +129,14 @@ spawn_xserver(void *user_data, const char *display, int abstract_fd, int unix_fd
 
 		close(wm[1]);
 		wxw->wm_fd = wm[0];
+
+		struct wl_event_loop *loop = wl_display_get_event_loop(wxw->compositor->wl_display);
+		
+		// hack of the century. we can't receive SIGUSR1 due to headaches, so delay this by 500ms
+		// like seriously get rid of this as soon as reasonably possible LOL
+		struct wl_event_source* timer = wl_event_loop_add_timer(loop, handle_sigusr1, wxw);
+		wl_event_source_timer_update(timer, 500);
+
 		break;
 
 	case -1:
@@ -150,7 +154,6 @@ wet_load_xwayland(struct weston_compositor *comp)
 	const struct weston_xwayland_api *api;
 	struct weston_xwayland *xwayland;
 	struct wet_xwayland *wxw;
-	struct wl_event_loop *loop;
 
 	if (weston_compositor_load_xwayland(comp) < 0)
 		return -1;
@@ -176,10 +179,6 @@ wet_load_xwayland(struct weston_compositor *comp)
 	wxw->xwayland = xwayland;
 	if (api->listen(xwayland, wxw, spawn_xserver) < 0)
 		return -1;
-
-	loop = wl_display_get_event_loop(comp->wl_display);
-	wxw->sigusr1_source = wl_event_loop_add_signal(loop, SIGUSR1,
-						       handle_sigusr1, wxw);
 
 	return 0;
 }
