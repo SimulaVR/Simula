@@ -36,7 +36,7 @@ library
      hs-source-dirs: src, telemetry
 
   build-depends:
-      base >=4.7 && <5
+      base >=4.12 && <5
     , lens
     , godot-haskell
     , godot-extra
@@ -90,9 +90,9 @@ foreign-library godot-haskell-plugin
       godot_headers
   hs-source-dirs:
       flib
-  ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates
+  ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -threaded
   build-depends:
-     base >=4.7 && <5
+     base >=4.12 && <5
     , godot-haskell
     , godot-haskell-plugin
     , linear
