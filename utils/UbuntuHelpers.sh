@@ -67,10 +67,6 @@ upgradeStack() {
   stack install hpack # Same with old versions of hpack
 }
 
-makeRTSBinaryMultithreaded () {
-  cd ~/.stack/programs/x86_64-linux/ghc-8.4.3/lib/ghc-8.4.3/rts
-  cp libHSrts-ghc8.4.3.so libHSrts-ghc8.4.3.so.bak
-  cp libHSrts_thr-ghc8.4.3.so libHSrts-ghc8.4.3.so
 }
 
 buildSimulaDependencies() {
