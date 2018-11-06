@@ -67,7 +67,9 @@ Simula has only been tested on Ubuntu bionic beaver (18.04), but the instruction
   
   # You can also launch X apps:
   DISPLAY=:1 firefox # You have to tell X apps that Simula is located on DISPLAY 1
-  # NOTE: This assumes Simula is launched on DISPLAY 1 (unless you have an unusual setup, this is usually the case by default; check Simula console output to check for sure)
+  # NOTE: This assumes Simula is launched on DISPLAY 1.
+  #       Unless you have an unusual setup, this is usually the case by default; 
+  #       check Simula console output to check for sure.
 
 
   #+END_SRC
