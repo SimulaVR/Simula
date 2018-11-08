@@ -67,8 +67,6 @@ upgradeStack() {
   stack install hpack # Same with old versions of hpack
 }
 
-}
-
 buildSimulaDependencies() {
   installUbuntuDependencies 
   installSteam
