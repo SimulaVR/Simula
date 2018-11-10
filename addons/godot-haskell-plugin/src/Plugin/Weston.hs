@@ -160,6 +160,10 @@ startBaseThread compositor = void $ forkOS $ do
   --installHandler sigUSR1 Ignore Nothing
   wet_load_xwayland wcomp
 
+  -- DISPLAY is set to :1 for some reason, which will cause it to crash when
+  -- launching in VR mode.
+  setEnv "DISPLAY" ":0"
+
   weston_compositor_wake wcomp
   putStrLn "starting compositor"
   wl_display_run wldp
