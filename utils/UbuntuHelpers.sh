@@ -34,17 +34,23 @@ installAMDDrivers() {
   echo "TODO."
 }
 
-# Assumes our target is godot.x11.tools.64
+# Assumes we are in project root
 installGodot() {
-  sudo apt-get install build-essential scons pkg-config libx11-dev libxcursor-dev libxinerama-dev \
-    libgl1-mesa-dev libglu-dev libasound2-dev libpulse-dev libfreetype6-dev libssl-dev libudev-dev \
-    libxi-dev libxrandr-dev
+  VERSION="3.1"
+  RELEASE="alpha2"
+  FILE="Godot_v"${VERSION}"-"${RELEASE}"_x11.64"
+  OUT=${PWD}/godot
+
   cd /tmp
-  git clone https://github.com/godotengine/godot.git
-  cd godot
-  scons platform=x11
-  cd ~/.local/bin
-  cp /tmp/godot/bin/godot.x11.tools.64 godot # put godot in Ubuntu PATH
+  # If it's a stable release, remove the ${RELEASE} part of the URL below
+  if [ ! -f ${FILE} ]
+  then wget https://downloads.tuxfamily.org/godotengine/${VERSION}/${RELEASE}/${FILE}.zip
+  fi
+  unzip ${FILE}.zip || echo "Could not unzip. Make sure unzip is installed."
+  cp /tmp/${FILE} ${OUT} && echo "\
+Installed Godot (version $(exec ${OUT} --version)): ${OUT}
+Please put it somewhere in your \$PATH"
+  cd -
 }
 
 # It is best to install stack via curl to avoid
