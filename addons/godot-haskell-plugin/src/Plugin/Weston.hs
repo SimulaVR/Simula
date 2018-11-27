@@ -101,6 +101,8 @@ onReady gwc = do
 
 startBaseThread :: GodotWestonCompositor -> IO ()
 startBaseThread compositor = void $ forkOS $ do
+  prevDisplay <- getEnv "DISPLAY"
+
   wldp <- wl_display_create
   wcomp <- weston_compositor_create wldp nullPtr
   atomically $ writeTVar (_gwcCompositor compositor) wcomp
@@ -160,9 +162,9 @@ startBaseThread compositor = void $ forkOS $ do
   --installHandler sigUSR1 Ignore Nothing
   wet_load_xwayland wcomp
 
-  -- For some reason it crashes when launched in VR mode unless set to :0 (which
-  -- it won't be if another X server is running).
-  setEnv "DISPLAY" ":0"
+  -- Needs to be set to the original X display rather than
+  -- the new one for some reason, or it will crash.
+  setEnv "DISPLAY" prevDisplay
 
   weston_compositor_wake wcomp
   putStrLn "starting compositor"
