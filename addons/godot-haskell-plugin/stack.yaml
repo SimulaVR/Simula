@@ -14,8 +14,8 @@
 # resolver: ghcjs-0.1.0_ghc-7.10.2
 # resolver:
 #  name: custom-snapshot
-#  location: "./custom-snapshot.yaml"
-resolver: nightly-2018-11-02
+#  location: "./custom-snapshot.yaml
+resolver: nightly-2018-11-28
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
