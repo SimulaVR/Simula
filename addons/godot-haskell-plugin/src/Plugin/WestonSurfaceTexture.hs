@@ -91,14 +91,26 @@ updateWestonSurfaceTexture gws = do
       writeAccess <- godot_pool_byte_array_write byteArray
       writePtr <- godot_pool_byte_array_write_access_ptr writeAccess
 
-      wl_shm_buffer_begin_access shmbuf
-      copyBytes writePtr (castPtr dt) size
-      wl_shm_buffer_end_access shmbuf
+      allocaArray size $ \arrPtr -> do
+        wl_shm_buffer_begin_access shmbuf
+        copyBytes arrPtr (castPtr dt) size
+        wl_shm_buffer_end_access shmbuf
+        
+        let arrPtr32 = castPtr arrPtr :: Ptr Word32
+        forM_ [0..size `div` 4] $ \n -> do
+          let ptr = advancePtr arrPtr32 n
+          elem <- peek ptr
+          -- HACKHACK
+          let [b3,b2,b1,b0] = map (\n -> shiftR elem (n*8) .&. 0xff) [0..3]
+          let result = foldr (\n res -> shiftL res 8 .|. n) 0 [b1,b2,b3,b0]
+
+          poke ptr result
+
+        copyBytes writePtr arrPtr size
       godot_pool_byte_array_write_access_destroy writeAccess -- TODO helper function
 
       G.create_from_data img width height False fmt byteArray
-
-      G.create_from_image gws img (7 :: Int)
+      G.create_from_image gws img (7 .|. 16 :: Int)
       godot_pool_byte_array_destroy byteArray
       
       return ()
