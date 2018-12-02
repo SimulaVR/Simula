@@ -75,9 +75,18 @@ library
       Plugin.Input.Grab
       Plugin.Input.Telekinesis
       Plugin.SimulaController
+      Plugin.Simula
 
   default-language: Haskell2010
-  default-extensions:  OverloadedStrings TypeOperators FlexibleContexts FlexibleInstances TypeApplications ScopedTypeVariables PatternSynonyms LambdaCase
+  default-extensions:
+      FlexibleContexts
+      FlexibleInstances
+      LambdaCase
+      NamedFieldPuns
+      OverloadedStrings
+      PatternSynonyms
+      TypeApplications
+      TypeOperators
   ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates
 
 
