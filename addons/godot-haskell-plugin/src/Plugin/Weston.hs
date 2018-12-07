@@ -33,6 +33,7 @@ import Control.Concurrent
 import System.Environment
 
 import System.Posix.Signals
+import System.Process
 
 import Data.Bits
 
@@ -168,6 +169,7 @@ startBaseThread compositor = void $ forkOS $ do
 
   weston_compositor_wake wcomp
   putStrLn "starting compositor"
+  wlDisplayAddIdleCallback wldp nullPtr (\_ -> callCommand "weston-terminal &")
   wl_display_run wldp
 
   where
