@@ -149,8 +149,10 @@ startBaseThread compositor = void $ forkOS $ do
   putStrLn "starting compositor"
 
   -- weston-terminal will be our "launcher" until a real launcher is implemented.
+  -- HACK: Sleeping for 3 seconds avoids an extant bug that happens when launching an application too 
+  --       soon after a Simula starts
   -- TODO: Create a generic queue for running commands using idle callback
-  wlDisplayAddIdleCallback wldp nullPtr (\_ -> callCommand "weston-terminal &")
+  wlDisplayAddIdleCallback wldp nullPtr (\_ -> callCommand "sleep 3 && weston-terminal &")
 
   wl_display_run wldp
 
