@@ -58,7 +58,7 @@ Simula has only been tested on Ubuntu bionic beaver (18.04), but the instruction
 3. *Compile & launch Simula.* 
   #+BEGIN_SRC shell
   # Ensure that SteamVR is launched.
-  cd /path/to/simula-godot
+  cd /path/to/simula
   make run # this should take a while also
 
   # Once Simula starts, launch some Wayland apps to interact with:

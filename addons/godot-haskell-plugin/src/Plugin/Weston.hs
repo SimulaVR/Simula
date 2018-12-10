@@ -28,6 +28,8 @@ import Control.Monad
 import Control.Concurrent
 import System.Environment
 
+import System.Process
+
 import Control.Lens
 
 import Foreign hiding (void)
@@ -145,6 +147,11 @@ startBaseThread compositor = void $ forkOS $ do
 
   weston_compositor_wake wcomp
   putStrLn "starting compositor"
+
+  -- weston-terminal will be our "launcher" until a real launcher is implemented.
+  -- TODO: Create a generic queue for running commands using idle callback
+  wlDisplayAddIdleCallback wldp nullPtr (\_ -> callCommand "weston-terminal &")
+
   wl_display_run wldp
 
   where
