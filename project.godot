@@ -20,7 +20,7 @@ run/main_scene="res://addons/godot-haskell-plugin/demo/Demo.tscn"
 
 [gdnative]
 
-singletons=[ "res://addons/godot-openvr/godot_openvr.gdnlib" ]
+singletons=[ "res://addons/godot-openhmd/godot_openhmd.gdnlib", "res://addons/godot-openvr/godot_openvr.gdnlib" ]
 
 [physics]
 

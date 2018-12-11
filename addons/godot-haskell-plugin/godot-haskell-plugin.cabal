@@ -76,6 +76,7 @@ library
       Plugin.Input.Telekinesis
       Plugin.SimulaController
       Plugin.Simula
+      Plugin.VR
 
   default-language: Haskell2010
   default-extensions:
