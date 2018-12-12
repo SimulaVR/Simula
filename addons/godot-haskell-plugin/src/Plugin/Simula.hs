@@ -13,7 +13,8 @@ import           Plugin.VR
 import           Godot.Core.GodotGlobalConstants
 import           Godot.Extra.Register
 import           Godot.Nativescript
-import qualified Godot.Methods as G
+import qualified Godot.Gdnative.Internal.Api   as Api
+import qualified Godot.Methods                 as G
 
 
 data GodotSimula = GodotSimula
@@ -46,23 +47,53 @@ ready self _ = do
 
   -- OpenHMD is unfortunately not yet a working substitute for OpenVR
   -- https://github.com/SimulaVR/Simula/issues/72
-  {-
-   -backend <- do
-   -  !cfg <- openHMDConfig
-   -  return $ OpenHMD cfg
-   -}
-  let backend = OpenVR
-  initVR backend (safeCast self) >>= \case
-    InitVRSuccess _ -> addVRNodes (safeCast self) backend
-    InitVRFailed    -> return ()
+  openVR >>= initVR (safeCast self) >>= \case
+    InitVRSuccess -> do
+      -- Add the VR origin node
+      orig <- unsafeInstance GodotARVROrigin "ARVROrigin"
+      G.add_child self (safeCast orig) True
+
+      -- Add the HMD as a child of the origin node
+      hmd <- unsafeInstance GodotARVRCamera "ARVRCamera"
+      G.add_child orig (safeCast hmd) True
+
+      -- Add two controllers and connect their button presses to the Simula
+      -- node.
+      let addCt = addSimulaController orig
+      addCt "LeftController" 1 >>= connectController
+      addCt "RightController" 2 >>= connectController
+
+      return ()
+
+    InitVRFailed  -> return ()
 
   retnil
  where
+  addCompositorNode :: IO ()
   addCompositorNode = do
     gwc <- "res://addons/godot-haskell-plugin/WestonCompositor.gdns"
       & unsafeNewNS GodotSpatial "Spatial" []
     G.set_name gwc =<< toLowLevel "Weston"
     G.add_child self (asObj gwc) True
+
+  connectController :: GodotSimulaController -> IO ()
+  connectController ct = do
+    argsPressed <- Api.godot_array_new
+    Api.godot_array_append argsPressed =<< toLowLevel (toVariant $ asObj ct)
+    Api.godot_array_append argsPressed =<< toLowLevel (toVariant True)
+
+    argsReleased <- Api.godot_array_new
+    Api.godot_array_append argsReleased =<< toLowLevel (toVariant $ asObj ct)
+    Api.godot_array_append argsReleased =<< toLowLevel (toVariant False)
+
+    btnSignal   <- toLowLevel "on_button_signal"
+    btnPressed  <- toLowLevel "button_pressed"
+    btnReleased <- toLowLevel "button_release"
+
+    G.connect ct btnPressed (safeCast self) btnSignal argsPressed 0
+    G.connect ct btnReleased (safeCast self) btnSignal argsReleased 0
+
+    return ()
 
 
 on_button_signal :: GFunc GodotSimula

@@ -7,6 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 module Plugin.SimulaController
   ( GodotSimulaController(..)
+  , addSimulaController
   , isButtonPressed
   , pointerWindow
   )
@@ -16,17 +17,21 @@ import           Control.Concurrent.STM.TVar
 
 import qualified Data.Text                     as T
 import           Linear
+
 import           Plugin.Imports
-import           Godot.Nativescript
-
-import           Godot.Extra.Register
-import qualified Godot.Methods                 as G
-
 import           Plugin.WestonSurfaceSprite
 import           Plugin.Input.Telekinesis
 import           Plugin.Pointer
 
-import           System.IO.Unsafe
+import           Godot.Extra.Register
+import           Godot.Nativescript
+import qualified Godot.Gdnative.Internal.Api   as Api
+import qualified Godot.Methods                 as G
+
+import           Foreign ( deRefStablePtr
+                         , castPtrToStablePtr
+                         )
+
 
 data GodotSimulaController = GodotSimulaController
   { _gscObj     :: GodotObject
@@ -64,7 +69,14 @@ instance ClassExport GodotSimulaController where
 
     G.set_visible (GodotSpatial obj) False
 
-    return $ GodotSimulaController obj rc ctMesh (laser) tk lsp
+    return $ GodotSimulaController
+      { _gscObj           = obj
+      , _gscRayCast       = rc
+      , _gscMeshInstance  = ctMesh
+      , _gscLaser         = laser
+      , _gscTelekinesis   = tk
+      , _gscLastScrollPos = lsp
+      }
 
   classExtends = "ARVRController"
   classMethods =
@@ -76,33 +88,35 @@ instance HasBaseClass GodotSimulaController where
   type BaseClass GodotSimulaController = GodotARVRController
   super (GodotSimulaController obj _ _ _ _ _) = GodotARVRController obj
 
-load_controller_mesh :: Text -> IO (Maybe GodotMesh)
-load_controller_mesh name = do
-  msh <- "res://addons/godot-openvr/OpenVRRenderModel.gdns"
-    & unsafeNewNS GodotArrayMesh "ArrayMesh" []
-  nameStr <- toLowLevel $ T.dropEnd 2 name
-  ret <- G.call msh loadModelStr [toVariant (nameStr :: GodotString)] >>= fromGodotVariant
-  if ret
-    then
-      return $ Just $ safeCast msh
-    else do
-      ret <- G.call msh loadModelStr [toVariant genericControllerStr] >>= fromGodotVariant
-      if ret
-        then return $ Just $ safeCast msh
-        else return Nothing
 
- where
-  loadModelStr, genericControllerStr :: GodotString
-  loadModelStr = unsafePerformIO $ toLowLevel "load_model"
-  {-# NOINLINE loadModelStr #-}
-  genericControllerStr = unsafePerformIO $ toLowLevel "generic_controller"
-  {-# NOINLINE genericControllerStr #-}
+loadOpenVRControllerMesh :: Text -> IO (Maybe GodotMesh)
+loadOpenVRControllerMesh name =
+  "res://addons/godot-openvr/OpenVRRenderModel.gdns"
+    & newNS GodotArrayMesh "ArrayMesh" [] >>= \case
+      Nothing  ->
+        Nothing <$ godotPrint "Couldn't find an OpenVR render model."
+
+      Just msh -> do
+        loadModelStr <- toLowLevel "load_model"
+        nameStr :: GodotString <- toLowLevel $ T.dropEnd 2 name
+        ret <- G.call msh loadModelStr [toVariant nameStr] >>= fromGodotVariant
+        if ret
+          then return $ Just $ safeCast msh
+          else do
+            genericControllerStr :: GodotString <- toLowLevel "generic_controller"
+            ret' <- G.call msh loadModelStr [toVariant genericControllerStr]
+              >>= fromGodotVariant
+            if ret'
+              then return $ Just $ safeCast msh
+              else return Nothing
+
 
 -- Because the ARVRController member method is_button_pressed returns Int, not Bool
 isButtonPressed :: Int -> GodotSimulaController -> IO Bool
 isButtonPressed btnId gsc = do
   ctId <- G.get_joystick_id $ (safeCast gsc :: GodotARVRController)
   getSingleton GodotInput "Input" >>= \inp -> G.is_joy_button_pressed inp ctId btnId
+
 
 -- | Get the window pointed at if any.
 pointerWindow :: GodotSimulaController -> IO (Maybe GodotWestonSurfaceSprite)
@@ -112,8 +126,10 @@ pointerWindow gsc = do
     then G.get_collider (_gscRayCast gsc) >>= tryObjectCast @GodotWestonSurfaceSprite
     else return Nothing
 
-resize :: GodotSimulaController -> Float -> IO ()
-resize ct delta = do
+
+-- | Change the scale of the grabbed object
+rescale :: GodotSimulaController -> Float -> IO ()
+rescale ct delta = do
   curPos <- V2 <$> (ct `G.get_joystick_axis` 0) <*> (ct `G.get_joystick_axis` 1)
 
   _tkBody <$> (readTVarIO (_gscTelekinesis ct)) >>= \case
@@ -128,9 +144,9 @@ resize ct delta = do
           maxScale = 8
 
       if
-        | norm curScale < minScale     -> resizeBy (V2 delta delta) obj
-        | norm curScale > maxScale     -> resizeBy (V2 (-delta) (-delta)) obj
-        | isGripPressed && validChange -> resizeBy diff obj
+        | norm curScale < minScale     -> rescaleBy (V2 delta delta) obj
+        | norm curScale > maxScale     -> rescaleBy (V2 (-delta) (-delta)) obj
+        | isGripPressed && validChange -> rescaleBy diff obj
         | otherwise                    -> return ()
 
     Nothing -> return ()
@@ -138,12 +154,28 @@ resize ct delta = do
   atomically $ writeTVar (_gscLastScrollPos ct) curPos
 
  where
-  -- TODO: Implement proper resizing (not scaling), vert and horiz
-  resizeBy :: (GodotSpatial :< child) => V2 Float -> child -> IO ()
-  resizeBy (V2 x y) a =
+  rescaleBy :: (GodotSpatial :< child) => V2 Float -> child -> IO ()
+  rescaleBy (V2 _ y) a =
     V3 1 1 1 ^* (1 + y * 0.5)
       & toLowLevel
       >>= G.scale_object_local (safeCast a :: GodotSpatial)
+
+
+addSimulaController :: GodotARVROrigin -> Text -> Int -> IO GodotSimulaController
+addSimulaController originNode nodeName ctID = do
+  ct <- "res://addons/godot-haskell-plugin/SimulaController.gdns"
+    & unsafeNewNS id "Object" []
+    -- TODO: Make this implicit in newNS (godot-extra)?
+    >>= Api.godot_nativescript_get_userdata
+    >>= deRefStablePtr . castPtrToStablePtr
+
+  G.add_child originNode (safeCast ct) True
+
+  nm <- toLowLevel nodeName
+  ct `G.set_name` nm
+  ct `G.set_controller_id` ctID
+
+  return ct
 
 
 process :: GFunc GodotSimulaController
@@ -155,7 +187,7 @@ process self args = do
   if
     | not active -> G.set_visible self False
     | visible -> do
-      resize self delta
+      rescale self delta
       pointerWindow self >>= \case
         Just window -> do
           G.set_visible (_gscLaser self) True
@@ -166,10 +198,9 @@ process self args = do
           return ()
     | otherwise -> do
       cname <- G.get_controller_name self >>= fromLowLevel
-      mMesh <- load_controller_mesh cname
-      case mMesh of
+      loadOpenVRControllerMesh cname >>= \case
         Just mesh -> G.set_mesh (_gscMeshInstance self) mesh
-        Nothing   -> godotPrint "Failed to set controller mesh"
+        Nothing   -> godotPrint "Failed to set controller mesh."
       G.set_visible self True
 
   toLowLevel VariantNil
