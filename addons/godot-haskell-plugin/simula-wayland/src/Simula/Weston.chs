@@ -216,6 +216,7 @@ westonViewPos view = V2 <$> westonViewPosX view <*> westonViewPosY view
 {#fun weston_keyboard_send_key {`WestonKeyboard', `CUInt', `CUInt', `WlKeyboardKeyState'} -> `()'#}
 {#fun weston_keyboard_send_modifiers {`WestonKeyboard', `CUInt', `CUInt', `CUInt', `CUInt', `CUInt'} -> `()'#}
 {#fun weston_keyboard_set_focus {`WestonKeyboard', `WestonSurface'} -> `()'#}
+{#fun weston_keyboard_set_locks {`WestonKeyboard', `CUInt', `CUInt'} -> `()'#}
 
 {#fun weston_seat_set_keyboard_focus {`WestonSeat', `WestonSurface'} -> `()'#}
 
