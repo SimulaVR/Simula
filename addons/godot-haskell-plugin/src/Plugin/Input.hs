@@ -1,40 +1,84 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase, DataKinds, MultiParamTypeClasses #-}
 module Plugin.Input where
 
+import           Data.Coerce
 import qualified Data.Map.Strict             as M
 import           Data.Bits
 
 import qualified Godot.Methods               as G
+import qualified Godot.Gdnative.Internal.Api as Api
+
+import           Foreign
+import           Foreign.C
 
 import           Simula.Weston
 import           Simula.WaylandServer
 
+import           System.IO.Unsafe
+
 import           Plugin.Imports
 
+-- i don't want to touch godot-haskell for proprietary changes
+
+get_raw_keycode :: Method "get_raw_keycode" cls sig => cls -> sig
+get_raw_keycode = runMethod @"get_raw_keycode"
+
+bindInputEventKey_get_raw_keycode
+  = unsafePerformIO $
+      withCString "InputEventKey" $
+        \ clsNamePtr ->
+          withCString "get_raw_keycode" $
+            \ methodNamePtr ->
+              Api.godot_method_bind_get_method clsNamePtr methodNamePtr
+
+{-# NOINLINE bindInputEventKey_get_raw_keycode #-}
+
+instance Method "get_raw_keycode" GodotInputEventKey (IO Int) where
+        runMethod cls
+          = withVariantArray []
+              (\ (arrPtr, len) ->
+                 Api.godot_method_bind_call bindInputEventKey_get_raw_keycode (coerce cls)
+                   arrPtr
+                   len
+                   >>= \ (err, res) -> throwIfErr err >> fromGodotVariant res)
 
 processKeyEvent :: WlDisplay -> WestonKeyboard -> GodotInputEventKey -> IO ()
-processKeyEvent wldp kbd evk =
-  G.get_scancode evk <&> flip M.lookup keyTranslation >>= \case
-    Just code -> do
-      serial <- wl_display_next_serial wldp
+processKeyEvent wldp kbd evk = do
+  whenM (withGodotMethodBind bindInputEventKey_get_raw_keycode $ \ptr -> return $ ptr == coerce nullPtr) $ error "You need a patched Godot version to run this"
+  x11Code <- get_raw_keycode evk
+  let code = x11Code - 8 -- see weston-3 => libweston/compositor-x11.c#L1357 
 
-      altPressed <- fromEnum <$> G.get_alt evk
-      shiftPressed <- fromEnum <$> G.get_shift evk
-      ctrlPressed <- fromEnum <$> G.get_control evk
-      superPressed <- fromEnum <$> G.get_metakey evk
-      let mods = fromIntegral $ shiftPressed + superPressed * 2 + ctrlPressed * 4 + altPressed * 8
+  serial <- wl_display_next_serial wldp
 
-      weston_keyboard_send_modifiers kbd serial mods mods 0 mods
+  altPressed <- fromEnum <$> G.get_alt evk
+  shiftPressed <- fromEnum <$> G.get_shift evk
+  ctrlPressed <- fromEnum <$> G.get_control evk
+  superPressed <- fromEnum <$> G.get_metakey evk
+  let mods = fromIntegral $ shiftPressed + superPressed * 2 + ctrlPressed * 4 + altPressed * 8
 
-      pressed <- G.is_pressed evk
-      time <- getTime Realtime
-      let msec = fromIntegral $ toNanoSecs time `div` 1000000
-      weston_keyboard_send_key kbd msec (fromIntegral code) (toState pressed)
+  pressed <- G.is_pressed evk
 
-    Nothing -> return ()
- where
-  toState pressed | pressed = WlKeyboardKeyStatePressed
-                  | otherwise = WlKeyboardKeyStateReleased
+  -- shelving this for now
+{- 
+  -- mask/values => numlock: 1, capslock: 2
+  -- also, small note: watch out for the indent on that case statement, it's not immediately obvious what parses and what doesn't
+  let lockMask = case code of
+        69 -> 1
+        58 -> 2
+        _ -> 0
+
+  let lockValue = _ -- need to store lock values!
+  weston_keyboard_set_locks kbd lockMask lockValue
+-}
+  weston_keyboard_send_modifiers kbd serial mods mods 0 mods
+
+  time <- getTime Realtime
+  let msec = fromIntegral $ toNanoSecs time `div` 1000000
+  weston_keyboard_send_key kbd msec (fromIntegral code) (toState pressed)
+
+  where
+    toState pressed | pressed = WlKeyboardKeyStatePressed
+                    | otherwise = WlKeyboardKeyStateReleased
 
 setInputHandled :: (GodotNode :< a) => a -> IO ()
 setInputHandled self = do
