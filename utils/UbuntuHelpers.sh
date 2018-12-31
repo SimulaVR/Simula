@@ -8,6 +8,19 @@ installUbuntuDependencies() {
                 curl
 }
 
+installSimulaVRGodotFork() {
+    rm -r godot
+    git clone --recursive https://github.com/SimulaVR/godot
+    cd godot
+    sudo apt-get install build-essential scons pkg-config libx11-dev libxcursor-dev libxinerama-dev \
+         libgl1-mesa-dev libglu-dev libasound2-dev libpulse-dev libfreetype6-dev libssl-dev libudev-dev \
+         libxi-dev libxrandr-dev yasm
+    scons -j8 platform=x11
+    mv ~/.local/bin/godot ~/.local/bin/godot.bak.$(date +%F-%T)
+    cp ./bin/godot.x11.tools.64 ~/.local/bin/godot
+    cd ..
+}
+
 installSteam() {
     if [ -z `which steam` ]; then
         if [ ask "Steam not installed. Do you consent to enabling the non-free multiverse repo?" ]; then

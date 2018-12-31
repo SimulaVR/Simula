@@ -2,5 +2,6 @@
 *~
 .import/
 /addons/godot-haskell-plugin/libgodot-haskell-plugin.so
+/addons/godot
 /UUID
 /bin

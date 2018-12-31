@@ -179,6 +179,7 @@ newSeat wc nm = do
 
 {#fun weston_seat_get_keyboard {`WestonSeat'} -> `WestonKeyboard' #}
 {#fun weston_seat_get_pointer {`WestonSeat'} -> `WestonPointer' #}
+{#fun weston_pointer_clear_focus {`WestonPointer'} -> `()' #}
 
 instance WlListElement WestonSurface WestonView where
   linkOffset _ _ = {#offsetof weston_view->surface_link#}

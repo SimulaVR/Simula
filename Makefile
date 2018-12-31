@@ -4,6 +4,8 @@ run:
 	cd addons/godot-haskell-plugin && make run ; cd -
 watch:
 	cd addons/godot-haskell-plugin && make watch ; cd -
+clean:
+	cd addons/godot-haskell-plugin && make clean; cd -
 
 .PHONY: check
 check:

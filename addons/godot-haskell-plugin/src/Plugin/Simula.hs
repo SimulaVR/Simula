@@ -130,6 +130,7 @@ onButton self gsc button pressed =
     G.get_collision_point rc >>= case button of
       OVR_Button_Trigger -> processClickEvent sprite (Button pressed BUTTON_LEFT)
       OVR_Button_AppMenu -> processClickEvent sprite (Button pressed BUTTON_RIGHT)
+      -- OVR_Button_Touchpad -> pressAndReleaseButtonLeft sprite -- Potential hack to ensure Simula has a functional mouse clicker
       OVR_Button_Grip    -> const $
         readTVarIO gst
           >>= processGrabEvent gsc (Just sprite) pressed

@@ -40,6 +40,7 @@ data GodotWestonSurfaceSprite = GodotWestonSurfaceSprite
   , _gwssShape :: TVar GodotBoxShape
   , _gwssTexture :: TVar GodotWestonSurfaceTexture
   , _gwssSeat :: TVar WestonSeat
+  , _gwssFocused :: TVar (Maybe Focus)
   }
 
 instance Eq GodotWestonSurfaceSprite where
@@ -54,6 +55,7 @@ instance ClassExport GodotWestonSurfaceSprite where
                   <$> atomically (newTVar True)
                   <*> atomically (newTVar (error "didn't init sprite")) <*> atomically (newTVar (error "didn't init shape"))
                   <*> atomically (newTVar (error "didn't init texture")) <*> atomically (newTVar (error "didn't init seat"))
+                  <*> atomically (newTVar Nothing)
   classExtends = "RigidBody"
   classMethods =
     [ GodotMethod NoRPC "_input_event" inputEvent
@@ -62,7 +64,7 @@ instance ClassExport GodotWestonSurfaceSprite where
 
 instance HasBaseClass GodotWestonSurfaceSprite where
   type BaseClass GodotWestonSurfaceSprite = GodotRigidBody
-  super (GodotWestonSurfaceSprite obj _ _ _ _ _ ) = GodotRigidBody obj
+  super (GodotWestonSurfaceSprite obj _ _ _ _ _ _) = GodotRigidBody obj
 
 newGodotWestonSurfaceSprite :: GodotWestonSurfaceTexture -> WestonSeat -> IO GodotWestonSurfaceSprite
 newGodotWestonSurfaceSprite tex seat = do
@@ -211,6 +213,10 @@ processClickEvent gwss evt clickPos = do
       ws <- atomically $ readTVar $ _gwstSurface gwst
       weston_keyboard_set_focus kbd ws
       weston_pointer_send_button pointer msec (toWestonButton button) (fromIntegral $ fromEnum pressed) --see libinput and wayland for enums; converting later
+
+      -- Use this hack to force a left-mouse-down ++ left-mouse-up to occur in immediate sequence
+      -- when pressed $ do weston_pointer_send_button pointer msec (toWestonButton button) (fromIntegral $ fromEnum pressed)
+      --                   weston_pointer_send_button pointer msec (toWestonButton button) 0
 
     toWestonButton BUTTON_LEFT = 0x110
     toWestonButton BUTTON_RIGHT = 0x111

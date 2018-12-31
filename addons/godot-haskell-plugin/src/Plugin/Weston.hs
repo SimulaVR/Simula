@@ -36,6 +36,10 @@ import Foreign hiding (void)
 
 import Telemetry
 
+data Focus = Focus 
+  { _focusView :: WestonView 
+  , _focusTimestamp :: Timestamp
+  }
 
 data GodotWestonCompositor = GodotWestonCompositor
   { _gwcObj      :: GodotObject
@@ -44,6 +48,7 @@ data GodotWestonCompositor = GodotWestonCompositor
   , _gwcSurfaces :: TVar (M.Map WestonSurface GodotWestonSurfaceSprite)
   , _gwcOutput :: TVar WestonOutput
   , _gwcNormalLayer :: TVar WestonLayer
+  , _gwcFocus :: TVar (Maybe Focus)
   }
 
 instance GodotClass GodotWestonCompositor where
@@ -56,6 +61,7 @@ instance ClassExport GodotWestonCompositor where
     <*> atomically (newTVar mempty)
     <*> atomically (newTVar undefined)
     <*> atomically (newTVar undefined)
+    <*> atomically (newTVar Nothing)
 
   classExtends = "Spatial"
   classMethods =
@@ -65,7 +71,7 @@ instance ClassExport GodotWestonCompositor where
 
 instance HasBaseClass GodotWestonCompositor where
   type BaseClass GodotWestonCompositor = GodotSpatial
-  super (GodotWestonCompositor obj _ _ _ _ _) = GodotSpatial obj
+  super (GodotWestonCompositor obj _ _ _ _ _ _) = GodotSpatial obj
 
 
 ready :: GFunc GodotWestonCompositor
@@ -207,6 +213,21 @@ startBaseThread compositor = void $ forkOS $ do
       Just sprite <- M.lookup surface <$> atomically (readTVar (_gwcSurfaces compositor))
 
       updateWestonSurfaceSprite sprite
+
+      -- Clear the pointer's focus if needed
+      maybeCurrentActiveFocus <- atomically $ readTVar $ _gwscFocus compositor
+      maybeSpriteFocus <- atomically $ readTVar $ _gwssFocused sprite
+      seat <- atomically $ readTVar (_gwssSeat sprite)
+      pointer <- weston_seat_get_pointer seat
+      if (isJust maybeCurrentActiveFocus && isJust maybeSpriteFocus)
+          then do
+              let (Just currentActiveFocus) = maybeCurrentActiveFocus
+              let (Just spriteFocus) = maybeSpriteFocus
+              if ((_focusTimestamp spriteFocus) `>` (_focusTimestamp currentActiveFocus)) -- Assumes (>) is implemented for Timestamp
+                then do weston_pointer_clear_focus pointer
+                        atomically $ writeTVar (_gwcFocus compositor) spriteFocus
+                else do atomically $ writeTVar (_gwcFocused sprite) Nothing
+           else return ()
 
       whenM (spriteShouldMove sprite) $ do
         setSpriteShouldMove sprite False
