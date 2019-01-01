@@ -13,6 +13,7 @@ module Plugin.WestonSurfaceSprite
   , getSprite
   , InputEventType(..)
   , processClickEvent
+  , Focus(..)
   ) where
 
 import Simula.Weston
@@ -32,6 +33,11 @@ import qualified Godot.Methods               as G
 import Plugin.WestonSurfaceTexture
 
 import Foreign
+
+data Focus = Focus
+  { _focusView :: WestonView
+  , _focusTimeSpec :: TimeSpec
+  }
 
 data GodotWestonSurfaceSprite = GodotWestonSurfaceSprite
   { _gwssObj     :: GodotObject

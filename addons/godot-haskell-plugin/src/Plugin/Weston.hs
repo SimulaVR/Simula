@@ -27,6 +27,7 @@ import Plugin.WestonSurfaceTexture
 import Control.Monad
 import Control.Concurrent
 import System.Environment
+import Data.Maybe
 
 import System.Process
 
@@ -36,10 +37,6 @@ import Foreign hiding (void)
 
 import Telemetry
 
-data Focus = Focus 
-  { _focusView :: WestonView 
-  , _focusTimestamp :: Timestamp
-  }
 
 data GodotWestonCompositor = GodotWestonCompositor
   { _gwcObj      :: GodotObject
@@ -215,7 +212,7 @@ startBaseThread compositor = void $ forkOS $ do
       updateWestonSurfaceSprite sprite
 
       -- Clear the pointer's focus if needed
-      maybeCurrentActiveFocus <- atomically $ readTVar $ _gwscFocus compositor
+      maybeCurrentActiveFocus <- atomically $ readTVar $ _gwcFocus compositor
       maybeSpriteFocus <- atomically $ readTVar $ _gwssFocused sprite
       seat <- atomically $ readTVar (_gwssSeat sprite)
       pointer <- weston_seat_get_pointer seat
@@ -223,10 +220,10 @@ startBaseThread compositor = void $ forkOS $ do
           then do
               let (Just currentActiveFocus) = maybeCurrentActiveFocus
               let (Just spriteFocus) = maybeSpriteFocus
-              if ((_focusTimestamp spriteFocus) `>` (_focusTimestamp currentActiveFocus)) -- Assumes (>) is implemented for Timestamp
+              if ((_focusTimeSpec spriteFocus) > (_focusTimeSpec currentActiveFocus))
                 then do weston_pointer_clear_focus pointer
-                        atomically $ writeTVar (_gwcFocus compositor) spriteFocus
-                else do atomically $ writeTVar (_gwcFocused sprite) Nothing
+                        atomically $ writeTVar (_gwcFocus compositor) (Just spriteFocus)
+                else do atomically $ writeTVar (_gwssFocused sprite) Nothing
            else return ()
 
       whenM (spriteShouldMove sprite) $ do
