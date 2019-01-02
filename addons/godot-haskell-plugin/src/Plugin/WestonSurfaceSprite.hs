@@ -198,9 +198,17 @@ processClickEvent gwss evt clickPos = do
       let msec = fromIntegral $ toNanoSecs time `div` 1000000
       return msec
     processMouseMotionEvent sx sy =  do
-      msec <- getMsec
+      time <- getTime Realtime
+      let msec = fromIntegral $ toNanoSecs time `div` 1000000
       seat <- atomically $ readTVar (_gwssSeat gwss)
       pointer <- weston_seat_get_pointer seat
+
+      -- Here we update _gwstFocused so that the weston_pointer's focus
+      -- can be cleared during the next frame (see `onSurfaceCommit`).
+      gwst <- atomically $ readTVar $ _gwssTexture gwss
+      view <- atomically $ readTVar $ _gwstView gwst
+      let newFocus = Just (Focus view time)
+      atomically $ writeTVar (_gwssFocused gwss) newFocus
 
       pointer_send_motion pointer msec sx sy
 

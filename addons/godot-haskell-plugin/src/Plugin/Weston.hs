@@ -216,14 +216,24 @@ startBaseThread compositor = void $ forkOS $ do
       maybeSpriteFocus <- atomically $ readTVar $ _gwssFocused sprite
       seat <- atomically $ readTVar (_gwssSeat sprite)
       pointer <- weston_seat_get_pointer seat
+      -- PROBLEM: Running Simula yields 0's, 1's, and 3's printed to console,
+      -- but no 2's.
+      print "0"
+      if (isNothing maybeCurrentActiveFocus) && (isJust maybeSpriteFocus)
+        then atomically $ writeTVar (_gwcFocus compositor) maybeSpriteFocus
+        else return ()
       if (isJust maybeCurrentActiveFocus && isJust maybeSpriteFocus)
           then do
+              print "1"
               let (Just currentActiveFocus) = maybeCurrentActiveFocus
               let (Just spriteFocus) = maybeSpriteFocus
-              if ((_focusTimeSpec spriteFocus) > (_focusTimeSpec currentActiveFocus))
+              -- Perhaps pointer comparison (of WestonView) is flawed?
+              if ((_focusTimeSpec spriteFocus) > (_focusTimeSpec currentActiveFocus)) && ((_focusView spriteFocus) /= (_focusView currentActiveFocus))
                 then do weston_pointer_clear_focus pointer
                         atomically $ writeTVar (_gwcFocus compositor) (Just spriteFocus)
-                else do atomically $ writeTVar (_gwssFocused sprite) Nothing
+                        print "2"
+                else do -- atomically $ writeTVar (_gwssFocused sprite) Nothing
+                        print "3"
            else return ()
 
       whenM (spriteShouldMove sprite) $ do
