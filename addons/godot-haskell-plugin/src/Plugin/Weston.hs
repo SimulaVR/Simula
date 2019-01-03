@@ -40,15 +40,15 @@ import Foreign hiding (void)
 import Telemetry
 
 
-data GodotWestonCompositor = GodotWestonCompositor
-  { _gwcObj      :: GodotObject
-  , _gwcCompositor :: TVar WestonCompositor
-  , _gwcWlDisplay :: TVar WlDisplay
-  , _gwcSurfaces :: TVar (M.Map WestonSurface GodotWestonSurfaceSprite)
-  , _gwcOutput :: TVar WestonOutput
-  , _gwcNormalLayer :: TVar WestonLayer
-  , _gwcFocus :: TVar (Maybe Focus)
-  }
+-- data GodotWestonCompositor = GodotWestonCompositor
+--   { _gwcObj      :: GodotObject
+--   , _gwcCompositor :: TVar WestonCompositor
+--   , _gwcWlDisplay :: TVar WlDisplay
+--   , _gwcSurfaces :: TVar (M.Map WestonSurface GodotWestonSurfaceSprite)
+--   , _gwcOutput :: TVar WestonOutput
+--   , _gwcNormalLayer :: TVar WestonLayer
+--   , _gwcFocus :: TVar (Maybe Focus)
+--   }
 
 instance GodotClass GodotWestonCompositor where
   godotClassName = "WestonCompositor"
@@ -214,6 +214,7 @@ startBaseThread compositor = void $ forkOS $ do
 
       updateWestonSurfaceSprite sprite
 
+      {-
       -- Clear the pointer's focus if needed
       maybeCurrentActiveFocus <- atomically $ readTVar $ _gwcFocus compositor
       maybeSpriteFocus <- atomically $ readTVar $ _gwssFocused sprite
@@ -240,6 +241,7 @@ startBaseThread compositor = void $ forkOS $ do
                 else do -- atomically $ writeTVar (_gwssFocused sprite) Nothing
                         print "3"
            else return ()
+      -}
 
       whenM (spriteShouldMove sprite) $ do
         setSpriteShouldMove sprite False

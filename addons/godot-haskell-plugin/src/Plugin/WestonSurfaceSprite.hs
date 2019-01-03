@@ -16,6 +16,7 @@ module Plugin.WestonSurfaceSprite
   , InputEventType(..)
   , processClickEvent
   , Focus(..)
+  , GodotWestonCompositor(..)
   ) where
 
 import Simula.Weston
@@ -33,8 +34,28 @@ import           Godot.Gdnative.Internal.Api
 import qualified Godot.Methods               as G
 
 import Plugin.WestonSurfaceTexture
+import Simula.WaylandServer
+import Simula.Weston
+import Simula.WestonDesktop
+import qualified Data.Map.Strict as M
+import Unsafe.Coerce
 
+import Data.Maybe
 import Foreign
+
+nativeScript :: GodotObject -> IO a
+nativeScript = Godot.Gdnative.Internal.Api.godot_nativescript_get_userdata
+  >=> Foreign.deRefStablePtr . Foreign.castPtrToStablePtr
+
+data GodotWestonCompositor = GodotWestonCompositor
+  { _gwcObj      :: GodotObject
+  , _gwcCompositor :: TVar WestonCompositor
+  , _gwcWlDisplay :: TVar WlDisplay
+  , _gwcSurfaces :: TVar (M.Map WestonSurface GodotWestonSurfaceSprite)
+  , _gwcOutput :: TVar WestonOutput
+  , _gwcNormalLayer :: TVar WestonLayer
+  , _gwcFocus :: TVar (Maybe Focus)
+  }
 
 data Focus = Focus
   { _focusView :: WestonView
@@ -213,6 +234,37 @@ processClickEvent gwss evt clickPos = do
       print $ "processMouseMOtionEvent view: " ++ (show view)
       atomically $ writeTVar (_gwssFocused gwss) newFocus
 
+      -- Clear the pointer's focus if needed
+      nodePath <- (toLowLevel "/root/Simula/Weston")
+      compositorNode <- G.get_node ((safeCast gwss) :: GodotNode) nodePath
+      -- let compositor = (unsafeCoerce compositorNode) :: GodotWestonCompositor
+      compositor <- (nativeScript (safeCast compositorNode)) :: IO GodotWestonCompositor
+      maybeCurrentActiveFocus <- atomically $ readTVar $ _gwcFocus compositor
+      maybeSpriteFocus <- atomically $ readTVar $ _gwssFocused gwss
+      seat <- atomically $ readTVar (_gwssSeat gwss)
+      pointer <- weston_seat_get_pointer seat
+      -- PROBLEM: Running Simula yields 0's, 1's, and 3's printed to console,
+      -- but no 2's.
+      print "0"
+      if (isNothing maybeCurrentActiveFocus) && (isJust maybeSpriteFocus)
+        then atomically $ writeTVar (_gwcFocus compositor) maybeSpriteFocus
+        else return ()
+      if (isJust maybeCurrentActiveFocus && isJust maybeSpriteFocus)
+          then do
+              print "1"
+              let (Just currentActiveFocus) = maybeCurrentActiveFocus
+              let (Just spriteFocus) = maybeSpriteFocus
+              -- Perhaps pointer comparison (of WestonView) is flawed?
+              print $ "spriteFocus view: " ++ (show (_focusView spriteFocus))
+              print $ "currentActiveFocus view: "  ++ (show (_focusView currentActiveFocus))
+              if ((_focusTimeSpec spriteFocus) > (_focusTimeSpec currentActiveFocus)) && ((_focusView spriteFocus) /= (_focusView currentActiveFocus)) -- > inverted
+                then do weston_pointer_clear_focus pointer
+                        atomically $ writeTVar (_gwcFocus compositor) (Just spriteFocus)
+                        print "2"
+                else do -- atomically $ writeTVar (_gwssFocused sprite) Nothing
+                        print "3"
+           else return ()
+
       pointer_send_motion pointer msec sx sy
 
     processMouseButtonEvent sx sy pressed button = do
@@ -228,6 +280,9 @@ processClickEvent gwss evt clickPos = do
       when pressed $ weston_pointer_set_focus pointer view sx sy
 
       ws <- atomically $ readTVar $ _gwstSurface gwst
+      print "TEST"
+
+
       weston_keyboard_set_focus kbd ws
       weston_pointer_send_button pointer msec (toWestonButton button) (fromIntegral $ fromEnum pressed) --see libinput and wayland for enums; converting later
 
