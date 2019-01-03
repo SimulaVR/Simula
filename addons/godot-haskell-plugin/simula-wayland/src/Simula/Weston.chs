@@ -58,6 +58,7 @@ deriving instance Storable WestonSurface
 {#pointer *weston_view as WestonView newtype#}
 deriving instance Eq WestonView
 deriving instance Storable WestonView
+deriving instance Show WestonView
 
 instance WlListElement WestonCompositor WestonSeat where
   linkOffset _ _ = {#offsetof weston_seat->link#}

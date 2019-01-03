@@ -3,6 +3,8 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+
 module Plugin.WestonSurfaceSprite
   ( GodotWestonSurfaceSprite(..)
   , newGodotWestonSurfaceSprite
@@ -208,6 +210,7 @@ processClickEvent gwss evt clickPos = do
       gwst <- atomically $ readTVar $ _gwssTexture gwss
       view <- atomically $ readTVar $ _gwstView gwst
       let newFocus = Just (Focus view time)
+      print $ "processMouseMOtionEvent view: " ++ (show view)
       atomically $ writeTVar (_gwssFocused gwss) newFocus
 
       pointer_send_motion pointer msec sx sy

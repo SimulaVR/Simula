@@ -4,6 +4,8 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE StandaloneDeriving #-}
+
 module Plugin.Weston (GodotWestonCompositor(..)) where
 
 import Simula.WaylandServer
@@ -70,6 +72,7 @@ instance HasBaseClass GodotWestonCompositor where
   type BaseClass GodotWestonCompositor = GodotSpatial
   super (GodotWestonCompositor obj _ _ _ _ _ _) = GodotSpatial obj
 
+-- deriving instance Show WestonView
 
 ready :: GFunc GodotWestonCompositor
 ready compositor _ = do
@@ -228,7 +231,9 @@ startBaseThread compositor = void $ forkOS $ do
               let (Just currentActiveFocus) = maybeCurrentActiveFocus
               let (Just spriteFocus) = maybeSpriteFocus
               -- Perhaps pointer comparison (of WestonView) is flawed?
-              if ((_focusTimeSpec spriteFocus) > (_focusTimeSpec currentActiveFocus)) && ((_focusView spriteFocus) /= (_focusView currentActiveFocus))
+              print $ "spriteFocus view: " ++ (show (_focusView spriteFocus))
+              print $ "currentActiveFocus view: "  ++ (show (_focusView currentActiveFocus))
+              if ((_focusTimeSpec spriteFocus) > (_focusTimeSpec currentActiveFocus)) && ((_focusView spriteFocus) /= (_focusView currentActiveFocus)) -- > inverted
                 then do weston_pointer_clear_focus pointer
                         atomically $ writeTVar (_gwcFocus compositor) (Just spriteFocus)
                         print "2"
