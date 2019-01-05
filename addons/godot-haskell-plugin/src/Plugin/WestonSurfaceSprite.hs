@@ -275,8 +275,25 @@ processClickEvent gwss evt clickPos = do
       compositor <- getCompositorFromNodePath ((safeCast gwss) :: GodotNode) "/root/Root/Weston"
       clearPointerFocus compositor gwss time
 
-      -- TODO: Test weston_pointer_send_motion to see if it fixes our intput problems
-      pointer_send_motion pointer msec sx sy
+      -- pointer_send_motion pointer msec sx sy
+
+      -- Test: Use weston_pointer_send_motion to see if it fixes our intput problems
+      let westonPointerMotionEvent = WestonPointerMotionEvent {
+                                    motionMask = WestonPointerMotionAbs -- WestonPointerMotionAbs: Causes motion streaks to stop registering in weston-clickdot (clicks work, but only in clickdot)
+                                                                        -- WestonPointerMotionRel: Same as WestonPointerMotionAbs
+                                                                        -- WestonPointerMotionRelUnaccel: Yields error "godot: libweston/input.c:196: weston_pointer_motion_toabs: Assertion `!"invalid motion event"' failed.
+                                  , motionTimeUsec = 0
+                                  , motionX = (fromIntegral sx)
+                                  , motionY = (fromIntegral sy)
+                                  , motionDx = 0
+                                  , motionDy = 0
+                                  , motionDxUnaccel = 0
+                                  , motionDyUnaccel = 0
+                                  }
+
+      ptrWestonPointerMotionEvent <- new westonPointerMotionEvent
+      weston_pointer_send_motion pointer msec ptrWestonPointerMotionEvent
+      free ptrWestonPointerMotionEvent
 
     processMouseButtonEvent sx sy pressed button = do
 
