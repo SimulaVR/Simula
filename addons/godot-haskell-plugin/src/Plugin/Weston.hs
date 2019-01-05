@@ -4,7 +4,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE StandaloneDeriving #-}
 
 module Plugin.Weston (GodotWestonCompositor(..)) where
 
@@ -39,7 +38,7 @@ import Foreign hiding (void)
 
 import Telemetry
 
-
+-- Moved to WestonSurfaceSprite.hs for testing purposes
 -- data GodotWestonCompositor = GodotWestonCompositor
 --   { _gwcObj      :: GodotObject
 --   , _gwcCompositor :: TVar WestonCompositor
@@ -71,8 +70,6 @@ instance ClassExport GodotWestonCompositor where
 instance HasBaseClass GodotWestonCompositor where
   type BaseClass GodotWestonCompositor = GodotSpatial
   super (GodotWestonCompositor obj _ _ _ _ _ _) = GodotSpatial obj
-
--- deriving instance Show WestonView
 
 ready :: GFunc GodotWestonCompositor
 ready compositor _ = do
@@ -155,10 +152,11 @@ startBaseThread compositor = void $ forkOS $ do
   putStrLn "starting compositor"
 
   -- weston-terminal will be our "launcher" until a real launcher is implemented.
-  -- HACK: Sleeping for 3 seconds avoids an extant bug that happens when launching an application too 
+  -- HACK: Sleeping for a few seconds avoids an extant bug that happens when launching an application too 
   --       soon after a Simula starts
   -- TODO: Create a generic queue for running commands using idle callback
-  wlDisplayAddIdleCallback wldp nullPtr (\_ -> callCommand "sleep 3 && weston-terminal &")
+  -- wlDisplayAddIdleCallback wldp nullPtr (\_ -> callCommand "sleep 7 && weston-terminal && sleep 3 && pkill firefox && DISPLAY=:2 firefox & && sleep 1 && DISPLAY=:2 firefox") -- TODO: Make this into a config
+  wlDisplayAddIdleCallback wldp nullPtr (\_ -> callCommand "sleep 7 && weston-terminal &") -- TODO: Make this into a config
 
   wl_display_run wldp
 
@@ -213,35 +211,6 @@ startBaseThread compositor = void $ forkOS $ do
       Just sprite <- M.lookup surface <$> atomically (readTVar (_gwcSurfaces compositor))
 
       updateWestonSurfaceSprite sprite
-
-      {-
-      -- Clear the pointer's focus if needed
-      maybeCurrentActiveFocus <- atomically $ readTVar $ _gwcFocus compositor
-      maybeSpriteFocus <- atomically $ readTVar $ _gwssFocused sprite
-      seat <- atomically $ readTVar (_gwssSeat sprite)
-      pointer <- weston_seat_get_pointer seat
-      -- PROBLEM: Running Simula yields 0's, 1's, and 3's printed to console,
-      -- but no 2's.
-      print "0"
-      if (isNothing maybeCurrentActiveFocus) && (isJust maybeSpriteFocus)
-        then atomically $ writeTVar (_gwcFocus compositor) maybeSpriteFocus
-        else return ()
-      if (isJust maybeCurrentActiveFocus && isJust maybeSpriteFocus)
-          then do
-              print "1"
-              let (Just currentActiveFocus) = maybeCurrentActiveFocus
-              let (Just spriteFocus) = maybeSpriteFocus
-              -- Perhaps pointer comparison (of WestonView) is flawed?
-              print $ "spriteFocus view: " ++ (show (_focusView spriteFocus))
-              print $ "currentActiveFocus view: "  ++ (show (_focusView currentActiveFocus))
-              if ((_focusTimeSpec spriteFocus) > (_focusTimeSpec currentActiveFocus)) && ((_focusView spriteFocus) /= (_focusView currentActiveFocus)) -- > inverted
-                then do weston_pointer_clear_focus pointer
-                        atomically $ writeTVar (_gwcFocus compositor) (Just spriteFocus)
-                        print "2"
-                else do -- atomically $ writeTVar (_gwssFocused sprite) Nothing
-                        print "3"
-           else return ()
-      -}
 
       whenM (spriteShouldMove sprite) $ do
         setSpriteShouldMove sprite False

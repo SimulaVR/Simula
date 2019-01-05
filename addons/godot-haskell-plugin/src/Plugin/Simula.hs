@@ -28,7 +28,6 @@ instance GodotClass GodotSimula where
 instance ClassExport GodotSimula where
   classInit obj  = GodotSimula obj
     <$> newTVarIO NoGrab
-
   classExtends = "Node"
   classMethods =
     [ GodotMethod NoRPC "_ready" ready

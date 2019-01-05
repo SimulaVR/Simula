@@ -3,7 +3,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
 
 module Plugin.WestonSurfaceSprite
   ( GodotWestonSurfaceSprite(..)
@@ -38,14 +37,60 @@ import Simula.WaylandServer
 import Simula.Weston
 import Simula.WestonDesktop
 import qualified Data.Map.Strict as M
-import Unsafe.Coerce
 
 import Data.Maybe
 import Foreign
 
+-- Ludvig function to be imported into godot-extra
 nativeScript :: GodotObject -> IO a
 nativeScript = Godot.Gdnative.Internal.Api.godot_nativescript_get_userdata
   >=> Foreign.deRefStablePtr . Foreign.castPtrToStablePtr
+
+-- For testing purposes: assumes compositor is hardcoded to path "/root/Root/Weston"
+getCompositorFromNodePath :: GodotNode -> String -> IO GodotWestonCompositor
+getCompositorFromNodePath node nodePathStr = do
+  nodePath <- (toLowLevel (pack nodePathStr))
+  compositorNode <- G.get_node node nodePath
+  -- G.print_tree ((safeCast compositorNode) :: GodotNode)
+  -- let compositor = (unsafeCoerce compositorNode) :: GodotWestonCompositor
+  compositor <- (nativeScript (safeCast compositorNode)) :: IO GodotWestonCompositor
+  return compositor
+
+-- Clears weston_pointer focus if (i) this is the first surface we've looked at and/or 
+-- (ii) this is a new surface we're pointing at.
+-- TODO: Make this into a cleaner \case statement.
+-- TODO: Replace this with Ludvig's `setFocus`
+clearPointerFocus :: GodotWestonCompositor -> GodotWestonSurfaceSprite -> TimeSpec -> IO ()
+clearPointerFocus compositor gwss time = do
+    -- Update _gwstFocused so it can be compared against the compositor's
+    -- _gwcFocus
+    gwst <- atomically $ readTVar $ _gwssTexture gwss
+    view <- atomically $ readTVar $ _gwstView gwst
+    let newFocus = Just (Focus view time)
+    atomically $ writeTVar (_gwssFocused gwss) newFocus
+
+    -- Below we retrieve some of the very data we just shoved into a TVar (ugly);
+    -- am leaving this in case the logic is split apart in future refactoring
+    maybeCurrentActiveFocus <- atomically $ readTVar $ _gwcFocus compositor
+    maybeSpriteFocus <- atomically $ readTVar $ _gwssFocused gwss
+    seat <- atomically $ readTVar (_gwssSeat gwss)
+    pointer <- weston_seat_get_pointer seat
+
+    -- Clear the pointer's focus in case this is the first sprite we've pointed at.
+    if (isNothing maybeCurrentActiveFocus) && (isJust maybeSpriteFocus)
+      then do atomically $ writeTVar (_gwcFocus compositor) maybeSpriteFocus
+              weston_pointer_clear_focus pointer -- added
+      else return ()
+    -- Clear the pointer's focus in case we are pointing at a new sprite.
+    if (isJust maybeCurrentActiveFocus && isJust maybeSpriteFocus)
+        then do
+            let (Just currentActiveFocus) = maybeCurrentActiveFocus
+            let (Just spriteFocus) = maybeSpriteFocus
+            if ((_focusTimeSpec spriteFocus) > (_focusTimeSpec currentActiveFocus)) && ((_focusView spriteFocus) /= (_focusView currentActiveFocus)) -- > inverted
+              then do weston_pointer_clear_focus pointer
+                      atomically $ writeTVar (_gwcFocus compositor) (Just spriteFocus)
+              else do atomically $ writeTVar (_gwssFocused gwss) Nothing
+          else return ()
 
 data GodotWestonCompositor = GodotWestonCompositor
   { _gwcObj      :: GodotObject
@@ -226,45 +271,11 @@ processClickEvent gwss evt clickPos = do
       seat <- atomically $ readTVar (_gwssSeat gwss)
       pointer <- weston_seat_get_pointer seat
 
-      -- Here we update _gwstFocused so that the weston_pointer's focus
-      -- can be cleared during the next frame (see `onSurfaceCommit`).
-      gwst <- atomically $ readTVar $ _gwssTexture gwss
-      view <- atomically $ readTVar $ _gwstView gwst
-      let newFocus = Just (Focus view time)
-      print $ "processMouseMOtionEvent view: " ++ (show view)
-      atomically $ writeTVar (_gwssFocused gwss) newFocus
-
       -- Clear the pointer's focus if needed
-      nodePath <- (toLowLevel "/root/Simula/Weston")
-      compositorNode <- G.get_node ((safeCast gwss) :: GodotNode) nodePath
-      -- let compositor = (unsafeCoerce compositorNode) :: GodotWestonCompositor
-      compositor <- (nativeScript (safeCast compositorNode)) :: IO GodotWestonCompositor
-      maybeCurrentActiveFocus <- atomically $ readTVar $ _gwcFocus compositor
-      maybeSpriteFocus <- atomically $ readTVar $ _gwssFocused gwss
-      seat <- atomically $ readTVar (_gwssSeat gwss)
-      pointer <- weston_seat_get_pointer seat
-      -- PROBLEM: Running Simula yields 0's, 1's, and 3's printed to console,
-      -- but no 2's.
-      print "0"
-      if (isNothing maybeCurrentActiveFocus) && (isJust maybeSpriteFocus)
-        then atomically $ writeTVar (_gwcFocus compositor) maybeSpriteFocus
-        else return ()
-      if (isJust maybeCurrentActiveFocus && isJust maybeSpriteFocus)
-          then do
-              print "1"
-              let (Just currentActiveFocus) = maybeCurrentActiveFocus
-              let (Just spriteFocus) = maybeSpriteFocus
-              -- Perhaps pointer comparison (of WestonView) is flawed?
-              print $ "spriteFocus view: " ++ (show (_focusView spriteFocus))
-              print $ "currentActiveFocus view: "  ++ (show (_focusView currentActiveFocus))
-              if ((_focusTimeSpec spriteFocus) > (_focusTimeSpec currentActiveFocus)) && ((_focusView spriteFocus) /= (_focusView currentActiveFocus)) -- > inverted
-                then do weston_pointer_clear_focus pointer
-                        atomically $ writeTVar (_gwcFocus compositor) (Just spriteFocus)
-                        print "2"
-                else do -- atomically $ writeTVar (_gwssFocused sprite) Nothing
-                        print "3"
-           else return ()
+      compositor <- getCompositorFromNodePath ((safeCast gwss) :: GodotNode) "/root/Root/Weston"
+      clearPointerFocus compositor gwss time
 
+      -- TODO: Test weston_pointer_send_motion to see if it fixes our intput problems
       pointer_send_motion pointer msec sx sy
 
     processMouseButtonEvent sx sy pressed button = do
@@ -277,18 +288,19 @@ processClickEvent gwss evt clickPos = do
       kbd <- weston_seat_get_keyboard seat
       pointer <- weston_seat_get_pointer seat
 
-      when pressed $ weston_pointer_set_focus pointer view sx sy
+      -- when pressed $ weston_pointer_set_focus pointer view sx sy -- Old (and ultimately desired?) behavior
+      weston_pointer_set_focus pointer view sx sy -- Ludvig suggestion: causes input to work but not dragging.
 
       ws <- atomically $ readTVar $ _gwstSurface gwst
-      print "TEST"
-
 
       weston_keyboard_set_focus kbd ws
+
       weston_pointer_send_button pointer msec (toWestonButton button) (fromIntegral $ fromEnum pressed) --see libinput and wayland for enums; converting later
 
       -- Use this hack to force a left-mouse-down ++ left-mouse-up to occur in immediate sequence
+      -- (causes clicking to work but not dragging).
       -- when pressed $ do weston_pointer_send_button pointer msec (toWestonButton button) (fromIntegral $ fromEnum pressed)
-      --                   weston_pointer_send_button pointer msec (toWestonButton button) 0
+                        -- weston_pointer_send_button pointer msec (toWestonButton button) 0
 
     toWestonButton BUTTON_LEFT = 0x110
     toWestonButton BUTTON_RIGHT = 0x111
