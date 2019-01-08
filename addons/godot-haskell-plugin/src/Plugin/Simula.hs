@@ -108,8 +108,10 @@ on_button_signal self args = do
   toLowLevel VariantNil
 
 
+-- Handles VR controller and regular mouse buttons;
+-- does not handle mouse *movement*.
 onButton :: GodotSimula -> GodotSimulaController -> Int -> Bool -> IO ()
-onButton self gsc button pressed =
+onButton self gsc button pressed = do
   case (button, pressed) of
     (OVR_Button_Grip, False) -> -- Release grabbed
       readTVarIO gst
@@ -129,7 +131,7 @@ onButton self gsc button pressed =
     G.get_collision_point rc >>= case button of
       OVR_Button_Trigger -> processClickEvent sprite (Button pressed BUTTON_LEFT)
       OVR_Button_AppMenu -> processClickEvent sprite (Button pressed BUTTON_RIGHT)
-      -- OVR_Button_Touchpad -> pressAndReleaseButtonLeft sprite -- Potential hack to ensure Simula has a functional mouse clicker
+      OVR_Button_Touchpad -> pressAndReleaseButtonLeft sprite (Button pressed BUTTON_LEFT) -- Hack to ensure Simula has a functional mouse clicker
       OVR_Button_Grip    -> const $
         readTVarIO gst
           >>= processGrabEvent gsc (Just sprite) pressed

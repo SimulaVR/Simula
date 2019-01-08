@@ -193,6 +193,7 @@ process self args = do
           G.set_visible (_gscLaser self) True
           pos <- G.get_collision_point $ _gscRayCast self
           processClickEvent window Motion pos
+          -- processTouchpadScroll self window pos
         Nothing -> do
           G.set_visible (_gscLaser self) False
           return ()
@@ -218,3 +219,22 @@ physicsProcess self _ = do
     atomically $ writeTVar (_gscTelekinesis self) tk
 
   retnil
+
+processTouchpadScroll :: GodotSimulaController -> GodotWestonSurfaceSprite -> GodotVector3 -> IO ()
+processTouchpadScroll ct window pos = do
+  -- var trackpad_vector = Vector2(-get_joystick_axis(1), get_joystick_axis(0))
+  -- http://docs.godotengine.org/en/latest/tutorials/vr/vr_starter_tutorial.html
+
+  curPos <- V2 <$> (ct `G.get_joystick_axis` 0) <*> (ct `G.get_joystick_axis` 1)
+  lastPos <- readTVarIO (_gscLastScrollPos ct)
+  let diff = curPos - lastPos
+      validChange = norm lastPos > 0.01 && norm curPos > 0.01
+
+  -- if
+  --   | norm curScale < minScale     -> rescaleBy (V2 delta delta) obj
+  --   | norm curScale > maxScale     -> rescaleBy (V2 (-delta) (-delta)) obj
+  --   | isGripPressed && validChange -> rescaleBy diff obj
+  --   | otherwise                    -> return ()
+
+  -- Make sure this doesn't interview with grab state.
+  atomically $ writeTVar (_gscLastScrollPos ct) curPos

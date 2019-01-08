@@ -16,6 +16,7 @@ module Plugin.WestonSurfaceSprite
   , processClickEvent
   , Focus(..)
   , GodotWestonCompositor(..)
+  , pressAndReleaseButtonLeft
   ) where
 
 import Simula.Weston
@@ -229,15 +230,74 @@ data InputEventType
   = Motion
   | Button Bool Int
 
+-- This function only handles actual mouse (i.e., non-VR controller) events;
+-- this is most useful (so far) with pancake mode.
 processInputEvent :: GodotWestonSurfaceSprite -> GodotObject -> GodotVector3 -> IO ()
 processInputEvent gwss ev clickPos = do
-  whenM (ev `isClass` "InputEventMouseMotion") $ processClickEvent gwss Motion clickPos
+  whenM (ev `isClass` "InputEventMouseMotion") $ do print "InputEventMouseMotion"
+                                                    processClickEvent gwss Motion clickPos
   whenM (ev `isClass` "InputEventMouseButton") $ do
+    print  "InputEventMouseButton"
     let ev' = GodotInputEventMouseButton (coerce ev)
     pressed <- G.is_pressed ev'
     button <- G.get_button_index ev'
     processClickEvent gwss (Button pressed button) clickPos
 
+-- Gutted version of processClickEvent. This is a temporary function to give Simula users
+-- left button clicking until we fix VR triggers.
+pressAndReleaseButtonLeft :: GodotWestonSurfaceSprite -> InputEventType -> GodotVector3 -> IO ()
+pressAndReleaseButtonLeft gwss evt clickPos = do
+  lpos <- G.to_local gwss clickPos >>= fromLowLevel
+  sprite <- atomically $ readTVar (_gwssSprite gwss)
+  aabb <- G.get_aabb sprite
+  size <- godot_aabb_get_size aabb >>= fromLowLevel
+
+  let topleftPos = V2 (size ^. _x / 2 - lpos ^. _x ) (size ^. _y / 2 - lpos ^. _y)
+  let scaledPos = liftI2 (/) topleftPos (size ^. _xy)
+
+  rect <- G.get_item_rect sprite
+  recSize <- godot_rect2_get_size rect >>= fromLowLevel
+
+  let coords = liftI2 (*) recSize scaledPos
+
+  -- coords = surface coordinates in pixel with (0,0) at top left
+  let sx = truncate (256 * coords ^. _x)
+      sy = truncate (256 * coords ^. _y)
+
+  case evt of
+    (Button pressed button) ->  processTouchpadButtonEvent sx sy pressed
+    _                     ->  print "processClickEvent cannot process this event."
+
+  where
+    getMsec = do
+      time <- getTime Realtime
+      let msec = fromIntegral $ toNanoSecs time `div` 1000000
+      return msec
+    processTouchpadButtonEvent sx sy pressed = do
+      msec <- getMsec
+      gwst <- atomically $ readTVar $ _gwssTexture gwss
+      view <- atomically $ readTVar $ _gwstView gwst
+
+      seat <- atomically $ readTVar (_gwssSeat gwss)
+      kbd <- weston_seat_get_keyboard seat
+      pointer <- weston_seat_get_pointer seat
+
+      weston_pointer_set_focus pointer view sx sy -- Possibly uneeded
+
+      ws <- atomically $ readTVar $ _gwstSurface gwst
+
+      weston_keyboard_set_focus kbd ws
+
+      -- Hack to force a left-mouse-down ++ left-mouse-up to occur in immediate sequence
+      -- (causing clicking to work but not dragging).
+      when pressed $ do weston_pointer_send_button pointer msec (toWestonButton BUTTON_LEFT) (fromIntegral $ fromEnum pressed)
+                        weston_pointer_send_button pointer msec (toWestonButton BUTTON_LEFT) 0
+
+    toWestonButton BUTTON_LEFT = 0x110
+
+
+-- This is an all-purpose function that gets called by ordinary mouse events (this module),
+-- VR movement (SimulaController.hs), and VR button events (Simula.hs). Consider renaming.
 processClickEvent :: GodotWestonSurfaceSprite -> InputEventType -> GodotVector3 -> IO ()
 processClickEvent gwss evt clickPos = do
   lpos <- G.to_local gwss clickPos >>= fromLowLevel
@@ -275,14 +335,15 @@ processClickEvent gwss evt clickPos = do
       compositor <- getCompositorFromNodePath ((safeCast gwss) :: GodotNode) "/root/Root/Weston"
       clearPointerFocus compositor gwss time
 
-      -- pointer_send_motion pointer msec sx sy
+      pointer_send_motion pointer msec sx sy
 
       -- Test: Use weston_pointer_send_motion to see if it fixes our intput problems
+      {-
       let westonPointerMotionEvent = WestonPointerMotionEvent {
                                     motionMask = WestonPointerMotionAbs -- WestonPointerMotionAbs: Causes motion streaks to stop registering in weston-clickdot (clicks work, but only in clickdot)
                                                                         -- WestonPointerMotionRel: Same as WestonPointerMotionAbs
                                                                         -- WestonPointerMotionRelUnaccel: Yields error "godot: libweston/input.c:196: weston_pointer_motion_toabs: Assertion `!"invalid motion event"' failed.
-                                  , motionTimeUsec = 0
+                                  , motionTimeUsec = msec               -- Setting to `msec` causes weston-clickdot to not even receive rays.
                                   , motionX = (fromIntegral sx)
                                   , motionY = (fromIntegral sy)
                                   , motionDx = 0
@@ -294,7 +355,9 @@ processClickEvent gwss evt clickPos = do
       ptrWestonPointerMotionEvent <- new westonPointerMotionEvent
       weston_pointer_send_motion pointer msec ptrWestonPointerMotionEvent
       free ptrWestonPointerMotionEvent
+      -}
 
+    -- TODO: Test whether processMouseButtonEvent needs (some of) processMouseMotionEvent first.
     processMouseButtonEvent sx sy pressed button = do
 
       msec <- getMsec
@@ -325,3 +388,4 @@ processClickEvent gwss evt clickPos = do
     toWestonButton BUTTON_WHEEL_UP = 0x151
     toWestonButton BUTTON_WHEEL_DOWN = 0x150
     toWestonButton _ = 0x110
+
