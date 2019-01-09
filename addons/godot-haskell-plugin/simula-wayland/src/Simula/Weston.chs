@@ -474,12 +474,13 @@ instance Storable WestonPointerMotionEvent where
     {#set weston_pointer_motion_event->dx_unaccel#} ptr motionDxUnaccel
     {#set weston_pointer_motion_event->dy_unaccel#} ptr motionDyUnaccel
 
-{#pointer *weston_pointer_axis_event as WestonPointerAxisEvent newtype#}
+-- {#pointer *weston_pointer_axis_event as WestonPointerAxisEvent newtype#}
+{#pointer *weston_pointer_axis_event as WestonPointerAxisEventPtr -> WestonPointerAxisEvent #}
 
 type PointerGrabUnaryFunc = WestonPointerGrab -> IO ()
 type PointerGrabMotionFunc = WestonPointerGrab -> CUInt -> WestonPointerMotionEventPtr -> IO ()
 type PointerGrabButtonFunc = WestonPointerGrab -> CUInt -> CUInt -> CUInt -> IO ()
-type PointerGrabAxisFunc = WestonPointerGrab -> CUInt -> WestonPointerAxisEvent -> IO ()
+type PointerGrabAxisFunc = WestonPointerGrab -> CUInt -> WestonPointerAxisEventPtr -> IO ()
 type PointerGrabAxisSourceFunc = WestonPointerGrab -> CUInt -> IO ()
 
 foreign import ccall "wrapper" createPointerGrabUnaryFunc :: PointerGrabUnaryFunc -> IO (FunPtr PointerGrabUnaryFunc)
@@ -511,13 +512,34 @@ instance Storable WestonPointerGrabInterface where
     createPointerGrabUnaryFunc grabPointerFrame >>= {#set weston_pointer_grab_interface->frame#} ptr
     createPointerGrabUnaryFunc grabPointerCancel >>= {#set weston_pointer_grab_interface->cancel#} ptr
 
+data WestonPointerAxisEvent = WestonPointerAxisEvent {
+                              axis :: CUInt
+                            , value :: CDouble
+                            , has_discrete :: Bool
+                            , discrete :: CInt
+                            } deriving (Show, Eq)
+
+instance Storable WestonPointerAxisEvent where
+  sizeOf _ = {#sizeof weston_pointer_axis_event#}
+  alignment _ = {#alignof weston_pointer_axis_event#}
+  peek ptr = WestonPointerAxisEvent -- QWERTY
+             <$> {#get weston_pointer_axis_event->axis#} ptr
+             <*> {#get weston_pointer_axis_event->value#} ptr
+             <*> {#get weston_pointer_axis_event->has_discrete#} ptr
+             <*> {#get weston_pointer_axis_event->discrete#} ptr
+  poke ptr (WestonPointerAxisEvent axis value has_discrete discrete) = do
+    {#set weston_pointer_axis_event->axis#} ptr axis
+    {#set weston_pointer_axis_event->value#} ptr value
+    {#set weston_pointer_axis_event->has_discrete#} ptr has_discrete
+    {#set weston_pointer_axis_event->discrete#} ptr discrete
 
 {#fun weston_pointer_set_focus {`WestonPointer',`WestonView', `Int', `Int'} -> `()'#}
 {#fun pointer_send_motion {`WestonPointer', `CUInt', `Int', `Int'} -> `()'#}
 {#fun weston_pointer_send_motion {`WestonPointer', `CUInt', `WestonPointerMotionEventPtr'} -> `()'#}
 {#fun weston_pointer_send_button {`WestonPointer', `CUInt', `CUInt', `CUInt'} -> `()'#}
 {#fun notify_button {`WestonSeat', `CUInt', `CUInt', `CUInt'} -> `()'#}
-{#fun weston_pointer_send_axis {`WestonPointer', `CUInt', `WestonPointerAxisEvent'} -> `()'#}
+-- {#fun weston_pointer_send_axis {`WestonPointer', `CUInt', `WestonPointerAxisEvent'} -> `()'#}
+{#fun weston_pointer_send_axis {`WestonPointer', `CUInt', `WestonPointerAxisEventPtr'} -> `()'#}
 {#fun weston_pointer_send_axis_source {`WestonPointer', `CUInt'} -> `()'#}
 {#fun weston_pointer_send_frame {`WestonPointer'} -> `()'#}
 

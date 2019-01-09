@@ -234,10 +234,8 @@ data InputEventType
 -- this is most useful (so far) with pancake mode.
 processInputEvent :: GodotWestonSurfaceSprite -> GodotObject -> GodotVector3 -> IO ()
 processInputEvent gwss ev clickPos = do
-  whenM (ev `isClass` "InputEventMouseMotion") $ do print "InputEventMouseMotion"
-                                                    processClickEvent gwss Motion clickPos
+  whenM (ev `isClass` "InputEventMouseMotion") $ processClickEvent gwss Motion clickPos
   whenM (ev `isClass` "InputEventMouseButton") $ do
-    print  "InputEventMouseButton"
     let ev' = GodotInputEventMouseButton (coerce ev)
     pressed <- G.is_pressed ev'
     button <- G.get_button_index ev'

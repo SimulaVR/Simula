@@ -18,8 +18,11 @@ import           Control.Concurrent.STM.TVar
 import qualified Data.Text                     as T
 import           Linear
 
+import           Simula.Weston
+
 import           Plugin.Imports
 import           Plugin.WestonSurfaceSprite
+import           Plugin.WestonSurfaceTexture
 import           Plugin.Input.Telekinesis
 import           Plugin.Pointer
 
@@ -30,7 +33,12 @@ import qualified Godot.Methods                 as G
 
 import           Foreign ( deRefStablePtr
                          , castPtrToStablePtr
+                         , free
+                         , new
                          )
+
+import Foreign.C.Types
+import GHC.Float
 
 
 data GodotSimulaController = GodotSimulaController
@@ -193,7 +201,7 @@ process self args = do
           G.set_visible (_gscLaser self) True
           pos <- G.get_collision_point $ _gscRayCast self
           processClickEvent window Motion pos
-          -- processTouchpadScroll self window pos
+          processTouchpadScroll self window pos
         Nothing -> do
           G.set_visible (_gscLaser self) False
           return ()
@@ -221,11 +229,22 @@ physicsProcess self _ = do
   retnil
 
 processTouchpadScroll :: GodotSimulaController -> GodotWestonSurfaceSprite -> GodotVector3 -> IO ()
-processTouchpadScroll ct window pos = do
+processTouchpadScroll ct gwss pos = do
   -- var trackpad_vector = Vector2(-get_joystick_axis(1), get_joystick_axis(0))
   -- http://docs.godotengine.org/en/latest/tutorials/vr/vr_starter_tutorial.html
 
+  time <- getTime Realtime
+  let msec = fromIntegral $ toNanoSecs time `div` 1000000
+
+  gwst <- atomically $ readTVar $ _gwssTexture gwss
+  view <- atomically $ readTVar $ _gwstView gwst
+
+  seat <- atomically $ readTVar (_gwssSeat gwss)
+  kbd <- weston_seat_get_keyboard seat
+  pointer <- weston_seat_get_pointer seat
+
   curPos <- V2 <$> (ct `G.get_joystick_axis` 0) <*> (ct `G.get_joystick_axis` 1)
+  -- let xName = curPos ^. _x
   lastPos <- readTVarIO (_gscLastScrollPos ct)
   let diff = curPos - lastPos
       validChange = norm lastPos > 0.01 && norm curPos > 0.01
@@ -237,4 +256,43 @@ processTouchpadScroll ct window pos = do
   --   | otherwise                    -> return ()
 
   -- Make sure this doesn't interview with grab state.
-  atomically $ writeTVar (_gscLastScrollPos ct) curPos
+
+  -- TODO: Change G.get_joystick_axis <0/1> to diff.<x/y>
+  -- Axis 1 corresponds to the x-axis while axis 0 corresponds with the y-axis ?
+  valueX <- G.get_joystick_axis ct 1
+  valueY <- G.get_joystick_axis ct 0
+  let valueX' = CDouble (float2Double valueX)
+  let valueY' = CDouble (float2Double valueY)
+  if validChange then do print $ "valueX': " ++ (show valueX')
+                         print $ "valueY': " ++ (show valueY')
+                 else return ()
+
+  -- TODO: Call weston_pointer_axis_source before sending axis event;
+  -- Note that: wl_pointer_axis_source { WL_POINTER_AXIS_SOURCE_WHEEL = 0, WL_POINTER_AXIS_SOURCE_FINGER = 1, WL_POINTER_AXIS_SOURCE_CONTINUOUS = 2, WL_POINTER_AXIS_SOURCE_WHEEL_TILT = 3 }
+  -- This seems optional but worth an experiment to call `wl_pointer.axis_source.continuous` if all
+  -- else fails.
+  
+  let westonPointerAxisEventX = WestonPointerAxisEvent {
+                                axis = 1 -- WL_POINTER_AXIS_HORIZONTAL_SCROLL = 1
+                              , value = valueX' -- denotes length of vector in surface-local coordinate space
+                              , has_discrete = False -- TODO: Experiment with sending a discrete event
+                              , discrete = 0
+                              }
+
+  let westonPointerAxisEventY = WestonPointerAxisEvent {
+                                axis = 0 -- WL_POINTER_AXIS_VERTICAL_SCROLL = 0
+                              , value = valueY' -- denotes length of vector in surface-local coordinate space
+                              , has_discrete = False
+                              , discrete = 0
+                              }
+
+  ptrWestonPointerAxisEventX <- new westonPointerAxisEventX
+  ptrWestonPointerAxisEventY <- new westonPointerAxisEventY
+  -- Ultimately wraps wl_pointer_send_axis
+  weston_pointer_send_axis pointer msec ptrWestonPointerAxisEventX
+  weston_pointer_send_axis pointer msec ptrWestonPointerAxisEventY
+  free ptrWestonPointerAxisEventX
+  free ptrWestonPointerAxisEventY
+
+  -- TODO: Ensure another function is doing this
+  -- atomically $ writeTVar (_gscLastScrollPos ct) curPos
