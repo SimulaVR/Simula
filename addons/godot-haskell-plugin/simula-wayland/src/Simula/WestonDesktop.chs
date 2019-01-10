@@ -130,6 +130,7 @@ instance Storable (WestonDesktopApi a) where
     createSurfaceRemovedFuncPtr (fromHaskell apiSurfaceRemoved) >>= {#set weston_desktop_api->surface_removed#} ptr 
     createCommittedFuncPtr (fromHaskell apiCommitted) >>= {#set weston_desktop_api->committed#} ptr 
     createShowWindowMenuFuncPtr (fromHaskell apiShowWindowMenu) >>= {#set weston_desktop_api->show_window_menu#} ptr 
+    createSetParentFuncPtr (fromHaskell apiSetParent) >>= {#set weston_desktop_api->set_parent#} ptr 
     createMoveFuncPtr (fromHaskell apiMove) >>= {#set weston_desktop_api->move#} ptr 
     createResizeFuncPtr (fromHaskell apiResize) >>= {#set weston_desktop_api->resize#} ptr 
     createFullscreenRequestedFuncPtr (fromHaskell apiFullscreenRequested) >>= {#set weston_desktop_api->fullscreen_requested#} ptr 
