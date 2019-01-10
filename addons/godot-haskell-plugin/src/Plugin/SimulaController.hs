@@ -5,6 +5,10 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE TemplateHaskell #-}
+
 module Plugin.SimulaController
   ( GodotSimulaController(..)
   , addSimulaController
@@ -31,15 +35,18 @@ import           Godot.Nativescript
 import qualified Godot.Gdnative.Internal.Api   as Api
 import qualified Godot.Methods                 as G
 
-import           Foreign ( deRefStablePtr
-                         , castPtrToStablePtr
-                         , free
-                         , new
-                         )
+import           Foreign
 
 import Foreign.C.Types
 import GHC.Float
 
+import Debug.C
+import qualified Language.C.Inline as C
+
+initializeCppSimulaCtx
+
+C.include "<wayland-server.h>"
+C.include "<weston/weston.h>"
 
 data GodotSimulaController = GodotSimulaController
   { _gscObj     :: GodotObject
@@ -228,26 +235,39 @@ physicsProcess self _ = do
 
   retnil
 
+-- See http://docs.godotengine.org/en/latest/tutorials/vr/vr_starter_tutorial.html
 processTouchpadScroll :: GodotSimulaController -> GodotWestonSurfaceSprite -> GodotVector3 -> IO ()
 processTouchpadScroll ct gwss pos = do
-  -- var trackpad_vector = Vector2(-get_joystick_axis(1), get_joystick_axis(0))
-  -- http://docs.godotengine.org/en/latest/tutorials/vr/vr_starter_tutorial.html
-
   time <- getTime Realtime
   let msec = fromIntegral $ toNanoSecs time `div` 1000000
-
   gwst <- atomically $ readTVar $ _gwssTexture gwss
   view <- atomically $ readTVar $ _gwstView gwst
-
   seat <- atomically $ readTVar (_gwssSeat gwss)
   kbd <- weston_seat_get_keyboard seat
-  pointer <- weston_seat_get_pointer seat
+
+  -- Here we use inline-C as a debugging tool to print the result of
+  -- `wl_list_length(weston_pointer->focus_client->pointer_resources)`.
+  -- This is intended to let me see if the weston_pointer is somehow accumulating
+  -- resources.
+  pointer@(WestonPointer ptrToWestonPointer) <- weston_seat_get_pointer seat
+  let castedPointer = (castPtr ptrToWestonPointer) :: Ptr C'WestonPointer
+  numPointerResources <- [C.block| int {
+                          weston_pointer *w_pointer;
+                          wl_list * l_ptr;
+
+                          w_pointer = $(weston_pointer* castedPointer);
+                          l_ptr = &(w_pointer->focus_client->pointer_resources);
+
+                          return wl_list_length(l_ptr);
+                        } |]
+  print $ "wl_list_length(weston_pointer->focus_client->pointer_resources): " ++ (show numPointerResources)
 
   curPos <- V2 <$> (ct `G.get_joystick_axis` 0) <*> (ct `G.get_joystick_axis` 1)
-  -- let xName = curPos ^. _x
   lastPos <- readTVarIO (_gscLastScrollPos ct)
   let diff = curPos - lastPos
-      validChange = norm lastPos > 0.01 && norm curPos > 0.01
+  let validChange = norm lastPos > 0.01 && norm curPos > 0.01
+  let xDiff = diff ^. _x
+  let yDiff = diff ^. _y
 
   -- if
   --   | norm curScale < minScale     -> rescaleBy (V2 delta delta) obj
@@ -267,32 +287,54 @@ processTouchpadScroll ct gwss pos = do
                          print $ "valueY': " ++ (show valueY')
                  else return ()
 
-  -- TODO: Call weston_pointer_axis_source before sending axis event;
-  -- Note that: wl_pointer_axis_source { WL_POINTER_AXIS_SOURCE_WHEEL = 0, WL_POINTER_AXIS_SOURCE_FINGER = 1, WL_POINTER_AXIS_SOURCE_CONTINUOUS = 2, WL_POINTER_AXIS_SOURCE_WHEEL_TILT = 3 }
-  -- This seems optional but worth an experiment to call `wl_pointer.axis_source.continuous` if all
-  -- else fails.
-  
-  let westonPointerAxisEventX = WestonPointerAxisEvent {
-                                axis = 1 -- WL_POINTER_AXIS_HORIZONTAL_SCROLL = 1
-                              , value = valueX' -- denotes length of vector in surface-local coordinate space
-                              , has_discrete = False -- TODO: Experiment with sending a discrete event
-                              , discrete = 0
-                              }
+  -- TODO: Implement something like `setPointerFocus gwc gwss timeSpec` or call
+  -- weston_pointer_set_focus view sx sy (will need way to get way to retrieve sx & sy arguments; see processClickEvent)
+  sendContinuousScroll pointer msec valueX' valueY'
+  -- sendDiscreteScroll pointer msec valueX' valueY'
 
-  let westonPointerAxisEventY = WestonPointerAxisEvent {
-                                axis = 0 -- WL_POINTER_AXIS_VERTICAL_SCROLL = 0
-                              , value = valueY' -- denotes length of vector in surface-local coordinate space
-                              , has_discrete = False
-                              , discrete = 0
-                              }
-
-  ptrWestonPointerAxisEventX <- new westonPointerAxisEventX
-  ptrWestonPointerAxisEventY <- new westonPointerAxisEventY
-  -- Ultimately wraps wl_pointer_send_axis
-  weston_pointer_send_axis pointer msec ptrWestonPointerAxisEventX
-  weston_pointer_send_axis pointer msec ptrWestonPointerAxisEventY
-  free ptrWestonPointerAxisEventX
-  free ptrWestonPointerAxisEventY
-
-  -- TODO: Ensure another function is doing this
+  -- TODO: Ensure another function is doing this:
   -- atomically $ writeTVar (_gscLastScrollPos ct) curPos
+
+  -- Below we call weston_pointer_send_axis_source before sending the scroll event. Documentation suggests that this is optional for continuous events, but we call it nonetheless.
+  -- Note that: wl_pointer_axis_source { WL_POINTER_AXIS_SOURCE_WHEEL = 0, WL_POINTER_AXIS_SOURCE_FINGER = 1, WL_POINTER_AXIS_SOURCE_CONTINUOUS = 2, WL_POINTER_AXIS_SOURCE_WHEEL_TILT = 3 }
+  where sendContinuousScroll pointer msec valueX' valueY' = do weston_pointer_send_axis_source pointer 2 -- WL_POINTER_AXIS_SOURCE_CONTINUOUS = 2
+                                                               let westonPointerAxisEventX = WestonPointerAxisEvent {
+                                                                                             axis = 1 -- WL_POINTER_AXIS_HORIZONTAL_SCROLL = 1
+                                                                                           , value = valueX' -- denotes length of vector in surface-local coordinate space
+                                                                                           , has_discrete = False -- TODO: Experiment with sending a discrete event
+                                                                                           , discrete = 0
+                                                                                           }
+                                                               let westonPointerAxisEventY = WestonPointerAxisEvent {
+                                                                                             axis = 0 -- WL_POINTER_AXIS_VERTICAL_SCROLL = 0
+                                                                                           , value = valueY' -- denotes length of vector in surface-local coordinate space
+                                                                                           , has_discrete = False
+                                                                                           , discrete = 0
+                                                                                           }
+                                                               ptrWestonPointerAxisEventX <- new westonPointerAxisEventX
+                                                               ptrWestonPointerAxisEventY <- new westonPointerAxisEventY
+                                                               -- Ultimately wraps wl_pointer_send_axis
+                                                               weston_pointer_send_axis pointer msec ptrWestonPointerAxisEventX
+                                                               weston_pointer_send_axis pointer msec ptrWestonPointerAxisEventY
+                                                               free ptrWestonPointerAxisEventX
+                                                               free ptrWestonPointerAxisEventY
+
+        sendDiscreteScroll   pointer msec valueX' valueY' = do weston_pointer_send_axis_source pointer 0 -- WL_POINTER_AXIS_SOURCE_WHEEL = 0
+                                                               let westonPointerAxisEventX = WestonPointerAxisEvent {
+                                                                                             axis = 1 -- WL_POINTER_AXIS_HORIZONTAL_SCROLL = 1
+                                                                                           , value = valueX' -- denotes length of vector in surface-local coordinate space
+                                                                                           , has_discrete = True -- TODO: Experiment with sending a discrete event
+                                                                                           , discrete = 1 -- test value
+                                                                                           }
+                                                               let westonPointerAxisEventY = WestonPointerAxisEvent {
+                                                                                             axis = 0 -- WL_POINTER_AXIS_VERTICAL_SCROLL = 0
+                                                                                           , value = valueY' -- denotes length of vector in surface-local coordinate space
+                                                                                           , has_discrete = True
+                                                                                           , discrete = 1 -- test value
+                                                                                           }
+                                                               ptrWestonPointerAxisEventX <- new westonPointerAxisEventX
+                                                               ptrWestonPointerAxisEventY <- new westonPointerAxisEventY
+                                                               -- Ultimately wraps wl_pointer_send_axis
+                                                               weston_pointer_send_axis pointer msec ptrWestonPointerAxisEventX
+                                                               weston_pointer_send_axis pointer msec ptrWestonPointerAxisEventY
+                                                               free ptrWestonPointerAxisEventX
+                                                               free ptrWestonPointerAxisEventY
