@@ -85,7 +85,7 @@ library
       PatternSynonyms
       TypeApplications
       TypeOperators
-  ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates
+  ghc-options: -Werror -Wall -fwarn-tabs -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates
 
 
 foreign-library simula
@@ -97,7 +97,7 @@ foreign-library simula
       godot_headers
   hs-source-dirs:
       flib
-  ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -threaded
+  ghc-options: -Werror -Wall -fwarn-tabs -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -threaded
   build-depends:
      base >=4.12 && <5
     , godot-haskell
