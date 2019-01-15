@@ -1,0 +1,14 @@
+[general]
+
+singleton=false
+load_once=true
+symbol_prefix="godot_"
+
+[entry]
+
+X11.64="res://addons/godot-wayland/libgodot-wayland.so"
+
+[dependencies]
+
+Windows.64=[]
+X11.64=[]
