@@ -118,11 +118,11 @@ isButtonPressed btnId gsc = do
 
 
 -- | Get the window pointed at if any.
-pointerWindow :: GodotSimulaController -> IO (Maybe GodotCollisionObject)
-pointerWindow gsc = do
-  isColliding <- G.is_colliding $ _gscRayCast gsc
+pointerWindow :: GodotRayCast -> IO (Maybe GodotCollisionObject)
+pointerWindow rc = do
+  isColliding <- G.is_colliding rc
   if isColliding
-    then G.get_collider (_gscRayCast gsc)
+    then G.get_collider rc
       >>= asClass GodotCollisionObject "CollisionObject"
     else return Nothing
 
@@ -188,11 +188,11 @@ process self args = do
     | not active -> G.set_visible self False
     | visible -> do
       rescale self delta
-      pointerWindow self >>= \case
+      pointerWindow (_gscRayCast self) >>= \case
         Just window -> do
           G.set_visible (_gscLaser self) True
           pos <- G.get_collision_point $ _gscRayCast self
-          inputEvent Motion pos window
+          pointerEvent Motion pos window
         Nothing -> do
           G.set_visible (_gscLaser self) False
           return ()

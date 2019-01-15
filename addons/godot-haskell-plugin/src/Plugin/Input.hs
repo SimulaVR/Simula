@@ -19,22 +19,39 @@ import           System.IO.Unsafe
 import           Plugin.Imports
 
 
-data PointerEvent = Motion | Click
+data PointerEvent
+  = Motion
+  | Click Bool Int -- isPressed and buttonID
 
-inputEvent :: PointerEvent -> GodotVector3 -> GodotCollisionObject -> IO ()
-inputEvent evType pos window = do
-  funcName <- toLowLevel $ case evType of
-    Motion -> "motionEvent"
-    Click  -> "clickEvent"
-  _ <- G.call window funcName [toVariant pos]
+pointerEvent :: PointerEvent -> GodotVector3 -> GodotCollisionObject -> IO ()
+pointerEvent evType pos window = do
+  (funcName, funcArgs) <- case evType of
+    Motion -> do
+      funcName <- toLowLevel "motionEvent"
+      return ( funcName
+             , [ toVariant pos ]
+             )
+
+    Click isPressed buttonID -> do
+      funcName <- toLowLevel "clickEvent"
+      return ( funcName
+             , [ toVariant isPressed
+               , toVariant buttonID
+               , toVariant pos
+               ]
+             )
+
+  _ <- G.call window funcName funcArgs
+
   return ()
 
 
--- i don't want to touch godot-haskell for proprietary changes
+-- i don't want to touch godot-haskell for non-upstreamed Godot patches
 
 get_raw_keycode :: Method "get_raw_keycode" cls sig => cls -> sig
 get_raw_keycode = runMethod @"get_raw_keycode"
 
+bindInputEventKey_get_raw_keycode :: GodotMethodBind
 bindInputEventKey_get_raw_keycode
   = unsafePerformIO $
       withCString "InputEventKey" $
