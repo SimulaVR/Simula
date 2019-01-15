@@ -22,15 +22,9 @@ import           Data.Time.Clock
 import           Data.Time.ISO8601
 import           Control.Concurrent.STM.TVar
 import           Data.Maybe
-import qualified Data.Map.Strict as M
-
-import           Simula.Weston
-import           Plugin.Window
-
-type SurfaceMap = M.Map WestonSurface Window
 
 data Payload = Payload
-               { numWindowsOpen :: TVar SurfaceMap
+               { numWindowsOpen :: TVar Int
                , minutesElapsedSinceLastPayload :: Double
                , minutesTotalSession :: Double
                }
@@ -124,20 +118,20 @@ forkSendAppLaunchEvent = forkIO $ do
   response <- httpLbs request manager
   return ()
 
-forkSendPayloadEveryMinuteInterval :: TVar SurfaceMap -> Integer -> IO ThreadId
-forkSendPayloadEveryMinuteInterval tvarSurfaceMap min = forkIO $ (doLoop 0)
+forkSendPayloadEveryMinuteInterval :: TVar Int -> Integer -> IO ThreadId
+forkSendPayloadEveryMinuteInterval tvarNumWindows min = forkIO $ (doLoop 0)
     where
     doLoop :: Double -> IO ()
     doLoop dbl = do
         threadDelay (1000 * 1000 * 60 * (fromIntegral min))
-        forkSendPayload (Payload { numWindowsOpen = tvarSurfaceMap
+        forkSendPayload (Payload { numWindowsOpen = tvarNumWindows
                                  , minutesElapsedSinceLastPayload = (fromIntegral min)
                                  , minutesTotalSession = (dbl + (fromIntegral min))
                                  })
         doLoop (dbl + (fromIntegral min))
 
 forkSendPayload :: Payload -> IO ()
-forkSendPayload (Payload { numWindowsOpen = tvarSurfaceMap
+forkSendPayload (Payload { numWindowsOpen = tvarNumWindows
                          , minutesElapsedSinceLastPayload = minutesElapsedSinceLastPayload'
                          , minutesTotalSession = minutesTotalSession'
                          }) = do
@@ -147,8 +141,7 @@ forkSendPayload (Payload { numWindowsOpen = tvarSurfaceMap
   manager <- newManager tlsManagerSettings
 
 --  readMvarInt <- readMVar mvarInt
-  surfaceMap  <- readTVarIO tvarSurfaceMap
-  let numSurfaces = M.size surfaceMap
+  numSurfaces  <- readTVarIO tvarNumWindows
 
   -- Construct a bytestring encoded request object with the properties we want.
   let encodedRequestObject = LBS.toStrict (encode 
@@ -176,8 +169,8 @@ forkSendPayload (Payload { numWindowsOpen = tvarSurfaceMap
   return ()
 
 -- The first variable encodes the number of windows open (possibly useful data).
-startTelemetry :: TVar SurfaceMap -> IO ()
-startTelemetry tvarSurfaceMap = do forkIO ensureUUIDIsRegistered
-                                   forkSendPayloadEveryMinuteInterval tvarSurfaceMap 5 -- Send payload every 5 minutes
+startTelemetry :: TVar Int -> IO ()
+startTelemetry tvarNumWindows = do forkIO ensureUUIDIsRegistered
+                                   forkSendPayloadEveryMinuteInterval tvarNumWindows 5 -- Send payload every 5 minutes
                                    return ()
 
