@@ -3,6 +3,7 @@
 singleton=false
 load_once=true
 symbol_prefix="godot_"
+reloadable=true
 
 [entry]
 
@@ -10,5 +11,4 @@ X11.64="res://libsimula.so"
 
 [dependencies]
 
-Windows.64=[]
-X11.64=[]
+X11.64=[  ]

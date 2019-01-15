@@ -2,7 +2,7 @@
 
 static void flib_init() __attribute__((constructor));
 static void flib_init() {
-  static char *argv[] = { "libGodotHaskellPlugin.so", 0 }, **argv_ = argv;
+  static char *argv[] = { "libSimula.so", 0 }, **argv_ = argv;
   static int argc = 1;
   hs_init(&argc, &argv_);
 }
