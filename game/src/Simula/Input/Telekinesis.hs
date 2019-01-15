@@ -1,9 +1,9 @@
 {-# LANGUAGE LambdaCase #-}
-module Plugin.Input.Telekinesis where
+module Simula.Input.Telekinesis where
 
 import qualified Godot.Methods                 as G
 import qualified Godot.Core.GodotRigidBody     as RigidBody
-import           Plugin.Imports
+import           Simula.Imports
 import           Control.Monad                            ( when )
 
 

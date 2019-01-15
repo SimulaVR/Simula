@@ -1,11 +1,11 @@
 {-# LANGUAGE LambdaCase #-}
-module Plugin.Input.Grab where
+module Simula.Input.Grab where
 
 import qualified Godot.Gdnative.Internal.Api   as Api
 import qualified Godot.Methods                 as G
 
-import           Plugin.Imports
-import           Plugin.SimulaController
+import           Simula.Imports
+import           Simula.SimulaController
 
 
 data GrabState

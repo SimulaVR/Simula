@@ -1,10 +1,10 @@
 {-# LANGUAGE TypeApplications    #-}
-module Plugin (registerClasses) where
+module Simula (registerClasses) where
 
 import           Godot.Extra.Register
 
-import           Plugin.Simula
-import           Plugin.SimulaController
+import           Simula.Simula
+import           Simula.SimulaController
 
 
 registerClasses :: GdnativeHandle -> IO ()

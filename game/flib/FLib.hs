@@ -1,14 +1,12 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 module FLib where
 
-import           Data.Coerce             (coerce)
-
 import           Foreign                 (peek)
 
 import           Godot.Gdnative.Internal
 import           Godot.Nativescript
 
-import           Plugin
+import           Simula
 
 
 
@@ -32,6 +30,6 @@ foreign export ccall godot_gdnative_init :: GodotGdnativeInitOptionsPtr -> IO ()
 
 
 godot_gdnative_terminate :: GodotGdnativeTerminateOptionsPtr -> IO ()
-godot_gdnative_terminate optPtr = putStrLn "Haskell GDNative terminated"
+godot_gdnative_terminate _optPtr = putStrLn "Haskell GDNative terminated"
 
 foreign export ccall godot_gdnative_terminate :: GodotGdnativeTerminateOptionsPtr -> IO ()

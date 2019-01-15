@@ -1,13 +1,13 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TypeFamilies #-}
-module Plugin.Simula (GodotSimula(..)) where
+module Simula.Simula (GodotSimula(..)) where
 
-import           Plugin.Imports
+import           Simula.Imports
 
-import           Plugin.Input
-import           Plugin.Input.Grab
-import           Plugin.SimulaController
-import           Plugin.VR
+import           Simula.Input
+import           Simula.Input.Grab
+import           Simula.SimulaController
+import           Simula.VR
 
 import           Godot.Core.GodotGlobalConstants
 import           Godot.Extra.Register

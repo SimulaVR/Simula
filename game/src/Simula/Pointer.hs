@@ -1,4 +1,4 @@
-module Plugin.Pointer
+module Simula.Pointer
   ( defaultPointer
   )
 where
@@ -6,7 +6,7 @@ where
 import           Data.Colour
 import           Data.Colour.SRGB
 
-import           Plugin.Imports
+import           Simula.Imports
 
 import qualified Godot.Methods                 as G
 import           Godot.Core.GodotSpatialMaterial

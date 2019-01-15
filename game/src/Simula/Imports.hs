@@ -1,4 +1,4 @@
-module Plugin.Imports
+module Simula.Imports
   ( module B
   , module D
   , module G

@@ -5,7 +5,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
-module Plugin.SimulaController
+module Simula.SimulaController
   ( GodotSimulaController(..)
   , addSimulaController
   , isButtonPressed
@@ -18,10 +18,10 @@ import           Control.Concurrent.STM.TVar
 import qualified Data.Text                     as T
 import           Linear
 
-import           Plugin.Imports
-import           Plugin.Input
-import           Plugin.Input.Telekinesis
-import           Plugin.Pointer
+import           Simula.Imports
+import           Simula.Input
+import           Simula.Input.Telekinesis
+import           Simula.Pointer
 
 import           Godot.Extra.Register
 import qualified Godot.Gdnative.Internal.Api   as Api

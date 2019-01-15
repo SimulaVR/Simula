@@ -17,10 +17,6 @@ license-file:   LICENSE
 build-type:     Simple
 cabal-version:  >= 1.10
 
-extra-source-files:
-    ChangeLog.md
-    README.md
-
 source-repository head
   type: git
   location: https://github.com/SimulaVR/Simula
@@ -64,16 +60,16 @@ library
 
   exposed-modules:
       Telemetry
-      Plugin
-      Plugin.Imports
-      Plugin.Pointer
-      Plugin.Window
-      Plugin.Input
-      Plugin.Input.Grab
-      Plugin.Input.Telekinesis
-      Plugin.SimulaController
-      Plugin.Simula
-      Plugin.VR
+      Simula
+      Simula.Imports
+      Simula.Pointer
+      Simula.Window
+      Simula.Input
+      Simula.Input.Grab
+      Simula.Input.Telekinesis
+      Simula.SimulaController
+      Simula.Simula
+      Simula.VR
 
   default-language: Haskell2010
   default-extensions:

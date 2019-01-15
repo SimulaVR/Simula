@@ -1,9 +1,9 @@
 {-# LANGUAGE LambdaCase, DataKinds, MultiParamTypeClasses #-}
-module Plugin.Input where
+module Simula.Input where
 
 import qualified Godot.Methods               as G
 
-import           Plugin.Imports
+import           Simula.Imports
 
 
 data PointerEvent

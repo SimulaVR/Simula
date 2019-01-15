@@ -1,12 +1,12 @@
 {-# LANGUAGE BangPatterns #-}
-module Plugin.VR
+module Simula.VR
   ( VRInitResult(..)
   , openHMD
   , openVR
   , initVR
   ) where
 
-import           Plugin.Imports
+import           Simula.Imports
 
 import qualified Godot.Methods as G
 

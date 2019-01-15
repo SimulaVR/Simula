@@ -1,8 +1,8 @@
-module Plugin.Window
+module Simula.Window
  ( Window(..)
  ) where
 
-import Plugin.Imports
+import Simula.Imports
 
 
 newtype Window = Window GodotCollisionObject
