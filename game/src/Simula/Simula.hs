@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TypeFamilies #-}
 module Simula.Simula (GodotSimula(..)) where
@@ -70,10 +71,14 @@ ready self _ = do
  where
   addCompositorNode :: IO ()
   addCompositorNode = do
-    gwc <- "res://addons/godot-wayland/WestonCompositor.gdns"
-      & unsafeNewNS GodotSpatial "Spatial" []
+    gwc <- unsafeNewNS [] "res://addons/godot-wayland/WestonCompositor.gdns"
+      >>= asClass' GodotNode "Node"
     G.set_name gwc =<< toLowLevel "Weston"
     G.add_child self (asObj gwc) True
+
+    _ <- gwc & call "use_sprites" [toVariant True]
+
+    return ()
 
   connectController :: GodotSimulaController -> IO ()
   connectController ct = do

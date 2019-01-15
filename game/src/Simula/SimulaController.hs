@@ -24,12 +24,7 @@ import           Simula.Input.Telekinesis
 import           Simula.Pointer
 
 import           Godot.Extra.Register
-import qualified Godot.Gdnative.Internal.Api   as Api
 import qualified Godot.Methods                 as G
-
-import           Foreign ( deRefStablePtr
-                         , castPtrToStablePtr
-                         )
 
 
 data GodotSimulaController = GodotSimulaController
@@ -90,12 +85,12 @@ instance HasBaseClass GodotSimulaController where
 
 loadOpenVRControllerMesh :: Text -> IO (Maybe GodotMesh)
 loadOpenVRControllerMesh name =
-  "res://addons/godot-openvr/OpenVRRenderModel.gdns"
-    & newNS GodotArrayMesh "ArrayMesh" [] >>= \case
+  newNS [] "res://addons/godot-openvr/OpenVRRenderModel.gdns"
+    >>= maybe (return Nothing) (asClass GodotMesh "Mesh") >>= \case
       Nothing  ->
         Nothing <$ godotPrint "Couldn't find an OpenVR render model."
 
-      Just msh -> do
+      Just (msh :: GodotMesh) -> do
         loadModelStr <- toLowLevel "load_model"
         nameStr :: GodotString <- toLowLevel $ T.dropEnd 2 name
         ret <- G.call msh loadModelStr [toVariant nameStr] >>= fromGodotVariant
@@ -163,11 +158,7 @@ rescale ct delta = do
 
 addSimulaController :: GodotARVROrigin -> Text -> Int -> IO GodotSimulaController
 addSimulaController originNode nodeName ctID = do
-  ct <- "res://SimulaController.gdns"
-    & unsafeNewNS id "Object" []
-    -- TODO: Make this implicit in newNS (godot-extra)?
-    >>= Api.godot_nativescript_get_userdata
-    >>= deRefStablePtr . castPtrToStablePtr
+  ct <- unsafeNewNS [] "res://SimulaController.gdns" >>= fromNativeScript
 
   G.add_child originNode (safeCast ct) True
 

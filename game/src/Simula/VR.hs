@@ -30,10 +30,8 @@ newtype OpenHMDConfig = OpenHMDConfig GodotObject
 
 -- | Initialize and get the OpenHMD configuration object
 openHMDConfig :: IO OpenHMDConfig
-openHMDConfig = do
-  "res://addons/godot-openhmd/OpenHMDConfig.gdns"
-    & unsafeNewNS id "Object" []
-    <&> OpenHMDConfig
+openHMDConfig =
+  OpenHMDConfig <$> unsafeNewNS [] "res://addons/godot-openhmd/OpenHMDConfig.gdns"
 
 
 -- | Get the OpenHMD ARVRInterface
