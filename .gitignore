@@ -1,6 +1,7 @@
 **/*.stack-work/
 *~
 .import/
-/addons/godot-haskell-plugin/libgodot-haskell-plugin.so
+/game/libsimula.so
 /UUID
-/bin
+/bin/
+**/dist-newstyle/
