@@ -3,19 +3,16 @@
 module Telemetry where
 
 import           Data.Aeson
-import qualified Data.ByteString         as BS
 import qualified Data.ByteString.Base64  as BSB64
 import qualified Data.ByteString.Lazy    as LBS
 import           Data.Semigroup          ((<>))
-import           Network.HTTP.Client     (getUri, httpLbs, method, newManager,
+import           Network.HTTP.Client     (httpLbs, method, newManager,
                                           parseRequest, queryString,
-                                          requestHeaders, responseStatus)
+                                          requestHeaders)
 import           Network.HTTP.Client.TLS (tlsManagerSettings)
-import           Network.HTTP.Types      (statusCode)
 import           Control.Concurrent
 import           System.Directory
 import           Data.UUID
-import           Data.UUID.V4
 import           Data.UUID.V1
 import           Control.Monad
 import           Data.Time.Clock
@@ -30,6 +27,7 @@ data Payload = Payload
                }
 
 -- Denotes our MixPanel "project ID".
+mixPanelToken :: String
 mixPanelToken = "d893bae9548d8e678cef251fd81df486" :: String -- actual Simula token
 --            = "5ad417357e3a80fa426d272473d8dee4" :: String -- testing token
 
@@ -83,7 +81,7 @@ ensureUUIDIsRegistered = do
         }
 
   -- Send the request and print the response.
-  response <- httpLbs request manager
+  _response <- httpLbs request manager
   return ()
 
 getTelemetryEnabledStatus :: IO Bool
@@ -115,20 +113,20 @@ forkSendAppLaunchEvent = forkIO $ do
         , requestHeaders = [("Content-Type", "application/json; charset=utf-8")]
         }
 
-  response <- httpLbs request manager
+  _response <- httpLbs request manager
   return ()
 
 forkSendPayloadEveryMinuteInterval :: TVar Int -> Integer -> IO ThreadId
-forkSendPayloadEveryMinuteInterval tvarNumWindows min = forkIO $ (doLoop 0)
+forkSendPayloadEveryMinuteInterval tvarNumWindows minutes = forkIO $ (doLoop 0)
     where
     doLoop :: Double -> IO ()
     doLoop dbl = do
-        threadDelay (1000 * 1000 * 60 * (fromIntegral min))
+        threadDelay (1000 * 1000 * 60 * (fromIntegral minutes))
         forkSendPayload (Payload { numWindowsOpen = tvarNumWindows
-                                 , minutesElapsedSinceLastPayload = (fromIntegral min)
-                                 , minutesTotalSession = (dbl + (fromIntegral min))
+                                 , minutesElapsedSinceLastPayload = (fromIntegral minutes)
+                                 , minutesTotalSession = (dbl + (fromIntegral minutes))
                                  })
-        doLoop (dbl + (fromIntegral min))
+        doLoop (dbl + (fromIntegral minutes))
 
 forkSendPayload :: Payload -> IO ()
 forkSendPayload (Payload { numWindowsOpen = tvarNumWindows
@@ -165,7 +163,7 @@ forkSendPayload (Payload { numWindowsOpen = tvarNumWindows
         , queryString = requestQueryString
         , requestHeaders = [("Content-Type", "application/json; charset=utf-8")]
         }
-  response <- httpLbs request manager
+  _response <- httpLbs request manager
   return ()
 
 -- The first variable encodes the number of windows open (possibly useful data).
