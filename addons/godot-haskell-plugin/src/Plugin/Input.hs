@@ -18,6 +18,18 @@ import           System.IO.Unsafe
 
 import           Plugin.Imports
 
+
+data PointerEvent = Motion | Click
+
+inputEvent :: PointerEvent -> GodotVector3 -> GodotCollisionObject -> IO ()
+inputEvent evType pos window = do
+  funcName <- toLowLevel $ case evType of
+    Motion -> "motionEvent"
+    Click  -> "clickEvent"
+  _ <- G.call window funcName [toVariant pos]
+  return ()
+
+
 -- i don't want to touch godot-haskell for proprietary changes
 
 get_raw_keycode :: Method "get_raw_keycode" cls sig => cls -> sig

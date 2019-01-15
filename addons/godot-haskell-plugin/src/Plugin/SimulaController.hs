@@ -19,12 +19,11 @@ import qualified Data.Text                     as T
 import           Linear
 
 import           Plugin.Imports
-import           Plugin.WestonSurfaceSprite
+import           Plugin.Input
 import           Plugin.Input.Telekinesis
 import           Plugin.Pointer
 
 import           Godot.Extra.Register
-import           Godot.Nativescript
 import qualified Godot.Gdnative.Internal.Api   as Api
 import qualified Godot.Methods                 as G
 
@@ -119,11 +118,12 @@ isButtonPressed btnId gsc = do
 
 
 -- | Get the window pointed at if any.
-pointerWindow :: GodotSimulaController -> IO (Maybe GodotWestonSurfaceSprite)
+pointerWindow :: GodotSimulaController -> IO (Maybe GodotCollisionObject)
 pointerWindow gsc = do
   isColliding <- G.is_colliding $ _gscRayCast gsc
   if isColliding
-    then G.get_collider (_gscRayCast gsc) >>= tryObjectCast @GodotWestonSurfaceSprite
+    then G.get_collider (_gscRayCast gsc)
+      >>= asClass GodotCollisionObject "CollisionObject"
     else return Nothing
 
 
@@ -192,7 +192,7 @@ process self args = do
         Just window -> do
           G.set_visible (_gscLaser self) True
           pos <- G.get_collision_point $ _gscRayCast self
-          processClickEvent window Motion pos
+          inputEvent Motion pos window
         Nothing -> do
           G.set_visible (_gscLaser self) False
           return ()
