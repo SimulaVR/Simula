@@ -24,10 +24,10 @@ import           Control.Concurrent.STM.TVar
 import           Data.Maybe
 import qualified Data.Map.Strict as M
 
-import Simula.Weston
-import Plugin.WestonSurfaceSprite
+import           Simula.Weston
+import           Plugin.Window
 
-type SurfaceMap = M.Map WestonSurface GodotWestonSurfaceSprite
+type SurfaceMap = M.Map WestonSurface Window
 
 data Payload = Payload
                { numWindowsOpen :: TVar SurfaceMap
