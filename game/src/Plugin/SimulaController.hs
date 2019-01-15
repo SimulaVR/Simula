@@ -163,7 +163,7 @@ rescale ct delta = do
 
 addSimulaController :: GodotARVROrigin -> Text -> Int -> IO GodotSimulaController
 addSimulaController originNode nodeName ctID = do
-  ct <- "res://addons/godot-haskell-plugin/SimulaController.gdns"
+  ct <- "res://SimulaController.gdns"
     & unsafeNewNS id "Object" []
     -- TODO: Make this implicit in newNS (godot-extra)?
     >>= Api.godot_nativescript_get_userdata

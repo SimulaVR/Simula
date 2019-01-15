@@ -1,6 +1,6 @@
 [gd_resource type="NativeScript" load_steps=2 format=2]
 
-[ext_resource path="res://addons/godot-haskell-plugin/libgodot-haskell-plugin.gdnlib" type="GDNativeLibrary" id=1]
+[ext_resource path="res://libsimula.gdnlib" type="GDNativeLibrary" id=1]
 
 [resource]
 

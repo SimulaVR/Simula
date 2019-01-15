@@ -15,8 +15,8 @@ _global_script_class_icons={
 
 [application]
 
-config/name="haskell-test"
-run/main_scene="res://addons/godot-haskell-plugin/demo/Demo.tscn"
+config/name="Simula"
+run/main_scene="res://demo/Demo.tscn"
 
 [gdnative]
 

@@ -1,14 +1,14 @@
 all: check
-	cd addons/godot-haskell-plugin && make ; cd -
+	cd game && make ; cd -
 run:
-	cd addons/godot-haskell-plugin && make run ; cd -
+	cd game && make run ; cd -
 watch:
-	cd addons/godot-haskell-plugin && make watch ; cd -
+	cd game && make watch ; cd -
 
 .PHONY: check
 check:
 ifndef TELEMETRY
 	@cat  "./Consent.md"
-	@read line; if [ $$line == "n" ]; then echo "Please set TELEMETRY='--flag godot-haskell-plugin:no-tracking' and re-run make."; exit 1 ; fi
-  # @read line; if [ $$line == "n" ]; then export TELEMETRY='--flag godot-haskell-plugin:no-tracking'; fi # Doesn't work
+	@read line; if [ $$line == "n" ]; then echo "Please set TELEMETRY='--flag simula:no-tracking' and re-run make."; exit 1 ; fi
+  # @read line; if [ $$line == "n" ]; then export TELEMETRY='--flag simula:no-tracking'; fi # Doesn't work
 endif

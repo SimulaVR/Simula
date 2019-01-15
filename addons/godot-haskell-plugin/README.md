@@ -1,1 +1,0 @@
-# godot-haskell-plugin

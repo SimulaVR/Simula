@@ -70,7 +70,7 @@ ready self _ = do
  where
   addCompositorNode :: IO ()
   addCompositorNode = do
-    gwc <- "res://addons/godot-haskell-plugin/WestonCompositor.gdns"
+    gwc <- "res://WestonCompositor.gdns"
       & unsafeNewNS GodotSpatial "Spatial" []
     G.set_name gwc =<< toLowLevel "Weston"
     G.add_child self (asObj gwc) True

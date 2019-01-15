@@ -4,11 +4,11 @@
 --
 -- hash: 9dd8efd2e45c2898fb76a533380ee709713ad59d98865274345e6eac9e30c25b
 
-name:           godot-haskell-plugin
+name:           simula
 version:        0.1.0.0
-description:    Please see the README on Github at <https://github.com/KaneTW/godot-haskell-plugin#readme>
-homepage:       https://github.com/KaneTW/godot-haskell-plugin#readme
-bug-reports:    https://github.com/KaneTW/godot-haskell-plugin/issues
+description:    Please see the README on Github at <https://github.com/SimulaVR/Simula#readme>
+homepage:       https://github.com/SimulaVR/Simula#readme
+bug-reports:    https://github.com/SimulaVR/Simula/issues
 author:         David Kraeutmann
 maintainer:     kane@kane.cx
 copyright:      2018 David Kraeutmann
@@ -23,7 +23,7 @@ extra-source-files:
 
 source-repository head
   type: git
-  location: https://github.com/KaneTW/godot-haskell-plugin
+  location: https://github.com/SimulaVR/Simula
 
 flag no-tracking
   default:     False
@@ -45,7 +45,6 @@ library
     , text
     , vector
     , stm
-    , simula-wayland
     , containers
     , unix
     , clock
@@ -89,7 +88,7 @@ library
   ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates
 
 
-foreign-library godot-haskell-plugin
+foreign-library simula
   type: native-shared
   if os(Windows)
     options: standalone
@@ -102,7 +101,7 @@ foreign-library godot-haskell-plugin
   build-depends:
      base >=4.12 && <5
     , godot-haskell
-    , godot-haskell-plugin
+    , simula
     , linear
     , text
     , vector
