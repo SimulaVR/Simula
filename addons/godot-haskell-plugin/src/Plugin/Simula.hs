@@ -7,7 +7,6 @@ import           Plugin.Imports
 import           Plugin.Input
 import           Plugin.Input.Grab
 import           Plugin.SimulaController
-import           Plugin.WestonSurfaceSprite
 import           Plugin.VR
 
 import           Godot.Core.GodotGlobalConstants
@@ -120,16 +119,14 @@ onButton self gsc button pressed =
 
     _ -> do
       let rc = _gscRayCast gsc
-      whenM (G.is_colliding rc) $
-        G.get_collider rc
-          >>= tryObjectCast @GodotWestonSurfaceSprite
-          >>= maybe (return ()) (onSpriteInput rc)
+      pointerWindow rc
+        >>= maybe (return ()) (onSpriteInput rc)
  where
   gst = _sGrabState self
   onSpriteInput rc sprite =
     G.get_collision_point rc >>= case button of
-      OVR_Button_Trigger -> processClickEvent sprite (Button pressed BUTTON_LEFT)
-      OVR_Button_AppMenu -> processClickEvent sprite (Button pressed BUTTON_RIGHT)
+      OVR_Button_Trigger -> flip (pointerEvent (Click pressed BUTTON_LEFT)) sprite
+      OVR_Button_AppMenu -> flip (pointerEvent (Click pressed BUTTON_RIGHT)) sprite
       OVR_Button_Grip    -> const $
         readTVarIO gst
           >>= processGrabEvent gsc (Just sprite) pressed
