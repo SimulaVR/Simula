@@ -68,9 +68,6 @@ library
       Plugin
       Plugin.Imports
       Plugin.Pointer
-      Plugin.WestonSurfaceTexture
-      Plugin.WestonSurfaceSprite
-      Plugin.Weston
       Plugin.Window
       Plugin.Input
       Plugin.Input.Grab
