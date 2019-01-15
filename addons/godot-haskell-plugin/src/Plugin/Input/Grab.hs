@@ -6,21 +6,20 @@ import qualified Godot.Methods                 as G
 
 import           Plugin.Imports
 import           Plugin.SimulaController
-import           Plugin.WestonSurfaceSprite
 
 
 data GrabState
   = NoGrab
-  | Manipulating (GodotSimulaController, GodotWestonSurfaceSprite)
+  | Manipulating (GodotSimulaController, GodotCollisionObject)
   | ManipulatingDual
-      (GodotSimulaController, GodotWestonSurfaceSprite)
-      (GodotSimulaController, GodotWestonSurfaceSprite)
-  | Resizing (GodotSimulaController, GodotSimulaController) GodotWestonSurfaceSprite Float -- dist
+      (GodotSimulaController, GodotCollisionObject)
+      (GodotSimulaController, GodotCollisionObject)
+  | Resizing (GodotSimulaController, GodotSimulaController) GodotCollisionObject Float -- dist
 
 
 processGrabEvent
   :: GodotSimulaController
-  -> Maybe GodotWestonSurfaceSprite
+  -> Maybe GodotCollisionObject
   -> Bool
   -> GrabState
   -> IO GrabState
@@ -35,7 +34,7 @@ processGrabEvent gsc maybeWindow pressed = \case
       Just window
         | gsc == gsc1 -> NoGrab <$ putStrLn
           "Tried to press with the same controller without releasing"
-        | window == curWindow -> startResize gsc1 gsc window
+        | asObj window == asObj curWindow -> startResize gsc1 gsc window
         | -- Second controller, same window
           otherwise -> return $ ManipulatingDual ct1 (gsc, window)
       Nothing -> return NoGrab
