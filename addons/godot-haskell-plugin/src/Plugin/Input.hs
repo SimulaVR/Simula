@@ -69,18 +69,18 @@ processKeyEvent ptrWldp ptrKbd evk = do
 
   where
     wlrSendModifiersAndKey ptrWldp ptrKbd evk = do
-      x11Code <- get_raw_keycode evk
-      let code = x11Code - 8 -- see weston-3 => libweston/compositor-x11.c#L1357 
-      serial <- wl_display_next_serial wldp
-      weston_keyboard_send_modifiers kbd serial mods mods 0 mods
-
-      time <- getTime Realtime
-      let msec = fromIntegral $ toNanoSecs time `div` 1000000
-      weston_keyboard_send_key kbd msec (fromIntegral code) (toState pressed)
-
       print "wlrSendModifiers unimplemented"
-    toState pressed | pressed = WlKeyboardKeyStatePressed
-                    | otherwise = WlKeyboardKeyStateReleased
+      -- x11Code <- get_raw_keycode evk
+      -- let code = x11Code - 8 -- see weston-3 => libweston/compositor-x11.c#L1357 
+      -- serial <- wl_display_next_serial wldp
+      -- weston_keyboard_send_modifiers kbd serial mods mods 0 mods
+
+      -- time <- getTime Realtime
+      -- let msec = fromIntegral $ toNanoSecs time `div` 1000000
+      -- weston_keyboard_send_key kbd msec (fromIntegral code) (toState pressed)
+
+    -- toState pressed | pressed = WlKeyboardKeyStatePressed
+    --                 | otherwise = WlKeyboardKeyStateReleased
 
 setInputHandled :: (GodotNode :< a) => a -> IO ()
 setInputHandled self = do
