@@ -45,7 +45,7 @@ library
     , text
     , vector
     , stm
-    , simula-wayland
+--    , simula-wayland
     , containers
     , unix
     , clock
@@ -62,21 +62,25 @@ library
     , uuid
     , time
     , iso8601-time
+    , raw-strings-qq
+    , inline-c
+    , inline-c-cpp
 
   exposed-modules:
       Telemetry
       Plugin
       Plugin.Imports
       Plugin.Pointer
-      Plugin.WestonSurfaceTexture
-      Plugin.WestonSurfaceSprite
-      Plugin.Weston
+      Plugin.WlrootsSurfaceTexture
+      Plugin.WlrootsSurfaceSprite
+      Plugin.Wlroots
       Plugin.Input
       Plugin.Input.Grab
       Plugin.Input.Telekinesis
       Plugin.SimulaController
       Plugin.Simula
       Plugin.VR
+      Plugin.WaylandTypes
 
   default-language: Haskell2010
   default-extensions:

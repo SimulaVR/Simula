@@ -11,8 +11,7 @@ import qualified Godot.Gdnative.Internal.Api as Api
 import           Foreign
 import           Foreign.C
 
-import           Simula.Weston
-import           Simula.WaylandServer
+import           Plugin.WaylandTypes
 
 import           System.IO.Unsafe
 
@@ -42,14 +41,9 @@ instance Method "get_raw_keycode" GodotInputEventKey (IO Int) where
                    len
                    >>= \ (err, res) -> throwIfErr err >> fromGodotVariant res)
 
-processKeyEvent :: WlDisplay -> WestonKeyboard -> GodotInputEventKey -> IO ()
-processKeyEvent wldp kbd evk = do
+processKeyEvent :: (Ptr C'WlDisplay) -> (Ptr C'WlrKeyboard) -> GodotInputEventKey -> IO ()
+processKeyEvent ptrWldp ptrKbd evk = do
   whenM (withGodotMethodBind bindInputEventKey_get_raw_keycode $ \ptr -> return $ ptr == coerce nullPtr) $ error "You need a patched Godot version to run this"
-  x11Code <- get_raw_keycode evk
-  let code = x11Code - 8 -- see weston-3 => libweston/compositor-x11.c#L1357 
-
-  serial <- wl_display_next_serial wldp
-
   altPressed <- fromEnum <$> G.get_alt evk
   shiftPressed <- fromEnum <$> G.get_shift evk
   ctrlPressed <- fromEnum <$> G.get_control evk
@@ -70,13 +64,21 @@ processKeyEvent wldp kbd evk = do
   let lockValue = _ -- need to store lock values!
   weston_keyboard_set_locks kbd lockMask lockValue
 -}
-  weston_keyboard_send_modifiers kbd serial mods mods 0 mods
-
-  time <- getTime Realtime
-  let msec = fromIntegral $ toNanoSecs time `div` 1000000
-  weston_keyboard_send_key kbd msec (fromIntegral code) (toState pressed)
+  wlrSendModifiersAndKey ptrWldp ptrKbd evk
+  return ()
 
   where
+    wlrSendModifiersAndKey ptrWldp ptrKbd evk = do
+      x11Code <- get_raw_keycode evk
+      let code = x11Code - 8 -- see weston-3 => libweston/compositor-x11.c#L1357 
+      serial <- wl_display_next_serial wldp
+      weston_keyboard_send_modifiers kbd serial mods mods 0 mods
+
+      time <- getTime Realtime
+      let msec = fromIntegral $ toNanoSecs time `div` 1000000
+      weston_keyboard_send_key kbd msec (fromIntegral code) (toState pressed)
+
+      print "wlrSendModifiers unimplemented"
     toState pressed | pressed = WlKeyboardKeyStatePressed
                     | otherwise = WlKeyboardKeyStateReleased
 
