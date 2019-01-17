@@ -93,7 +93,12 @@ library
       TypeApplications
       TypeOperators
   ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code
-
+  -- Unclear if this is actually needed:
+  pkgconfig-depends:
+      wlroots
+    , wayland-server
+    , xkbcommon
+    , udev
 
 foreign-library godot-haskell-plugin
   type: native-shared

@@ -13,6 +13,9 @@ pkgs.haskell.lib.buildStackProject {
                              zlib
                              git
                              godot
+                             xorg.libX11
+                             udev
+                           # xdg_utils
                           ];
 
   LANG = "en_US.UTF-8";
