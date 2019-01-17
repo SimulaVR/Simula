@@ -6,21 +6,21 @@ import qualified Godot.Methods                 as G
 
 import           Plugin.Imports
 import           Plugin.SimulaController
-import           Plugin.WestonSurfaceSprite
+import           Plugin.WlrootsSurfaceSprite
 
 
 data GrabState
   = NoGrab
-  | Manipulating (GodotSimulaController, GodotWestonSurfaceSprite)
+  | Manipulating (GodotSimulaController, GodotWlrootsSurfaceSprite)
   | ManipulatingDual
-      (GodotSimulaController, GodotWestonSurfaceSprite)
-      (GodotSimulaController, GodotWestonSurfaceSprite)
-  | Resizing (GodotSimulaController, GodotSimulaController) GodotWestonSurfaceSprite Float -- dist
+      (GodotSimulaController, GodotWlrootsSurfaceSprite)
+      (GodotSimulaController, GodotWlrootsSurfaceSprite)
+  | Resizing (GodotSimulaController, GodotSimulaController) GodotWlrootsSurfaceSprite Float -- dist
 
 
 processGrabEvent
   :: GodotSimulaController
-  -> Maybe GodotWestonSurfaceSprite
+  -> Maybe GodotWlrootsSurfaceSprite
   -> Bool
   -> GrabState
   -> IO GrabState

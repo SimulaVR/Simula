@@ -19,7 +19,7 @@ import qualified Data.Text                     as T
 import           Linear
 
 import           Plugin.Imports
-import           Plugin.WestonSurfaceSprite
+import           Plugin.WlrootsSurfaceSprite
 import           Plugin.Input.Telekinesis
 import           Plugin.Pointer
 
@@ -31,7 +31,6 @@ import qualified Godot.Methods                 as G
 import           Foreign ( deRefStablePtr
                          , castPtrToStablePtr
                          )
-
 
 data GodotSimulaController = GodotSimulaController
   { _gscObj     :: GodotObject
@@ -119,11 +118,11 @@ isButtonPressed btnId gsc = do
 
 
 -- | Get the window pointed at if any.
-pointerWindow :: GodotSimulaController -> IO (Maybe GodotWestonSurfaceSprite)
+pointerWindow :: GodotSimulaController -> IO (Maybe GodotWlrootsSurfaceSprite)
 pointerWindow gsc = do
   isColliding <- G.is_colliding $ _gscRayCast gsc
   if isColliding
-    then G.get_collider (_gscRayCast gsc) >>= tryObjectCast @GodotWestonSurfaceSprite
+    then G.get_collider (_gscRayCast gsc) >>= tryObjectCast @GodotWlrootsSurfaceSprite
     else return Nothing
 
 

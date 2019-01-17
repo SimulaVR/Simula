@@ -7,7 +7,7 @@ import           Plugin.Imports
 import           Plugin.Input
 import           Plugin.Input.Grab
 import           Plugin.SimulaController
-import           Plugin.WestonSurfaceSprite
+import           Plugin.WlrootsSurfaceSprite
 import           Plugin.VR
 
 import           Godot.Core.GodotGlobalConstants
@@ -71,9 +71,9 @@ ready self _ = do
  where
   addCompositorNode :: IO ()
   addCompositorNode = do
-    gwc <- "res://addons/godot-haskell-plugin/WestonCompositor.gdns"
+    gwc <- "res://addons/godot-haskell-plugin/WlrootsCompositor.gdns"
       & unsafeNewNS GodotSpatial "Spatial" []
-    G.set_name gwc =<< toLowLevel "Weston"
+    G.set_name gwc =<< toLowLevel "Wlroots"
     G.add_child self (asObj gwc) True
 
   connectController :: GodotSimulaController -> IO ()
@@ -122,7 +122,7 @@ onButton self gsc button pressed =
       let rc = _gscRayCast gsc
       whenM (G.is_colliding rc) $
         G.get_collider rc
-          >>= tryObjectCast @GodotWestonSurfaceSprite
+          >>= tryObjectCast @GodotWlrootsSurfaceSprite
           >>= maybe (return ()) (onSpriteInput rc)
  where
   gst = _sGrabState self

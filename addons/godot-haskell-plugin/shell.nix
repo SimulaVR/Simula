@@ -4,16 +4,15 @@ pkgs.haskell.lib.buildStackProject {
   name = "simula-godot";
   inherit ghc;
   buildInputs = with pkgs; [ 
-                             mesa
-                             pkgconfig
+                             libGL
                              xorg.pixman
                              wayland-protocols
                              wayland
                              weston
-                             xorg.libX11 # possibly not needed
                              libxkbcommon
-                             git
                              zlib
+                             git
+                             godot
                           ];
 
   LANG = "en_US.UTF-8";

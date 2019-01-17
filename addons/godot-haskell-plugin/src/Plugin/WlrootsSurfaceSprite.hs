@@ -3,19 +3,19 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Plugin.WestonSurfaceSprite
-  ( GodotWestonSurfaceSprite(..)
-  , newGodotWestonSurfaceSprite
-  , setWestonSurfaceTexture
-  , getWestonSurfaceTexture
-  , updateWestonSurfaceSprite
+module Plugin.WlrootsSurfaceSprite
+  ( GodotWlrootsSurfaceSprite(..)
+  , newGodotWlrootsSurfaceSprite
+  , setWlrootsSurfaceTexture
+  , getWlrootsSurfaceTexture
+  , updateWlrootsSurfaceSprite
   , spriteShouldMove, setSpriteShouldMove
   , getSprite
   , InputEventType(..)
   , processClickEvent
   ) where
 
-import Simula.Weston
+import Plugin.WaylandTypes
 
 import Control.Monad
 import Data.Coerce
@@ -29,28 +29,28 @@ import qualified Godot.Core.GodotRigidBody   as RigidBody
 import           Godot.Gdnative.Internal.Api
 import qualified Godot.Methods               as G
 
-import Plugin.WestonSurfaceTexture
+import Plugin.WlrootsSurfaceTexture
 
 import Foreign
 
-data GodotWestonSurfaceSprite = GodotWestonSurfaceSprite
+data GodotWlrootsSurfaceSprite = GodotWlrootsSurfaceSprite
   { _gwssObj     :: GodotObject
   , _gwssShouldMove :: TVar Bool
   , _gwssSprite :: TVar GodotSprite3D
   , _gwssShape :: TVar GodotBoxShape
-  , _gwssTexture :: TVar GodotWestonSurfaceTexture
-  , _gwssSeat :: TVar WestonSeat
+  , _gwssTexture :: TVar GodotWlrootsSurfaceTexture
+  , _gwssSeat :: TVar (Ptr C'WlrSeat)
   }
 
-instance Eq GodotWestonSurfaceSprite where
+instance Eq GodotWlrootsSurfaceSprite where
   (==) = (==) `on` _gwssObj
 
-instance GodotClass GodotWestonSurfaceSprite where
-  godotClassName = "WestonSurfaceSprite"
+instance GodotClass GodotWlrootsSurfaceSprite where
+  godotClassName = "WlrootsSurfaceSprite"
 
-instance ClassExport GodotWestonSurfaceSprite where
+instance ClassExport GodotWlrootsSurfaceSprite where
   classInit obj =
-    GodotWestonSurfaceSprite obj
+    GodotWlrootsSurfaceSprite obj
                   <$> atomically (newTVar True)
                   <*> atomically (newTVar (error "didn't init sprite")) <*> atomically (newTVar (error "didn't init shape"))
                   <*> atomically (newTVar (error "didn't init texture")) <*> atomically (newTVar (error "didn't init seat"))
@@ -60,13 +60,13 @@ instance ClassExport GodotWestonSurfaceSprite where
     , GodotMethod NoRPC "_ready" ready
     ]
 
-instance HasBaseClass GodotWestonSurfaceSprite where
-  type BaseClass GodotWestonSurfaceSprite = GodotRigidBody
-  super (GodotWestonSurfaceSprite obj _ _ _ _ _ ) = GodotRigidBody obj
+instance HasBaseClass GodotWlrootsSurfaceSprite where
+  type BaseClass GodotWlrootsSurfaceSprite = GodotRigidBody
+  super (GodotWlrootsSurfaceSprite obj _ _ _ _ _ ) = GodotRigidBody obj
 
-newGodotWestonSurfaceSprite :: GodotWestonSurfaceTexture -> WestonSeat -> IO GodotWestonSurfaceSprite
-newGodotWestonSurfaceSprite tex seat = do
-  gwss <- "res://addons/godot-haskell-plugin/WestonSurfaceSprite.gdns"
+newGodotWlrootsSurfaceSprite :: GodotWlrootsSurfaceTexture -> (Ptr C'WlrSeat) -> IO GodotWlrootsSurfaceSprite
+newGodotWlrootsSurfaceSprite tex seat = do
+  gwss <- "res://addons/godot-haskell-plugin/WlrootsSurfaceSprite.gdns"
     & unsafeNewNS id "Object" []
     >>= godot_nativescript_get_userdata
     >>= deRefStablePtr . castPtrToStablePtr
@@ -86,25 +86,25 @@ newGodotWestonSurfaceSprite tex seat = do
   atomically $ writeTVar (_gwssSeat gwss) seat
   return gwss
 
-setWestonSurfaceTexture :: GodotWestonSurfaceSprite -> GodotWestonSurfaceTexture -> IO ()
-setWestonSurfaceTexture gwss tex = do
+setWlrootsSurfaceTexture :: GodotWlrootsSurfaceSprite -> GodotWlrootsSurfaceTexture -> IO ()
+setWlrootsSurfaceTexture gwss tex = do
   atomically $ writeTVar (_gwssTexture gwss) tex
   sprite <- atomically $ readTVar (_gwssSprite gwss)
   G.set_texture sprite (safeCast tex)
   sizeChanged gwss
 
-getWestonSurfaceTexture :: GodotWestonSurfaceSprite -> IO GodotWestonSurfaceTexture
-getWestonSurfaceTexture gwss = atomically $ readTVar (_gwssTexture gwss)
+getWlrootsSurfaceTexture :: GodotWlrootsSurfaceSprite -> IO GodotWlrootsSurfaceTexture
+getWlrootsSurfaceTexture gwss = atomically $ readTVar (_gwssTexture gwss)
 
-updateWestonSurfaceSprite :: GodotWestonSurfaceSprite -> IO ()
-updateWestonSurfaceSprite gwss = do
+updateWlrootsSurfaceSprite :: GodotWlrootsSurfaceSprite -> IO ()
+updateWlrootsSurfaceSprite gwss = do
   sprite <- atomically $ readTVar (_gwssSprite gwss)
   tex <- atomically $ readTVar (_gwssTexture gwss)
-  updateWestonSurfaceTexture tex
+  updateWlrootsSurfaceTexture tex -- not implemented yet
   G.set_texture sprite (safeCast tex)
   sizeChanged gwss
 
-sizeChanged :: GodotWestonSurfaceSprite -> IO ()
+sizeChanged :: GodotWlrootsSurfaceSprite -> IO ()
 sizeChanged gwss = do
   sprite <- atomically $ readTVar (_gwssSprite gwss)
   aabb <- G.get_aabb sprite
@@ -115,10 +115,10 @@ sizeChanged gwss = do
 
   G.set_extents shape size'
 
-getSprite :: GodotWestonSurfaceSprite -> IO GodotSprite3D
+getSprite :: GodotWlrootsSurfaceSprite -> IO GodotSprite3D
 getSprite gwss = atomically $ readTVar (_gwssSprite gwss)
 
-spriteShouldMove :: GodotWestonSurfaceSprite -> IO Bool
+spriteShouldMove :: GodotWlrootsSurfaceSprite -> IO Bool
 spriteShouldMove gwss = do
   en <- atomically $ readTVar (_gwssShouldMove gwss)
   if en then do
@@ -130,15 +130,15 @@ spriteShouldMove gwss = do
     else return False
 
 
-setSpriteShouldMove :: GodotWestonSurfaceSprite -> Bool -> IO ()
+setSpriteShouldMove :: GodotWlrootsSurfaceSprite -> Bool -> IO ()
 setSpriteShouldMove gwss = atomically . writeTVar (_gwssShouldMove gwss)
 
-ready :: GFunc GodotWestonSurfaceSprite
+ready :: GFunc GodotWlrootsSurfaceSprite
 ready self _ = do
   G.set_mode self RigidBody.MODE_KINEMATIC
   toLowLevel VariantNil
 
-inputEvent :: GFunc GodotWestonSurfaceSprite
+inputEvent :: GFunc GodotWlrootsSurfaceSprite
 inputEvent self args = do
   case toList args of
     [_cam, evObj, clickPosObj, _clickNormal, _shapeIdx] ->  do
@@ -153,7 +153,7 @@ data InputEventType
   = Motion
   | Button Bool Int
 
-processInputEvent :: GodotWestonSurfaceSprite -> GodotObject -> GodotVector3 -> IO ()
+processInputEvent :: GodotWlrootsSurfaceSprite -> GodotObject -> GodotVector3 -> IO ()
 processInputEvent gwss ev clickPos = do
   whenM (ev `isClass` "InputEventMouseMotion") $ processClickEvent gwss Motion clickPos
   whenM (ev `isClass` "InputEventMouseButton") $ do
@@ -162,8 +162,9 @@ processInputEvent gwss ev clickPos = do
     button <- G.get_button_index ev'
     processClickEvent gwss (Button pressed button) clickPos
 
-processClickEvent :: GodotWestonSurfaceSprite -> InputEventType -> GodotVector3 -> IO ()
-processClickEvent gwss evt clickPos = do
+processClickEvent :: GodotWlrootsSurfaceSprite -> InputEventType -> GodotVector3 -> IO ()
+processClickEvent gwss evt clickPos = do putStrLn "processClickEvent not yet implemented."
+  {-
   lpos <- G.to_local gwss clickPos >>= fromLowLevel
   sprite <- atomically $ readTVar (_gwssSprite gwss)
   aabb <- G.get_aabb sprite
@@ -218,3 +219,4 @@ processClickEvent gwss evt clickPos = do
     toWestonButton BUTTON_WHEEL_UP = 0x151
     toWestonButton BUTTON_WHEEL_DOWN = 0x150
     toWestonButton _ = 0x110
+   -}

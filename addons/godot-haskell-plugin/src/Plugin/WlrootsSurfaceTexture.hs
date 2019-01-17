@@ -3,13 +3,12 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Plugin.WestonSurfaceTexture 
-  ( GodotWestonSurfaceTexture(..)
-  , newGodotWestonSurfaceTexture, setWestonSurface
-  , updateWestonSurfaceTexture) where
+module Plugin.WlrootsSurfaceTexture 
+  ( GodotWlrootsSurfaceTexture(..)
+  , newGodotWlrootsSurfaceTexture, setWlrSurface
+  , updateWlrootsSurfaceTexture) where
 
-import Simula.WaylandServer
-import Simula.Weston
+import Plugin.WaylandTypes
 
 import Control.Monad
 import Data.Coerce
@@ -25,22 +24,22 @@ import qualified Godot.Core.GodotImage as Image
 import Foreign
 
 
-data GodotWestonSurfaceTexture = GodotWestonSurfaceTexture
+data GodotWlrootsSurfaceTexture = GodotWlrootsSurfaceTexture
   { _gwstObj      :: GodotObject
-  , _gwstSurface :: TVar WestonSurface
-  , _gwstView :: TVar WestonView
+  , _gwstSurface :: TVar (Ptr C'WlrSurface)
+  , _gwstView :: TVar (Ptr C'WlrView)
   , _gwstImage :: TVar GodotImage
   , _gwstImageData :: TVar GodotPoolByteArray
   }
 
-instance GodotClass GodotWestonSurfaceTexture where
-  godotClassName = "WestonSurfaceTexture"
+instance GodotClass GodotWlrootsSurfaceTexture where
+  godotClassName = "WlrootsSurfaceTexture"
 
-instance ClassExport GodotWestonSurfaceTexture where
+instance ClassExport GodotWlrootsSurfaceTexture where
   classInit obj = do
     img <- unsafeInstance GodotImage "Image"
     imgdt <- godot_pool_byte_array_new
-    GodotWestonSurfaceTexture obj
+    GodotWlrootsSurfaceTexture obj
       <$> atomically (newTVar undefined)
       <*> atomically (newTVar undefined)
       <*> atomically (newTVar img)
@@ -48,24 +47,26 @@ instance ClassExport GodotWestonSurfaceTexture where
   classExtends = "ImageTexture"
   classMethods = []
 
-instance HasBaseClass GodotWestonSurfaceTexture where
-  type BaseClass GodotWestonSurfaceTexture = GodotImageTexture         
-  super (GodotWestonSurfaceTexture obj _ _ _ _) = GodotImageTexture obj
+instance HasBaseClass GodotWlrootsSurfaceTexture where
+  type BaseClass GodotWlrootsSurfaceTexture = GodotImageTexture         
+  super (GodotWlrootsSurfaceTexture obj _ _ _ _) = GodotImageTexture obj
 
-newGodotWestonSurfaceTexture :: IO GodotWestonSurfaceTexture
-newGodotWestonSurfaceTexture = do
-  ret <- unsafeNewNS id "Object" [] "res://addons/godot-haskell-plugin/WestonSurfaceTexture.gdns"
+newGodotWlrootsSurfaceTexture :: IO GodotWlrootsSurfaceTexture
+newGodotWlrootsSurfaceTexture = do
+  ret <- unsafeNewNS id "Object" [] "res://addons/godot-haskell-plugin/WlrootsSurfaceTexture.gdns"
   objPtr <- godot_nativescript_get_userdata ret
   deRefStablePtr $ castPtrToStablePtr objPtr
 
-setWestonSurface :: GodotWestonSurfaceTexture -> WestonSurface -> WestonView -> IO ()
-setWestonSurface gws ws view = do 
+setWlrSurface :: GodotWlrootsSurfaceTexture -> (Ptr C'WlrSurface) -> (Ptr C'WlrView) -> IO ()
+setWlrSurface gws ws view = do 
   atomically $ writeTVar (_gwstSurface gws) ws
   atomically $ writeTVar (_gwstView gws) view
-  updateWestonSurfaceTexture gws
+  updateWlrootsSurfaceTexture gws
 
-updateWestonSurfaceTexture :: GodotWestonSurfaceTexture -> IO ()
-updateWestonSurfaceTexture gws = do
+updateWlrootsSurfaceTexture :: GodotWlrootsSurfaceTexture -> IO ()
+updateWlrootsSurfaceTexture gws = do
+  putStrLn "updateWlrootsSurfaceTexture not yet implemented."
+  {-
   ws <- atomically $ readTVar (_gwstSurface gws)
 
   buffer <- westonSurfaceBuffer ws
@@ -112,11 +113,9 @@ updateWestonSurfaceTexture gws = do
       G.create_from_data img width height False fmt byteArray
       G.create_from_image gws img (7 .|. 16 :: Int)
       godot_pool_byte_array_destroy byteArray
-      
-      return ()
+     -}
 
   where
-    asGodotFormat shmFmt = case shmFmt of
-      WlShmFormatArgb8888 -> Image.FORMAT_RGBA8
-      _ -> error $ "Unknown SHM format " ++ show shmFmt
-  
+    -- asGodotFormat shmFmt = case shmFmt of
+    --   WlShmFormatArgb8888 -> Image.FORMAT_RGBA8
+    --   _ -> error $ "Unknown SHM format " ++ show shmFmt

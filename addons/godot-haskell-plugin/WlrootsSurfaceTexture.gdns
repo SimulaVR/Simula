@@ -4,6 +4,6 @@
 
 [resource]
 
-class_name = "WestonSurfaceSprite"
+class_name = "WlrootsSurfaceTexture"
 library = ExtResource( 1 )
 _sections_unfolded = [ "Resource" ]
