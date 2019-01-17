@@ -24,6 +24,8 @@ import           Control.Concurrent.STM.TVar
 import           Data.Maybe
 import qualified Data.Map.Strict as M
 
+import Foreign
+
 import Plugin.WaylandTypes
 import Plugin.WlrootsSurfaceSprite
 

@@ -6,9 +6,9 @@ pkgs.haskell.lib.buildStackProject {
   buildInputs = with pkgs; [ 
                              libGL
                              xorg.pixman
-                             wayland-protocols
-                             wayland
-                             weston
+                             (callPackage ./wayland.nix { } )
+                             (callPackage ./wayland-protocols.nix { } )
+                             (callPackage ./wlroots.nix { } )
                              libxkbcommon
                              zlib
                              git

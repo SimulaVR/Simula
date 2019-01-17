@@ -92,7 +92,7 @@ library
       PatternSynonyms
       TypeApplications
       TypeOperators
-  ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates
+  ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code
 
 
 foreign-library godot-haskell-plugin
@@ -104,7 +104,7 @@ foreign-library godot-haskell-plugin
       godot_headers
   hs-source-dirs:
       flib
-  ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -threaded
+  ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -threaded -fobject-code
   build-depends:
      base >=4.12 && <5
     , godot-haskell

@@ -6,9 +6,9 @@ import           Godot.Extra.Register
 
 import           Plugin.Simula
 import           Plugin.SimulaController
-import           Plugin.Weston
-import           Plugin.WestonSurfaceSprite
-import           Plugin.WestonSurfaceTexture
+import           Plugin.Wlroots
+import           Plugin.WlrootsSurfaceSprite
+import           Plugin.WlrootsSurfaceTexture
 
 
 registerClasses :: GdnativeHandle -> IO ()
@@ -16,6 +16,6 @@ registerClasses desc = do
   let reg constr = registerClass $ RegClass desc constr
   reg $ classInit @GodotSimula
   reg $ classInit @GodotSimulaController
-  reg $ classInit @GodotWestonCompositor
-  reg $ classInit @GodotWestonSurfaceSprite
-  reg $ classInit @GodotWestonSurfaceTexture
+  reg $ classInit @GodotWlrootsCompositor
+  reg $ classInit @GodotWlrootsSurfaceSprite
+  reg $ classInit @GodotWlrootsSurfaceTexture

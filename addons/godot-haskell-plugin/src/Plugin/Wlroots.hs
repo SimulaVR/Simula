@@ -38,8 +38,8 @@ import Telemetry
 
 data GodotWlrootsCompositor = GodotWlrootsCompositor
   { _gwcObj      :: GodotObject
-  , _gwcCompositor :: TVar (Ptr C'WlrootsCompositor)
-  , _gwcWlDisplay :: TVar WlDisplay
+  , _gwcCompositor :: TVar (Ptr C'WlrCompositor)
+  , _gwcWlDisplay :: TVar (Ptr C'WlDisplay)
   , _gwcSurfaces :: TVar (M.Map (Ptr C'WlrSurface) GodotWlrootsSurfaceSprite)
   , _gwcOutput :: TVar (Ptr C'WlrOutput)
   , _gwcNormalLayer :: TVar (Ptr C'WlrLayer)
@@ -78,7 +78,7 @@ startBaseCompositor compositor = do
   startTelemetry (_gwcSurfaces compositor)
 
 startBaseThread :: GodotWlrootsCompositor -> IO ()
-startBaseThread compositor = void $ forkOS $ do
+startBaseThread compositor = Control.Monad.void $ forkOS $ do
   putStrLn "startWlrBaseThread has not been implemented yet."
   -- prevDisplay <- getEnv "DISPLAY"
 
@@ -238,7 +238,7 @@ moveToUnoccupied gwc gwss = do
 
   G.translate gwss =<< toLowLevel newPos
 
-getSeat :: GodotWlrootsCompositor -> IO WlrootsSeat
+getSeat :: GodotWlrootsCompositor -> IO (Ptr C'WlrSeat)
 getSeat gwc = undefined
   -- do (seat:_) <- atomically (readTVar (_gwcCompositor gwc)) >>= westonCompositorSeats
   --    return seat
@@ -252,11 +252,11 @@ input self args = do
         -- dsp <- readTVarIO (_gwcWlDisplay self)
         -- kbd <- getKeyboard self
         -- processKeyEvent dsp kbd evk
-        putStrLn "WlrInput handling not yet implemented.".
+        putStrLn "WlrInput handling not yet implemented."
         setInputHandled self
 
       Nothing  -> return () -- not a key
   toLowLevel VariantNil
-  where
-    getKeyboard :: GodotWlrootsCompositor -> IO WlrootsKeyboard
-    getKeyboard gwc = getSeat gwc >>= weston_seat_get_keyboard
+  -- where
+    -- getKeyboard :: GodotWlrootsCompositor -> IO (Ptr C'WlrKeyboard)
+    -- getKeyboard gwc = getSeat gwc >>= weston_seat_get_keyboard
