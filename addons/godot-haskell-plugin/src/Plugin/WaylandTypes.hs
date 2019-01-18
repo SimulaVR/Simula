@@ -56,6 +56,13 @@ data C'WlrDesktopApi
 data C'WlrLayer
 data C'WlrBackend
 data C'WlrButton
+data C'WlEventLoop
+data C'WlListener
+
+
+-- typedef void(* wl_notify_func_t) (struct wl_listener *listener, void *data)
+type NotifyFuncT = (Ptr C'WlListener -> Ptr ())
+foreign import ccall "wrapper" mkNotifyFuncT :: NotifyFuncT -> IO (FunPtr NotifyFuncT)
 
 -- All C types are kept in an explicit marshalling table.
 initializeCppSimulaCtx = C.context $ Cpp.cppCtx <> Cpp.funCtx <> mempty {
@@ -72,6 +79,8 @@ initializeCppSimulaCtx = C.context $ Cpp.cppCtx <> Cpp.funCtx <> mempty {
   ,  (C.TypeName "wlr_layer", [t|C'WlrLayer|])
   ,  (C.TypeName "wlr_backend", [t|C'WlrBackend|])
   ,  (C.TypeName "wlr_button", [t|C'WlrButton|])
+  ,  (C.TypeName "wl_event_loop", [t|C'WlEventLoop|])
+--  ,  (C.TypeName "wl_notify_func_t", [t|C'NotifyFuncT|])
      -- (C.TypeName "wl_shm_format_argb8888", [t|C'WlShmFormatArgb8888|])
      -- (C.TypeName "wl_keyboard_key_state", [t|C'WlKeyboardKeyState|])
   ]

@@ -4,6 +4,9 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE TemplateHaskell #-}
+
 module Plugin.Wlroots (GodotWlrootsCompositor(..)) where
 
 import Plugin.WaylandTypes
@@ -35,13 +38,38 @@ import Foreign hiding (void)
 
 import Telemetry
 
+import qualified Language.C.Inline as C
+
+initializeCppSimulaCtx
+C.verbatim "#define WLR_USE_UNSTABLE"
+C.include "<wayland-server.h>"
+C.include "<wlr/backend.h>"
+C.include "<wlr/render/wlr_renderer.h>"
+C.include "<wlr/types/wlr_cursor.h>"
+C.include "<wlr/types/wlr_compositor.h>"
+C.include "<wlr/types/wlr_data_device.h>"
+C.include "<wlr/types/wlr_input_device.h>"
+C.include "<wlr/types/wlr_keyboard.h>"
+C.include "<wlr/types/wlr_matrix.h>"
+C.include "<wlr/types/wlr_output.h>"
+C.include "<wlr/types/wlr_output_layout.h>"
+C.include "<wlr/types/wlr_pointer.h>"
+C.include "<wlr/types/wlr_seat.h>"
+C.include "<wlr/types/wlr_xcursor_manager.h>"
+-- C.include "<wlr/types/wlr_xdg_shell.h>" -- nix presently lacks "xdg-shell-protocol.h"
+C.include "<wlr/util/log.h>"
+C.include "<xkbcommon/xkbcommon.h>"
+
+C.include "<wlr/backend/headless.h>"
 
 data GodotWlrootsCompositor = GodotWlrootsCompositor
   { _gwcObj      :: GodotObject
   , _gwcCompositor :: TVar (Ptr C'WlrCompositor)
   , _gwcWlDisplay :: TVar (Ptr C'WlDisplay)
+  , _gwcWlEventLoop :: TVar (Ptr C'WlEventLoop)
+  , _gwcBackEnd :: TVar (Ptr C'WlrBackend)
   , _gwcSurfaces :: TVar (M.Map (Ptr C'WlrSurface) GodotWlrootsSurfaceSprite)
-  , _gwcOutput :: TVar (Ptr C'WlrOutput)
+  , _gwcOutput :: TVar (Ptr C'WlrOutput) -- possibly needs to be (TVar [Ptr C'WlrOutput])
   , _gwcNormalLayer :: TVar (Ptr C'WlrLayer)
   }
 
@@ -51,6 +79,8 @@ instance GodotClass GodotWlrootsCompositor where
 instance ClassExport GodotWlrootsCompositor where
   classInit obj  = GodotWlrootsCompositor obj
     <$> atomically (newTVar undefined)
+    <*> atomically (newTVar undefined)
+    <*> atomically (newTVar undefined)
     <*> atomically (newTVar undefined)
     <*> atomically (newTVar mempty)
     <*> atomically (newTVar undefined)
@@ -64,8 +94,7 @@ instance ClassExport GodotWlrootsCompositor where
 
 instance HasBaseClass GodotWlrootsCompositor where
   type BaseClass GodotWlrootsCompositor = GodotSpatial
-  super (GodotWlrootsCompositor obj _ _ _ _ _) = GodotSpatial obj
-
+  super (GodotWlrootsCompositor obj _ _ _ _ _ _ _) = GodotSpatial obj
 
 ready :: GFunc GodotWlrootsCompositor
 ready compositor _ = do
@@ -79,138 +108,43 @@ startBaseCompositor compositor = do
 
 startBaseThread :: GodotWlrootsCompositor -> IO ()
 startBaseThread compositor = Control.Monad.void $ forkOS $ do
-  putStrLn "startWlrBaseThread has not been implemented yet."
-  -- prevDisplay <- getEnv "DISPLAY"
+  ptrWlDisplay <- [C.block| wl_display* {
+                      wl_display * display;
+                      display = wl_display_create();
+                      assert(display);
+                      return display;} |]
+  ptrWlEventLoop <- [C.block| wl_event_loop* {
+                        wl_event_loop * loop;
+                        loop = wl_display_get_event_loop($(wl_display *ptrWlDisplay));
+                        assert(loop);
+                        return wl_event_loop;} |]
+  ptrWlrBackend <- [C.block| wl_event_loop* {
+                        wlr_backend * backend;
+                        backend = wlr_headless_backend_create($(wl_display* ptrWlDisplay), NULL);
+                        assert(backend);
+                        return backend;} |]
+  -- TODO: Connect signals with their wl_notify_func_t
+          -- wl_list_init(&server.outputs);
+          -- server.new_output.notify = new_output_notify;
+          -- wl_signal_add(&server.backend->events.new_output, &server.new_output);
 
-  -- wldp  <- wl_display_create
-  -- wcomp <- weston_compositor_create wldp nullPtr
-  -- atomically $ writeTVar (_gwcCompositor compositor) wcomp
-  -- atomically $ writeTVar (_gwcWlDisplay compositor) wldp
-  -- westonCompositorSetRepaintMsec wcomp 1000
+          -- if (!wlr_backend_start(server.backend)) {
+          --         fprintf(stderr, "Failed to start backend\n");
+          --         wl_display_destroy(server.wl_display);
+          --         return 1;
+          -- }
+  [C.exp| void { wl_display_run($(wl_display* ptrWlDisplay)); } |]
+  [C.exp| void { wl_display_destroy($(wl_display* ptrWlDisplay)); } |]
+  putStrLn "DEBUG: startBaseThread complete."
+    where newOutputNotify :: (Ptr C'WlListener -> Ptr ())
+          newOutputNotify _ = undefined
 
-  -- setup_weston_log_handler
-  -- westonCompositorSetEmptyRuleNames wcomp
+          outputFrameNotify :: (Ptr C'WlListener -> Ptr ())
+          outputFrameNotify = undefined
 
-  -- --todo hack; make this into a proper withXXX function
-  -- res <- with (WlrootsHeadlessBackendConfig (WlrootsBackendConfig westonHeadlessBackendConfigVersion (sizeOf (undefined :: WlrootsHeadlessBackendConfig)))
-  --          False) $ weston_compositor_load_backend wcomp WlrootsBackendHeadless . castPtr
+          outputDestroyNotify :: (Ptr C'WlListener -> Ptr ())
+          outputDestroyNotify = undefined
 
-  -- when (res > 0) $ ioError $ userError "Error when loading backend"
-
-  -- socketName <- wl_display_add_socket_auto wldp
-  -- putStrLn $ "Socket: " ++ socketName
-  -- setEnv "WAYLAND_DISPLAY" socketName
-
-  -- mainLayer <- newWlrootsLayer wcomp
-  -- weston_layer_set_position mainLayer WlrootsLayerPositionNormal
-
-  -- atomically $ writeTVar (_gwcNormalLayer compositor) mainLayer
-
-
-  -- windowedApi <- weston_windowed_output_get_api wcomp
-
-  -- let outputPendingSignal = westonCompositorOutputPendingSignal wcomp
-  -- outputPendingPtr <- createNotifyFuncPtr (onOutputPending windowedApi)
-  -- addListenerToSignal outputPendingSignal outputPendingPtr
-
-  -- let outputCreatedSignal = westonCompositorOutputCreatedSignal wcomp
-  -- outputCreatedPtr <- createNotifyFuncPtr onOutputCreated
-  -- addListenerToSignal outputCreatedSignal outputCreatedPtr
-
-  -- --createFlushDamageFunc (onFlushDamage compositor) >>= setFlushDamageFunc wcomp
-
-  -- westonWindowedOutputCreate windowedApi wcomp "Godot"
-
-  -- output <- atomically $ readTVar (_gwcOutput compositor)
-
-  -- forkOS $ forever $ weston_output_schedule_repaint output >> threadDelay 1000
-
-  -- let api = defaultWlrootsDesktopApi
-  --       { apiSurfaceAdded   = onSurfaceCreated
-  --       , apiSurfaceRemoved = onSurfaceDestroyed
-  --       , apiCommitted      = onSurfaceCommit
-  --       }
-
-
-  -- westonDesktopCreate wcomp api nullPtr
-
-  -- seat <- newSeat wcomp "Godot"
-  -- weston_seat_init_pointer seat
-  -- weston_seat_init_keyboard seat (XkbKeymap nullPtr)
-
-  -- --installHandler sigUSR1 Ignore Nothing
-  -- wet_load_xwayland wcomp
-
-  -- -- Needs to be set to the original X display rather than
-  -- -- the new one for some reason, or it will crash.
-  -- setEnv "DISPLAY" prevDisplay
-
-  -- weston_compositor_wake wcomp
-  -- putStrLn "starting compositor"
-
-  -- -- weston-terminal will be our "launcher" until a real launcher is implemented.
-  -- -- HACK: Sleeping for 3 seconds avoids an extant bug that happens when launching an application too 
-  -- --       soon after a Simula starts
-  -- -- TODO: Create a generic queue for running commands using idle callback
-  -- wlDisplayAddIdleCallback wldp nullPtr (\_ -> callCommand "sleep 3 && weston-terminal &")
-
-  -- wl_display_run wldp
-
-  -- where
-  --   onOutputPending windowedApi _ outputPtr = do
-  --     putStrLn "output pending"
-  --     let output = WlrootsOutput $ castPtr outputPtr
-  --     weston_output_set_scale output 1
-  --     weston_output_set_transform output 0
-  --     westonWindowedOutputSetSize windowedApi output 1280 720
-  --     weston_output_enable output
-  --     return ()
-
-  --   onOutputCreated _ outputPtr = do
-  --     putStrLn "output created"
-  --     let output = WlrootsOutput $ castPtr outputPtr
-  --     atomically $ writeTVar (_gwcOutput compositor) output
-
-  --   onSurfaceCreated desktopSurface  _ = do
-  --     putStrLn "onSurfaceCreated"
-
-  --     surface <- weston_desktop_surface_get_surface desktopSurface
-  --     view'   <- weston_desktop_surface_create_view desktopSurface
-  --     output  <- atomically $ readTVar (_gwcOutput compositor)
-  --     layer   <- atomically $ readTVar (_gwcNormalLayer compositor)
-  --     westonViewSetOutput view' output
-  --     weston_layer_entry_insert (westonLayerViewList layer) (westonViewLayerEntry view')
-
-  --     gwst   <- newGodotWlrootsSurfaceTexture
-  --     setWlrootsSurface gwst surface view'
-  --     sprite <- newGodotWlrootsSurfaceSprite gwst =<< getSeat compositor
-  --     G.add_child compositor (safeCast sprite) True
-  --     atomically $ modifyTVar' (_gwcSurfaces compositor) (M.insert surface sprite)
-
-  --     putStrLn "onSurfaceCreated end"
-  --     return ()
-
-  --   onSurfaceDestroyed desktopSurface _ = do
-  --     putStrLn "onSurfaceDestroyed"
-  --     surface <- weston_desktop_surface_get_surface desktopSurface
-  --     maybeSprite <- M.lookup surface <$> atomically (readTVar (_gwcSurfaces compositor))
-  --     case maybeSprite of
-  --       Just sprite -> do
-  --         Api.godot_object_destroy (safeCast sprite)
-  --         atomically $ modifyTVar' (_gwcSurfaces compositor) (M.delete surface)
-  --       _ -> return ()
-  --     putStrLn "onSurfaceDestroyed end"
-  --     return ()
-
-  --   onSurfaceCommit desktopSurface _ _ _ = do
-  --     surface     <- weston_desktop_surface_get_surface desktopSurface
-  --     Just sprite <- M.lookup surface <$> atomically (readTVar (_gwcSurfaces compositor))
-
-  --     updateWlrootsSurfaceSprite sprite
-
-  --     whenM (spriteShouldMove sprite) $ do
-  --       setSpriteShouldMove sprite False
-  --       moveToUnoccupied compositor sprite
 
 -- TODO: check the origin plane?
 moveToUnoccupied :: GodotWlrootsCompositor -> GodotWlrootsSurfaceSprite -> IO ()

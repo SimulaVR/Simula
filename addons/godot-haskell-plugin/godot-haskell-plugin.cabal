@@ -120,3 +120,8 @@ foreign-library godot-haskell-plugin
   c-sources:
       cbits/flib.c
   default-language: Haskell2010
+  pkgconfig-depends:
+      wlroots
+    , wayland-server
+    , xkbcommon
+    , udev
