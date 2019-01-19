@@ -13,6 +13,8 @@ import           Data.UUID                                ( UUID
 import           Data.UUID.V1                             ( nextUUID )
 import           Dhall
 import           Dhall.Core                               ( pretty )
+import           Dhall.Format                             ( format )
+import           Dhall.Pretty                             ( CharacterSet(..) )
 import           System.Directory                         ( doesFileExist )
 
 
@@ -45,7 +47,9 @@ readConfig = do
   if exists then Just <$> input auto (pack cfgPath) else return Nothing
 
 writeConfig :: Config -> IO ()
-writeConfig = Data.Text.IO.writeFile cfgPath . toDhallSrc
+writeConfig cfg = do
+  Data.Text.IO.writeFile cfgPath $ toDhallSrc cfg
+  format Unicode (Just cfgPath)
 
 -- | Get user's UUID (non-nil, valid UUID only)
 getUUID :: IO (Maybe UUID)
