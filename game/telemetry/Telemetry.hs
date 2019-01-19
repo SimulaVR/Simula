@@ -1,11 +1,19 @@
-{-# LANGUAGE OverloadedStrings   #-}
+module Telemetry
+  ( startTelemetry
+  , getTelemetryEnabledStatus
+  , forkSendAppLaunchEvent
+  )
+where
 
-module Telemetry where
-
+import           Control.Concurrent
+import           Control.Concurrent.STM.TVar
 import           Data.Aeson
 import qualified Data.ByteString.Base64        as BSB64
 import qualified Data.ByteString.Lazy          as LBS
 import           Data.Semigroup                           ( (<>) )
+import           Data.Time.Clock
+import           Data.Time.ISO8601
+import           Data.UUID
 import           Network.HTTP.Client                      ( httpLbs
                                                           , method
                                                           , newManager
@@ -14,15 +22,8 @@ import           Network.HTTP.Client                      ( httpLbs
                                                           , requestHeaders
                                                           )
 import           Network.HTTP.Client.TLS                  ( tlsManagerSettings )
-import           Control.Concurrent
-import           System.Directory
-import           Data.UUID
-import           Data.UUID.V1
-import           Control.Monad
-import           Data.Time.Clock
-import           Data.Time.ISO8601
-import           Control.Concurrent.STM.TVar
-import           Data.Maybe
+import           Simula.Config
+import           Simula.Imports
 
 data Payload = Payload
                { numWindowsOpen :: TVar Int
@@ -35,30 +36,21 @@ mixPanelToken :: String
 mixPanelToken = "d893bae9548d8e678cef251fd81df486" :: String -- actual Simula token
 --            = "5ad417357e3a80fa426d272473d8dee4" :: String -- testing token
 
-getExistingOrNewUUID :: IO (UUID)
-getExistingOrNewUUID = do
-  exists          <- doesFileExist "./UUID"
-  maybeRandomUUID <- Data.UUID.V1.nextUUID
-  let randomUUID         = fromMaybe nil maybeRandomUUID
-  let randomUUIDToString = (Data.UUID.toString randomUUID)
-  unless exists $ appendFile "UUID" randomUUIDToString
-  strUUID <- readFile "./UUID"
-  let maybeUUID = Data.UUID.fromString (strUUID)
-  return $ case maybeUUID of
-    (Just uuid) -> uuid
-    Nothing     -> (nil :: UUID)
+getExistingOrNewUUID :: IO UUID
+getExistingOrNewUUID = getUUID >>= \case
+  Just uuid -> return uuid
+  Nothing   -> newUUID `seq` getUUID >>= \case
+    Just uuid -> return uuid
+    Nothing   -> error "Failed to parse or generate UUID"
 
-getExistingOrNewUUIDString :: IO (String)
-getExistingOrNewUUIDString = do
-  uuid <- getExistingOrNewUUID
-  return $ Data.UUID.toString uuid
+getExistingOrNewUUIDString :: IO String
+getExistingOrNewUUIDString = Data.UUID.toString <$> getExistingOrNewUUID
 
 
 -- TODO: Make this return IO (ExitCode)
 ensureUUIDIsRegistered :: IO ()
 ensureUUIDIsRegistered = do
-  uuid <- getExistingOrNewUUID
-  let uuidStr = Data.UUID.toString uuid
+  uuidStr        <- getExistingOrNewUUIDString
 
   -- Get the HTTP connection manager with default TLS settings.
   manager        <- newManager tlsManagerSettings
@@ -95,7 +87,9 @@ ensureUUIDIsRegistered = do
   return ()
 
 getTelemetryEnabledStatus :: IO Bool
-getTelemetryEnabledStatus = doesFileExist "./UUID"
+getTelemetryEnabledStatus = readConfig <&> \case
+  Just (Config { telemetry }) -> telemetry
+  Nothing                   -> False
 
 forkSendAppLaunchEvent :: IO ThreadId
 forkSendAppLaunchEvent = forkIO $ do
@@ -146,7 +140,7 @@ forkSendPayloadEveryMinuteInterval tvarNumWindows minutes = forkIO $ (doLoop 0)
     doLoop (dbl + (fromIntegral minutes))
 
 forkSendPayload :: Payload -> IO ()
-forkSendPayload (Payload { numWindowsOpen = tvarNumWindows, minutesElapsedSinceLastPayload = minutesElapsedSinceLastPayload', minutesTotalSession = minutesTotalSession' })
+forkSendPayload (Payload { numWindowsOpen, minutesElapsedSinceLastPayload, minutesTotalSession })
   = do
     uuidStr     <- getExistingOrNewUUIDString
 
@@ -154,7 +148,7 @@ forkSendPayload (Payload { numWindowsOpen = tvarNumWindows, minutesElapsedSinceL
     manager     <- newManager tlsManagerSettings
 
   --  readMvarInt <- readMVar mvarInt
-    numSurfaces <- readTVarIO tvarNumWindows
+    numSurfaces <- readTVarIO numWindowsOpen
 
     -- Construct a bytestring encoded request object with the properties we want.
     let
@@ -165,9 +159,9 @@ forkSendPayload (Payload { numWindowsOpen = tvarNumWindows, minutesElapsedSinceL
             , "properties" .= object
               [ "distinct_id" .= (uuidStr :: String)
               , "token" .= (mixPanelToken :: String)
-              , "minutesTotalSession" .= (minutesTotalSession' :: Double)
+              , "minutesTotalSession" .= (minutesTotalSession :: Double)
               , "minutesElapsedSinceLastPayload"
-                .= (minutesElapsedSinceLastPayload' :: Double)
+                .= (minutesElapsedSinceLastPayload :: Double)
               , "numWindowsOpen" .= (numSurfaces :: Int)
               ]
             ]

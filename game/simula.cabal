@@ -33,43 +33,41 @@ library
 
   build-depends:
       base >=4.12 && <5
-    , aeson
-    , base64-bytestring
-    , bytestring
-    , clock
     , colour
-    , containers
-    , directory
     , extra
     , godot-extra
     , godot-haskell
-    , http-client
-    , http-client-tls
-    , http-types
-    , iso8601-time
-    , lens
     , lens
     , linear
-    , process
     , stm
     , text
-    , time
-    , unix
+    -- Config deps
+    , dhall
+    , directory
     , uuid
-    , vector
+    -- Telemetry deps
+    , aeson
+    , base64-bytestring
+    , bytestring
+    , http-client
+    , http-client-tls
+    , iso8601-time
+    , time
 
   exposed-modules:
-      Telemetry
       Simula
+      Simula.Config
+      Telemetry
+  other-modules:
       Simula.Imports
-      Simula.Pointer
-      Simula.Window
       Simula.Input
       Simula.Input.Grab
       Simula.Input.Telekinesis
-      Simula.SimulaController
+      Simula.Pointer
       Simula.Simula
+      Simula.SimulaController
       Simula.VR
+      Simula.Window
 
   default-language: Haskell2010
   default-extensions:
