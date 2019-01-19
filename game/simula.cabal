@@ -33,30 +33,30 @@ library
 
   build-depends:
       base >=4.12 && <5
-    , lens
-    , godot-haskell
-    , godot-extra
-    , colour
-    , linear
-    , text
-    , vector
-    , stm
-    , containers
-    , unix
-    , clock
-    , extra
-    , lens
-    , bytestring
-    , http-client
-    , http-types
-    , http-client-tls
     , aeson
-    , process
     , base64-bytestring
+    , bytestring
+    , clock
+    , colour
+    , containers
     , directory
-    , uuid
-    , time
+    , extra
+    , godot-extra
+    , godot-haskell
+    , http-client
+    , http-client-tls
+    , http-types
     , iso8601-time
+    , lens
+    , lens
+    , linear
+    , process
+    , stm
+    , text
+    , time
+    , unix
+    , uuid
+    , vector
 
   exposed-modules:
       Telemetry

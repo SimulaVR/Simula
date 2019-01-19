@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-incomplete-uni-patterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -31,86 +32,82 @@ instance ClassExport GodotSimula where
 
   classExtends = "Node"
   classMethods =
-    [ GodotMethod NoRPC "_ready" ready
-    , GodotMethod NoRPC "_process" process
-    , GodotMethod NoRPC "on_button_signal" on_button_signal
-    ]
+    [ func NoRPC "_ready" [] $
+        \self _ -> do
+          addCompositorNode self
+
+          -- OpenHMD is unfortunately not yet a working substitute for OpenVR
+          -- https://github.com/SimulaVR/Simula/issues/72
+          openVR >>= initVR (safeCast self) >>= \case
+            InitVRSuccess -> addVRNodes self
+            InitVRFailed  -> return ()
+
+    , func NoRPC "_process" ["float"] $
+        \self _ ->
+          let gst = _sGrabState self
+          in atomically (readTVar gst)
+             >>= handleState
+             >>= atomically . writeTVar gst
+
+    , func NoRPC "_on_button_signal" ["int", "SimulaController", "bool"] $
+        \self [buttonVar, controllerVar, pressedVar] -> do
+          button          <- fromGodotVariant buttonVar
+          controllerObj   <- fromGodotVariant controllerVar
+          Just controller <- tryObjectCast controllerObj
+          pressed         <- fromGodotVariant pressedVar
+          onButton self controller button pressed
+    ] {-# OPTIONS_GHC -fwarn-incomplete-uni-patterns #-}
 
 instance HasBaseClass GodotSimula where
   type BaseClass GodotSimula = GodotNode
   super (GodotSimula obj _) = GodotNode obj
 
+addVRNodes :: GodotSimula -> IO ()
+addVRNodes self = do
+  -- Add the VR origin node
+  orig <- unsafeInstance GodotARVROrigin "ARVROrigin"
+  G.add_child self (safeCast orig) True
 
-ready :: GFunc GodotSimula
-ready self _ = do
-  addCompositorNode
+  -- Add the HMD as a child of the origin node
+  hmd <- unsafeInstance GodotARVRCamera "ARVRCamera"
+  G.add_child orig (safeCast hmd) True
 
-  -- OpenHMD is unfortunately not yet a working substitute for OpenVR
-  -- https://github.com/SimulaVR/Simula/issues/72
-  openVR >>= initVR (safeCast self) >>= \case
-    InitVRSuccess -> do
-      -- Add the VR origin node
-      orig <- unsafeInstance GodotARVROrigin "ARVROrigin"
-      G.add_child self (safeCast orig) True
-
-      -- Add the HMD as a child of the origin node
-      hmd <- unsafeInstance GodotARVRCamera "ARVRCamera"
-      G.add_child orig (safeCast hmd) True
-
-      -- Add two controllers and connect their button presses to the Simula
-      -- node.
-      let addCt = addSimulaController orig
-      addCt "LeftController" 1 >>= connectController
-      addCt "RightController" 2 >>= connectController
-
-      return ()
-
-    InitVRFailed  -> return ()
-
-  retnil
- where
-  addCompositorNode :: IO ()
-  addCompositorNode = do
-    gwc <- unsafeNewNS [] "res://addons/godot-wayland/WestonCompositor.gdns"
-      >>= asClass' GodotNode "Node"
-    G.set_name gwc =<< toLowLevel "Weston"
-    G.add_child self (asObj gwc) True
-
-    _ <- gwc & call "use_sprites" [toVariant True]
-
-    return ()
-
-  connectController :: GodotSimulaController -> IO ()
-  connectController ct = do
-    argsPressed <- Api.godot_array_new
-    Api.godot_array_append argsPressed =<< toLowLevel (toVariant $ asObj ct)
-    Api.godot_array_append argsPressed =<< toLowLevel (toVariant True)
-
-    argsReleased <- Api.godot_array_new
-    Api.godot_array_append argsReleased =<< toLowLevel (toVariant $ asObj ct)
-    Api.godot_array_append argsReleased =<< toLowLevel (toVariant False)
-
-    btnSignal   <- toLowLevel "on_button_signal"
-    btnPressed  <- toLowLevel "button_pressed"
-    btnReleased <- toLowLevel "button_release"
-
-    G.connect ct btnPressed (safeCast self) btnSignal argsPressed 0
-    G.connect ct btnReleased (safeCast self) btnSignal argsReleased 0
-
-    return ()
+  -- Add two controllers and connect their button presses to the Simula
+  -- node.
+  let addCt = addSimulaController orig
+  addCt "LeftController" 1 >>= connectController self
+  addCt "RightController" 2 >>= connectController self
 
 
-on_button_signal :: GFunc GodotSimula
-on_button_signal self args = do
-  case toList args of
-    [buttonVar, controllerVar, pressedVar] -> do
-      button <- fromGodotVariant buttonVar
-      controllerObj <- fromGodotVariant controllerVar
-      Just controller <- tryObjectCast controllerObj
-      pressed <- fromGodotVariant pressedVar
-      onButton self controller button pressed
-    _ -> return ()
-  toLowLevel VariantNil
+addCompositorNode :: GodotSimula -> IO ()
+addCompositorNode self = do
+  gwc <- unsafeNewNS [] "res://addons/godot-wayland/WestonCompositor.gdns"
+    >>= asClass' GodotNode "Node"
+  G.set_name gwc =<< toLowLevel "Weston"
+  G.add_child self (asObj gwc) True
+
+  _ <- gwc & call "use_sprites" [toVariant True]
+
+  return ()
+
+connectController :: GodotSimula -> GodotSimulaController -> IO ()
+connectController self ct = do
+  argsPressed <- Api.godot_array_new
+  Api.godot_array_append argsPressed =<< toLowLevel (toVariant $ asObj ct)
+  Api.godot_array_append argsPressed =<< toLowLevel (toVariant True)
+
+  argsReleased <- Api.godot_array_new
+  Api.godot_array_append argsReleased =<< toLowLevel (toVariant $ asObj ct)
+  Api.godot_array_append argsReleased =<< toLowLevel (toVariant False)
+
+  btnSignal   <- toLowLevel "on_button_signal"
+  btnPressed  <- toLowLevel "button_pressed"
+  btnReleased <- toLowLevel "button_release"
+
+  G.connect ct btnPressed (safeCast self) btnSignal argsPressed 0
+  G.connect ct btnReleased (safeCast self) btnSignal argsReleased 0
+
+  return ()
 
 
 onButton :: GodotSimula -> GodotSimulaController -> Int -> Bool -> IO ()
@@ -138,14 +135,4 @@ onButton self gsc button pressed =
           >>= atomically
           .   writeTVar gst
       _                  -> const $ return ()
-
-
-process :: GFunc GodotSimula
-process self _ = do
-  let gst = _sGrabState self
-  atomically (readTVar gst)
-    >>= handleState
-    >>= atomically . writeTVar gst
-
-  toLowLevel VariantNil
 
