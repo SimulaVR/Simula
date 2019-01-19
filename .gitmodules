@@ -1,3 +1,6 @@
 [submodule "godot_headers"]
 	path = godot_headers
 	url = https://github.com/GodotNativeTools/godot_headers.git
+[submodule "godot-wayland"]
+	path = godot-wayland
+	url = git@gitlab.com:lboklin/godot-wayland.git
