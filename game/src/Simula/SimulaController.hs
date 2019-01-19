@@ -14,6 +14,7 @@ module Simula.SimulaController
 where
 
 import           Control.Concurrent.STM.TVar
+import           Control.Monad.Extra                (whenM)
 
 import qualified Data.Text                     as T
 import           Linear
