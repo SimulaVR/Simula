@@ -4,17 +4,20 @@ pkgs.haskell.lib.buildStackProject {
   name = "simula-godot";
   inherit ghc;
   buildInputs = with pkgs; [ 
+                             (callPackage ./nix/libinput/default.nix { } )
+                             (callPackage ./nix/wayland.nix { } )
+                             (callPackage ./nix/wayland-protocols.nix { } )
+                             (callPackage ./nix/wlroots.nix { } )
                              libGL
                              xorg.pixman
-                             (callPackage ./wayland.nix { } )
-                             (callPackage ./wayland-protocols.nix { } )
-                             (callPackage ./wlroots.nix { } )
                              libxkbcommon
                              zlib
                              git
                              godot
                              xorg.libX11
                              udev
+                             cabal-install
+                           # libinput
                            # xdg_utils
                           ];
 
