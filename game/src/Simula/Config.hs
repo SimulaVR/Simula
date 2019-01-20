@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DeriveGeneric     #-}
 module Simula.Config where
 
@@ -19,8 +20,9 @@ import           System.Directory                         ( doesFileExist )
 
 
 data Config = Config
-  { uuid :: Text
+  { uuid      :: Text
   , telemetry :: Bool
+  , autostart :: [FilePath]
   } deriving (Generic, Show)
 
 instance Interpret Config
@@ -35,7 +37,11 @@ cfgPath = "./config"
 defaultConfig :: IO Config
 defaultConfig = do
   randomUUID <- fromMaybe nil <$> nextUUID
-  return $ Config {uuid = toText randomUUID, telemetry = False}
+  return $ Config
+    { uuid = toText randomUUID
+    , telemetry = False
+    , autostart = []
+    }
 
 -- | Creates a new default config file
 generateConfigFile :: IO ()
@@ -70,10 +76,16 @@ newUUID = readConfig >>= \case
 -- | Convert Config into valid Dhall source code
 toDhallSrc :: Config -> Text
 toDhallSrc = pretty . embed injectConfig
-
-injectConfig :: InputType Config
-injectConfig = inputRecord $ adapt
-  >$< inputField "uuid"
-  >*< inputField "telemetry"
  where
-  adapt (Config { uuid, telemetry }) = (uuid, telemetry)
+  injectConfig :: InputType Config
+  injectConfig = inputRecord $ adapt
+    >$< inputField "uuid"
+    >*< inputField "telemetry"
+    >*< inputField "autostart"
+
+  adapt (Config {..}) =
+    ( uuid
+    , ( telemetry
+      , pack <$> autostart
+      )
+    )
