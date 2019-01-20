@@ -2,6 +2,7 @@
 *~
 .import/
 /game/libsimula.so
-/UUID
+config
+UUID
 /bin/
 **/dist-newstyle/

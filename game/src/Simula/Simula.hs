@@ -5,6 +5,7 @@
 module Simula.Simula (GodotSimula(..)) where
 
 import           Simula.Imports
+import           Telemetry
 
 import           Simula.Input
 import           Simula.Input.Grab
@@ -13,9 +14,9 @@ import           Simula.VR
 
 import           Godot.Core.GodotGlobalConstants
 import           Godot.Extra.Register
-import           Godot.Nativescript
 import qualified Godot.Gdnative.Internal.Api   as Api
 import qualified Godot.Methods                 as G
+import           Godot.Nativescript
 
 
 data GodotSimula = GodotSimula
@@ -35,6 +36,7 @@ instance ClassExport GodotSimula where
     [ func NoRPC "_ready" [] $
         \self _ -> do
           addCompositorNode self
+            >>= telemetryOnConsent
 
           -- OpenHMD is unfortunately not yet a working substitute for OpenVR
           -- https://github.com/SimulaVR/Simula/issues/72
@@ -79,7 +81,7 @@ addVRNodes self = do
   addCt "RightController" 2 >>= connectController self
 
 
-addCompositorNode :: GodotSimula -> IO ()
+addCompositorNode :: GodotSimula -> IO GodotNode
 addCompositorNode self = do
   gwc <- unsafeNewNS [] "res://addons/godot-wayland/WestonCompositor.gdns"
     >>= asClass' GodotNode "Node"
@@ -88,7 +90,26 @@ addCompositorNode self = do
 
   _ <- gwc & call "use_sprites" [toVariant True]
 
-  return ()
+  return gwc
+
+-- TODO: Implement asking for user consent
+telemetryOnConsent :: GodotNode -> IO ()
+telemetryOnConsent compositor =
+  getTelemetryConsent >>= \case
+    Nothing    -> askConsent >> telemetryOnConsent compositor
+    Just False -> return ()
+    Just True  ->
+      startTelemetry $ Telemetry $ do
+        surfaceTextureArray <-
+          compositor & call "get_surface_textures" []
+          >>= fromGodotVariant
+          :: IO GodotArray
+        length <$> fromLowLevel surfaceTextureArray
+ where
+  askConsent = do
+    putStrLn "Asking user to consent to telemetry is not yet implemented."
+    putStrLn "Telemetry is disabled."
+    setTelemetryConsent False
 
 connectController :: GodotSimula -> GodotSimulaController -> IO ()
 connectController self ct = do

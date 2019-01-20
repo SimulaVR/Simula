@@ -1,12 +1,14 @@
+{-# LANGUAGE RecordWildCards #-}
 module Telemetry
-  ( startTelemetry
-  , getTelemetryEnabledStatus
+  ( Telemetry(..)
+  , startTelemetry
+  , setTelemetryConsent
+  , getTelemetryConsent
   , forkSendAppLaunchEvent
   )
 where
 
 import           Control.Concurrent
-import           Control.Concurrent.STM.TVar
 import           Data.Aeson
 import qualified Data.ByteString.Base64        as BSB64
 import qualified Data.ByteString.Lazy          as LBS
@@ -23,23 +25,34 @@ import           Network.HTTP.Client                      ( httpLbs
                                                           )
 import           Network.HTTP.Client.TLS                  ( tlsManagerSettings )
 import           Simula.Config
-import           Simula.Imports
+
+
+data Telemetry = Telemetry
+  { pollNumWindowsOpen :: IO Int
+  }
 
 data Payload = Payload
-               { numWindowsOpen :: TVar Int
-               , minutesElapsedSinceLastPayload :: Double
-               , minutesTotalSession :: Double
-               }
+  { numWindowsOpen                 :: Int
+  , minutesElapsedSinceLastPayload :: Double
+  , minutesTotalSession            :: Double
+  }
 
 -- Denotes our MixPanel "project ID".
 mixPanelToken :: String
 mixPanelToken = "d893bae9548d8e678cef251fd81df486" :: String -- actual Simula token
 --            = "5ad417357e3a80fa426d272473d8dee4" :: String -- testing token
 
+setTelemetryConsent :: Bool -> IO ()
+setTelemetryConsent consent = readConfig >>= \case
+  Just cfg -> writeConfig (cfg { telemetry = consent })
+  Nothing  -> do
+    cfg <- defaultConfig
+    writeConfig $ cfg { telemetry = consent }
+
 getExistingOrNewUUID :: IO UUID
 getExistingOrNewUUID = getUUID >>= \case
   Just uuid -> return uuid
-  Nothing   -> newUUID `seq` getUUID >>= \case
+  Nothing   -> newUUID >> getUUID >>= \case
     Just uuid -> return uuid
     Nothing   -> error "Failed to parse or generate UUID"
 
@@ -86,10 +99,8 @@ ensureUUIDIsRegistered = do
   _response <- httpLbs request manager
   return ()
 
-getTelemetryEnabledStatus :: IO Bool
-getTelemetryEnabledStatus = readConfig <&> \case
-  Just (Config { telemetry }) -> telemetry
-  Nothing                   -> False
+getTelemetryConsent :: IO (Maybe Bool)
+getTelemetryConsent = fmap (fmap telemetry) readConfig
 
 forkSendAppLaunchEvent :: IO ThreadId
 forkSendAppLaunchEvent = forkIO $ do
@@ -124,15 +135,16 @@ forkSendAppLaunchEvent = forkIO $ do
   _response <- httpLbs request manager
   return ()
 
-forkSendPayloadEveryMinuteInterval :: TVar Int -> Integer -> IO ThreadId
-forkSendPayloadEveryMinuteInterval tvarNumWindows minutes = forkIO $ (doLoop 0)
+forkSendPayloadEveryMinuteInterval :: IO Int -> Integer -> IO ThreadId
+forkSendPayloadEveryMinuteInterval getNumWindows minutes = forkIO $ (doLoop 0)
  where
   doLoop :: Double -> IO ()
   doLoop dbl = do
     threadDelay (1000 * 1000 * 60 * (fromIntegral minutes))
+    numWindows <- getNumWindows
     forkSendPayload
       (Payload
-        { numWindowsOpen                 = tvarNumWindows
+        { numWindowsOpen                 = numWindows
         , minutesElapsedSinceLastPayload = (fromIntegral minutes)
         , minutesTotalSession            = (dbl + (fromIntegral minutes))
         }
@@ -147,9 +159,6 @@ forkSendPayload (Payload { numWindowsOpen, minutesElapsedSinceLastPayload, minut
     -- Get the HTTP connection manager with default TLS settings.
     manager     <- newManager tlsManagerSettings
 
-  --  readMvarInt <- readMVar mvarInt
-    numSurfaces <- readTVarIO numWindowsOpen
-
     -- Construct a bytestring encoded request object with the properties we want.
     let
       encodedRequestObject = LBS.toStrict
@@ -162,7 +171,7 @@ forkSendPayload (Payload { numWindowsOpen, minutesElapsedSinceLastPayload, minut
               , "minutesTotalSession" .= (minutesTotalSession :: Double)
               , "minutesElapsedSinceLastPayload"
                 .= (minutesElapsedSinceLastPayload :: Double)
-              , "numWindowsOpen" .= (numSurfaces :: Int)
+              , "numWindowsOpen" .= (numWindowsOpen :: Int)
               ]
             ]
           )
@@ -185,9 +194,9 @@ forkSendPayload (Payload { numWindowsOpen, minutesElapsedSinceLastPayload, minut
     return ()
 
 -- The first variable encodes the number of windows open (possibly useful data).
-startTelemetry :: TVar Int -> IO ()
-startTelemetry tvarNumWindows = do
+startTelemetry :: Telemetry -> IO ()
+startTelemetry (Telemetry {..}) = do
   forkIO ensureUUIDIsRegistered
-  forkSendPayloadEveryMinuteInterval tvarNumWindows 5 -- Send payload every 5 minutes
+  forkSendPayloadEveryMinuteInterval pollNumWindowsOpen 5 -- Send payload every 5 minutes
   return ()
 

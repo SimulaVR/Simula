@@ -21,15 +21,10 @@ source-repository head
   type: git
   location: https://github.com/SimulaVR/Simula
 
-flag no-tracking
-  default:     False
-  manual:      True
-
 library
-  if flag(no-tracking)
-     hs-source-dirs: src, no-telemetry
-  else
-     hs-source-dirs: src, telemetry
+  hs-source-dirs:
+      src
+    , telemetry
 
   build-depends:
       base >=4.12 && <5

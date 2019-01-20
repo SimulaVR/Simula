@@ -2,10 +2,10 @@ LIBFILE = $(shell stack path --local-install-root)/lib/libsimula.so
 PROJECTROOT = $(shell stack path --project-root)
 GODOTPROJECT = $(PROJECTROOT)
 all:
-	stack build simula $$TELEMETRY
+	stack build simula
 	cp $(LIBFILE) $(PROJECTROOT)
 run:
-	stack --verbosity=error build simula $$TELEMETRY
+	stack --verbosity=error build simula
 	cp $(LIBFILE) $(PROJECTROOT)
 	godot --path $(GODOTPROJECT)
 watch:
