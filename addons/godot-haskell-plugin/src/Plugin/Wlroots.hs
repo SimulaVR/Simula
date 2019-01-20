@@ -40,27 +40,86 @@ import Telemetry
 
 import qualified Language.C.Inline as C
 
-initializeCppSimulaCtx
-C.verbatim "#define WLR_USE_UNSTABLE"
-C.include "<wayland-server.h>"
-C.include "<wlr/backend.h>"
-C.include "<wlr/render/wlr_renderer.h>"
-C.include "<wlr/types/wlr_cursor.h>"
-C.include "<wlr/types/wlr_compositor.h>"
-C.include "<wlr/types/wlr_data_device.h>"
-C.include "<wlr/types/wlr_input_device.h>"
-C.include "<wlr/types/wlr_keyboard.h>"
-C.include "<wlr/types/wlr_matrix.h>"
-C.include "<wlr/types/wlr_output.h>"
-C.include "<wlr/types/wlr_output_layout.h>"
-C.include "<wlr/types/wlr_pointer.h>"
-C.include "<wlr/types/wlr_seat.h>"
-C.include "<wlr/types/wlr_xcursor_manager.h>"
--- C.include "<wlr/types/wlr_xdg_shell.h>" -- nix presently lacks "xdg-shell-protocol.h"
-C.include "<wlr/util/log.h>"
-C.include "<xkbcommon/xkbcommon.h>"
 
-C.include "<wlr/backend/headless.h>"
+{- HsRoots Modules:
+import      Graphics.Egl
+import      Graphics.Pixman
+import      Graphics.Wayland.Global
+import      Graphics.Wayland.List
+import      Graphics.Wayland.Resource
+import      Graphics.Wayland.Server.Client
+import      Graphics.Wayland.Signal
+import      Graphics.Wayland.WlRoots.Backend
+import      Graphics.Wayland.WlRoots.Backend.Headless
+import      Graphics.Wayland.WlRoots.Backend.Libinput
+import      Graphics.Wayland.WlRoots.Backend.Multi
+import      Graphics.Wayland.WlRoots.Backend.Session
+import      Graphics.Wayland.WlRoots.Box
+import      Graphics.Wayland.WlRoots.Buffer
+import      Graphics.Wayland.WlRoots.Compositor
+import      Graphics.Wayland.WlRoots.Cursor
+import      Graphics.Wayland.WlRoots.DeviceManager
+import      Graphics.Wayland.WlRoots.ExportDMABuf
+import      Graphics.Wayland.WlRoots.Egl
+import      Graphics.Wayland.WlRoots.GammaControl
+import      Graphics.Wayland.WlRoots.Global
+import      Graphics.Wayland.WlRoots.IdleInhibit
+import      Graphics.Wayland.WlRoots.Input
+import      Graphics.Wayland.WlRoots.Input.Buttons
+import      Graphics.Wayland.WlRoots.Input.Keyboard
+import      Graphics.Wayland.WlRoots.Input.Pointer
+import      Graphics.Wayland.WlRoots.Input.Tablet
+import      Graphics.Wayland.WlRoots.Input.TabletPad
+import      Graphics.Wayland.WlRoots.Input.TabletTool
+import      Graphics.Wayland.WlRoots.Input.Touch
+import      Graphics.Wayland.WlRoots.InputInhibitor
+import      Graphics.Wayland.WlRoots.LinuxDMABuf
+import      Graphics.Wayland.WlRoots.Output
+import      Graphics.Wayland.WlRoots.OutputLayout
+import      Graphics.Wayland.WlRoots.PrimarySelection
+import      Graphics.Wayland.WlRoots.Render
+import      Graphics.Wayland.WlRoots.Render.Color
+import      Graphics.Wayland.WlRoots.Render.Gles2
+import      Graphics.Wayland.WlRoots.Render.Matrix
+import      Graphics.Wayland.WlRoots.Screenshooter
+import      Graphics.Wayland.WlRoots.Seat
+import      Graphics.Wayland.WlRoots.ServerDecoration
+import      Graphics.Wayland.WlRoots.Surface
+import      Graphics.Wayland.WlRoots.SurfaceLayers
+import      Graphics.Wayland.WlRoots.Tabletv2
+import      Graphics.Wayland.WlRoots.Util
+import      Graphics.Wayland.WlRoots.Util.Region
+import      Graphics.Wayland.WlRoots.WlShell
+import      Graphics.Wayland.WlRoots.XCursor
+import      Graphics.Wayland.WlRoots.XCursorManager
+import      Graphics.Wayland.WlRoots.XWayland
+import      Graphics.Wayland.WlRoots.XdgShell
+import      Graphics.Wayland.WlRoots.XdgShellv6
+-} 
+
+-- | Any inclusion of inline-C causes "undefined symbol errors":
+
+-- initializeCppSimulaCtx
+-- C.verbatim "#define WLR_USE_UNSTABLE"
+-- C.include "<libinput.h>"
+-- C.include "<wayland-server.h>"
+-- C.include "<wlr/backend.h>"
+-- C.include "<wlr/render/wlr_renderer.h>"
+-- C.include "<wlr/types/wlr_cursor.h>"
+-- C.include "<wlr/types/wlr_compositor.h>"
+-- C.include "<wlr/types/wlr_data_device.h>"
+-- C.include "<wlr/types/wlr_input_device.h>"
+-- C.include "<wlr/types/wlr_keyboard.h>"
+-- C.include "<wlr/types/wlr_matrix.h>"
+-- C.include "<wlr/types/wlr_output.h>"
+-- C.include "<wlr/types/wlr_output_layout.h>"
+-- C.include "<wlr/types/wlr_pointer.h>"
+-- C.include "<wlr/types/wlr_seat.h>"
+-- C.include "<wlr/types/wlr_xcursor_manager.h>"
+-- -- C.include "<wlr/types/wlr_xdg_shell.h>" -- nix presently lacks "xdg-shell-protocol.h"
+-- C.include "<wlr/util/log.h>"
+-- C.include "<xkbcommon/xkbcommon.h>"
+-- C.include "<wlr/backend/headless.h>"
 
 data GodotWlrootsCompositor = GodotWlrootsCompositor
   { _gwcObj      :: GodotObject
@@ -108,6 +167,8 @@ startBaseCompositor compositor = do
 
 startBaseThread :: GodotWlrootsCompositor -> IO ()
 startBaseThread compositor = Control.Monad.void $ forkOS $ do
+  putStrLn "startBaseThread not implemented yet."
+  {-
   ptrWlDisplay <- [C.block| wl_display* {
                       wl_display * display;
                       display = wl_display_create();
@@ -144,6 +205,7 @@ startBaseThread compositor = Control.Monad.void $ forkOS $ do
 
           outputDestroyNotify :: (Ptr C'WlListener -> Ptr ())
           outputDestroyNotify = undefined
+    -}
 
 
 -- TODO: check the origin plane?
