@@ -5,7 +5,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
-module Simula.SimulaController
+module Simula.GodotSimulaController
   ( GodotSimulaController(..)
   , addSimulaController
   , isButtonPressed

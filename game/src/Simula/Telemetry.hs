@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
-module Telemetry
+module Simula.Telemetry
   ( Telemetry(..)
   , startTelemetry
   , setTelemetryConsent

@@ -22,9 +22,7 @@ source-repository head
   location: https://github.com/SimulaVR/Simula
 
 library
-  hs-source-dirs:
-      src
-    , telemetry
+  hs-source-dirs: src
 
   build-depends:
       base >=4.12 && <5
@@ -51,16 +49,16 @@ library
 
   exposed-modules:
       Simula
-      Simula.Config
-      Telemetry
+      Simula.GodotSimula
+      Simula.GodotSimulaController
   other-modules:
+      Simula.Config
       Simula.Imports
       Simula.Input
       Simula.Input.Grab
       Simula.Input.Telekinesis
       Simula.Pointer
-      Simula.Simula
-      Simula.SimulaController
+      Simula.Telemetry
       Simula.VR
       Simula.Window
 

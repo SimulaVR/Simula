@@ -2,14 +2,14 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TypeFamilies #-}
-module Simula.Simula (GodotSimula(..)) where
+module Simula.GodotSimula (GodotSimula(..)) where
 
 import           Simula.Imports
-import           Telemetry
 
+import           Simula.GodotSimulaController
 import           Simula.Input
 import           Simula.Input.Grab
-import           Simula.SimulaController
+import           Simula.Telemetry
 import           Simula.VR
 
 import           Godot.Core.GodotGlobalConstants

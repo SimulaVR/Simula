@@ -5,7 +5,7 @@ import qualified Godot.Gdnative.Internal.Api   as Api
 import qualified Godot.Methods                 as G
 
 import           Simula.Imports
-import           Simula.SimulaController
+import           Simula.GodotSimulaController
 
 
 data GrabState

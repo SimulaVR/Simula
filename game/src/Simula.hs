@@ -3,8 +3,8 @@ module Simula (registerClasses) where
 
 import           Godot.Extra.Register
 
-import           Simula.Simula
-import           Simula.SimulaController
+import           Simula.GodotSimula
+import           Simula.GodotSimulaController
 
 
 registerClasses :: GdnativeHandle -> IO ()
