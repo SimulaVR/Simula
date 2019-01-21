@@ -4,7 +4,7 @@ Simula is a 3D window manager for Linux that runs on top of [[https://godotengin
 
 [[https://d.tube/#!/v/sudoreboot/t026ny0m][file:./doc/SimulaDesktop.png]]
 
-*Video:* [[https://d.tube/#!/v/sudoreboot/t026ny0m][See here.]]
+*Video:* [[https://peertube.social/videos/watch/6ca912da-7bc4-4f81-934b-79fddeb71fd0][See here.]]
 
 *Mission:* Facilitate a Linux future for VR & AR Desktop. In the short-run, this means allowing people to run 2D Linux apps with current generation headsets. In the long-run, this means allowing people to run Linux in standalone AR & VR HMDs. Currently, Simula is aiming to be compatible with the HTC Vive. 
 
