@@ -1,6 +1,7 @@
 LIBFILE = $(shell stack path --local-install-root)/lib/libsimula.so
 PROJECTROOT = $(shell stack path --project-root)
 PLUGINPROJECT = ../godot-wayland
+GODOT = $(PLUGINPROJECT)/godot
 
 all: plugin
 	stack build simula
@@ -8,10 +9,8 @@ all: plugin
 run:
 	stack --verbosity=error build simula
 	cp $(LIBFILE) $(PROJECTROOT)
-	$(PLUGINPROJECT)/godot --path $(PROJECTROOT)
+	$(GODOT) --path $(PROJECTROOT)
 watch:
 	stack build --file-watch --fast --exec "cp $(LIBFILE) $(PROJECTROOT)"
 plugin:
-	cd $(PLUGINPROJECT) && make ; cd -
-	cp $(PLUGINPROJECT)/addons/godot-wayland/libgodot-wayland.so $(PROJECTROOT)/addons/godot-wayland/
-	cp $(PLUGINPROJECT)/addons/godot-wayland/*.gdn* $(PROJECTROOT)/addons/godot-wayland/
+	cd $(PLUGINPROJECT) && make install TARGET=$(PROJECTROOT)/addons/godot-wayland ; cd -
