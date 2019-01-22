@@ -1,10 +1,10 @@
 { pkgs ? import <nixpkgs> {}, ghc ? pkgs.ghc }:
 
 pkgs.haskell.lib.buildStackProject {
-  name = "simula-godot";
+  name = "Simula";
   inherit ghc;
   buildInputs = with pkgs; [ 
-                             (callPackage ./nix/libinput/default.nix { } )
+                             libinput
                              (callPackage ./nix/wayland.nix { } )
                              (callPackage ./nix/wayland-protocols.nix { } )
                              (callPackage ./nix/wlroots.nix { } )
@@ -17,8 +17,6 @@ pkgs.haskell.lib.buildStackProject {
                              xorg.libX11
                              udev
                              cabal-install
-                           # libinput
-                           # xdg_utils
                           ];
 
   LANG = "en_US.UTF-8";

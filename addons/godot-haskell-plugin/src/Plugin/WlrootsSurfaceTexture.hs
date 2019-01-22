@@ -8,7 +8,7 @@ module Plugin.WlrootsSurfaceTexture
   , newGodotWlrootsSurfaceTexture, setWlrSurface
   , updateWlrootsSurfaceTexture) where
 
-import Plugin.WaylandTypes
+import Debug.C
 
 import Control.Monad
 import Data.Coerce
