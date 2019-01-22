@@ -9,7 +9,6 @@
 
 module Plugin.Wlroots (GodotWlrootsCompositor(..)) where
 
-import Plugin.WaylandTypes
 import Foreign
 
 import           Linear
@@ -39,7 +38,15 @@ import Foreign hiding (void)
 import Telemetry
 
 import qualified Language.C.Inline as C
+import Debug.C
 
+import      Graphics.Wayland.WlRoots.Compositor
+import      Graphics.Wayland.WlRoots.Output
+import      Graphics.Wayland.WlRoots.Surface
+import      Graphics.Wayland.WlRoots.Backend
+import      Graphics.Wayland.WlRoots.Output
+import      Graphics.Wayland.Server
+-- import      System.InputDevice
 
 {- HsRoots Modules:
 import      Graphics.Egl
@@ -97,40 +104,36 @@ import      Graphics.Wayland.WlRoots.XdgShell
 import      Graphics.Wayland.WlRoots.XdgShellv6
 -} 
 
--- | Any inclusion of inline-C causes "undefined symbol errors":
-
--- initializeCppSimulaCtx
 -- C.verbatim "#define WLR_USE_UNSTABLE"
--- C.include "<libinput.h>"
 -- C.include "<wayland-server.h>"
 -- C.include "<wlr/backend.h>"
--- C.include "<wlr/render/wlr_renderer.h>"
--- C.include "<wlr/types/wlr_cursor.h>"
--- C.include "<wlr/types/wlr_compositor.h>"
--- C.include "<wlr/types/wlr_data_device.h>"
--- C.include "<wlr/types/wlr_input_device.h>"
--- C.include "<wlr/types/wlr_keyboard.h>"
--- C.include "<wlr/types/wlr_matrix.h>"
--- C.include "<wlr/types/wlr_output.h>"
--- C.include "<wlr/types/wlr_output_layout.h>"
--- C.include "<wlr/types/wlr_pointer.h>"
--- C.include "<wlr/types/wlr_seat.h>"
--- C.include "<wlr/types/wlr_xcursor_manager.h>"
--- -- C.include "<wlr/types/wlr_xdg_shell.h>" -- nix presently lacks "xdg-shell-protocol.h"
--- C.include "<wlr/util/log.h>"
--- C.include "<xkbcommon/xkbcommon.h>"
--- C.include "<wlr/backend/headless.h>"
+-- C.include "<wlr/render/wlr_renderer.h>" -- Throws error "expected primary-expression before 'static'  on line 37
+initializeSimulaCtxAndIncludes
 
+-- TODO: Rename typename to "Compositor" and propogate throughout godot scene tree.
+data GodotWlrootsCompositor = GodotWlrootsCompositor
+  { _gwcObj      :: GodotObject
+  , _gwcCompositor :: TVar (Ptr WlrCompositor)
+  , _gwcWlDisplay :: TVar DisplayServer
+  , _gwcWlEventLoop :: TVar EventLoop
+  , _gwcBackEnd :: TVar (Ptr Backend)
+  , _gwcSurfaces :: TVar (M.Map (Ptr WlrSurface) GodotWlrootsSurfaceSprite)
+  , _gwcOutput :: TVar (Ptr WlrOutput) -- possibly needs to be (TVar [Ptr WlrOutput])
+--   , _gwcNormalLayer :: TVar (Ptr C'WlrLayer) -- so far unused
+  }
+
+{- inline-C datatype representation
 data GodotWlrootsCompositor = GodotWlrootsCompositor
   { _gwcObj      :: GodotObject
   , _gwcCompositor :: TVar (Ptr C'WlrCompositor)
-  , _gwcWlDisplay :: TVar (Ptr C'WlDisplay)
-  , _gwcWlEventLoop :: TVar (Ptr C'WlEventLoop)
+  , _gwcWlDisplay :: TVar C'WlDisplay  -- DisplayServer ~ * wl_display
+  , _gwcWlEventLoop :: TVar C'WlEventLoop
   , _gwcBackEnd :: TVar (Ptr C'WlrBackend)
   , _gwcSurfaces :: TVar (M.Map (Ptr C'WlrSurface) GodotWlrootsSurfaceSprite)
   , _gwcOutput :: TVar (Ptr C'WlrOutput) -- possibly needs to be (TVar [Ptr C'WlrOutput])
-  , _gwcNormalLayer :: TVar (Ptr C'WlrLayer)
+-- , _gwcNormalLayer :: TVar (Ptr C'WlrLayer) -- so far unused
   }
+-}
 
 instance GodotClass GodotWlrootsCompositor where
   godotClassName = "WlrootsCompositor"
@@ -143,7 +146,6 @@ instance ClassExport GodotWlrootsCompositor where
     <*> atomically (newTVar undefined)
     <*> atomically (newTVar mempty)
     <*> atomically (newTVar undefined)
-    <*> atomically (newTVar undefined)
 
   classExtends = "Spatial"
   classMethods =
@@ -153,7 +155,7 @@ instance ClassExport GodotWlrootsCompositor where
 
 instance HasBaseClass GodotWlrootsCompositor where
   type BaseClass GodotWlrootsCompositor = GodotSpatial
-  super (GodotWlrootsCompositor obj _ _ _ _ _ _ _) = GodotSpatial obj
+  super (GodotWlrootsCompositor obj _ _ _ _ _ _) = GodotSpatial obj
 
 ready :: GFunc GodotWlrootsCompositor
 ready compositor _ = do
@@ -168,22 +170,21 @@ startBaseCompositor compositor = do
 startBaseThread :: GodotWlrootsCompositor -> IO ()
 startBaseThread compositor = Control.Monad.void $ forkOS $ do
   putStrLn "startBaseThread not implemented yet."
-  {-
-  ptrWlDisplay <- [C.block| wl_display* {
-                      wl_display * display;
-                      display = wl_display_create();
-                      assert(display);
-                      return display;} |]
-  ptrWlEventLoop <- [C.block| wl_event_loop* {
-                        wl_event_loop * loop;
-                        loop = wl_display_get_event_loop($(wl_display *ptrWlDisplay));
-                        assert(loop);
-                        return wl_event_loop;} |]
-  ptrWlrBackend <- [C.block| wl_event_loop* {
-                        wlr_backend * backend;
-                        backend = wlr_headless_backend_create($(wl_display* ptrWlDisplay), NULL);
-                        assert(backend);
-                        return backend;} |]
+  -- ptrWlDisplay <- [C.block| wl_display* {
+  --                     wl_display * display;
+  --                     display = wl_display_create();
+  --                     assert(display);
+  --                     return display;} |]
+  -- ptrWlEventLoop <- [C.block| wl_event_loop* {
+  --                       wl_event_loop * loop;
+  --                       loop = wl_display_get_event_loop($(wl_display *ptrWlDisplay));
+  --                       assert(loop);
+  --                       return wl_event_loop;} |]
+  -- ptrWlrBackend <- [C.block| wl_event_loop* {
+  --                       wlr_backend * backend;
+  --                       backend = wlr_headless_backend_create($(wl_display* ptrWlDisplay), NULL);
+  --                       assert(backend);
+  --                       return backend;} |]
   -- TODO: Connect signals with their wl_notify_func_t
           -- wl_list_init(&server.outputs);
           -- server.new_output.notify = new_output_notify;
@@ -194,9 +195,8 @@ startBaseThread compositor = Control.Monad.void $ forkOS $ do
           --         wl_display_destroy(server.wl_display);
           --         return 1;
           -- }
-  [C.exp| void { wl_display_run($(wl_display* ptrWlDisplay)); } |]
-  [C.exp| void { wl_display_destroy($(wl_display* ptrWlDisplay)); } |]
-  putStrLn "DEBUG: startBaseThread complete."
+  -- [C.exp| void { wl_display_run($(wl_display* ptrWlDisplay)); } |]
+  -- [C.exp| void { wl_display_destroy($(wl_display* ptrWlDisplay)); } |]
     where newOutputNotify :: (Ptr C'WlListener -> Ptr ())
           newOutputNotify _ = undefined
 
@@ -205,7 +205,6 @@ startBaseThread compositor = Control.Monad.void $ forkOS $ do
 
           outputDestroyNotify :: (Ptr C'WlListener -> Ptr ())
           outputDestroyNotify = undefined
-    -}
 
 
 -- TODO: check the origin plane?

@@ -62,13 +62,13 @@ extra-deps:
 - casing-0.1.4.0@sha256:a1ea21789906302930300b68ffd40373bc731e9254b43d1f35e8ba7368b2acce,1029
 - data-flags-0.0.3.4
 - git: https://github.com/SimulaVR/hsroots
-  commit: d078ee8efb39587f0300269a1da22bfc0954e010
-- git: https://github.com/Ongy/haskell-wayland
-  commit: 4a8974dcb0adf50b14e822633f7fc84aaa4afa70
-- git: https://github.com/abooij/haskell-xkbcommon
-  commit: a337b4f699fef2621ae028eec9171fcd9ea848c5
-- git: https://github.com/waymonad/libinput
-  commit: 22d009f0c5555845fb57ded83fabd0b5adba3a0f
+  commit: 92adff771783f4b4f36754d26109463daca8c2e6
+- git: https://github.com/SimulaVR/hayland
+  commit: 7bb7d3dbe97bf5ec38697d87da31f3e00f992494
+- git: https://github.com/Ongy/haskell-xkbcommon.git
+  commit: a1455b51c053289b1b5b27d19d4159180647228d
+- git: https://github.com/georgewsinger/libinput
+  commit: 68088b5acdda3e3e8121e6dafa34f295bf35c121
 
 # Fields needed when importing hsroots locally:
   # - hsroots/

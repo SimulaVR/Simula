@@ -11,7 +11,7 @@ import qualified Godot.Gdnative.Internal.Api as Api
 import           Foreign
 import           Foreign.C
 
-import           Plugin.WaylandTypes
+import           Debug.C
 
 import           System.IO.Unsafe
 
