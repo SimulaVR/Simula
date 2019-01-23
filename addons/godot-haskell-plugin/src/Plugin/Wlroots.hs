@@ -46,9 +46,8 @@ import      Graphics.Wayland.WlRoots.Surface
 import      Graphics.Wayland.WlRoots.Backend
 import      Graphics.Wayland.WlRoots.Output
 import      Graphics.Wayland.Server
--- import      System.InputDevice
 
-{- HsRoots Modules:
+{- HsRoots Modules in case needed:
 import      Graphics.Egl
 import      Graphics.Pixman
 import      Graphics.Wayland.Global
@@ -104,10 +103,6 @@ import      Graphics.Wayland.WlRoots.XdgShell
 import      Graphics.Wayland.WlRoots.XdgShellv6
 -} 
 
--- C.verbatim "#define WLR_USE_UNSTABLE"
--- C.include "<wayland-server.h>"
--- C.include "<wlr/backend.h>"
--- C.include "<wlr/render/wlr_renderer.h>" -- Throws error "expected primary-expression before 'static'  on line 37
 initializeSimulaCtxAndIncludes
 
 -- TODO: Rename typename to "Compositor" and propogate throughout godot scene tree.
@@ -170,16 +165,17 @@ startBaseCompositor compositor = do
 startBaseThread :: GodotWlrootsCompositor -> IO ()
 startBaseThread compositor = Control.Monad.void $ forkOS $ do
   putStrLn "startBaseThread not implemented yet."
-  -- ptrWlDisplay <- [C.block| wl_display* {
-  --                     wl_display * display;
+  -- return ()
+  -- ptrWlDisplay <- [C.block| struct wl_display* {
+  --                     struct wl_display * display;
   --                     display = wl_display_create();
   --                     assert(display);
-  --                     return display;} |]
-  -- ptrWlEventLoop <- [C.block| wl_event_loop* {
-  --                       wl_event_loop * loop;
-  --                       loop = wl_display_get_event_loop($(wl_display *ptrWlDisplay));
+  --                     return display;} |] :: IO (Ptr C'WlDisplay)
+  -- ptrWlEventLoop <- [C.block| struct wl_event_loop* {
+  --                       struct wl_event_loop * loop;
+  --                       loop = wl_display_get_event_loop($(struct wl_display *ptrWlDisplay));
   --                       assert(loop);
-  --                       return wl_event_loop;} |]
+  --                       return loop;} |]
   -- ptrWlrBackend <- [C.block| wl_event_loop* {
   --                       wlr_backend * backend;
   --                       backend = wlr_headless_backend_create($(wl_display* ptrWlDisplay), NULL);
