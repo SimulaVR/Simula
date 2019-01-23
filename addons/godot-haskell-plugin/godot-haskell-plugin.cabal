@@ -79,6 +79,7 @@ library
       Plugin.Simula
       Plugin.VR
       Debug.C
+      Debug.Marshal
   default-language: Haskell2010
   default-extensions:
       FlexibleContexts
@@ -126,6 +127,7 @@ foreign-library godot-haskell-plugin
     Plugin.Simula
     Plugin.VR
     Debug.C
+    Debug.Marshal
   other-modules: FLib
   ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -threaded -fobject-code
   build-depends:
