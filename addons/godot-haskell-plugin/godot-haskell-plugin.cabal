@@ -75,6 +75,7 @@ library
       Plugin.Input
       Plugin.Input.Grab
       Plugin.Input.Telekinesis
+      Plugin.Server
       Plugin.SimulaController
       Plugin.Simula
       Plugin.VR
@@ -123,6 +124,7 @@ foreign-library godot-haskell-plugin
     Plugin.Input
     Plugin.Input.Grab
     Plugin.Input.Telekinesis
+    Plugin.Server
     Plugin.SimulaController
     Plugin.Simula
     Plugin.VR
