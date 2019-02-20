@@ -16,26 +16,12 @@ import Foreign.C.String
 import Foreign.C.Types
 import Text.RawString.QQ (r)
 
-import Graphics.Wayland.Server
-import Graphics.Wayland.Internal.Server
-import Graphics.Wayland.WlRoots.Compositor
-import Graphics.Wayland.WlRoots.Output
-import Graphics.Wayland.WlRoots.Surface
-import Graphics.Wayland.WlRoots.Backend
-import Graphics.Wayland.Signal
-import Graphics.Wayland.WlRoots.Render
-import Graphics.Wayland.WlRoots.OutputLayout
-import Graphics.Wayland.WlRoots.Input
-import Graphics.Wayland.WlRoots.Seat
-import Graphics.Wayland.WlRoots.Cursor
-import Graphics.Wayland.WlRoots.XCursorManager
-import Graphics.Wayland.WlRoots.XdgShell
-
 import Data.Coerce
 import Debug.C
 
 -- |HsRoots Modules for reference:
-{-
+import      Graphics.Wayland.Server
+import      Graphics.Wayland.Internal.Server
 import      Graphics.Egl
 import      Graphics.Pixman
 import      Graphics.Wayland.Global
@@ -88,14 +74,29 @@ import      Graphics.Wayland.WlRoots.XCursor
 import      Graphics.Wayland.WlRoots.XCursorManager
 import      Graphics.Wayland.WlRoots.XWayland
 import      Graphics.Wayland.WlRoots.XdgShell
-import      Graphics.Wayland.WlRoots.XdgShellv6
--}
+-- import      Graphics.Wayland.WlRoots.XdgShellv6
 
 initializeSimulaCtxAndIncludes
 
+-- | We make C'WlListener an instance of Storable so we can conveniently
+-- | pass it from C to Haskell and back via inline-C.
+-- | NOTE: This actually didn't work; see:
+-- | https://stackoverflow.com/questions/54375088/marshalling-a-struct-from-c-to-haskell-using-inline-c
+instance Storable C'WlListener where
+  sizeOf _    = fromIntegral $ [C.pure| int { sizeof(struct wl_listener) }|]
+  alignment _ = fromIntegral $ [C.pure| int { alignof(struct wl_listener) }|]
+  peek        = error "peek not implemented for C'WlListener"
+  poke _ _    = error "poke not implemented for C'WlListener"
+
+instance Storable C'WlSignal where
+  sizeOf _    = fromIntegral $ [C.pure| int { sizeof(struct wl_signal) }|]
+  alignment _ = fromIntegral $ [C.pure| int { alignof(struct wl_signal) }|]
+  peek        = error "peek not implemented for C'WlSignal"
+  poke _ _    = error "poke not implemented for C'WlSignal"
+
 -- |FFI is a relation between C types marshalled from inline-C and C2HS
 -- |(via hsroots and its dependencies).
-class FFI inlinec chs | inlinec -> chs where
+class FFI inlinec chs | chs -> inlinec where
   toC2HS :: inlinec -> chs
   toInlineC :: chs -> inlinec
 
@@ -104,7 +105,6 @@ instance FFI (Ptr C'WlDisplay) DisplayServer where
   toC2HS ptrToWlDisplay = (DisplayServer ((castPtr ptrToWlDisplay) :: Ptr DisplayServer))
   toInlineC (DisplayServer ptrToDisplayServer) = (castPtr ptrToDisplayServer) :: Ptr C'WlDisplay
 
--- |Comment outed; see below.
 -- instance FFI (Ptr C'WlEventLoop) EventLoop where
 --  toC2HS ptrToWlEventLoop = (EventLoop ((castPtr ptrToWlEventLoop) :: Ptr EventLoop))
 --  toInlineC (EventLoop ptrToEventLoop) = (castPtr ptrToEventLoop) :: Ptr C'WlEventLoop
@@ -153,6 +153,34 @@ instance FFI (Ptr C'WlrSeat) (Ptr WlrSeat) where
   toInlineC ptr = (castPtr ptr) :: Ptr C'WlrSeat
 
 instance FFI (Ptr C'WlrOutputLayout) (Ptr WlrOutputLayout) where
+  toC2HS = castPtr
+  toInlineC = castPtr
+
+instance FFI (Ptr C'WlrXdgShell) (Ptr WlrXdgShell) where
+  toC2HS = castPtr
+  toInlineC = castPtr
+
+instance FFI (Ptr C'WlrKeyboard) (Ptr WlrKeyboard) where
+  toC2HS = castPtr
+  toInlineC = castPtr
+
+-- instance FFI (Ptr C'WlrEventKeyboardKey) (EventKey) where
+--   toC2HS = castPtr
+--   toInlineC = castPtr
+
+instance FFI (Ptr C'WlrXdgSurface) (Ptr WlrXdgSurface) where
+  toC2HS = castPtr
+  toInlineC = castPtr
+
+instance FFI (Ptr C'WlrSeatPointerState) (Ptr WlrSeatPointerState) where
+  toC2HS = castPtr
+  toInlineC = castPtr
+
+instance FFI (Ptr C'WlrSeatClient) (Ptr WlrSeatClient) where
+  toC2HS = castPtr
+  toInlineC = castPtr
+
+instance FFI (Ptr C'WlSignal) (Ptr (WlSignal a)) where
   toC2HS = castPtr
   toInlineC = castPtr
 
