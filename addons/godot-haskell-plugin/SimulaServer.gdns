@@ -4,6 +4,6 @@
 
 [resource]
 
-class_name = "WlrootsCompositor"
+class_name = "SimulaServer"
 library = ExtResource( 1 )
 _sections_unfolded = [ "Resource" ]
