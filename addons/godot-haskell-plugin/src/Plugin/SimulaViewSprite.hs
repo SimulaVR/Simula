@@ -3,17 +3,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Plugin.WlrootsSurfaceSprite
-  ( GodotWlrootsSurfaceSprite(..)
-  , newGodotWlrootsSurfaceSprite
-  , setWlrootsSurfaceTexture
-  , getWlrootsSurfaceTexture
-  , updateWlrootsSurfaceSprite
-  , spriteShouldMove, setSpriteShouldMove
-  , getSprite
-  , InputEventType(..)
-  , processClickEvent
-  ) where
+module Plugin.SimulaViewSprite where
 
 import Debug.C
 
@@ -29,28 +19,28 @@ import qualified Godot.Core.GodotRigidBody   as RigidBody
 import           Godot.Gdnative.Internal.Api
 import qualified Godot.Methods               as G
 
-import Plugin.WlrootsSurfaceTexture
+import Plugin.SimulaViewTexture
 
 import Foreign
 
-data GodotWlrootsSurfaceSprite = GodotWlrootsSurfaceSprite
+data GodotSimulaViewSprite = GodotSimulaViewSprite
   { _gwssObj     :: GodotObject
   , _gwssShouldMove :: TVar Bool
   , _gwssSprite :: TVar GodotSprite3D
   , _gwssShape :: TVar GodotBoxShape
-  , _gwssTexture :: TVar GodotWlrootsSurfaceTexture
+  , _gwssTexture :: TVar GodotSimulaViewTexture
   , _gwssSeat :: TVar (Ptr C'WlrSeat)
   }
 
-instance Eq GodotWlrootsSurfaceSprite where
+instance Eq GodotSimulaViewSprite where
   (==) = (==) `on` _gwssObj
 
-instance GodotClass GodotWlrootsSurfaceSprite where
-  godotClassName = "WlrootsSurfaceSprite"
+instance GodotClass GodotSimulaViewSprite where
+  godotClassName = "SimulaViewSprite"
 
-instance ClassExport GodotWlrootsSurfaceSprite where
+instance ClassExport GodotSimulaViewSprite where
   classInit obj =
-    GodotWlrootsSurfaceSprite obj
+    GodotSimulaViewSprite obj
                   <$> atomically (newTVar True)
                   <*> atomically (newTVar (error "didn't init sprite")) <*> atomically (newTVar (error "didn't init shape"))
                   <*> atomically (newTVar (error "didn't init texture")) <*> atomically (newTVar (error "didn't init seat"))
@@ -60,13 +50,13 @@ instance ClassExport GodotWlrootsSurfaceSprite where
     , GodotMethod NoRPC "_ready" ready
     ]
 
-instance HasBaseClass GodotWlrootsSurfaceSprite where
-  type BaseClass GodotWlrootsSurfaceSprite = GodotRigidBody
-  super (GodotWlrootsSurfaceSprite obj _ _ _ _ _ ) = GodotRigidBody obj
+instance HasBaseClass GodotSimulaViewSprite where
+  type BaseClass GodotSimulaViewSprite = GodotRigidBody
+  super (GodotSimulaViewSprite obj _ _ _ _ _ ) = GodotRigidBody obj
 
-newGodotWlrootsSurfaceSprite :: GodotWlrootsSurfaceTexture -> (Ptr C'WlrSeat) -> IO GodotWlrootsSurfaceSprite
-newGodotWlrootsSurfaceSprite tex seat = do
-  gwss <- "res://addons/godot-haskell-plugin/WlrootsSurfaceSprite.gdns"
+newGodotSimulaViewSprite :: GodotSimulaViewTexture -> (Ptr C'WlrSeat) -> IO GodotSimulaViewSprite
+newGodotSimulaViewSprite tex seat = do
+  gwss <- "res://addons/godot-haskell-plugin/SimulaViewSprite.gdns"
     & unsafeNewNS id "Object" []
     >>= godot_nativescript_get_userdata
     >>= deRefStablePtr . castPtrToStablePtr
@@ -86,25 +76,25 @@ newGodotWlrootsSurfaceSprite tex seat = do
   atomically $ writeTVar (_gwssSeat gwss) seat
   return gwss
 
-setWlrootsSurfaceTexture :: GodotWlrootsSurfaceSprite -> GodotWlrootsSurfaceTexture -> IO ()
-setWlrootsSurfaceTexture gwss tex = do
+setSimulaViewTexture :: GodotSimulaViewSprite -> GodotSimulaViewTexture -> IO ()
+setSimulaViewTexture gwss tex = do
   atomically $ writeTVar (_gwssTexture gwss) tex
   sprite <- atomically $ readTVar (_gwssSprite gwss)
   G.set_texture sprite (safeCast tex)
   sizeChanged gwss
 
-getWlrootsSurfaceTexture :: GodotWlrootsSurfaceSprite -> IO GodotWlrootsSurfaceTexture
-getWlrootsSurfaceTexture gwss = atomically $ readTVar (_gwssTexture gwss)
+getSimulaViewTexture :: GodotSimulaViewSprite -> IO GodotSimulaViewTexture
+getSimulaViewTexture gwss = atomically $ readTVar (_gwssTexture gwss)
 
-updateWlrootsSurfaceSprite :: GodotWlrootsSurfaceSprite -> IO ()
-updateWlrootsSurfaceSprite gwss = do
+updateSimulaViewSprite :: GodotSimulaViewSprite -> IO ()
+updateSimulaViewSprite gwss = do
   sprite <- atomically $ readTVar (_gwssSprite gwss)
   tex <- atomically $ readTVar (_gwssTexture gwss)
-  updateWlrootsSurfaceTexture tex -- not implemented yet
+  updateSimulaViewTexture tex -- not implemented yet
   G.set_texture sprite (safeCast tex)
   sizeChanged gwss
 
-sizeChanged :: GodotWlrootsSurfaceSprite -> IO ()
+sizeChanged :: GodotSimulaViewSprite -> IO ()
 sizeChanged gwss = do
   sprite <- atomically $ readTVar (_gwssSprite gwss)
   aabb <- G.get_aabb sprite
@@ -115,10 +105,10 @@ sizeChanged gwss = do
 
   G.set_extents shape size'
 
-getSprite :: GodotWlrootsSurfaceSprite -> IO GodotSprite3D
+getSprite :: GodotSimulaViewSprite -> IO GodotSprite3D
 getSprite gwss = atomically $ readTVar (_gwssSprite gwss)
 
-spriteShouldMove :: GodotWlrootsSurfaceSprite -> IO Bool
+spriteShouldMove :: GodotSimulaViewSprite -> IO Bool
 spriteShouldMove gwss = do
   en <- atomically $ readTVar (_gwssShouldMove gwss)
   if en then do
@@ -130,15 +120,15 @@ spriteShouldMove gwss = do
     else return False
 
 
-setSpriteShouldMove :: GodotWlrootsSurfaceSprite -> Bool -> IO ()
+setSpriteShouldMove :: GodotSimulaViewSprite -> Bool -> IO ()
 setSpriteShouldMove gwss = atomically . writeTVar (_gwssShouldMove gwss)
 
-ready :: GFunc GodotWlrootsSurfaceSprite
+ready :: GFunc GodotSimulaViewSprite
 ready self _ = do
   G.set_mode self RigidBody.MODE_KINEMATIC
   toLowLevel VariantNil
 
-inputEvent :: GFunc GodotWlrootsSurfaceSprite
+inputEvent :: GFunc GodotSimulaViewSprite
 inputEvent self args = do
   case toList args of
     [_cam, evObj, clickPosObj, _clickNormal, _shapeIdx] ->  do
@@ -153,7 +143,7 @@ data InputEventType
   = Motion
   | Button Bool Int
 
-processInputEvent :: GodotWlrootsSurfaceSprite -> GodotObject -> GodotVector3 -> IO ()
+processInputEvent :: GodotSimulaViewSprite -> GodotObject -> GodotVector3 -> IO ()
 processInputEvent gwss ev clickPos = do
   whenM (ev `isClass` "InputEventMouseMotion") $ processClickEvent gwss Motion clickPos
   whenM (ev `isClass` "InputEventMouseButton") $ do
@@ -162,7 +152,7 @@ processInputEvent gwss ev clickPos = do
     button <- G.get_button_index ev'
     processClickEvent gwss (Button pressed button) clickPos
 
-processClickEvent :: GodotWlrootsSurfaceSprite -> InputEventType -> GodotVector3 -> IO ()
+processClickEvent :: GodotSimulaViewSprite -> InputEventType -> GodotVector3 -> IO ()
 processClickEvent gwss evt clickPos = do putStrLn "processClickEvent not yet implemented."
   {-
   lpos <- G.to_local gwss clickPos >>= fromLowLevel

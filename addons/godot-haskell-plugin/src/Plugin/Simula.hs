@@ -7,7 +7,7 @@ import           Plugin.Imports
 import           Plugin.Input
 import           Plugin.Input.Grab
 import           Plugin.SimulaController
-import           Plugin.WlrootsSurfaceSprite
+import           Plugin.SimulaViewSprite
 import           Plugin.VR
 
 import           Godot.Core.GodotGlobalConstants
@@ -31,7 +31,7 @@ instance ClassExport GodotSimula where
 
   classExtends = "Node"
   classMethods =
-    [ GodotMethod NoRPC "_ready" ready
+    [ GodotMethod NoRPC "_ready" Plugin.Simula.ready
     , GodotMethod NoRPC "_process" process
     , GodotMethod NoRPC "on_button_signal" on_button_signal
     ]
@@ -71,9 +71,9 @@ ready self _ = do
  where
   addCompositorNode :: IO ()
   addCompositorNode = do
-    gwc <- "res://addons/godot-haskell-plugin/WlrootsCompositor.gdns"
+    gwc <- "res://addons/godot-haskell-plugin/SimulaServer.gdns"
       & unsafeNewNS GodotSpatial "Spatial" []
-    G.set_name gwc =<< toLowLevel "Wlroots"
+    G.set_name gwc =<< toLowLevel "SimulaServer"
     G.add_child self (asObj gwc) True
 
   connectController :: GodotSimulaController -> IO ()
@@ -122,7 +122,7 @@ onButton self gsc button pressed =
       let rc = _gscRayCast gsc
       whenM (G.is_colliding rc) $
         G.get_collider rc
-          >>= tryObjectCast @GodotWlrootsSurfaceSprite
+          >>= tryObjectCast @GodotSimulaViewSprite
           >>= maybe (return ()) (onSpriteInput rc)
  where
   gst = _sGrabState self

@@ -69,13 +69,12 @@ library
       Plugin
       Plugin.Imports
       Plugin.Pointer
-      Plugin.WlrootsSurfaceTexture
-      Plugin.WlrootsSurfaceSprite
-      Plugin.Wlroots
+      Plugin.SimulaViewTexture
+      Plugin.SimulaViewSprite
       Plugin.Input
       Plugin.Input.Grab
       Plugin.Input.Telekinesis
-      Plugin.Server
+      Plugin.SimulaServer
       Plugin.SimulaController
       Plugin.Simula
       Plugin.VR
@@ -118,13 +117,12 @@ foreign-library godot-haskell-plugin
     Plugin
     Plugin.Imports
     Plugin.Pointer
-    Plugin.WlrootsSurfaceTexture
-    Plugin.WlrootsSurfaceSprite
-    Plugin.Wlroots
+    Plugin.SimulaViewTexture
+    Plugin.SimulaViewSprite
     Plugin.Input
     Plugin.Input.Grab
     Plugin.Input.Telekinesis
-    Plugin.Server
+    Plugin.SimulaServer
     Plugin.SimulaController
     Plugin.Simula
     Plugin.VR

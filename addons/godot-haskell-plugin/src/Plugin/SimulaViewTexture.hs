@@ -3,10 +3,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Plugin.WlrootsSurfaceTexture 
-  ( GodotWlrootsSurfaceTexture(..)
-  , newGodotWlrootsSurfaceTexture, setWlrSurface
-  , updateWlrootsSurfaceTexture) where
+module Plugin.SimulaViewTexture where
 
 import Debug.C
 
@@ -24,7 +21,7 @@ import qualified Godot.Core.GodotImage as Image
 import Foreign
 
 
-data GodotWlrootsSurfaceTexture = GodotWlrootsSurfaceTexture
+data GodotSimulaViewTexture = GodotSimulaViewTexture
   { _gwstObj      :: GodotObject
   , _gwstSurface :: TVar (Ptr C'WlrSurface)
   , _gwstView :: TVar (Ptr C'WlrView)
@@ -32,14 +29,14 @@ data GodotWlrootsSurfaceTexture = GodotWlrootsSurfaceTexture
   , _gwstImageData :: TVar GodotPoolByteArray
   }
 
-instance GodotClass GodotWlrootsSurfaceTexture where
-  godotClassName = "WlrootsSurfaceTexture"
+instance GodotClass GodotSimulaViewTexture where
+  godotClassName = "SimulaViewTexture"
 
-instance ClassExport GodotWlrootsSurfaceTexture where
+instance ClassExport GodotSimulaViewTexture where
   classInit obj = do
     img <- unsafeInstance GodotImage "Image"
     imgdt <- godot_pool_byte_array_new
-    GodotWlrootsSurfaceTexture obj
+    GodotSimulaViewTexture obj
       <$> atomically (newTVar undefined)
       <*> atomically (newTVar undefined)
       <*> atomically (newTVar img)
@@ -47,25 +44,25 @@ instance ClassExport GodotWlrootsSurfaceTexture where
   classExtends = "ImageTexture"
   classMethods = []
 
-instance HasBaseClass GodotWlrootsSurfaceTexture where
-  type BaseClass GodotWlrootsSurfaceTexture = GodotImageTexture         
-  super (GodotWlrootsSurfaceTexture obj _ _ _ _) = GodotImageTexture obj
+instance HasBaseClass GodotSimulaViewTexture where
+  type BaseClass GodotSimulaViewTexture = GodotImageTexture         
+  super (GodotSimulaViewTexture obj _ _ _ _) = GodotImageTexture obj
 
-newGodotWlrootsSurfaceTexture :: IO GodotWlrootsSurfaceTexture
-newGodotWlrootsSurfaceTexture = do
-  ret <- unsafeNewNS id "Object" [] "res://addons/godot-haskell-plugin/WlrootsSurfaceTexture.gdns"
+newGodotSimulaViewTexture :: IO GodotSimulaViewTexture
+newGodotSimulaViewTexture = do
+  ret <- unsafeNewNS id "Object" [] "res://addons/godot-haskell-plugin/SimulaViewTexture.gdns"
   objPtr <- godot_nativescript_get_userdata ret
   deRefStablePtr $ castPtrToStablePtr objPtr
 
-setWlrSurface :: GodotWlrootsSurfaceTexture -> (Ptr C'WlrSurface) -> (Ptr C'WlrView) -> IO ()
+setWlrSurface :: GodotSimulaViewTexture -> (Ptr C'WlrSurface) -> (Ptr C'WlrView) -> IO ()
 setWlrSurface gws ws view = do 
   atomically $ writeTVar (_gwstSurface gws) ws
   atomically $ writeTVar (_gwstView gws) view
-  updateWlrootsSurfaceTexture gws
+  updateSimulaViewTexture gws
 
-updateWlrootsSurfaceTexture :: GodotWlrootsSurfaceTexture -> IO ()
-updateWlrootsSurfaceTexture gws = do
-  putStrLn "updateWlrootsSurfaceTexture not yet implemented."
+updateSimulaViewTexture :: GodotSimulaViewTexture -> IO ()
+updateSimulaViewTexture gws = do
+  putStrLn "updateSimulaViewTexture not yet implemented."
   {-
   ws <- atomically $ readTVar (_gwstSurface gws)
 
