@@ -8,12 +8,15 @@ pkgs.haskell.lib.buildStackProject {
                              (callPackage ./nix/wayland.nix { } )
                              (callPackage ./nix/wayland-protocols.nix { } )
                              (callPackage ./nix/wlroots.nix { } )
+                             (callPackage ./nix/libdrm.nix { } )
+                             pkgconfig
+                             pixman
                              libGL
                              xorg.pixman
                              libxkbcommon
                              zlib
                              git
-                             godot
+                           # godot # TODO: Make nix expression for our Godot fork
                              xorg.libX11
                              udev
                              cabal-install
