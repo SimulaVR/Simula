@@ -6,13 +6,13 @@
 
 name:           godot-haskell-plugin
 version:        0.1.0.0
-description:    Please see the README on Github at <https://github.com/KaneTW/godot-haskell-plugin#readme>
-homepage:       https://github.com/KaneTW/godot-haskell-plugin#readme
-bug-reports:    https://github.com/KaneTW/godot-haskell-plugin/issues
-author:         David Kraeutmann
-maintainer:     kane@kane.cx
-copyright:      2018 David Kraeutmann
-license:        BSD3
+description:    Please see the README on Github at <https://github.com/SimulaVR/Simula#readme>
+homepage:       https://github.com/SimulaVR/Simula#readme
+bug-reports:    https://github.com/SimulaVR/SImula/issues
+author:         Simula Team
+maintainer:     simulavr@gmail.com
+copyright:      2018
+license:        Apache
 license-file:   LICENSE
 build-type:     Simple
 cabal-version:  >= 1.10
@@ -34,6 +34,11 @@ library
      hs-source-dirs: src, no-telemetry
   else
      hs-source-dirs: src, telemetry
+  c-sources:
+      cbits/flib.c
+      cbits/xdg-shell-protocol.c
+  include-dirs:
+      include
   build-depends:
       base >=4.12 && <5
     , lens
@@ -103,7 +108,7 @@ library
 
 -- | After adding hsroots, we are forced to copy cabal fields for `library`
 -- down to `foreign-library godot-haskell-plugin` (unclear why).
--- TODO: Switch to package.yaml
+-- TODO: Switch to package.yaml pending on this change: https://github.com/sol/hpack/issues/258
 foreign-library godot-haskell-plugin
   if flag(no-tracking)
      hs-source-dirs: src, no-telemetry, flib
@@ -174,6 +179,9 @@ foreign-library godot-haskell-plugin
        FunctionalDependencies
   c-sources:
       cbits/flib.c
+      cbits/xdg-shell-protocol.c
+  include-dirs:
+      include
   default-language: Haskell2010
   pkgconfig-depends:
       wlroots

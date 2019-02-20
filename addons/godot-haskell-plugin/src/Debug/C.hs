@@ -22,19 +22,18 @@ import Graphics.Wayland.WlRoots.Compositor
 import Graphics.Wayland.WlRoots.Output
 import Graphics.Wayland.WlRoots.Surface
 import Graphics.Wayland.WlRoots.Backend
-import      Graphics.Wayland.Signal
+import Graphics.Wayland.Signal
 
 import Data.Coerce
 
+import System.Clock
 
--- |These hold actual structs, but are opaque to Haskell without explicit Storable declarations.
+
+-- |Many of these hold actual structs, but are opaque to Haskell without explicit Storable declarations.
 data C'WlDisplay
 data C'WlList
--- data C'WlShmFormatArgb8888 -- Probably will be needed for transfering wayland buffers to Godot
--- data C'WlKeyboardKeyState  -- Used in old Simula code
 data C'WlrSurface
 data C'WlrCompositor
-data C'WlrView
 data C'WlrOutput
 data C'WlrOutputLayout
 data C'WlrKeyboard
@@ -51,11 +50,20 @@ data C'WlrXCursorManager
 data C'WlrSeat
 data C'WlrOuutputLayout
 data C'WlrInputDevice
-data C'WlListener  -- HsRoots treats this type weirdly; see Marshal.hs
+data C'WlrXdgSurface
+data C'WlrEventKeyboardKey
+data C'WlrSeatPointerState
+data C'WlrSeatClient
+data C'WlSeatCapability
+  
+data C'WlSignal
+data C'WlListener -- HsRoots treats this type subtly; see Marshal.hs and Signal.hsc in HsRoots
 
 -- |Here we enrich C'WlNotifyFuncT with some inner structure. Note that in C:
 -- |typedef void(* wl_notify_func_t) (struct wl_listener *listener, void *data)
 type C'WlNotifyFuncT = FunPtr (Ptr C'WlListener -> Ptr () -> IO ())
+
+type C'WlrSurfaceIteratorFuncT = FunPtr (Ptr C'WlrSurface -> CInt -> CInt -> Ptr () -> IO ())
 
 -- |All inline-C types are kept in an explicit marshalling table.
 -- |Note we must not use C++ in this project as wlroots is incompatible with C++ compilers (see wlr_renderer.h use of [static ..]).
@@ -64,24 +72,33 @@ initializeSimulaCtx = C.context $ C.baseCtx <> C.funCtx <> mempty {
      (C.Struct "wl_display", [t|C'WlDisplay|])
   ,  (C.Struct "wl_listener", [t|C'WlListener|])
   ,  (C.Struct "wl_event_loop", [t|C'WlEventLoop|])
-  ,  (C.TypeName "wlr_surface", [t|C'WlrSurface|])
-  ,  (C.TypeName "wlr_compositor", [t|C'WlrCompositor|])
-  ,  (C.TypeName "wlr_view", [t|C'WlrView|])
-  ,  (C.TypeName "wlr_output", [t|C'WlrOutput|])
-  ,  (C.TypeName "wlr_keyboard", [t|C'WlrKeyboard|])
-  ,  (C.TypeName "wlr_pointer", [t|C'WlrPointer|])
-  ,  (C.TypeName "wlr_seat", [t|C'WlrSeat|])
-  ,  (C.TypeName "wlr_desktopApi", [t|C'WlrDesktopApi|])
-  ,  (C.TypeName "wlr_layer", [t|C'WlrLayer|])
-  ,  (C.TypeName "wlr_backend", [t|C'WlrBackend|])
-  ,  (C.TypeName "wlr_button", [t|C'WlrButton|])
+  ,  (C.Struct "wlr_surface", [t|C'WlrSurface|])
+  ,  (C.Struct "wlr_compositor", [t|C'WlrCompositor|])
+  ,  (C.Struct "wlr_output", [t|C'WlrOutput|])
+  ,  (C.Struct "wlr_keyboard", [t|C'WlrKeyboard|])
+  ,  (C.Struct "wlr_pointer", [t|C'WlrPointer|])
+  ,  (C.Struct "wlr_seat", [t|C'WlrSeat|])
+  ,  (C.Struct "wlr_desktopApi", [t|C'WlrDesktopApi|])
+  ,  (C.Struct "wlr_layer", [t|C'WlrLayer|])
+  ,  (C.Struct "wlr_backend", [t|C'WlrBackend|])
+  ,  (C.Struct "wlr_button", [t|C'WlrButton|])
   ,  (C.TypeName "wl_notify_func_t", [t|C'WlNotifyFuncT|])
-  ,  (C.TypeName "wlr_renderer", [t|C'WlrRenderer|])
-  ,  (C.TypeName "wlr_cursor", [t|C'WlrCursor|])
-  ,  (C.TypeName "wlr_xcursor_manager", [t|C'WlrXCursorManager|])
-  ,  (C.TypeName "wlr_seat", [t|C'WlrSeat|])
-  ,  (C.TypeName "wlr_output_layout", [t|C'WlrOutputLayout|])
-  ,  (C.TypeName "wlr_input_device", [t|C'WlrInputDevice|])
+  ,  (C.Struct "wlr_renderer", [t|C'WlrRenderer|])
+  ,  (C.Struct "wlr_cursor", [t|C'WlrCursor|])
+  ,  (C.Struct "wlr_xcursor_manager", [t|C'WlrXCursorManager|])
+  ,  (C.Struct "wlr_seat", [t|C'WlrSeat|])
+  ,  (C.Struct "wlr_output_layout", [t|C'WlrOutputLayout|])
+  ,  (C.Struct "wlr_input_device", [t|C'WlrInputDevice|])
+  ,  (C.Struct "wlr_xdg_surface", [t|C'WlrXdgSurface|])
+  ,  (C.Struct "wlr_event_keyboard_key", [t|C'WlrEventKeyboardKey|])
+  ,  (C.Struct "wlr_seat_pointer_state", [t|C'WlrSeatPointerState|])
+  ,  (C.Struct "wlr_seat_client", [t|C'WlrSeatClient|])
+  ,  (C.Struct "wlr_xdg_shell", [t|C'WlrXdgShell|])
+  ,  (C.Struct "timespec", [t|TimeSpec|])
+  ,  (C.Struct "wl_signal", [t|C'WlSignal|])
+  ,  (C.TypeName "wlr_surface_iterator_func_t", [t|C'WlrSurfaceIteratorFuncT|])
+  ,  (C.Enum  "wl_seat_capability", [t|C'WlSeatCapability|])
+  -- Omitted XKB Types: xkb_keysym_t, xkb_state, xkb_rule_names, xkb_context, xkb_keymap
 -- (C.TypeName "wl_shm_format_argb8888", [t|C'WlShmFormatArgb8888|])
 -- (C.TypeName "wl_keyboard_key_state", [t|C'WlKeyboardKeyState|])
   ]
@@ -101,12 +118,17 @@ initializeSimulaCtxAndIncludes = do
   C.include "<wlr/types/wlr_input_device.h>"
   C.include "<wlr/types/wlr_keyboard.h>"
   C.include "<wlr/types/wlr_matrix.h>"
+  C.include "<wlr/interfaces/wlr_output.h>"
   C.include "<wlr/types/wlr_output.h>"
   C.include "<wlr/types/wlr_output_layout.h>"
   C.include "<wlr/types/wlr_pointer.h>"
   C.include "<wlr/types/wlr_seat.h>"
   C.include "<wlr/types/wlr_xcursor_manager.h>"
+  C.include "<wlr/types/wlr_xdg_shell.h>"
+  C.include "<wlr/types/wlr_surface.h>"
   C.include "<wlr/util/log.h>"
   C.include "<xkbcommon/xkbcommon.h>"
   C.include "<assert.h>"
   C.include "<time.h>"
+  C.include "<stdlib.h>"
+  C.include "<stdalign.h>"

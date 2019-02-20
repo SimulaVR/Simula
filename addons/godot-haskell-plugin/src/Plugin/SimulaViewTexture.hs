@@ -24,7 +24,7 @@ import Foreign
 data GodotSimulaViewTexture = GodotSimulaViewTexture
   { _gwstObj      :: GodotObject
   , _gwstSurface :: TVar (Ptr C'WlrSurface)
-  , _gwstView :: TVar (Ptr C'WlrView)
+  , _gwstView :: TVar (Ptr ())
   , _gwstImage :: TVar GodotImage
   , _gwstImageData :: TVar GodotPoolByteArray
   }
@@ -54,7 +54,7 @@ newGodotSimulaViewTexture = do
   objPtr <- godot_nativescript_get_userdata ret
   deRefStablePtr $ castPtrToStablePtr objPtr
 
-setWlrSurface :: GodotSimulaViewTexture -> (Ptr C'WlrSurface) -> (Ptr C'WlrView) -> IO ()
+setWlrSurface :: GodotSimulaViewTexture -> (Ptr C'WlrSurface) -> (Ptr ()) -> IO ()
 setWlrSurface gws ws view = do 
   atomically $ writeTVar (_gwstSurface gws) ws
   atomically $ writeTVar (_gwstView gws) view
