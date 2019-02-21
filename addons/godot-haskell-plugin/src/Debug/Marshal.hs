@@ -74,7 +74,6 @@ import      Graphics.Wayland.WlRoots.XCursor
 import      Graphics.Wayland.WlRoots.XCursorManager
 import      Graphics.Wayland.WlRoots.XWayland
 import      Graphics.Wayland.WlRoots.XdgShell
--- import      Graphics.Wayland.WlRoots.XdgShellv6
 
 initializeSimulaCtxAndIncludes
 
@@ -185,6 +184,10 @@ instance FFI (Ptr C'WlSignal) (Ptr (WlSignal a)) where
   toInlineC = castPtr
 
 instance FFI (Ptr C'WlrInputDevice) (Ptr InputDevice) where
+  toC2HS = castPtr
+  toInlineC = castPtr
+
+instance FFI (Ptr C'WlResource) (Ptr WlResource) where
   toC2HS = castPtr
   toInlineC = castPtr
 

@@ -30,6 +30,7 @@ import System.Clock
 
 
 -- |Many of these hold actual structs, but are opaque to Haskell without explicit Storable declarations.
+data C'WlResource
 data C'WlDisplay
 data C'WlList
 data C'WlrSurface
@@ -55,7 +56,9 @@ data C'WlrEventKeyboardKey
 data C'WlrSeatPointerState
 data C'WlrSeatClient
 data C'WlSeatCapability
-  
+data C'WlShmBuffer
+data C'WlShmFormat
+
 data C'WlSignal
 data C'WlListener -- HsRoots treats this type subtly; see Marshal.hs and Signal.hsc in HsRoots
 
@@ -98,8 +101,9 @@ initializeSimulaCtx = C.context $ C.baseCtx <> C.funCtx <> mempty {
   ,  (C.Struct "wl_signal", [t|C'WlSignal|])
   ,  (C.TypeName "wlr_surface_iterator_func_t", [t|C'WlrSurfaceIteratorFuncT|])
   ,  (C.Enum  "wl_seat_capability", [t|C'WlSeatCapability|])
+  ,  (C.Enum "wl_shm_format", [t|C'WlShmFormat|])
+  -- ,  (C.Struct "wl_shm_format_argb8888", [t|C'WlShmFormatArgb8888|])
   -- Omitted XKB Types: xkb_keysym_t, xkb_state, xkb_rule_names, xkb_context, xkb_keymap
--- (C.TypeName "wl_shm_format_argb8888", [t|C'WlShmFormatArgb8888|])
 -- (C.TypeName "wl_keyboard_key_state", [t|C'WlKeyboardKeyState|])
   ]
 }
@@ -110,6 +114,7 @@ initializeSimulaCtxAndIncludes = do
   C.verbatim "#define WLR_USE_UNSTABLE" -- Until wlroots stabalizes their API, we have to put this at the top of all of our modules that make use of wlr_* types
   C.include "<wayland-server.h>"
   C.include "<wayland-server-core.h>"
+  C.include "<wayland-server-protocol.h>"
   C.include "<wlr/backend.h>"
   C.include "<wlr/render/wlr_renderer.h>"
   C.include "<wlr/types/wlr_cursor.h>"
