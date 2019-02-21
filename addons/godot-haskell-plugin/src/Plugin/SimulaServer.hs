@@ -130,124 +130,124 @@ data GodotSimulaServer = GodotSimulaServer
   }
 -}
 
-instance GodotClass GodotSimulaServer where
-  godotClassName = "SimulaServer"
+-- instance GodotClass GodotSimulaServer where
+--   godotClassName = "SimulaServer"
 
-instance ClassExport GodotSimulaServer where
-  classInit obj  = GodotSimulaServer obj
-    <$> atomically (newTVar undefined)
-    <*> atomically (newTVar undefined)
-    <*> atomically (newTVar undefined)
-    <*> atomically (newTVar undefined)
-    <*> atomically (newTVar mempty)
-    <*> atomically (newTVar undefined)
+-- instance ClassExport GodotSimulaServer where
+--   classInit obj  = GodotSimulaServer obj
+--     <$> atomically (newTVar undefined)
+--     <*> atomically (newTVar undefined)
+--     <*> atomically (newTVar undefined)
+--     <*> atomically (newTVar undefined)
+--     <*> atomically (newTVar mempty)
+--     <*> atomically (newTVar undefined)
 
-  classExtends = "Spatial"
-  classMethods =
-    [ GodotMethod NoRPC "_ready" Plugin.SimulaServer.ready
-    , GodotMethod NoRPC "_input" input
-    ]
+--   classExtends = "Spatial"
+--   classMethods =
+--     [ GodotMethod NoRPC "_ready" Plugin.SimulaServer.ready
+--     , GodotMethod NoRPC "_input" input
+--     ]
 
-instance HasBaseClass GodotSimulaServer where
-  type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _) = GodotSpatial obj
+-- instance HasBaseClass GodotSimulaServer where
+--   type BaseClass GodotSimulaServer = GodotSpatial
+--   super (GodotSimulaServer obj _ _ _ _ _ _) = GodotSpatial obj
 
-ready :: GFunc GodotSimulaServer
-ready compositor _ = do
-  startBaseCompositor compositor
-  toLowLevel VariantNil
+-- ready :: GFunc GodotSimulaServer
+-- ready compositor _ = do
+--   startBaseCompositor compositor
+--   toLowLevel VariantNil
 
-startBaseCompositor :: GodotSimulaServer -> IO ()
-startBaseCompositor compositor = do
-  startBaseThread compositor
-  startTelemetry (_gwcSurfaces compositor)
+-- startBaseCompositor :: GodotSimulaServer -> IO ()
+-- startBaseCompositor compositor = do
+--   startBaseThread compositor
+--   startTelemetry (_gwcSurfaces compositor)
 
-startBaseThread :: GodotSimulaServer -> IO ()
-startBaseThread compositor = Control.Monad.void $ forkOS $ do
-  putStrLn "startBaseThread not implemented yet."
-  -- return ()
-  -- ptrWlDisplay <- [C.block| struct wl_display* {
-  --                     struct wl_display * display;
-  --                     display = wl_display_create();
-  --                     assert(display);
-  --                     return display;} |] :: IO (Ptr C'WlDisplay)
-  -- ptrWlEventLoop <- [C.block| struct wl_event_loop* {
-  --                       struct wl_event_loop * loop;
-  --                       loop = wl_display_get_event_loop($(struct wl_display *ptrWlDisplay));
-  --                       assert(loop);
-  --                       return loop;} |]
-  -- ptrWlrBackend <- [C.block| wl_event_loop* {
-  --                       wlr_backend * backend;
-  --                       backend = wlr_headless_backend_create($(wl_display* ptrWlDisplay), NULL);
-  --                       assert(backend);
-  --                       return backend;} |]
-  -- TODO: Connect signals with their wl_notify_func_t
-          -- wl_list_init(&server.outputs);
-          -- server.new_output.notify = new_output_notify;
-          -- wl_signal_add(&server.backend->events.new_output, &server.new_output);
+-- startBaseThread :: GodotSimulaServer -> IO ()
+-- startBaseThread compositor = Control.Monad.void $ forkOS $ do
+--   putStrLn "startBaseThread not implemented yet."
+--   -- return ()
+--   -- ptrWlDisplay <- [C.block| struct wl_display* {
+--   --                     struct wl_display * display;
+--   --                     display = wl_display_create();
+--   --                     assert(display);
+--   --                     return display;} |] :: IO (Ptr C'WlDisplay)
+--   -- ptrWlEventLoop <- [C.block| struct wl_event_loop* {
+--   --                       struct wl_event_loop * loop;
+--   --                       loop = wl_display_get_event_loop($(struct wl_display *ptrWlDisplay));
+--   --                       assert(loop);
+--   --                       return loop;} |]
+--   -- ptrWlrBackend <- [C.block| wl_event_loop* {
+--   --                       wlr_backend * backend;
+--   --                       backend = wlr_headless_backend_create($(wl_display* ptrWlDisplay), NULL);
+--   --                       assert(backend);
+--   --                       return backend;} |]
+--   -- TODO: Connect signals with their wl_notify_func_t
+--           -- wl_list_init(&server.outputs);
+--           -- server.new_output.notify = new_output_notify;
+--           -- wl_signal_add(&server.backend->events.new_output, &server.new_output);
 
-          -- if (!wlr_backend_start(server.backend)) {
-          --         fprintf(stderr, "Failed to start backend\n");
-          --         wl_display_destroy(server.wl_display);
-          --         return 1;
-          -- }
-  -- [C.exp| void { wl_display_run($(wl_display* ptrWlDisplay)); } |]
-  -- [C.exp| void { wl_display_destroy($(wl_display* ptrWlDisplay)); } |]
-    where newOutputNotify :: (Ptr C'WlListener -> Ptr ())
-          newOutputNotify _ = undefined
+--           -- if (!wlr_backend_start(server.backend)) {
+--           --         fprintf(stderr, "Failed to start backend\n");
+--           --         wl_display_destroy(server.wl_display);
+--           --         return 1;
+--           -- }
+--   -- [C.exp| void { wl_display_run($(wl_display* ptrWlDisplay)); } |]
+--   -- [C.exp| void { wl_display_destroy($(wl_display* ptrWlDisplay)); } |]
+--     where newOutputNotify :: (Ptr C'WlListener -> Ptr ())
+--           newOutputNotify _ = undefined
 
-          outputFrameNotify :: (Ptr C'WlListener -> Ptr ())
-          outputFrameNotify = undefined
+--           outputFrameNotify :: (Ptr C'WlListener -> Ptr ())
+--           outputFrameNotify = undefined
 
-          outputDestroyNotify :: (Ptr C'WlListener -> Ptr ())
-          outputDestroyNotify = undefined
-
-
--- TODO: check the origin plane?
-moveToUnoccupied :: GodotSimulaServer -> GodotSimulaViewSprite -> IO ()
-moveToUnoccupied gwc gwss = do
-  surfaces <- atomically $ readTVar (_gwcSurfaces gwc)
-  let elems = filter (\x -> asObj x /= asObj gwss) $ M.elems surfaces
-
-  extents <- forM elems $ \westonSprite -> do
-    sprite <- getSprite westonSprite
-    aabb   <- G.get_transformed_aabb sprite
-    size   <- Api.godot_aabb_get_size aabb >>= fromLowLevel
-    pos    <- Api.godot_aabb_get_position aabb >>= fromLowLevel
-    return (pos, size + pos)
-
-  let minX = minimum $ 0 : map (view $ _1._x) extents
-      maxX = maximum $ 0 :  map (view $ _2._x) extents
-  sprite <- getSprite gwss
-  aabb   <- G.get_aabb sprite
-  size   <- Api.godot_aabb_get_size aabb >>= fromLowLevel
-  let sizeX  = size ^. _x
-      newPos =
-        if abs minX < abs maxX
-        then V3 (minX - sizeX/2) 0 0
-        else V3 (maxX + sizeX/2) 0 0
-
-  G.translate gwss =<< toLowLevel newPos
-
-getSeat :: GodotSimulaServer -> IO (Ptr C'WlrSeat)
-getSeat gwc = undefined
-  -- do (seat:_) <- atomically (readTVar (_gwcCompositor gwc)) >>= westonCompositorSeats
-  --    return seat
+--           outputDestroyNotify :: (Ptr C'WlListener -> Ptr ())
+--           outputDestroyNotify = undefined
 
 
-input :: GFunc GodotSimulaServer
-input self args = do
-  (getArg' 0 args :: IO GodotObject)
-    >>= asClass GodotInputEventKey "InputEventKey" >>= \case
-      Just evk -> do
-        -- dsp <- readTVarIO (_gwcWlDisplay self)
-        -- kbd <- getKeyboard self
-        -- processKeyEvent dsp kbd evk
-        putStrLn "WlrInput handling not yet implemented."
-        setInputHandled self
+-- -- TODO: check the origin plane?
+-- moveToUnoccupied :: GodotSimulaServer -> GodotSimulaViewSprite -> IO ()
+-- moveToUnoccupied gwc gwss = do
+--   surfaces <- atomically $ readTVar (_gwcSurfaces gwc)
+--   let elems = filter (\x -> asObj x /= asObj gwss) $ M.elems surfaces
 
-      Nothing  -> return () -- not a key
-  toLowLevel VariantNil
-  -- where
-    -- getKeyboard :: GodotSimulaServer -> IO (Ptr C'WlrKeyboard)
-    -- getKeyboard gwc = getSeat gwc >>= weston_seat_get_keyboard
+--   extents <- forM elems $ \westonSprite -> do
+--     sprite <- getSprite westonSprite
+--     aabb   <- G.get_transformed_aabb sprite
+--     size   <- Api.godot_aabb_get_size aabb >>= fromLowLevel
+--     pos    <- Api.godot_aabb_get_position aabb >>= fromLowLevel
+--     return (pos, size + pos)
+
+--   let minX = minimum $ 0 : map (view $ _1._x) extents
+--       maxX = maximum $ 0 :  map (view $ _2._x) extents
+--   sprite <- getSprite gwss
+--   aabb   <- G.get_aabb sprite
+--   size   <- Api.godot_aabb_get_size aabb >>= fromLowLevel
+--   let sizeX  = size ^. _x
+--       newPos =
+--         if abs minX < abs maxX
+--         then V3 (minX - sizeX/2) 0 0
+--         else V3 (maxX + sizeX/2) 0 0
+
+--   G.translate gwss =<< toLowLevel newPos
+
+-- getSeat :: GodotSimulaServer -> IO (Ptr C'WlrSeat)
+-- getSeat gwc = undefined
+--   -- do (seat:_) <- atomically (readTVar (_gwcCompositor gwc)) >>= westonCompositorSeats
+--   --    return seat
+
+
+-- input :: GFunc GodotSimulaServer
+-- input self args = do
+--   (getArg' 0 args :: IO GodotObject)
+--     >>= asClass GodotInputEventKey "InputEventKey" >>= \case
+--       Just evk -> do
+--         -- dsp <- readTVarIO (_gwcWlDisplay self)
+--         -- kbd <- getKeyboard self
+--         -- processKeyEvent dsp kbd evk
+--         putStrLn "WlrInput handling not yet implemented."
+--         setInputHandled self
+
+--       Nothing  -> return () -- not a key
+--   toLowLevel VariantNil
+--   -- where
+--     -- getKeyboard :: GodotSimulaServer -> IO (Ptr C'WlrKeyboard)
+--     -- getKeyboard gwc = getSeat gwc >>= weston_seat_get_keyboard

@@ -12,10 +12,11 @@ import           Plugin.SimulaViewTexture
 
 
 registerClasses :: GdnativeHandle -> IO ()
-registerClasses desc = do
-  let reg constr = registerClass $ RegClass desc constr
-  reg $ classInit @GodotSimula
-  reg $ classInit @GodotSimulaController
-  reg $ classInit @GodotSimulaServer
-  reg $ classInit @GodotSimulaViewSprite
-  reg $ classInit @GodotSimulaViewTexture
+registerClasses desc = undefined
+--   do
+-- let reg constr = registerClass $ RegClass desc constr
+-- reg $ classInit @GodotSimula
+-- reg $ classInit @GodotSimulaController
+-- reg $ classInit @GodotSimulaServer
+-- reg $ classInit @GodotSimulaViewSprite
+-- reg $ classInit @GodotSimulaViewTexture
