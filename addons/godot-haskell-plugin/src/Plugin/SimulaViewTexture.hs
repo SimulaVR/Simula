@@ -35,11 +35,79 @@ import           Graphics.Wayland.Signal
 import           Graphics.Wayland.WlRoots.XdgShell
 import           Graphics.Wayland.WlRoots.Buffer
 import           Graphics.Wayland.Internal.SpliceServerTypes (Buffer(..))
+import           Graphics.Wayland.Server
+import           Graphics.Wayland.Internal.Server
+import           Graphics.Wayland.Internal.SpliceServerTypes
+-- import           Graphics.Wayland.WlRoots.Compositor
+import           Graphics.Wayland.WlRoots.Output
+import           Graphics.Wayland.WlRoots.Surface
+import           Graphics.Wayland.WlRoots.Backend
+import           Graphics.Wayland.Signal
+import           Graphics.Wayland.WlRoots.Render
+-- import           Graphics.Wayland.WlRoots.Render.Color
+-- import           Graphics.Wayland.WlRoots.OutputLayout
+import           Graphics.Wayland.WlRoots.Input
+import           Graphics.Wayland.WlRoots.Seat
+-- import           Graphics.Wayland.WlRoots.Cursor
+-- import           Graphics.Wayland.WlRoots.XCursorManager
+import           Graphics.Wayland.WlRoots.XdgShell
+import           Graphics.Wayland.WlRoots.Input.Keyboard
+-- import           Graphics.Wayland.WlRoots.Input.Pointer
+-- import           Graphics.Wayland.WlRoots.Cursor
+import           Graphics.Wayland.WlRoots.Input.Buttons
+-- import           Graphics.Wayland.WlRoots.Box
+import qualified Data.Map.Strict as M
 
 C.initializeSimulaCtxAndIncludes
 
 -- Placing these types (some dummy) here for now
-data GodotSimulaServer
+data GodotSimulaServer = GodotSimulaServer
+  { _gssObj          :: GodotObject
+  , _gssDisplay      :: DisplayServer -- add this.
+  , _gssViews        :: TVar (M.Map SimulaView GodotSimulaViewSprite)
+  , _gssBackend       :: Ptr Backend
+  , _gssXdgShell      :: Ptr WlrXdgShell
+  , _gssSeat          :: Ptr WlrSeat
+  , _gssKeyboards     :: TVar [SimulaKeyboard]
+
+  -- I think we might need a dummy output global to trick clients into rendering surfaces
+  -- If this turns out to not be true, then delete this:
+  , _gssOutputs       :: TVar [SimulaOutput] 
+  , _gssRenderer      :: Ptr Renderer -- Same story: might need a dummy renderer for certain initialization calls
+
+  -- All ListenerToken's should be manually destroyed when this type is destroyed
+  , _gssNewXdgSurface :: ListenerToken
+  , _gssNewInput      :: ListenerToken
+  , _gssNewOutput     :: ListenerToken
+
+  -- The following datatypes will likely be used/modified for Simula's resizing/movement operations
+    -- , _ssCursorMode           :: TVar SimulaCursorMode
+    -- , _ssGrabbedView          :: TVar (Maybe SimulaView)
+    -- , _ssGrab                 :: TVar (Maybe SurfaceLocalCoordinates)
+    -- , _ssResizeEdges          :: TVar (Maybe Int) -- New datatype pending on resizing task
+
+  -- The following probably aren't needed, or need to be wrapped up in a different datatype:
+    -- , _ssGrabWidth            :: TVar (Maybe Int) -- Refers to original width of window being resized
+    -- , _ssGrabHeight           :: TVar (Maybe Int) -- Refers to origianl height of window being resized
+
+  }
+data SimulaOutput = SimulaOutput { _soServer         :: GodotSimulaServer
+                                 , _soWlrOutput      :: Ptr WlrOutput
+                                 }
+
+data SimulaKeyboard = SimulaKeyboard
+  { _skServer    :: GodotSimulaServer
+  , _skDevice    :: Ptr InputDevice
+  , _skModifiers :: ListenerToken -- TODO: Destroy this somewhere (keyboard destroyer listener)
+  , _skKey       :: ListenerToken -- "
+  }
+
+
+-- Temporary home for needed helper types/functions from SimulaServer.hs
+data SurfaceLocalCoordinates = SurfaceLocalCoordinates (Double, Double)
+data SubSurfaceLocalCoordinates = SubSurfaceLocalCoordinates (Double, Double)
+data SurfaceDimension = SurfaceDimension (Int, Int)
+
 data SimulaView = SimulaView
   { _svServer                  :: GodotSimulaServer
   , _svXdgSurface              :: Ptr WlrXdgSurface
@@ -51,6 +119,16 @@ data SimulaView = SimulaView
 --, _svRequestResize           :: ListenerToken -- Pending resize implementation
   }
 
+-- type ViewMap = M.Map SimulaView GodotSimulaViewSprite
+data GodotSimulaViewSprite = GodotSimulaViewSprite
+  { _gsvsObj        :: GodotObject
+  , _gsvsShouldMove :: TVar Bool
+  , _gsvsSprite     :: TVar GodotSprite3D
+  , _gsvsShape      :: TVar GodotBoxShape
+  , _gsvsTexture    :: TVar GodotSimulaViewTexture
+  -- , _gsvsSeat    :: TVar WestonSeat -- Accessible from GodotSimulaViewTexture argument
+  }
+
 data GodotSimulaViewTexture = GodotSimulaViewTexture
   { _gsvtObj       :: GodotObject
   , _gsvtView      :: TVar SimulaView
@@ -58,8 +136,10 @@ data GodotSimulaViewTexture = GodotSimulaViewTexture
   , _gsvtImageData :: TVar GodotPoolByteArray
   }
 
+makeLenses ''GodotSimulaViewSprite
 makeLenses ''GodotSimulaViewTexture
 makeLenses ''SimulaView
+makeLenses ''GodotSimulaServer
 
 instance GodotClass GodotSimulaViewTexture where
   godotClassName = "SimulaSurfaceTexture"

@@ -19,6 +19,7 @@ import qualified Data.Text                     as T
 import           Linear
 
 import           Plugin.Imports
+import           Plugin.SimulaViewTexture
 import           Plugin.SimulaViewSprite
 import           Plugin.Input.Telekinesis
 import           Plugin.Pointer

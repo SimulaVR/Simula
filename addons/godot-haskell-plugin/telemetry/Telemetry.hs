@@ -28,6 +28,7 @@ import Foreign
 
 import Debug.C
 import Plugin.SimulaViewSprite
+import Plugin.SimulaViewTexture
 import Graphics.Wayland.WlRoots.Surface
 
 -- type SurfaceMap = M.Map (Ptr C'WlrSurface) GodotWlrootsSurfaceSprite -- inline-C version
