@@ -41,46 +41,47 @@ instance Method "get_raw_keycode" GodotInputEventKey (IO Int) where
                    len
                    >>= \ (err, res) -> throwIfErr err >> fromGodotVariant res)
 
-processKeyEvent :: (Ptr C'WlDisplay) -> (Ptr C'WlrKeyboard) -> GodotInputEventKey -> IO ()
-processKeyEvent ptrWldp ptrKbd evk = do
-  whenM (withGodotMethodBind bindInputEventKey_get_raw_keycode $ \ptr -> return $ ptr == coerce nullPtr) $ error "You need a patched Godot version to run this"
-  altPressed <- fromEnum <$> G.get_alt evk
-  shiftPressed <- fromEnum <$> G.get_shift evk
-  ctrlPressed <- fromEnum <$> G.get_control evk
-  superPressed <- fromEnum <$> G.get_metakey evk
-  let mods = fromIntegral $ shiftPressed + superPressed * 2 + ctrlPressed * 4 + altPressed * 8
+processKeyEvent = undefined
+-- processKeyEvent :: (Ptr C'WlDisplay) -> (Ptr C'WlrKeyboard) -> GodotInputEventKey -> IO ()
+-- processKeyEvent ptrWldp ptrKbd evk = do
+--   whenM (withGodotMethodBind bindInputEventKey_get_raw_keycode $ \ptr -> return $ ptr == coerce nullPtr) $ error "You need a patched Godot version to run this"
+--   altPressed <- fromEnum <$> G.get_alt evk
+--   shiftPressed <- fromEnum <$> G.get_shift evk
+--   ctrlPressed <- fromEnum <$> G.get_control evk
+--   superPressed <- fromEnum <$> G.get_metakey evk
+--   let mods = fromIntegral $ shiftPressed + superPressed * 2 + ctrlPressed * 4 + altPressed * 8
 
-  pressed <- G.is_pressed evk
+--   pressed <- G.is_pressed evk
 
-  -- shelving this for now
-{- 
-  -- mask/values => numlock: 1, capslock: 2
-  -- also, small note: watch out for the indent on that case statement, it's not immediately obvious what parses and what doesn't
-  let lockMask = case code of
-        69 -> 1
-        58 -> 2
-        _ -> 0
+--   -- shelving this for now
+-- {- 
+--   -- mask/values => numlock: 1, capslock: 2
+--   -- also, small note: watch out for the indent on that case statement, it's not immediately obvious what parses and what doesn't
+--   let lockMask = case code of
+--         69 -> 1
+--         58 -> 2
+--         _ -> 0
 
-  let lockValue = _ -- need to store lock values!
-  weston_keyboard_set_locks kbd lockMask lockValue
--}
-  wlrSendModifiersAndKey ptrWldp ptrKbd evk
-  return ()
+--   let lockValue = _ -- need to store lock values!
+--   weston_keyboard_set_locks kbd lockMask lockValue
+-- -}
+--   wlrSendModifiersAndKey ptrWldp ptrKbd evk
+--   return ()
 
-  where
-    wlrSendModifiersAndKey ptrWldp ptrKbd evk = do
-      print "wlrSendModifiers unimplemented"
-      -- x11Code <- get_raw_keycode evk
-      -- let code = x11Code - 8 -- see weston-3 => libweston/compositor-x11.c#L1357 
-      -- serial <- wl_display_next_serial wldp
-      -- weston_keyboard_send_modifiers kbd serial mods mods 0 mods
+--   where
+--     wlrSendModifiersAndKey ptrWldp ptrKbd evk = do
+--       print "wlrSendModifiers unimplemented"
+--       -- x11Code <- get_raw_keycode evk
+--       -- let code = x11Code - 8 -- see weston-3 => libweston/compositor-x11.c#L1357 
+--       -- serial <- wl_display_next_serial wldp
+--       -- weston_keyboard_send_modifiers kbd serial mods mods 0 mods
 
-      -- time <- getTime Realtime
-      -- let msec = fromIntegral $ toNanoSecs time `div` 1000000
-      -- weston_keyboard_send_key kbd msec (fromIntegral code) (toState pressed)
+--       -- time <- getTime Realtime
+--       -- let msec = fromIntegral $ toNanoSecs time `div` 1000000
+--       -- weston_keyboard_send_key kbd msec (fromIntegral code) (toState pressed)
 
-    -- toState pressed | pressed = WlKeyboardKeyStatePressed
-    --                 | otherwise = WlKeyboardKeyStateReleased
+--     -- toState pressed | pressed = WlKeyboardKeyStatePressed
+--     --                 | otherwise = WlKeyboardKeyStateReleased
 
 setInputHandled :: (GodotNode :< a) => a -> IO ()
 setInputHandled self = do
