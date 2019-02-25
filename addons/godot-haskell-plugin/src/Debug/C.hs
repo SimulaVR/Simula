@@ -23,6 +23,7 @@ import Graphics.Wayland.WlRoots.Output
 import Graphics.Wayland.WlRoots.Surface
 import Graphics.Wayland.WlRoots.Backend
 import Graphics.Wayland.Signal
+import Graphics.Wayland.WlRoots.Input.Keyboard
 
 import Data.Coerce
 
@@ -102,9 +103,9 @@ initializeSimulaCtx = C.context $ C.baseCtx <> C.funCtx <> mempty {
   ,  (C.TypeName "wlr_surface_iterator_func_t", [t|C'WlrSurfaceIteratorFuncT|])
   ,  (C.Enum  "wl_seat_capability", [t|C'WlSeatCapability|])
   ,  (C.Enum "wl_shm_format", [t|C'WlShmFormat|])
-  -- ,  (C.Struct "wl_shm_format_argb8888", [t|C'WlShmFormatArgb8888|])
-  -- Omitted XKB Types: xkb_keysym_t, xkb_state, xkb_rule_names, xkb_context, xkb_keymap
--- (C.TypeName "wl_keyboard_key_state", [t|C'WlKeyboardKeyState|])
+
+  -- The following C types are marshalled straight to hsroots types:
+  ,  (C.Struct "wlr_keyboard_modifiers", [t|KeyboardModifiers|])
   ]
 }
 

@@ -1,4 +1,6 @@
 {-# LANGUAGE LambdaCase, DataKinds, MultiParamTypeClasses #-}
+{-# LANGUAGE TemplateHaskell #-}
+
 module Plugin.Input where
 
 import           Data.Coerce
@@ -12,10 +14,25 @@ import           Foreign
 import           Foreign.C
 
 import           Debug.C
+import           Debug.Marshal
 
 import           System.IO.Unsafe
 
 import           Plugin.Imports
+import           Plugin.SimulaViewTexture
+
+import           Graphics.Wayland.Server
+import           Graphics.Wayland.Internal.Server
+import           Graphics.Wayland.Internal.SpliceServerTypes
+import           Graphics.Wayland.WlRoots.Input
+import           Graphics.Wayland.WlRoots.Input.Keyboard
+import           Graphics.Wayland.WlRoots.Seat
+
+import qualified Language.C.Inline as C
+import qualified Language.C.Inline.Context as C
+import qualified Language.C.Types as C
+
+initializeSimulaCtxAndIncludes
 
 -- i don't want to touch godot-haskell for proprietary changes
 
@@ -41,47 +58,62 @@ instance Method "get_raw_keycode" GodotInputEventKey (IO Int) where
                    len
                    >>= \ (err, res) -> throwIfErr err >> fromGodotVariant res)
 
-processKeyEvent = undefined
--- processKeyEvent :: (Ptr C'WlDisplay) -> (Ptr C'WlrKeyboard) -> GodotInputEventKey -> IO ()
--- processKeyEvent ptrWldp ptrKbd evk = do
---   whenM (withGodotMethodBind bindInputEventKey_get_raw_keycode $ \ptr -> return $ ptr == coerce nullPtr) $ error "You need a patched Godot version to run this"
---   altPressed <- fromEnum <$> G.get_alt evk
---   shiftPressed <- fromEnum <$> G.get_shift evk
---   ctrlPressed <- fromEnum <$> G.get_control evk
---   superPressed <- fromEnum <$> G.get_metakey evk
---   let mods = fromIntegral $ shiftPressed + superPressed * 2 + ctrlPressed * 4 + altPressed * 8
+-- | This function passes Godot key events to wlroots. It doesn't yet input lock
+-- | keys. It also uses wlr_seat_keyboard_notify_* instead of
+-- | wlr_seat_keyboard_send_*, which I'm not sure is correct.
+processKeyEvent :: GodotSimulaServer -> GodotInputEventKey -> IO ()
+processKeyEvent gss evk = do
+  whenM (withGodotMethodBind bindInputEventKey_get_raw_keycode $ \ptr -> return $ ptr == coerce nullPtr) $ error "You need a patched Godot version to run this"
+  x11Code <- get_raw_keycode evk
 
---   pressed <- G.is_pressed evk
+  -- See: https://github.com/swaywm/wlroots/blob/master/backend/x11/input_device.c#L79
+  let code = x11Code - 8
 
---   -- shelving this for now
--- {- 
---   -- mask/values => numlock: 1, capslock: 2
---   -- also, small note: watch out for the indent on that case statement, it's not immediately obvious what parses and what doesn't
---   let lockMask = case code of
---         69 -> 1
---         58 -> 2
---         _ -> 0
+  altPressed <- fromEnum <$> G.get_alt evk
+  shiftPressed <- fromEnum <$> G.get_shift evk
+  ctrlPressed <- fromEnum <$> G.get_control evk
+  superPressed <- fromEnum <$> G.get_metakey evk
+  let mods = fromIntegral $ shiftPressed + superPressed * 2 + ctrlPressed * 4 + altPressed * 8
 
---   let lockValue = _ -- need to store lock values!
---   weston_keyboard_set_locks kbd lockMask lockValue
--- -}
---   wlrSendModifiersAndKey ptrWldp ptrKbd evk
---   return ()
+  pressed <- G.is_pressed evk
+  now32 <- getNow32
 
---   where
---     wlrSendModifiersAndKey ptrWldp ptrKbd evk = do
---       print "wlrSendModifiers unimplemented"
---       -- x11Code <- get_raw_keycode evk
---       -- let code = x11Code - 8 -- see weston-3 => libweston/compositor-x11.c#L1357 
---       -- serial <- wl_display_next_serial wldp
---       -- weston_keyboard_send_modifiers kbd serial mods mods 0 mods
+  -- TODO: Fix lock keys:
+      ---- mask/values => numlock: 1, capslock: 2
+      ---- also, small note: watch out for the indent on that case statement, it's not immediately obvious what parses and what doesn't
+      --let lockMask = case code of
+      --      69 -> 1
+      --      58 -> 2
+      --      _ -> 0
+      --let lockValue = _ -- need to store lock values!
+      --weston_keyboard_set_locks kbd lockMask lockValue
 
---       -- time <- getTime Realtime
---       -- let msec = fromIntegral $ toNanoSecs time `div` 1000000
---       -- weston_keyboard_send_key kbd msec (fromIntegral code) (toState pressed)
+  -- See: ftp://www.x.org/pub/X11R7.7/doc/kbproto/xkbproto.html#Locking_and_Latching_Modifiers_and_Groups
+  let keyboardModifiers = Modifiers { modDepressed = mods :: Word32  -- HACK: We use mods repeatedly; need to fix lock/latched, etc.
+                                    , modLatched = mods :: Word32
+                                    , modLocked = 0 :: Word32
+                                    , modGroup = mods :: Word32
+                                    }
+  -- We could use either wlr_seat_keyboard_send_modifiers or
+  -- wlr_seat_keyboard_notify_modifiers (which "respects keyboard grabs"); we
+  -- choose the latter
+  with keyboardModifiers (\ptrKeyboardModifiers -> 
+                            keyboardNotifyModifiers 
+                              (gss ^. gssSeat) 
+                              ptrKeyboardModifiers)
 
---     -- toState pressed | pressed = WlKeyboardKeyStatePressed
---     --                 | otherwise = WlKeyboardKeyStateReleased
+  -- We could use wlr_seat_keyboard_send_key or wlr_seat_keyboard_notify_key; we
+  -- experiment with the latter first since the former isn't in hsroots
+  keyboardNotifyKey (gss ^. gssSeat) now32 (fromIntegral code) (toKeyState pressed)
+
+  where
+    getNow32 = do
+      time <- getTime Realtime
+      let msec = fromIntegral $ toNanoSecs time `div` 1000000
+      return msec
+    -- See [[file:~/hsroots/src/Graphics/Wayland/WlRoots/Input/Keyboard.hsc::data%20KeyState]] 
+    toKeyState pressed | pressed = KeyPressed
+                       | otherwise = KeyReleased
 
 setInputHandled :: (GodotNode :< a) => a -> IO ()
 setInputHandled self = do
@@ -101,6 +133,8 @@ pattern OVR_Button_AppMenu = 1
 pattern OVR_Button_Grip :: Int
 pattern OVR_Button_Grip = 2
 
+-- | A mapping from Godot to Linux keycodes.
+-- | See https://gist.github.com/georgewsinger/bd52db93ce6567877d4826161415fcc1
 keyTranslation :: M.Map Int Int
 keyTranslation = M.fromList
   [ ((1 `shiftL` 24) .|. 0x01, 1)       -- KEY_ESCAPE         ~ KEY_ESC
