@@ -215,3 +215,30 @@ toInlineCListener (WlListener wrappedFunc) = do
                                        return listener;
                                       }|]
   return r
+
+
+-- We need this unfortunately for an hsroots call in processKeyEvent.
+-- Recall that data KeyboardModifiers = Modifiers { modDepressed :: Word32
+--                                                , modLatched :: Word32
+--                                                , modLocked :: Word32
+--                                                , modGroup :: Word32
+--                                                }
+instance Storable KeyboardModifiers where
+  sizeOf _    = fromIntegral $ [C.pure| int { sizeof(struct wlr_keyboard_modifiers) }|]
+  alignment _ = fromIntegral $ [C.pure| int { alignof(struct wlr_keyboard_modifiers) }|]
+  peek ptr    = Modifiers <$> [C.exp| uint32_t {$(struct wlr_keyboard_modifiers * ptr)->depressed} |]
+                          <*> [C.exp| uint32_t {$(struct wlr_keyboard_modifiers * ptr)->latched} |]
+                          <*> [C.exp| uint32_t {$(struct wlr_keyboard_modifiers * ptr)->locked} |]
+                          <*> [C.exp| uint32_t {$(struct wlr_keyboard_modifiers * ptr)->group} |]
+  poke ptr keyboardModifiers = do
+    let mod_depressed = (modDepressed keyboardModifiers) :: Word32
+    let mod_latched   = (modLatched keyboardModifiers)   :: Word32
+    let mod_locked    = (modLocked keyboardModifiers)    :: Word32
+    let mod_group     = (modGroup keyboardModifiers)     :: Word32
+    [C.block| void {
+        $(struct wlr_keyboard_modifiers * ptr)->depressed = $(uint32_t mod_depressed);
+        $(struct wlr_keyboard_modifiers * ptr)->latched   = $(uint32_t mod_latched);
+        $(struct wlr_keyboard_modifiers * ptr)->locked    = $(uint32_t mod_locked);
+        $(struct wlr_keyboard_modifiers * ptr)->group     = $(uint32_t mod_group);
+        } |]
+
