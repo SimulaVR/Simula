@@ -68,13 +68,6 @@ toMsec32 timeSpec = do
 toTimeSpec :: (Integral a) => a -> TimeSpec
 toTimeSpec word = (let nsec = (fromIntegral word) * 1000000 in fromNanoSecs nsec)
 
--- | We will say that two views are "the same" when they have the same Ptr WlrXdgSurface (this is
--- | is a bad idea long-term but for now will suffice; for example, we might have two
--- | distinct views [one used as an icon and one a window] that have the same underlying surface).
--- | TODO: Give SimulaView's a unique id and change this function accordingly.
-isSameView :: SimulaView -> SimulaView -> Bool
-isSameView simulaView1 simulaView2 = (_svXdgSurface simulaView1) == (_svXdgSurface simulaView2)
-
 -- | This function takes a pair of surface coordinates (against a given view) and
 -- | inspects if there are any XDG toplevel "subsurfaces" at those coordinates (this
 -- | could either be a true "subsurface" -- like a popup -- or the trivial subsurface
@@ -151,8 +144,8 @@ instance HasBaseClass GodotSimulaViewSprite where
   type BaseClass GodotSimulaViewSprite = GodotRigidBody
   super (GodotSimulaViewSprite obj _ _ _ _ ) = GodotRigidBody obj
 
-newGodotSimulaViewSprite :: SimulaView -> GodotSimulaViewTexture -> IO GodotSimulaViewSprite
-newGodotSimulaViewSprite simulaView tex = do
+newGodotSimulaViewSprite :: GodotSimulaViewTexture -> IO GodotSimulaViewSprite
+newGodotSimulaViewSprite gsvt = do
   gsvs <- "res://addons/godot-haskell-plugin/SimulaViewSprite.gdns"
     & unsafeNewNS id "Object" []
     >>= godot_nativescript_get_userdata
@@ -168,9 +161,12 @@ newGodotSimulaViewSprite simulaView tex = do
   G.shape_owner_add_shape gsvs ownerId (safeCast shape)
 
   -- We don't need to fill gsvsObj or gsvsShouldMove (already set via classInit)
-  atomically $ writeTVar (_gsvsSprite  gsvs ) sprite
-  atomically $ writeTVar (_gsvsShape   gsvs ) shape
-  atomically $ writeTVar (_gsvsTexture gsvs ) tex
+  atomically $ writeTVar (_gsvsSprite  gsvs ) sprite -- We create the sprite above
+  atomically $ writeTVar (_gsvsShape   gsvs ) shape  -- We create the shape above
+  atomically $ writeTVar (_gsvsTexture gsvs ) gsvt    -- We pass in the texture argument
+
+  updateSimulaViewSprite gsvs -- Now we update everything
+
   return gsvs
 
 updateSimulaViewSprite :: GodotSimulaViewSprite -> IO ()

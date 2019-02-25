@@ -115,9 +115,21 @@ data SimulaView = SimulaView
   , _svMap                     :: ListenerToken
   , _svUnmap                   :: ListenerToken
   , _svDestroy                 :: ListenerToken
+  , _svCommit                  :: ListenerToken
 --, _svRequestMove             :: ListenerToken -- Pending move implementation
 --, _svRequestResize           :: ListenerToken -- Pending resize implementation
   }
+
+-- | We will say that two views are "equal" when they have the same Ptr WlrXdgSurface (this is
+-- | is a bad idea long-term but for now will suffice; for example, we might have two
+-- | distinct views [one used as an icon and one a window] that have the same underlying surface).
+-- | TODO: Give SimulaView's a unique id and change this function accordingly.
+instance Eq SimulaView where
+  (==) = (==) `on` _svXdgSurface
+
+-- Required for M.lookup calls on (M.Map SimulaView GodotSimulaViewSprite)
+instance Ord SimulaView where
+  (<=) = (<=) `on` _svXdgSurface
 
 -- type ViewMap = M.Map SimulaView GodotSimulaViewSprite
 data GodotSimulaViewSprite = GodotSimulaViewSprite
@@ -159,11 +171,17 @@ instance HasBaseClass GodotSimulaViewTexture where
   type BaseClass GodotSimulaViewTexture = GodotImageTexture
   super (GodotSimulaViewTexture obj _ _ _) = GodotImageTexture obj
 
-newGodotSimulaViewTexture :: IO GodotSimulaViewTexture
-newGodotSimulaViewTexture = do
+newGodotSimulaViewTexture :: SimulaView -> IO GodotSimulaViewTexture
+newGodotSimulaViewTexture simulaView = do
   ret <- unsafeNewNS id "Object" [] "res://addons/godot-haskell-plugin/SimulaViewTexture.gdns"
   objPtr <- godot_nativescript_get_userdata ret
-  deRefStablePtr $ castPtrToStablePtr objPtr
+  texture <- deRefStablePtr $ castPtrToStablePtr objPtr
+
+  -- New:
+  atomically $ writeTVar (texture ^. gsvtView) simulaView
+  updateSimulaViewTexture texture
+
+  return texture
 
 -- | This function inefficiently copies the entire buffer to Godot.
 -- | TODO: Make this more efficient.

@@ -32,8 +32,7 @@ import Plugin.SimulaViewTexture
 import Graphics.Wayland.WlRoots.Surface
 
 -- type SurfaceMap = M.Map (Ptr C'WlrSurface) GodotWlrootsSurfaceSprite -- inline-C version
-type SurfaceMap = M.Map (Ptr WlrSurface) GodotSimulaViewSprite -- C2HS version
-
+type SurfaceMap = M.Map SimulaView GodotSimulaViewSprite -- C2HS version
 
 data Payload = Payload
                { numWindowsOpen :: TVar SurfaceMap

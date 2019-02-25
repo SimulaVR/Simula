@@ -69,6 +69,7 @@ library
     , libinput
     , hsroots
     , hayland
+    , xkbcommon
   exposed-modules:
       Telemetry
       Plugin
@@ -165,6 +166,7 @@ foreign-library godot-haskell-plugin
     , libinput
     , hsroots
     , hayland
+    , xkbcommon
 
   default-extensions:
        FlexibleContexts

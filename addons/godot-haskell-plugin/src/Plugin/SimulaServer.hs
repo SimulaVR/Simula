@@ -6,10 +6,9 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE RecursiveDo #-}
 
 module Plugin.SimulaServer where
-
-import Foreign
 
 import           Linear
 import           Plugin.Imports
@@ -31,223 +30,488 @@ import System.Environment
 
 import System.Process
 
-import Control.Lens
-
-import Foreign hiding (void)
-
 import Telemetry
 
+import           Debug.Trace
+import           Control.Lens hiding (Context)
+import           Control.Concurrent.STM.TVar
+import           Control.Exception
+import           Control.Monad
+import           Control.Monad.STM
+import           Data.Maybe
+import           Data.List
+import           Data.Coerce
+
+import           Foreign hiding (void)
+import           Foreign.C.Error
+import           Foreign.Ptr
+import           Foreign.Marshal.Alloc
+import           Foreign.C.Types
 import qualified Language.C.Inline as C
-import Debug.C
+import           Debug.C as C
+import           Debug.Marshal
 
-import      Graphics.Wayland.WlRoots.Compositor
-import      Graphics.Wayland.WlRoots.Output
-import      Graphics.Wayland.WlRoots.Surface
-import      Graphics.Wayland.WlRoots.Backend
-import      Graphics.Wayland.WlRoots.Output
-import      Graphics.Wayland.Server
+import           Text.XkbCommon.Keysym
+import           Text.XkbCommon.KeyboardState
+import           Text.XkbCommon.InternalTypes
+import           Text.XkbCommon.Context
+import           Text.XkbCommon.Keymap
 
-{- HsRoots Modules in case needed:
-import      Graphics.Egl
-import      Graphics.Pixman
-import      Graphics.Wayland.Global
-import      Graphics.Wayland.List
-import      Graphics.Wayland.Resource
-import      Graphics.Wayland.Server.Client
-import      Graphics.Wayland.Signal
-import      Graphics.Wayland.WlRoots.Backend
-import      Graphics.Wayland.WlRoots.Backend.Headless
-import      Graphics.Wayland.WlRoots.Backend.Libinput
-import      Graphics.Wayland.WlRoots.Backend.Multi
-import      Graphics.Wayland.WlRoots.Backend.Session
-import      Graphics.Wayland.WlRoots.Box
-import      Graphics.Wayland.WlRoots.Buffer
-import      Graphics.Wayland.WlRoots.Compositor
-import      Graphics.Wayland.WlRoots.Cursor
-import      Graphics.Wayland.WlRoots.DeviceManager
-import      Graphics.Wayland.WlRoots.ExportDMABuf
-import      Graphics.Wayland.WlRoots.Egl
-import      Graphics.Wayland.WlRoots.GammaControl
-import      Graphics.Wayland.WlRoots.Global
-import      Graphics.Wayland.WlRoots.IdleInhibit
-import      Graphics.Wayland.WlRoots.Input
-import      Graphics.Wayland.WlRoots.Input.Buttons
-import      Graphics.Wayland.WlRoots.Input.Keyboard
-import      Graphics.Wayland.WlRoots.Input.Pointer
-import      Graphics.Wayland.WlRoots.Input.Tablet
-import      Graphics.Wayland.WlRoots.Input.TabletPad
-import      Graphics.Wayland.WlRoots.Input.TabletTool
-import      Graphics.Wayland.WlRoots.Input.Touch
-import      Graphics.Wayland.WlRoots.InputInhibitor
-import      Graphics.Wayland.WlRoots.LinuxDMABuf
-import      Graphics.Wayland.WlRoots.Output
-import      Graphics.Wayland.WlRoots.OutputLayout
-import      Graphics.Wayland.WlRoots.PrimarySelection
-import      Graphics.Wayland.WlRoots.Render
-import      Graphics.Wayland.WlRoots.Render.Color
-import      Graphics.Wayland.WlRoots.Render.Gles2
-import      Graphics.Wayland.WlRoots.Render.Matrix
-import      Graphics.Wayland.WlRoots.Screenshooter
-import      Graphics.Wayland.WlRoots.Seat
-import      Graphics.Wayland.WlRoots.ServerDecoration
-import      Graphics.Wayland.WlRoots.Surface
-import      Graphics.Wayland.WlRoots.SurfaceLayers
-import      Graphics.Wayland.WlRoots.Tabletv2
-import      Graphics.Wayland.WlRoots.Util
-import      Graphics.Wayland.WlRoots.Util.Region
-import      Graphics.Wayland.WlRoots.WlShell
-import      Graphics.Wayland.WlRoots.XCursor
-import      Graphics.Wayland.WlRoots.XCursorManager
-import      Graphics.Wayland.WlRoots.XWayland
-import      Graphics.Wayland.WlRoots.XdgShell
-import      Graphics.Wayland.WlRoots.XdgShellv6
--}
+import           Graphics.Wayland.Server
+import           Graphics.Wayland.Internal.Server
+import           Graphics.Wayland.Internal.SpliceServerTypes
+import           Graphics.Wayland.WlRoots.Compositor
+import           Graphics.Wayland.WlRoots.Output
+import           Graphics.Wayland.WlRoots.Surface
+import           Graphics.Wayland.WlRoots.Backend
+import           Graphics.Wayland.WlRoots.Backend.Headless
+import           Graphics.Wayland.Signal
+import           Graphics.Wayland.WlRoots.Render
+import           Graphics.Wayland.WlRoots.Render.Color
+import           Graphics.Wayland.WlRoots.OutputLayout
+import           Graphics.Wayland.WlRoots.Input
+import           Graphics.Wayland.WlRoots.Seat
+import           Graphics.Wayland.WlRoots.Cursor
+import           Graphics.Wayland.WlRoots.XCursorManager
+import           Graphics.Wayland.WlRoots.XdgShell
+import           Graphics.Wayland.WlRoots.Input.Keyboard
+import           Graphics.Wayland.WlRoots.Input.Pointer
+import           Graphics.Wayland.WlRoots.Cursor
+import           Graphics.Wayland.WlRoots.Input.Buttons
+import           Graphics.Wayland.WlRoots.Box
+import           Graphics.Wayland.WlRoots.Util
+import           Graphics.Wayland.WlRoots.DeviceManager
+
+import           System.Clock
+import           Control.Monad.Extra
 
 initializeSimulaCtxAndIncludes
 
--- TODO: Rename typename to "Compositor" and propogate throughout godot scene tree.
-data GodotSimulaServer = GodotSimulaServer
-  { _gwcObj      :: GodotObject
-  , _gwcCompositor :: TVar (Ptr WlrCompositor)
-  , _gwcWlDisplay :: TVar DisplayServer
-  , _gwcWlEventLoop :: TVar EventLoop
-  , _gwcBackEnd :: TVar (Ptr Backend)
-  , _gwcSurfaces :: TVar (M.Map (Ptr WlrSurface) GodotSimulaViewSprite)
-  , _gwcOutput :: TVar (Ptr WlrOutput) -- possibly needs to be (TVar [Ptr WlrOutput])
---   , _gwcNormalLayer :: TVar (Ptr C'WlrLayer) -- so far unused
+-- To (probably) be used with Simula's resizing function (to make sure we stop propogating wayland events during grabs).
+-- data SimulaCursorMode = SimulaCursorPassthrough | SimulaCursorMove |  SimulaCursorResize
+
+instance GodotClass GodotSimulaServer where
+  godotClassName = "SimulaServer"
+
+instance ClassExport GodotSimulaServer where
+  classInit obj  = initGodotSimulaServer obj
+
+  classExtends = "Spatial"
+  classMethods =
+    [ GodotMethod NoRPC "_ready" Plugin.SimulaServer.ready
+    , GodotMethod NoRPC "_input" Plugin.SimulaServer.input
+    ]
+
+instance HasBaseClass GodotSimulaServer where
+  type BaseClass GodotSimulaServer = GodotSpatial
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
+
+ready :: GFunc GodotSimulaServer
+ready gss _ = do
+  startSimulaServerOnNewThread gss
+  startTelemetry (gss ^. gssViews) -- Doesn't seem to require previous function to get to displayRunServer
+  toLowLevel VariantNil
+
+input :: GFunc GodotSimulaServer
+input self args = do
+  (getArg' 0 args :: IO GodotObject)
+    >>= asClass GodotInputEventKey "InputEventKey" >>= \case
+      Just evk -> do
+        processKeyEvent self evk
+        setInputHandled self
+
+      Nothing  -> return () -- not a key
+  toLowLevel VariantNil
+
+-- TODO: check the origin plane?
+moveToUnoccupied :: GodotSimulaServer -> GodotSimulaViewSprite -> IO ()
+moveToUnoccupied gss gsvs = do
+  viewMap <- atomically $ readTVar (_gssViews gss)
+  let otherGsvs = filter (\x -> asObj x /= asObj gsvs) $ M.elems viewMap
+
+  extents <- forM otherGsvs $ \viewSprite -> do
+    sprite <- atomically $ readTVar (gsvs ^. gsvsSprite) -- getSprite viewSprite
+    aabb   <- G.get_transformed_aabb sprite
+    size   <- Api.godot_aabb_get_size aabb >>= fromLowLevel
+    pos    <- Api.godot_aabb_get_position aabb >>= fromLowLevel
+    return (pos, size + pos)
+
+  let minX = minimum $ 0 : map (view $ _1._x) extents
+      maxX = maximum $ 0 :  map (view $ _2._x) extents
+  sprite <- atomically $ readTVar (gsvs ^. gsvsSprite)
+  aabb   <- G.get_aabb sprite
+  size   <- Api.godot_aabb_get_size aabb >>= fromLowLevel
+  let sizeX  = size ^. _x
+      newPos =
+        if abs minX < abs maxX
+        then V3 (minX - sizeX/2) 0 0
+        else V3 (maxX + sizeX/2) 0 0
+
+  G.translate gsvs =<< toLowLevel newPos
+
+-- Should probably be called "mutateServerForGrabOperation".
+beginInteractive :: IO ()
+beginInteractive =
+  putStrLn
+    "beginInteractive should mutate the server state to reflect \
+    \that we're in the middle of a move/resize operation; \
+    \for now we leave unimplemented."
+-- Real implementation should be this:
+  -- 1. Gets ~seat->pointer_state.focused_surface~
+  -- 2. Gets ~SimulaView~'s wlr_surface, and makes sure equal to (1).
+  -- 3. If so, mutates tsGrabbedView, tsCursorMode, tsGrab, tsGrabWidth, tsGrabHeight, tsResizeEdges accordingly
+
+-- | A wl_listener that (i) sets the SimulaKeyboard as active in the seat (since
+-- | wayland forces us to have one active keyboard as a time per seat) and (ii) sends
+-- | the modifier keys to the client.
+keyboardHandleModifiers :: SimulaKeyboard -> WlListener ()
+keyboardHandleModifiers simulaKeyboard = WlListener $ \_ ->
+  do let ptrWlrSeat     = (_gssSeat (_skServer simulaKeyboard))
+     let ptrInputDevice = (_skDevice simulaKeyboard)
+
+     seatSetKeyboard ptrWlrSeat ptrInputDevice -- Converts ptrInputDevice to wlr_keyboard and makes it the active keyboard for the seat
+     seatKeyboardNotifyModifiers ptrWlrSeat -- Sends modifiers to the client
+
+     where seatKeyboardNotifyModifiers ptrWlrSeat = do
+                maybePtrWlrKeyboard <- getSeatKeyboard ptrWlrSeat
+                case maybePtrWlrKeyboard of
+                    Nothing             -> putStrLn "Couldn't get keyboard!"
+                    Just ptrWlrKeyboard -> do
+                      (keycodes, numKeycodes) <- getKeyboardKeys ptrWlrKeyboard
+                      let modifiers = getModifierPtr ptrWlrKeyboard
+                      keyboardNotifyModifiers ptrWlrSeat modifiers
+
+-- | This function is the handler for key presses. It (i) sets the keyboard as the
+-- | active one in the wayland seat and (ii) notifies the client about the keypress.
+keyboardHandleKey :: SimulaKeyboard -> WlListener EventKey
+keyboardHandleKey simulaKeyboard = WlListener $ \ptrEventKey ->
+  do event               <- (peek ptrEventKey) -- EventKey ∈ Storable
+     let server          =  (_skServer simulaKeyboard)
+     let seat            =  (_gssSeat server)
+     let device          =  (_skDevice simulaKeyboard)
+     let eventKeyState   =  (state event)
+     let eventKeyTimeSec =  (timeSec event)
+     let eventKeyKeyCode =  (keyCode event)
+
+     -- Here is where we could check if the key event is a compositor-level shortcut
+     -- i.e., an <alt> + <key> combo, and process it via `handleKeybinding`.
+
+     seatSetKeyboard seat device
+     keyboardNotifyKey seat eventKeyTimeSec eventKeyKeyCode eventKeyState
+
+-- | This function "initializes" a wlr_input_device (second argument) into a
+-- | wlr_keyboard. To do so it (i) constructs a bunch of XKB state to load into the
+-- | keyboard; (ii) sets the keyboard's repeat info; (iii) attaches the
+-- | keyboardHandleModifiers & keyboardHandleKey wl_listener's to the wlr_keyboard's
+-- | "key" and "modifiers" signals respectively. It finally sets the keyboard as
+-- | active (relative to our seat) and adds it to the head of the server's keyboard
+-- | list.
+serverNewKeyboard :: GodotSimulaServer -> Ptr InputDevice -> IO ()
+serverNewKeyboard server device = do
+  deviceType    <- inputDeviceType device
+  maybeXkbContext <- newContext defaultFlags
+  case (deviceType, maybeXkbContext) of
+       ((DeviceKeyboard ptrWlrKeyboard), (Just xkbContext)) -> mdo [tokenModifiers, tokenKey] <- handleKeyboard simulaKeyboard ptrWlrKeyboard xkbContext
+                                                                   let simulaKeyboard = SimulaKeyboard { _skServer    = server         :: GodotSimulaServer
+                                                                                                       , _skDevice    = device         :: Ptr InputDevice
+                                                                                                       , _skModifiers = tokenModifiers :: ListenerToken
+                                                                                                       , _skKey       = tokenKey       :: ListenerToken
+                                                                                                       }
+                                                                   makeKeyboardActiveHead simulaKeyboard
+                                                                   return ()
+       _ -> putStrLn "Failed to get keyboard!"
+  where handleKeyboard :: SimulaKeyboard -> Ptr WlrKeyboard -> Context -> IO ([ListenerToken])
+        handleKeyboard simulaKeyboard deviceKeyboard context = do
+          maybeKeymap <- newKeymapFromNames context noPrefs
+          case maybeKeymap of
+               Nothing       -> putStrLn "Failed to get keymap!" >> return []
+               (Just keymap) -> do setKeymapAndRepeatInfo deviceKeyboard keymap
+                                   tokens <- handleSignals simulaKeyboard deviceKeyboard
+                                   return tokens
+
+        setKeymapAndRepeatInfo :: Ptr WlrKeyboard -> Keymap -> IO ()
+        setKeymapAndRepeatInfo keyboard keymap = do
+          withKeymap keymap (\keyMapC -> setKeymap keyboard keyMapC)
+          let keyboard' = toInlineC keyboard
+          [C.block| void { wlr_keyboard_set_repeat_info($(struct wlr_keyboard * keyboard'), 25, 600); }|] -- hsroots doesn't provide this call.
+
+        handleSignals :: SimulaKeyboard -> Ptr WlrKeyboard -> IO ([ListenerToken])
+        handleSignals simulaKeyboard keyboard = do
+          let keyboardSignals = getKeySignals keyboard
+          let keySignalKey' = (keySignalKey keyboardSignals)
+          let keySignalModifiers' = (keySignalModifiers keyboardSignals)
+          tokenModifiers <- addListener (keyboardHandleModifiers simulaKeyboard) keySignalModifiers' -- a = SimulaKeyboard
+          tokenKey <- addListener (keyboardHandleKey simulaKeyboard)       keySignalKey' -- a = EventKey
+
+          let tokens = [tokenModifiers, tokenKey]
+          return tokens
+
+        makeKeyboardActiveHead :: SimulaKeyboard -> IO ()
+        makeKeyboardActiveHead simulaKeyboard = do
+          seatSetKeyboard (_gssSeat server) (_skDevice simulaKeyboard)
+          keyboardList <- atomically $ readTVar (_gssKeyboards server)
+          atomically $ writeTVar (_gssKeyboards server) ([simulaKeyboard] ++ keyboardList)
+
+-- | This wl_listener is called when Simula gets a new wlr_input_device. We (i)
+-- | inspect the wlr_input_device to see whether it is a keyboard or a pointer,
+-- | passing it to serverNew* accordingly; (ii) set the wlr_seat's "capabilities" as
+-- | either "mouse" or "mouse + keyboard", depending upon whether the server's
+-- | keyboard list is empty or not.
+serverNewInput :: GodotSimulaServer -> WlListener InputDevice
+serverNewInput simulaServer = WlListener $ \device ->
+  do deviceType <- inputDeviceType device
+     let seat = (_gssSeat simulaServer)
+     return ()
+     case deviceType of
+         (DeviceKeyboard _) -> (serverNewKeyboard simulaServer device)
+         _                  -> putStrLn "Simula does not know how to handle this input type."
+         -- (DevicePointer  _) -> (serverNewPointer simulaServer  device)
+
+     keyboardList <- atomically $ readTVar (_gssKeyboards simulaServer)
+
+     -- Note that Graphics.Wayland.Internal.SpliceServerTypes code generates the following:
+     --   newtype SeatCapability = SeatCapability GHC.Types.Int
+     -- Now see: https://github.com/swaywm/hsroots/blob/f9b07af96dff9058a3aac59eba5a608a91801c0a/src/Graphics/Wayland/WlRoots/Input.hsc#L48
+     -- EDIT: We cannot use deviceToInt as it gets us WLR_* enums and we need WL_SEAT_* enums.
+     keyboardCapability' <- fromIntegral <$> [C.exp| int wl_seat_capability { WL_SEAT_CAPABILITY_KEYBOARD } |]
+     let keyboardCapabilities = [SeatCapability keyboardCapability']
+     setSeatCapabilities seat keyboardCapabilities
+
+-- | This is an event handler raised by the backend when a new output (i.e.,
+-- | display or monitor) becomes available. Simula doesn't require an output
+-- | (since Godot handles our rendering for us), but I include this in case
+-- | clients need to see a some sort of output global before rendering.
+serverNewOutput :: GodotSimulaServer -> WlListener WlrOutput
+serverNewOutput simulaServer = WlListener $ \ptrWlrOutput -> mdo
+    -- Sets the outputs (width, height, refresh rate) which depends on your hardware.
+    -- This is only necessary for some backends (i.e., DRM+KMS). Here we just pick
+    -- the first mode supported in the list retrieved. Unclear if we need this or not
+    -- with a headless backend.
+    setOutputModeAutomatically ptrWlrOutput
+
+    let simulaOutput = SimulaOutput { _soServer = simulaServer
+                                    , _soWlrOutput = ptrWlrOutput
+                                    }
+    -- Add output to head of server's output list
+    outputsList  <- atomically $ readTVar (simulaServer ^. gssOutputs)
+    let outputsListNew = simulaOutput:outputsList
+    atomically $ writeTVar (simulaServer ^. gssOutputs) outputsListNew
+
+    -- Adds the wl_output global to the display, which Wayland clients can use to
+    -- find out information about this output (such as DPI, scale factor,
+    -- manufacturerer, etc). We use it for dummy purposes in Simula.
+    createOutputGlobal ptrWlrOutput
+
+    where setOutputModeAutomatically :: Ptr WlrOutput -> IO ()
+          setOutputModeAutomatically ptrWlrOutput = do
+            hasModes' <- hasModes ptrWlrOutput
+            when hasModes' $ do modes <- getModes ptrWlrOutput
+                                let headMode = head modes -- We might want to reverse this list first to mimic C implementation
+                                setOutputMode headMode ptrWlrOutput
+                                return ()
+
+-- | Called when the surface is "mapped" (i.e., "ready to display
+-- | on-screen"). Note that the actual "mapping" and "unmapping"
+-- | occurs in serverNewXdgSurface and xdgSurfaceDestroy respectively.
+xdgSurfaceMap :: SimulaView -> WlListener WlrXdgSurface
+xdgSurfaceMap simulaView = WlListener $ \_ -> do
+  maybeSurface <- xdgSurfaceGetSurface (simulaView ^. svXdgSurface)
+
+  -- Set the XDG surface as mapped
+  atomically $ writeTVar (simulaView ^. svMapped) True
+
+  -- Then give it keyboard focus
+  case maybeSurface of
+    Nothing -> return ()
+    Just surface -> focusView simulaView surface
+  return ()
+
+-- | Called when the surface is "unmapped", and should no longer be shown.
+xdgSurfaceUnmap :: SimulaView -> WlListener WlrXdgSurface
+xdgSurfaceUnmap simulaView = WlListener $ \_ -> do
+  atomically $ writeTVar (simulaView ^. svMapped) False
+
+-- | Called when the surface is destroyed, and should never be shown again.
+xdgSurfaceDestroy :: SimulaView -> WlListener WlrXdgSurface
+xdgSurfaceDestroy simulaView = WlListener $ \_ -> do
+  -- Free the view's WlListener tokens.
+  freeListenerToken (simulaView ^. svMap)
+  freeListenerToken (simulaView ^. svUnmap)
+  freeListenerToken (simulaView ^. svDestroy)
+
+  -- Clean up the associated GodotSimulaViewSprite and
+  -- remove the `view ↦ sprite` mapping from the server.
+  let gss = simulaView ^. svServer
+  maybeSprite <- M.lookup simulaView <$> atomically (readTVar (_gssViews gss))
+  case maybeSprite of
+    Just sprite -> do
+      Api.godot_object_destroy (safeCast sprite)
+      atomically $ modifyTVar' (_gssViews gss) (M.delete simulaView)
+    _ -> return ()
+
+-- This is a key function in Simula. Every time a client commits a frame to the
+-- server for rendering, this handler is called, which ultimately ensures the view's
+-- latest surface buffer is pasted onto the Godot sprite.
+serverSurfaceCommit :: SimulaView -> WlListener WlrSurface
+serverSurfaceCommit simulaView = WlListener $ \ptrWlrSurface -> do
+  let gss = simulaView ^. svServer
+  Just gsvs <- M.lookup simulaView <$> atomically (readTVar (_gssViews gss))
+
+  updateSimulaViewSprite gsvs -- Wraps updateSimulaViewTexture, which sends wlr buffer to Godot
+
+  whenM (spriteShouldMove gsvs) $ do
+    atomically $ writeTVar (_gsvsShouldMove gsvs) False
+    moveToUnoccupied gss gsvs
+
+  -- Wrap a call to wlr_surface_send_frame_done so that client will start rendering the next frame
+  surfaceSendFrameDone ptrWlrSurface
+  where surfaceSendFrameDone ptrWlrSurface = do
+          let ptrWlrSurface' = toInlineC ptrWlrSurface
+          now <- getTime Realtime
+          ptrTimeSpecNow <- malloc :: IO (Ptr TimeSpec)
+          poke ptrTimeSpecNow now
+          [C.exp| void { wlr_surface_send_frame_done( $(struct wlr_surface * ptrWlrSurface'), $(struct timespec * ptrTimeSpecNow)) } |] -- hsroots doesn't provide this function
+          free ptrTimeSpecNow
+
+-- | This event is raised when wlr_xdg_shell receives a new xdg surface from a
+-- | client, either a toplevel (application window) or popup. For now we ignore popups,
+-- | which might cause problem's for Simula's ability to handle popups.
+serverNewXdgSurface :: GodotSimulaServer -> WlListener WlrXdgSurface
+serverNewXdgSurface gss = WlListener $ \ptrWlrXdgSurface -> do
+  putStrLn "serverNewXdgSurface"
+  maybeTopLevel   <- getXdgToplevel ptrWlrXdgSurface
+  maybeWlrSurface <- xdgSurfaceGetSurface ptrWlrXdgSurface
+  case (maybeTopLevel, maybeWlrSurface) of
+       (Just topLevel, Just ptrWlrSurface) -> createServerView ptrWlrSurface ptrWlrXdgSurface topLevel
+       (_, _) -> return () -- If the surface is, i.e., a popup or has no XDG "role", then we don't do anything.
+  where
+        -- createServerView creates a new SimulaView, connects its WlListeners
+        -- to the proper signals, and adds it to the front of the server's view
+        -- list
+        createServerView :: Ptr WlrSurface -> Ptr WlrXdgSurface -> Ptr WlrXdgToplevel -> IO ()
+        createServerView ptrWlrSurface ptrWlrXdgSurface topLevel = mdo
+          -- Signals are divided into XdgSurfaceEvents, XdgTopLevelEvents, & now WlrSurfaceEvents
+          let wlrXdgSurfaceEvents = getXdgSurfaceEvents ptrWlrXdgSurface
+          let eventToplevelWlrXdgToplevelEvents = getXdgToplevelEvents topLevel
+          let wlrSurfaceEvents = getWlrSurfaceEvents ptrWlrSurface
+
+          -- We omit "timeout", "popup" signals
+          let signalDestroy = xdgSurfaceEvtDestroy wlrXdgSurfaceEvents :: Ptr (WlSignal WlrXdgSurface)
+          let signalMap = xdgSurfaceEvtMap wlrXdgSurfaceEvents :: Ptr (WlSignal WlrXdgSurface)
+          let signalUnmap = xdgSurfaceEvtUnmap wlrXdgSurfaceEvents :: Ptr (WlSignal WlrXdgSurface)
+
+          -- We omit "maximize", "fullscreen", "minimize", and "menu" signals
+          let signalToplevelMove                = xdgToplevelEvtMove  eventToplevelWlrXdgToplevelEvents :: Ptr (WlSignal MoveEvent)
+          let signalToplevelResize              = xdgToplevelEvtResize  eventToplevelWlrXdgToplevelEvents :: Ptr (WlSignal ResizeEvent)
+          
+
+          let signalSurfaceCommit = wlrSurfaceEvtCommit wlrSurfaceEvents :: Ptr (WlSignal WlrSurface)
+
+          svMapToken     <- addListener (xdgSurfaceMap simulaView)     signalMap
+          svUnmapToken   <- addListener (xdgSurfaceUnmap simulaView)   signalUnmap
+          svDestroyToken <- addListener (xdgSurfaceDestroy simulaView) signalDestroy
+          svSurfaceCommitToken <- addListener (serverSurfaceCommit simulaView) signalSurfaceCommit
+
+          falseBoolTVar <- atomically $ (newTVar False) :: IO (TVar Bool)
+
+          let simulaView = SimulaView { _svServer     = gss :: GodotSimulaServer
+                                      , _svXdgSurface = ptrWlrXdgSurface     :: Ptr WlrXdgSurface
+                                      , _svMapped     = falseBoolTVar        :: TVar Bool
+                                      , _svMap        = svMapToken           :: ListenerToken
+                                      , _svUnmap      = svUnmapToken         :: ListenerToken
+                                      , _svDestroy    = svDestroyToken       :: ListenerToken
+                                      , _svCommit     = svSurfaceCommitToken :: ListenerToken
+                                      }
+
+          -- We now instantiate Godot types and add the `simulaView ↦ gsvs`
+          -- mapping to the server's (M.Map SimulaView GodotSimulaViewSprite)
+          gsvt <- newGodotSimulaViewTexture simulaView
+          gsvs <- newGodotSimulaViewSprite gsvt -- Potentially a problem: this has the side effect of calling updateSimulaViewTexture twice, and potentially on a null buffer
+          G.add_child gsvs (safeCast gsvs) True
+          atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs)
+
+
+initGodotSimulaServer :: GodotObject -> IO (GodotSimulaServer)
+initGodotSimulaServer obj = mdo
+  displayServer <- throwIfNullPtr displayCreate
+  headlessBackend <- createHeadlessBackend displayServer
+  ptrRenderer   <- backendGetRenderer headlessBackend
+  initWlDisplay displayServer ptrRenderer
+  ptrWlrCompositor <- compositorCreate displayServer ptrRenderer -- Potentially unneeded, but perhaps clients need to see this to render?
+  ptrWlrDeviceManager <- managerCreate displayServer
+
+  emptyMapTVar <- atomically (newTVar mempty) :: IO (TVar (M.Map SimulaView GodotSimulaViewSprite))
+  emptyKeyboardsTVar   <- atomically $ (newTVar []) :: IO (TVar [SimulaKeyboard])
+  emptyOutputsTVar     <- atomically $ (newTVar []) :: IO (TVar [SimulaOutput])
+
+  let signalBackendNewOutput = backendEvtOutput (backendGetSignals headlessBackend)
+  tokenNewOutput <- addListener (serverNewOutput gss) signalBackendNewOutput
+
+  (xdgShell, tokenNewXdgSurface) <- getXdgShellAndToken displayServer gss
+
+  let signalBackendNewInput  = backendEvtInput (backendGetSignals headlessBackend)
+  tokenNewInput <- addListener (serverNewInput gss) signalBackendNewInput
+
+  seat <- createSeat displayServer "seat0"
+
+  let gss = GodotSimulaServer {
+      _gssObj           = obj                :: GodotObject
+    , _gssDisplay       = displayServer      :: DisplayServer
+    , _gssViews         = emptyMapTVar       :: TVar (M.Map SimulaView GodotSimulaViewSprite)
+    , _gssBackend       = headlessBackend    :: Ptr Backend
+    , _gssXdgShell      = xdgShell           :: Ptr WlrXdgShell
+    , _gssSeat          = seat               :: Ptr WlrSeat
+    , _gssKeyboards     = emptyKeyboardsTVar :: TVar [SimulaKeyboard]
+    , _gssOutputs       = emptyOutputsTVar   :: TVar [SimulaOutput]
+    , _gssRenderer      = ptrRenderer        :: Ptr Renderer
+    , _gssNewXdgSurface = tokenNewXdgSurface :: ListenerToken
+    , _gssNewInput      = tokenNewInput      :: ListenerToken
+    , _gssNewOutput     = tokenNewOutput     :: ListenerToken
   }
+  return gss
+  where throwIfNullPtr f = throwErrnoIf
+                           (\res -> ((coerce res :: Ptr ()) == nullPtr)) -- Throw error if the pointer returned by f is 0 (i.e., NULL)
+                           "wl_* initialization failed."
+                           f
+        getXdgShellAndToken displayServer gss = do
+          let displayServer' = toInlineC displayServer
+          xdgShell' <- [C.exp| struct wlr_xdg_shell * { wlr_xdg_shell_create($(struct wl_display * displayServer'))} |]
+          let xdgShell = toC2HS xdgShell' :: Ptr WlrXdgShell
+          xdgShellSignal' <- [C.block| struct wl_signal * {struct wl_signal * signal_ptr;
+                                                        signal_ptr = &$(struct wlr_xdg_shell * xdgShell')->events.new_surface;
+                                                        return signal_ptr;} |] -- I'm assuming this pointer is freed when we eventually call freeListenerToken on tokenNewXdgSurface
+          let xdgShellSignal = (toC2HS xdgShellSignal') :: Ptr (WlSignal WlrXdgSurface)
+          tokenNewXdgSurface <- addListener (serverNewXdgSurface gss) xdgShellSignal
+          return (xdgShell, tokenNewXdgSurface)
 
-{- inline-C datatype representation
-data GodotSimulaServer = GodotSimulaServer
-  { _gwcObj      :: GodotObject
-  , _gwcCompositor :: TVar (Ptr C'WlrCompositor)
-  , _gwcWlDisplay :: TVar C'WlDisplay  -- DisplayServer ~ * wl_display
-  , _gwcWlEventLoop :: TVar C'WlEventLoop
-  , _gwcBackEnd :: TVar (Ptr C'WlrBackend)
-  , _gwcSurfaces :: TVar (M.Map (Ptr C'WlrSurface) GodotSimulaViewSprite)
-  , _gwcOutput :: TVar (Ptr C'WlrOutput) -- possibly needs to be (TVar [Ptr C'WlrOutput])
--- , _gwcNormalLayer :: TVar (Ptr C'WlrLayer) -- so far unused
-  }
--}
+-- | Here we set socket(s), start the backend, and finally call displayRun (which
+-- | blocks until the compositor is shut down). Once the compositor is shut down,
+-- | we free everything.
+startSimulaServerOnNewThread :: GodotSimulaServer -> IO ()
+startSimulaServerOnNewThread gss = void $ forkOS $ mdo
+      -- prevDisplay <- getEnv "DISPLAY"
+      setLogPrio Debug
 
--- instance GodotClass GodotSimulaServer where
---   godotClassName = "SimulaServer"
+      let socketName = "simula-0"
+      putStrLn $ "Socket: " ++ socketName
+      setEnv "WAYLAND_DISPLAY" socketName
+      displayAddSocket (gss ^. gssDisplay) (Just socketName)
 
--- instance ClassExport GodotSimulaServer where
---   classInit obj  = GodotSimulaServer obj
---     <$> atomically (newTVar undefined)
---     <*> atomically (newTVar undefined)
---     <*> atomically (newTVar undefined)
---     <*> atomically (newTVar undefined)
---     <*> atomically (newTVar mempty)
---     <*> atomically (newTVar undefined)
+      backendStart (gss ^. gssBackend)
 
---   classExtends = "Spatial"
---   classMethods =
---     [ GodotMethod NoRPC "_ready" Plugin.SimulaServer.ready
---     , GodotMethod NoRPC "_input" input
---     ]
+      -- In case it matters for debugging: I'm assuming that WlRoots doesn't force
+      -- us to change compositor frame internals like we had to with Weston, i.e.:
+        -- $(struct weston_compositor * compositor')->repaint_msec = 1000
+        -- forkOS $ forever $ weston_output_schedule_repaint output >> threadDelay 1000
 
--- instance HasBaseClass GodotSimulaServer where
---   type BaseClass GodotSimulaServer = GodotSpatial
---   super (GodotSimulaServer obj _ _ _ _ _ _) = GodotSpatial obj
+      -- setEnv "DISPLAY" prevDisplay
+      displayRun (gss ^. gssDisplay)
+      -- destroyDisplayClients displayServer
+      displayDestroy (gss ^. gssDisplay)
+      freeListenerToken (gss ^. gssNewXdgSurface)
+      freeListenerToken (gss ^. gssNewInput)
+      freeListenerToken (gss ^. gssNewOutput)
 
--- ready :: GFunc GodotSimulaServer
--- ready compositor _ = do
---   startBaseCompositor compositor
---   toLowLevel VariantNil
-
--- startBaseCompositor :: GodotSimulaServer -> IO ()
--- startBaseCompositor compositor = do
---   startBaseThread compositor
---   startTelemetry (_gwcSurfaces compositor)
-
--- startBaseThread :: GodotSimulaServer -> IO ()
--- startBaseThread compositor = Control.Monad.void $ forkOS $ do
---   putStrLn "startBaseThread not implemented yet."
---   -- return ()
---   -- ptrWlDisplay <- [C.block| struct wl_display* {
---   --                     struct wl_display * display;
---   --                     display = wl_display_create();
---   --                     assert(display);
---   --                     return display;} |] :: IO (Ptr C'WlDisplay)
---   -- ptrWlEventLoop <- [C.block| struct wl_event_loop* {
---   --                       struct wl_event_loop * loop;
---   --                       loop = wl_display_get_event_loop($(struct wl_display *ptrWlDisplay));
---   --                       assert(loop);
---   --                       return loop;} |]
---   -- ptrWlrBackend <- [C.block| wl_event_loop* {
---   --                       wlr_backend * backend;
---   --                       backend = wlr_headless_backend_create($(wl_display* ptrWlDisplay), NULL);
---   --                       assert(backend);
---   --                       return backend;} |]
---   -- TODO: Connect signals with their wl_notify_func_t
---           -- wl_list_init(&server.outputs);
---           -- server.new_output.notify = new_output_notify;
---           -- wl_signal_add(&server.backend->events.new_output, &server.new_output);
-
---           -- if (!wlr_backend_start(server.backend)) {
---           --         fprintf(stderr, "Failed to start backend\n");
---           --         wl_display_destroy(server.wl_display);
---           --         return 1;
---           -- }
---   -- [C.exp| void { wl_display_run($(wl_display* ptrWlDisplay)); } |]
---   -- [C.exp| void { wl_display_destroy($(wl_display* ptrWlDisplay)); } |]
---     where newOutputNotify :: (Ptr C'WlListener -> Ptr ())
---           newOutputNotify _ = undefined
-
---           outputFrameNotify :: (Ptr C'WlListener -> Ptr ())
---           outputFrameNotify = undefined
-
---           outputDestroyNotify :: (Ptr C'WlListener -> Ptr ())
---           outputDestroyNotify = undefined
-
-
--- -- TODO: check the origin plane?
--- moveToUnoccupied :: GodotSimulaServer -> GodotSimulaViewSprite -> IO ()
--- moveToUnoccupied gwc gwss = do
---   surfaces <- atomically $ readTVar (_gwcSurfaces gwc)
---   let elems = filter (\x -> asObj x /= asObj gwss) $ M.elems surfaces
-
---   extents <- forM elems $ \westonSprite -> do
---     sprite <- getSprite westonSprite
---     aabb   <- G.get_transformed_aabb sprite
---     size   <- Api.godot_aabb_get_size aabb >>= fromLowLevel
---     pos    <- Api.godot_aabb_get_position aabb >>= fromLowLevel
---     return (pos, size + pos)
-
---   let minX = minimum $ 0 : map (view $ _1._x) extents
---       maxX = maximum $ 0 :  map (view $ _2._x) extents
---   sprite <- getSprite gwss
---   aabb   <- G.get_aabb sprite
---   size   <- Api.godot_aabb_get_size aabb >>= fromLowLevel
---   let sizeX  = size ^. _x
---       newPos =
---         if abs minX < abs maxX
---         then V3 (minX - sizeX/2) 0 0
---         else V3 (maxX + sizeX/2) 0 0
-
---   G.translate gwss =<< toLowLevel newPos
-
--- getSeat :: GodotSimulaServer -> IO (Ptr C'WlrSeat)
--- getSeat gwc = undefined
---   -- do (seat:_) <- atomically (readTVar (_gwcCompositor gwc)) >>= westonCompositorSeats
---   --    return seat
-
-
--- input :: GFunc GodotSimulaServer
--- input self args = do
---   (getArg' 0 args :: IO GodotObject)
---     >>= asClass GodotInputEventKey "InputEventKey" >>= \case
---       Just evk -> do
---         -- dsp <- readTVarIO (_gwcWlDisplay self)
---         -- kbd <- getKeyboard self
---         -- processKeyEvent dsp kbd evk
---         putStrLn "WlrInput handling not yet implemented."
---         setInputHandled self
-
---       Nothing  -> return () -- not a key
---   toLowLevel VariantNil
---   -- where
---     -- getKeyboard :: GodotSimulaServer -> IO (Ptr C'WlrKeyboard)
---     -- getKeyboard gwc = getSeat gwc >>= weston_seat_get_keyboard
+      where destroyDisplayClients displayServer = do
+              let displayServer' = toInlineC displayServer
+              [C.exp| void { wl_display_destroy_clients($(struct wl_display * displayServer'))} |]
