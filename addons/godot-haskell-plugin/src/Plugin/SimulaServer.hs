@@ -515,3 +515,26 @@ startSimulaServerOnNewThread gss = void $ forkOS $ mdo
       where destroyDisplayClients displayServer = do
               let displayServer' = toInlineC displayServer
               [C.exp| void { wl_display_destroy_clients($(struct wl_display * displayServer'))} |]
+
+-- This function is in the latest godot-extra, but am using this for now to avoid fixing breaking changes.
+fromNativeScript :: GodotObject -> IO a
+fromNativeScript = Api.godot_nativescript_get_userdata
+  >=> Foreign.deRefStablePtr . Foreign.castPtrToStablePtr
+
+-- | This is a terrible hack. It requires a dummy GodotNode as its first
+-- | argument (can possibly cast nullPtr as GodotNode internally?). Moreover, 
+-- | it uses a hardcoded path that may change in the future. Finally, it somehow
+-- | doesn't return a Maybe type (attempts to access a null Godot instance
+-- | will just crash our program). See https://docs.godotengine.org/en/3.0/classes/class_node.html#class-node-get-node
+getSimulaServerFromHardcodedNodePath :: GodotNode -> IO (GodotSimulaServer)
+getSimulaServerFromHardcodedNodePath node = do
+  gss <- getGodotSimualServerFromNodePath (node :: GodotNode) "/root/Root/Simula" -- Confusingly, this path is set in Simula.hs and not this module
+  return gss
+  where getGodotSimualServerFromNodePath :: GodotNode -> String -> IO GodotSimulaServer
+        getGodotSimualServerFromNodePath node nodePathStr = do
+          nodePath <- (toLowLevel (pack nodePathStr))
+          gssNode <- G.get_node node nodePath
+          -- G.print_tree ((safeCast gssNode) :: GodotNode)
+          -- let gss = (unsafeCoerce gssNode) :: GodotSimulaServer
+          gss <- (fromNativeScript (safeCast gssNode)) :: IO GodotSimulaServer
+          return gss
