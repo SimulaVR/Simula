@@ -2,8 +2,8 @@ LIBFILE = $(shell stack path --local-install-root)/lib/libgodot-haskell-plugin.s
 PROJECTROOT = $(shell stack path --project-root)
 GODOTPROJECT = $(PROJECTROOT)/../../
 all:
-	cd include && make all
-	cd cbits && make all
+	cd include && make xdg-shell-protocol.h
+	cd cbits && make xdg-shell-protocol.c
 	stack clean godot-haskell-plugin 
 	stack build godot-haskell-plugin $$TELEMETRY
 	cp $(LIBFILE) $(PROJECTROOT)
