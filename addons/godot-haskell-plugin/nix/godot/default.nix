@@ -1,12 +1,12 @@
 { stdenv, lib, fetchFromGitHub, scons, pkgconfig, libX11, libXcursor
 , libXinerama, libXrandr, libXrender, libpulseaudio
 , libXi ? null, libXext, libXfixes, freetype, openssl
-, alsaLib, libGLU, zlib, yasm ? null }:
+, alsaLib, libGLU, zlib, yasm ? null }: # originally: libpulseaudio ? nil
 
 let
   options = {
     touch = libXi != null;
-  # pulseaudio = false;
+  # pulseaudio = false; # turning off pulseaudio leads to a different runtime error
   };
 in stdenv.mkDerivation rec {
   name    = "godot-${version}";
