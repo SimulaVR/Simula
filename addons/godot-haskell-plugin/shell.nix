@@ -3,12 +3,15 @@
 pkgs.haskell.lib.buildStackProject {
   name = "Simula";
   inherit ghc;
-  buildInputs = with pkgs; [ 
-                             libinput
+  buildInputs = with pkgs; [
+                             (callPackage ./nix/godot/default.nix { } ) # SimulaVR/godot fork
+                                                                        # Pseudo-depends on libpulseaudio, yasm, & libXi
+
                              (callPackage ./nix/wayland.nix { } )
                              (callPackage ./nix/wayland-protocols.nix { } )
                              (callPackage ./nix/wlroots.nix { } )
                              (callPackage ./nix/libdrm.nix { } )
+                             libinput
                              pkgconfig
                              pixman
                              libGL
@@ -16,7 +19,6 @@ pkgs.haskell.lib.buildStackProject {
                              libxkbcommon
                              zlib
                              git
-                           # godot # TODO: Make nix expression for our Godot fork
                              xorg.libX11
                              udev
                              cabal-install

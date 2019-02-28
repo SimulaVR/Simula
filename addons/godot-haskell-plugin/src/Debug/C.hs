@@ -117,6 +117,7 @@ initializeSimulaCtxAndIncludes = do
   C.include "<wayland-server-core.h>"
   C.include "<wayland-server-protocol.h>"
   C.include "<wlr/backend.h>"
+  C.include "<wlr/backend/headless.h>"
   C.include "<wlr/render/wlr_renderer.h>"
   C.include "<wlr/types/wlr_cursor.h>"
   C.include "<wlr/types/wlr_compositor.h>"
