@@ -22,6 +22,8 @@
 #include <wlr/backend.h>
 #include <wlr/backend/interface.h>
 
+#include <wlr_godot_backend.h>
+
 //wlr_renderer:
 static const enum wl_shm_format wl_formats[] = {
 	WL_SHM_FORMAT_ARGB8888,
@@ -216,6 +218,8 @@ void renderer_render_ellipse_with_matrix(struct wlr_renderer *renderer,
 	/* This space deliberately left blank */
 }
 
+
+
 static const struct wlr_renderer_impl renderer_impl = {
 	/* We need to implement these, but we don't use them */
 	/* TODO wlroots: we should consider separating the "allocate textures"
@@ -248,7 +252,8 @@ void backend_destroy(struct wlr_backend *backend) {
 struct wlr_renderer *backend_get_renderer(struct wlr_backend *_backend) {
 	/* WlrBackend *backend = (WlrBackend *)_backend; */
 	/* return backend->get_renderer()->get_wlr_renderer(); */
-  return NULL;
+	struct wlr_godot_backend *backend = (struct wlr_godot_backend *)_backend;
+  return backend->renderer;
 }
 
 static const struct wlr_backend_impl backend_impl = {
@@ -257,22 +262,20 @@ static const struct wlr_backend_impl backend_impl = {
 	.get_renderer = backend_get_renderer,
 };
 
-//TODO: Make into wlr_godot_backend_create
 struct wlr_backend *wlr_godot_backend_create(struct wl_display *display,
 		wlr_renderer_create_func_t create_renderer_func) {
-  /* //1 */
-	/* wlr_log(WLR_INFO, "Creating headless backend"); */
+	wlr_log(WLR_INFO, "Creating godot backend");
 
-	/* struct wlr_headless_backend *backend = */
-	/* 	calloc(1, sizeof(struct wlr_headless_backend)); */
-	/* if (!backend) { */
-	/* 	wlr_log(WLR_ERROR, "Failed to allocate wlr_headless_backend"); */
-	/* 	return NULL; */
-	/* } */
-	/* wlr_backend_init(&backend->backend, &backend_impl); */
-	/* backend->display = display; */
-	/* wl_list_init(&backend->outputs); */
-	/* wl_list_init(&backend->input_devices); */
+	struct wlr_godot_backend *backend = calloc(1, sizeof(struct wlr_godot_backend));
+	if (!backend) {
+		wlr_log(WLR_ERROR, "Failed to allocate wlr_backend");
+		return NULL;
+	}
+
+	wlr_backend_init(&backend->backend, &backend_impl);
+	//backend->display = display;
+	//wl_list_init(&backend->outputs);
+	//wl_list_init(&backend->input_devices);
 
 	/* static const EGLint config_attribs[] = { */
 	/* 	EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, */
@@ -295,9 +298,13 @@ struct wlr_backend *wlr_godot_backend_create(struct wl_display *display,
 	/* 	return NULL; */
 	/* } */
 
+	struct wlr_renderer *renderer = calloc(1, sizeof(struct wlr_renderer)); //TODO: Make sure this doesn't leak
+  wlr_renderer_init(renderer, &renderer_impl);
+
+  backend->renderer = renderer;
+
 	/* backend->display_destroy.notify = handle_display_destroy; */
 	/* wl_display_add_destroy_listener(display, &backend->display_destroy); */
 
-	/* return &backend->backend; */
-  return NULL;
+	return &backend->backend;
 }
