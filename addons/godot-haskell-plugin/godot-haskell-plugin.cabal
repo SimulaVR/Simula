@@ -182,6 +182,7 @@ foreign-library godot-haskell-plugin
   c-sources:
       cbits/flib.c
       cbits/xdg-shell-protocol.c
+      cbits/wlr_godot_backend.c
   include-dirs:
       include
   default-language: Haskell2010

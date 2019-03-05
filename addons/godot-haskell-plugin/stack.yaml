@@ -23,5 +23,5 @@ extra-deps:
 require-stack-version: ">=1.7.1 && <1.11"
 
 nix:
-  enable: true
+  enable: false
   shell-file: shell.nix

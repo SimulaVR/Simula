@@ -15,6 +15,10 @@ run:
 	stack --verbosity=error build godot-haskell-plugin $$TELEMETRY
 	cp $(LIBFILE) $(PROJECTROOT)
 	godot --path $(GODOTPROJECT)
+debug-run:
+	stack --verbosity=error build godot-haskell-plugin $$TELEMETRY
+	cp $(LIBFILE) $(PROJECTROOT)
+	gdb --args godot --path $(GODOTPROJECT)
 watch:
 	stack build --file-watch --fast --exec "cp $(LIBFILE) $(PROJECTROOT)"
 clean:

@@ -104,7 +104,7 @@ instance ClassExport GodotSimulaServer where
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _) = GodotSpatial obj
 
 ready :: GFunc GodotSimulaServer
 ready gss _ = do
@@ -434,8 +434,16 @@ serverNewXdgSurface gss = WlListener $ \ptrWlrXdgSurface -> do
 initGodotSimulaServer :: GodotObject -> IO (GodotSimulaServer)
 initGodotSimulaServer obj = mdo
   displayServer <- throwIfNullPtr displayCreate
-  headlessBackend <- createHeadlessBackend displayServer
-  ptrRenderer   <- backendGetRenderer headlessBackend
+  let displayServer' = toInlineC displayServer
+  -- The following calls cause EGL errors to bubble up:
+    -- backendHeadless <- createHeadlessBackend displayServer
+    -- backendAuto <- backendAutocreate displayServer
+
+  -- Thus we replace with wlr_godot_backend_create (see ./cbits/wlr_godot_backend.c)
+  backendGodot' <- [C.exp| struct wlr_backend * { wlr_godot_backend_create($(struct wl_display * displayServer'), NULL) }|] :: IO (Ptr C'WlrBackend)
+  let backendGodot = toC2HS backendGodot' :: Ptr Backend
+
+  ptrRenderer   <- backendGetRenderer backendGodot
   initWlDisplay displayServer ptrRenderer
   ptrWlrCompositor <- compositorCreate displayServer ptrRenderer -- Potentially unneeded, but perhaps clients need to see this to render?
   ptrWlrDeviceManager <- managerCreate displayServer
@@ -444,13 +452,21 @@ initGodotSimulaServer obj = mdo
   emptyKeyboardsTVar   <- atomically $ (newTVar []) :: IO (TVar [SimulaKeyboard])
   emptyOutputsTVar     <- atomically $ (newTVar []) :: IO (TVar [SimulaOutput])
 
-  let signalBackendNewOutput = backendEvtOutput (backendGetSignals headlessBackend)
-  tokenNewOutput <- addListener (serverNewOutput gss) signalBackendNewOutput
+  -- Both the following emitted in backend/headless/backend.c:backend_start(),
+  -- and hence won't be emitted in our empty gdlwroots.backend_start().
+  --   wlr_signal_emit_safe(&wlr_backend.events.new_output, <data payload>);
+  --   wlr_signal_emit_safe(&wlr_backend.events.new_input, <data payload>);
+  -- which means the following functions are worthless:
+    -- let signalBackendNewOutput = backendEvtOutput (backendGetSignals backendGodot)
+    -- tokenNewOutput <- addListener (serverNewOutput gss) signalBackendNewOutput
+    -- let signalBackendNewInput  = backendEvtInput (backendGetSignals backendGodot)
+    -- tokenNewInput <- addListener (serverNewInput gss) signalBackendNewInput
+  -- Thus, if we need to add a wlr_output or a wlr_input_device, we will have to do
+  -- (i) manually by (ii) implementing wlr_godot_add_[input_device,output] ourselves,
+  -- which should involve calls to wlr_signal_emit_safe(..) as above.
 
   (xdgShell, tokenNewXdgSurface) <- getXdgShellAndToken displayServer gss
 
-  let signalBackendNewInput  = backendEvtInput (backendGetSignals headlessBackend)
-  tokenNewInput <- addListener (serverNewInput gss) signalBackendNewInput
 
   seat <- createSeat displayServer "seat0"
 
@@ -458,15 +474,15 @@ initGodotSimulaServer obj = mdo
       _gssObj           = obj                :: GodotObject
     , _gssDisplay       = displayServer      :: DisplayServer
     , _gssViews         = emptyMapTVar       :: TVar (M.Map SimulaView GodotSimulaViewSprite)
-    , _gssBackend       = headlessBackend    :: Ptr Backend
+    , _gssBackend       = backendGodot       :: Ptr Backend
     , _gssXdgShell      = xdgShell           :: Ptr WlrXdgShell
     , _gssSeat          = seat               :: Ptr WlrSeat
     , _gssKeyboards     = emptyKeyboardsTVar :: TVar [SimulaKeyboard]
     , _gssOutputs       = emptyOutputsTVar   :: TVar [SimulaOutput]
     , _gssRenderer      = ptrRenderer        :: Ptr Renderer
     , _gssNewXdgSurface = tokenNewXdgSurface :: ListenerToken
-    , _gssNewInput      = tokenNewInput      :: ListenerToken
-    , _gssNewOutput     = tokenNewOutput     :: ListenerToken
+    -- , _gssNewInput      = tokenNewInput      :: ListenerToken -- Not needed now that we're using wlr_godot_backend
+    -- , _gssNewOutput     = tokenNewOutput     :: ListenerToken -- "
   }
   return gss
   where throwIfNullPtr f = throwErrnoIf
@@ -497,6 +513,8 @@ startSimulaServerOnNewThread gss = void $ forkOS $ mdo
       setEnv "WAYLAND_DISPLAY" socketName
       displayAddSocket (gss ^. gssDisplay) (Just socketName)
 
+      -- This just calls backend_start, which with wlr_godot_backend is just a shim
+      -- (compare to the backend_start of the headless backend).
       backendStart (gss ^. gssBackend)
 
       -- In case it matters for debugging: I'm assuming that WlRoots doesn't force
@@ -509,8 +527,8 @@ startSimulaServerOnNewThread gss = void $ forkOS $ mdo
       -- destroyDisplayClients displayServer
       displayDestroy (gss ^. gssDisplay)
       freeListenerToken (gss ^. gssNewXdgSurface)
-      freeListenerToken (gss ^. gssNewInput)
-      freeListenerToken (gss ^. gssNewOutput)
+      -- freeListenerToken (gss ^. gssNewInput)  -- Not needed now that we're using wlr_godot_backend
+      -- freeListenerToken (gss ^. gssNewOutput) -- "
 
       where destroyDisplayClients displayServer = do
               let displayServer' = toInlineC displayServer

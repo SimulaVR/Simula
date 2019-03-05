@@ -6,6 +6,8 @@ nix:
 	cd addons/godot-haskell-plugin && make nix ; cd -
 run:
 	cd addons/godot-haskell-plugin && make run ; cd -
+debug-run:
+	cd addons/godot-haskell-plugin && make debug-run ; cd -
 watch:
 	cd addons/godot-haskell-plugin && make watch ; cd -
 
