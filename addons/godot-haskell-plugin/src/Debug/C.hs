@@ -43,6 +43,7 @@ data C'WlrPointer
 data C'WlrDesktopApi
 data C'WlrLayer
 data C'WlrBackend
+data C'WlrHeadlessBackend
 data C'WlrButton
 data C'WlEventLoop
 data C'WlrRenderer
@@ -85,6 +86,7 @@ initializeSimulaCtx = C.context $ C.baseCtx <> C.funCtx <> mempty {
   ,  (C.Struct "wlr_desktopApi", [t|C'WlrDesktopApi|])
   ,  (C.Struct "wlr_layer", [t|C'WlrLayer|])
   ,  (C.Struct "wlr_backend", [t|C'WlrBackend|])
+  ,  (C.Struct "wlr_headless_backend", [t|C'WlrHeadlessBackend|])
   ,  (C.Struct "wlr_button", [t|C'WlrButton|])
   ,  (C.TypeName "wl_notify_func_t", [t|C'WlNotifyFuncT|])
   ,  (C.Struct "wlr_renderer", [t|C'WlrRenderer|])
@@ -117,6 +119,8 @@ initializeSimulaCtxAndIncludes = do
   C.include "<wayland-server-core.h>"
   C.include "<wayland-server-protocol.h>"
   C.include "<wlr/backend.h>"
+  C.include "<wlr/backend/headless.h>"
+  C.include "<wlr/backend/interface.h>"
   C.include "<wlr/render/wlr_renderer.h>"
   C.include "<wlr/types/wlr_cursor.h>"
   C.include "<wlr/types/wlr_compositor.h>"
@@ -138,3 +142,4 @@ initializeSimulaCtxAndIncludes = do
   C.include "<time.h>"
   C.include "<stdlib.h>"
   C.include "<stdalign.h>"
+  C.include "<wlr_godot_backend.h>"

@@ -77,8 +77,8 @@ data GodotSimulaServer = GodotSimulaServer
 
   -- All ListenerToken's should be manually destroyed when this type is destroyed
   , _gssNewXdgSurface :: ListenerToken
-  , _gssNewInput      :: ListenerToken
-  , _gssNewOutput     :: ListenerToken
+  -- , _gssNewInput      :: ListenerToken -- Not needed now that we're using wlr_godot_backend
+  -- , _gssNewOutput     :: ListenerToken -- "
 
   -- The following datatypes will likely be used/modified for Simula's resizing/movement operations
     -- , _ssCursorMode           :: TVar SimulaCursorMode
