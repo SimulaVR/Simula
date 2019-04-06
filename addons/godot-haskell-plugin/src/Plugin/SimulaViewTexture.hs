@@ -166,6 +166,7 @@ instance ClassExport GodotSimulaViewTexture where
       <*> atomically (newTVar imgdt)
   classExtends = "ImageTexture"
   classMethods = []
+  classSignals = []
 
 instance HasBaseClass GodotSimulaViewTexture where
   type BaseClass GodotSimulaViewTexture = GodotImageTexture
@@ -173,7 +174,7 @@ instance HasBaseClass GodotSimulaViewTexture where
 
 newGodotSimulaViewTexture :: SimulaView -> IO GodotSimulaViewTexture
 newGodotSimulaViewTexture simulaView = do
-  ret <- unsafeNewNS id "Object" [] "res://addons/godot-haskell-plugin/SimulaViewTexture.gdns"
+  ret <- newNS' [] "res://addons/godot-haskell-plugin/SimulaViewTexture.gdns"
   objPtr <- godot_nativescript_get_userdata ret
   texture <- deRefStablePtr $ castPtrToStablePtr objPtr
 

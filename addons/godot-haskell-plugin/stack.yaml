@@ -5,7 +5,7 @@ packages:
 
 extra-deps:
 - git: https://gitlab.com/lboklin/godot-extra
-  commit: 4a805886
+  commit: 495850e3c1d50b4a869becaaf9f0aed467a85b32 # signals branch
 - godot-haskell-0.1.0.0@sha256:9d92ff27c7b6c6d2155286f04ba2c432f96460f448fd976654ef26a84f0e35a6,26290
 - casing-0.1.4.0@sha256:a1ea21789906302930300b68ffd40373bc731e9254b43d1f35e8ba7368b2acce,1029
 - data-flags-0.0.3.4

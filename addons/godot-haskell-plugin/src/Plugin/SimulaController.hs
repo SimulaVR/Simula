@@ -95,6 +95,7 @@ instance ClassExport GodotSimulaController where
     [ GodotMethod NoRPC "_process" process
     , GodotMethod NoRPC "_physics_process" physicsProcess
     ]
+  classSignals = []
 
 instance HasBaseClass GodotSimulaController where
   type BaseClass GodotSimulaController = GodotARVRController
@@ -102,12 +103,15 @@ instance HasBaseClass GodotSimulaController where
 
 loadOpenVRControllerMesh :: Text -> IO (Maybe GodotMesh)
 loadOpenVRControllerMesh name = do
-  "res://addons/godot-openvr/OpenVRRenderModel.gdns"
-    & newNS GodotArrayMesh "ArrayMesh" [] >>= \case
+  -- "res://addons/godot-openvr/OpenVRRenderModel.gdns"
+  --   & newNS GodotArrayMesh "ArrayMesh" [] >>= \case
+  maybeObj <- newNS [] "res://addons/godot-openvr/OpenVRRenderModel.gdns" 
+  case maybeObj of
       Nothing  ->
         Nothing <$ godotPrint "Couldn't find an OpenVR render model."
 
-      Just msh -> do
+      Just obj -> do
+        msh <- Plugin.Imports.fromNativeScript obj :: IO GodotArrayMesh
         loadModelStr <- toLowLevel "load_model"
         nameStr :: GodotString <- toLowLevel $ T.dropEnd 2 name
         ret <- G.call msh loadModelStr [toVariant nameStr] >>= fromGodotVariant
@@ -175,7 +179,7 @@ rescale ct delta = do
 addSimulaController :: GodotARVROrigin -> Text -> Int -> IO GodotSimulaController
 addSimulaController originNode nodeName ctID = do
   ct <- "res://addons/godot-haskell-plugin/SimulaController.gdns"
-    & unsafeNewNS id "Object" []
+    & newNS' []
     -- TODO: Make this implicit in newNS (godot-extra)?
     >>= Api.godot_nativescript_get_userdata
     >>= deRefStablePtr . castPtrToStablePtr

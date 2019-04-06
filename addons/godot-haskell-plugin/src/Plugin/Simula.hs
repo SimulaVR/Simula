@@ -36,6 +36,7 @@ instance ClassExport GodotSimula where
     , GodotMethod NoRPC "_process" Plugin.Simula.process
     , GodotMethod NoRPC "on_button_signal" Plugin.Simula.on_button_signal
     ]
+  classSignals = []
 
 instance HasBaseClass GodotSimula where
   type BaseClass GodotSimula = GodotNode
@@ -72,8 +73,11 @@ ready self _ = do
  where
   addCompositorNode :: IO ()
   addCompositorNode = do
-    gwc <- "res://addons/godot-haskell-plugin/SimulaServer.gdns"
-      & unsafeNewNS GodotSpatial "Spatial" []
+    -- gwc <- "res://addons/godot-haskell-plugin/SimulaServer.gdns"
+    --   & unsafeNewNS GodotSpatial "Spatial" []
+    gwcObj <- newNS' [] "res://addons/godot-haskell-plugin/SimulaServer.gdns"
+    gwc <- Plugin.Imports.fromNativeScript gwcObj :: IO GodotSpatial
+
     G.set_name gwc =<< toLowLevel "Simula"
     G.add_child self (asObj gwc) True
 

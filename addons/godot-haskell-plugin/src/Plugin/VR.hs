@@ -32,7 +32,7 @@ newtype OpenHMDConfig = OpenHMDConfig GodotObject
 openHMDConfig :: IO OpenHMDConfig
 openHMDConfig = do
   "res://addons/godot-openhmd/OpenHMDConfig.gdns"
-    & unsafeNewNS id "Object" []
+    & newNS' []
     <&> OpenHMDConfig
 
 

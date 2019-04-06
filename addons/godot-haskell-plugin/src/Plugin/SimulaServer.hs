@@ -102,6 +102,11 @@ instance ClassExport GodotSimulaServer where
     , GodotMethod NoRPC "_input" Plugin.SimulaServer.input
     ]
 
+  -- Test:
+  classSignals = [ signal "test_signal1" [("arg1", GodotVariantTypeVector3), ("arg2", GodotVariantTypeObject)]
+                 , signal "test_signal2" []
+                 ]
+
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
   super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _) = GodotSpatial obj
@@ -554,5 +559,5 @@ getSimulaServerFromHardcodedNodePath node = do
           gssNode <- G.get_node node nodePath
           -- G.print_tree ((safeCast gssNode) :: GodotNode)
           -- let gss = (unsafeCoerce gssNode) :: GodotSimulaServer
-          gss <- (fromNativeScript (safeCast gssNode)) :: IO GodotSimulaServer
+          gss <- (Plugin.SimulaServer.fromNativeScript (safeCast gssNode)) :: IO GodotSimulaServer
           return gss

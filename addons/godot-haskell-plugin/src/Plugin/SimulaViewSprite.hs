@@ -139,6 +139,7 @@ instance ClassExport GodotSimulaViewSprite where
     [ GodotMethod NoRPC "_input_event" inputEvent
     , GodotMethod NoRPC "_ready" ready
     ]
+  classSignals = []
 
 instance HasBaseClass GodotSimulaViewSprite where
   type BaseClass GodotSimulaViewSprite = GodotRigidBody
@@ -147,7 +148,7 @@ instance HasBaseClass GodotSimulaViewSprite where
 newGodotSimulaViewSprite :: GodotSimulaViewTexture -> IO GodotSimulaViewSprite
 newGodotSimulaViewSprite gsvt = do
   gsvs <- "res://addons/godot-haskell-plugin/SimulaViewSprite.gdns"
-    & unsafeNewNS id "Object" []
+    & newNS' []
     >>= godot_nativescript_get_userdata
     >>= deRefStablePtr . castPtrToStablePtr
 
