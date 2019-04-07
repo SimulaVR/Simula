@@ -68,59 +68,6 @@ toMsec32 timeSpec = do
 toTimeSpec :: (Integral a) => a -> TimeSpec
 toTimeSpec word = (let nsec = (fromIntegral word) * 1000000 in fromNanoSecs nsec)
 
--- | This function takes a pair of surface coordinates (against a given view) and
--- | inspects if there are any XDG toplevel "subsurfaces" at those coordinates (this
--- | could either be a true "subsurface" -- like a popup -- or the trivial subsurface
--- | [the parent surface associated with the view itself]). We return the wlr_surface (if there is one)
--- | associated with the "subsurface", and convert the surface coordinates to the
--- | corresponding *subsurface* coordinates (relative to the output subsurface).
-viewAt :: SimulaView -> SurfaceLocalCoordinates -> IO (Maybe (Ptr WlrSurface, SubSurfaceLocalCoordinates))
-viewAt simulaView (SurfaceLocalCoordinates (sx, sy)) = do
-  let xdgSurface = (simulaView ^. svXdgSurface)
-  maybeSubSurface <- xdgSurfaceAt xdgSurface sx sy
-  case maybeSubSurface of
-       Nothing                     -> return $ Nothing
-       Just (subSurface, ssx, ssy) -> return $ Just (subSurface, SubSurfaceLocalCoordinates (ssx, ssy))
-
--- This function takes a SimulaView to (i) defocus the keyboard's old surface and (ii)
--- focus on the new SimulaView. (To understand this function, mostly ignore the second
--- argument).
---
--- When a view is "defocused" a call to `wlr_xdg_toplevel_set_activated` is made
--- (w/false flag). When a view is "focused" it is (i) called with
--- wlr_xdg_toplevel_set_activated (w/true flag); (ii) called with
--- wlr_seat_keyboard_notify_enter.
---
--- NOTE: It's unclear why this function doesn't just take a SimulaView, and then
--- use that to extract a Ptr WlrSurface. For now I'll keep the second argument
--- (which seems redundant) to mirror the C implementation.
-focusView :: SimulaView -> Ptr WlrSurface -> IO ()
-focusView simulaView ptrWlrSurface = do
-  let ptrWlrSeat =_gssSeat (_svServer simulaView)
-  prevSurface <- getKeyboardFocus (getKeyboardState ptrWlrSeat)
-  when (ptrWlrSurface /= prevSurface) $ do when (prevSurface /= nullPtr) $ deactivatePreviouslyFocusedSurface prevSurface
-                                           -- mutateViewToFront simulaView
-                                           setActivated (_svXdgSurface simulaView) True
-                                           keyboardNotifyEnterIntoNewSurface ptrWlrSeat (_svXdgSurface simulaView)
-  where
-        -- |Let's client know it no longer has focus (so it can, i.e., stop displaying caret).
-        deactivatePreviouslyFocusedSurface prevSurface = do
-            let prevSurface' = (toInlineC prevSurface) :: Ptr C'WlrSurface
-            prevSurfaceXdg <- [C.exp| struct wlr_xdg_surface * { wlr_xdg_surface_from_wlr_surface( $(struct wlr_surface * prevSurface') ) }|] -- hsroots lacks this function so we use inline-C
-            setActivated (toC2HS prevSurfaceXdg) False
-        keyboardNotifyEnterIntoNewSurface ptrWlrSeat viewXdgSurface = do
-          maybePtrWlrKeyboard          <- getSeatKeyboard ptrWlrSeat
-          maybeXdgSurfaceAssociatedSurface <- xdgSurfaceGetSurface (_svXdgSurface simulaView)
-          case (maybePtrWlrKeyboard, maybeXdgSurfaceAssociatedSurface) of
-              (Nothing, _)               -> putStrLn "Couldn't get keyboard!"
-              (_, Nothing)               -> putStrLn "Couldn't get surface!"
-              (Just ptrWlrKeyboard, Just surface) -> do
-                (keycodes, numKeycodes) <- getKeyboardKeys ptrWlrKeyboard
-                let modifiers = getModifierPtr ptrWlrKeyboard
-                keyboardNotifyEnter ptrWlrSeat surface keycodes numKeycodes modifiers
-
----------------
-
 instance Eq GodotSimulaViewSprite where
   (==) = (==) `on` _gsvsObj
 
@@ -174,7 +121,7 @@ updateSimulaViewSprite :: GodotSimulaViewSprite -> IO ()
 updateSimulaViewSprite gsvs = do
   sprite <- atomically $ readTVar (_gsvsSprite gsvs)
   tex <- atomically $ readTVar (_gsvsTexture gsvs)
-  updateSimulaViewTexture tex
+  -- updateSimulaViewTexture tex
   G.set_texture sprite (safeCast tex)
   sizeChanged gsvs
 
@@ -238,63 +185,64 @@ processInputEvent gsvs ev clickPos = do
 -- | controllers or a mouse in pancake mode).
 processClickEvent :: GodotSimulaViewSprite -> InputEventType -> GodotVector3 -> IO ()
 processClickEvent gsvs evt clickPos = do
-  texture <- atomically $ readTVar (gsvs ^. gsvsTexture)
-  simulaView <- atomically $ readTVar (texture ^. gsvtView)
-  let seat = simulaView ^. svServer ^. gssSeat
+  return ()
+  -- texture <- atomically $ readTVar (gsvs ^. gsvsTexture)
+  -- simulaView <- atomically $ readTVar (texture ^. gsvtView)
+  -- let seat = simulaView ^. svServer ^. gssSeat
 
-  lpos <- G.to_local gsvs clickPos >>= fromLowLevel
-  sprite <- atomically $ readTVar (_gsvsSprite gsvs)
-  aabb <- G.get_aabb sprite
-  size <- godot_aabb_get_size aabb >>= fromLowLevel
-  let topleftPos =
-        V2 (size ^. _x / 2 - lpos ^. _x) (size ^. _y / 2 - lpos ^. _y)
-  let scaledPos = liftI2 (/) topleftPos (size ^. _xy)
-  rect <- G.get_item_rect sprite
-  recSize <- godot_rect2_get_size rect >>= fromLowLevel
-  let coords = liftI2 (*) recSize scaledPos
-  -- coords = surface coordinates in pixel with (0,0) at top left
-  let sx = fromIntegral $ truncate (256 * coords ^. _x)
-      sy = fromIntegral $ truncate (256 * coords ^. _y)
-  maybeSubSurfaceData <- viewAt simulaView (SurfaceLocalCoordinates (sx, sy))
-  case (maybeSubSurfaceData, evt) of
-    (Nothing, _) -> return ()
-    (Just (subSurfaceAtPoint, SubSurfaceLocalCoordinates (ssx, ssy)), Motion)                -> processMouseMotionEvent seat subSurfaceAtPoint ssx ssy
-    (Just (subSurfaceAtPoint, SubSurfaceLocalCoordinates (ssx, ssy)), Button pressed button) -> processMouseButtonEvent seat simulaView subSurfaceAtPoint ssx ssy pressed button
-  where
-   -- See https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h
-    toInputEventCode :: Int -> Word32
-    toInputEventCode BUTTON_LEFT = 0x110 -- BTN_LEFT
-    toInputEventCode BUTTON_RIGHT = 0x111 -- BTN_RIGHT
-    toInputEventCode BUTTON_MIDDLE = 0x112 -- BTN_MIDDLE
-    toInputEventCode BUTTON_WHEEL_DOWN = 0x150 -- BTN_GEAR_DOWN
-    toInputEventCode BUTTON_WHEEL_UP = 0x151 -- BTN_GEAR_UP
-    toInputEventCode _ = 0x110
-    toButtonState True = ButtonPressed
-    toButtonState False = ButtonReleased
-    getSeatFocusedSurface seat = do
-      let seat' = toInlineC seat
-      lastFocusedSurface' <-
-        [C.exp| struct wlr_surface * { $(struct wlr_seat * seat')->pointer_state.focused_surface } |] -- hsroots doesn't provide access to this data structure AFAIK
-      return $ toC2HS lastFocusedSurface'
-    getNow32 = do
-      nowTimeSpec <- (getTime Realtime)
-      now32 <- toMsec32 nowTimeSpec
-      return now32
-    processMouseMotionEvent seat subSurfaceAtPoint ssx ssy = do
-      now32 <- getNow32
-      seatFocusedSurface <- getSeatFocusedSurface seat
-      let isNewSurface = (seatFocusedSurface /= subSurfaceAtPoint)
-      -- Core calls:
-      when isNewSurface       $ do pointerNotifyEnter seat subSurfaceAtPoint ssx ssy
-      when (not isNewSurface) $ do pointerNotifyMotion seat now32 ssx ssy
-    processMouseButtonEvent seat simulaView subSurfaceAtPoint ssx ssy pressed button = do
-      now32 <- getNow32
-      let button' = (toInputEventCode button)   :: Word32
-      let buttonState = (toButtonState pressed) :: ButtonState
-      -- Core calls:
-      pointerNotifyButton seat now32 button' buttonState -- Notify the client with pointer focus that a button press (or release) has occurred; I'm assuming the surface coordinates are obtained internally
-      case buttonState of
-        ButtonReleased -> putStrLn "button released" -- Here would be a good time to adjust SimulaCursorMode state back to pass-through in the future
-        ButtonPressed -> do
-          putStrLn "button pressed"
-          focusView simulaView subSurfaceAtPoint -- Ensure the keyboard has focus if there's a view at point
+  -- lpos <- G.to_local gsvs clickPos >>= fromLowLevel
+  -- sprite <- atomically $ readTVar (_gsvsSprite gsvs)
+  -- aabb <- G.get_aabb sprite
+  -- size <- godot_aabb_get_size aabb >>= fromLowLevel
+  -- let topleftPos =
+  --       V2 (size ^. _x / 2 - lpos ^. _x) (size ^. _y / 2 - lpos ^. _y)
+  -- let scaledPos = liftI2 (/) topleftPos (size ^. _xy)
+  -- rect <- G.get_item_rect sprite
+  -- recSize <- godot_rect2_get_size rect >>= fromLowLevel
+  -- let coords = liftI2 (*) recSize scaledPos
+  -- -- coords = surface coordinates in pixel with (0,0) at top left
+  -- let sx = fromIntegral $ truncate (256 * coords ^. _x)
+  --     sy = fromIntegral $ truncate (256 * coords ^. _y)
+  -- maybeSubSurfaceData <- viewAt simulaView (SurfaceLocalCoordinates (sx, sy))
+  -- case (maybeSubSurfaceData, evt) of
+  --   (Nothing, _) -> return ()
+  --   (Just (subSurfaceAtPoint, SubSurfaceLocalCoordinates (ssx, ssy)), Motion)                -> processMouseMotionEvent seat subSurfaceAtPoint ssx ssy
+  --   (Just (subSurfaceAtPoint, SubSurfaceLocalCoordinates (ssx, ssy)), Button pressed button) -> processMouseButtonEvent seat simulaView subSurfaceAtPoint ssx ssy pressed button
+  -- where
+  --  -- See https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h
+  --   toInputEventCode :: Int -> Word32
+  --   toInputEventCode BUTTON_LEFT = 0x110 -- BTN_LEFT
+  --   toInputEventCode BUTTON_RIGHT = 0x111 -- BTN_RIGHT
+  --   toInputEventCode BUTTON_MIDDLE = 0x112 -- BTN_MIDDLE
+  --   toInputEventCode BUTTON_WHEEL_DOWN = 0x150 -- BTN_GEAR_DOWN
+  --   toInputEventCode BUTTON_WHEEL_UP = 0x151 -- BTN_GEAR_UP
+  --   toInputEventCode _ = 0x110
+  --   toButtonState True = ButtonPressed
+  --   toButtonState False = ButtonReleased
+  --   getSeatFocusedSurface seat = do
+  --     let seat' = toInlineC seat
+  --     lastFocusedSurface' <-
+  --       [C.exp| struct wlr_surface * { $(struct wlr_seat * seat')->pointer_state.focused_surface } |] -- hsroots doesn't provide access to this data structure AFAIK
+  --     return $ toC2HS lastFocusedSurface'
+  --   getNow32 = do
+  --     nowTimeSpec <- (getTime Realtime)
+  --     now32 <- toMsec32 nowTimeSpec
+  --     return now32
+  --   processMouseMotionEvent seat subSurfaceAtPoint ssx ssy = do
+  --     now32 <- getNow32
+  --     seatFocusedSurface <- getSeatFocusedSurface seat
+  --     let isNewSurface = (seatFocusedSurface /= subSurfaceAtPoint)
+  --     -- Core calls:
+  --     when isNewSurface       $ do pointerNotifyEnter seat subSurfaceAtPoint ssx ssy
+  --     when (not isNewSurface) $ do pointerNotifyMotion seat now32 ssx ssy
+  --   processMouseButtonEvent seat simulaView subSurfaceAtPoint ssx ssy pressed button = do
+  --     now32 <- getNow32
+  --     let button' = (toInputEventCode button)   :: Word32
+  --     let buttonState = (toButtonState pressed) :: ButtonState
+  --     -- Core calls:
+  --     pointerNotifyButton seat now32 button' buttonState -- Notify the client with pointer focus that a button press (or release) has occurred; I'm assuming the surface coordinates are obtained internally
+  --     case buttonState of
+  --       ButtonReleased -> putStrLn "button released" -- Here would be a good time to adjust SimulaCursorMode state back to pass-through in the future
+  --       ButtonPressed -> do
+  --         putStrLn "button pressed"
+  --         focusView simulaView subSurfaceAtPoint -- Ensure the keyboard has focus if there's a view at point

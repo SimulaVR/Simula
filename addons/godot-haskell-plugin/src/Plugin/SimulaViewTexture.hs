@@ -108,16 +108,13 @@ data SurfaceLocalCoordinates = SurfaceLocalCoordinates (Double, Double)
 data SubSurfaceLocalCoordinates = SubSurfaceLocalCoordinates (Double, Double)
 data SurfaceDimension = SurfaceDimension (Int, Int)
 
+-- data GodotSimulaServer
+data GodotWlrSurface
+
 data SimulaView = SimulaView
   { _svServer                  :: GodotSimulaServer
-  , _svXdgSurface              :: Ptr WlrXdgSurface
+  , _svWlrSurface              :: GodotWlrSurface
   , _svMapped                  :: TVar Bool
-  , _svMap                     :: ListenerToken
-  , _svUnmap                   :: ListenerToken
-  , _svDestroy                 :: ListenerToken
-  , _svCommit                  :: ListenerToken
---, _svRequestMove             :: ListenerToken -- Pending move implementation
---, _svRequestResize           :: ListenerToken -- Pending resize implementation
   }
 
 -- | We will say that two views are "equal" when they have the same Ptr WlrXdgSurface (this is
@@ -125,11 +122,13 @@ data SimulaView = SimulaView
 -- | distinct views [one used as an icon and one a window] that have the same underlying surface).
 -- | TODO: Give SimulaView's a unique id and change this function accordingly.
 instance Eq SimulaView where
-  (==) = (==) `on` _svXdgSurface
+  -- (==) = (==) `on` _svWlrSurface
+  (==) x y = True
 
 -- Required for M.lookup calls on (M.Map SimulaView GodotSimulaViewSprite)
 instance Ord SimulaView where
-  (<=) = (<=) `on` _svXdgSurface
+  -- (<=) = (<=) `on` _svXdgSurface
+  (<=) x y = True
 
 -- type ViewMap = M.Map SimulaView GodotSimulaViewSprite
 data GodotSimulaViewSprite = GodotSimulaViewSprite
@@ -172,75 +171,3 @@ instance HasBaseClass GodotSimulaViewTexture where
   type BaseClass GodotSimulaViewTexture = GodotImageTexture
   super (GodotSimulaViewTexture obj _ _ _) = GodotImageTexture obj
 
-newGodotSimulaViewTexture :: SimulaView -> IO GodotSimulaViewTexture
-newGodotSimulaViewTexture simulaView = do
-  ret <- newNS' [] "res://addons/godot-haskell-plugin/SimulaViewTexture.gdns"
-  objPtr <- godot_nativescript_get_userdata ret
-  texture <- deRefStablePtr $ castPtrToStablePtr objPtr
-
-  -- New:
-  atomically $ writeTVar (texture ^. gsvtView) simulaView
-  updateSimulaViewTexture texture
-
-  return texture
-
--- | This function inefficiently copies the entire buffer to Godot.
--- | TODO: Make this more efficient.
-updateSimulaViewTexture :: GodotSimulaViewTexture -> IO ()
-updateSimulaViewTexture gsvt = do
-  simulaView <- atomically $ readTVar (gsvt ^. gsvtView)
-  maybeSurface <- xdgSurfaceGetSurface (simulaView ^. svXdgSurface)
-  case maybeSurface of
-    Nothing -> return ()
-    Just surface -> do
-      hasBuffer <- surfaceHasBuffer surface
-      buffer <- surfaceGetBuffer surface
-      maybeRes <- getBufferResource buffer
-      case maybeRes of
-        Nothing -> return ()
-        Just res -> do
-          maybeShmbuf <- shmBufferGet (coerce res) -- Am unsure if this coerce will work; if debugging this function check this.
-          case maybeShmbuf of
-            Nothing -> return ()
-            Just shmbuf -> do
-              return ()
-              dt <- shmBufferGetData shmbuf
-              width <- shmBufferGetWidth shmbuf
-              height <- shmBufferGetHeight shmbuf
-              stride <- shmBufferGetStride shmbuf
-              shmFmt <- shmBufferGetFormat shmbuf
-              fmt <- asGodotFormat shmFmt
-              let size :: Integral a => a
-                  size = fromIntegral (stride * height)
-              img <- atomically $ readTVar (_gsvtImage gsvt)
-              byteArray <- godot_pool_byte_array_new
-              cursize <- godot_pool_byte_array_size byteArray
-              when (cursize /= size) $
-                godot_pool_byte_array_resize byteArray size
-              writeAccess <- godot_pool_byte_array_write byteArray
-              writePtr <- godot_pool_byte_array_write_access_ptr writeAccess
-              allocaArray size $ \arrPtr -> do
-                shmBufferBeginAccess shmbuf
-                copyBytes arrPtr (castPtr dt) size
-                shmBufferEndAccess shmbuf
-                let arrPtr32 = castPtr arrPtr :: Ptr Word32
-                forM_ [0 .. size `div` 4] $ \n -> do
-                  let ptr = advancePtr arrPtr32 n
-                  elem <- peek ptr
-                                  -- HACKHACK
-                  let [b3, b2, b1, b0] =
-                        map (\n -> shiftR elem (n * 8) .&. 0xff) [0 .. 3]
-                  let result =
-                        foldr (\n res -> shiftL res 8 .|. n) 0 [b1, b2, b3, b0]
-                  poke ptr result
-                copyBytes writePtr arrPtr size
-              godot_pool_byte_array_write_access_destroy writeAccess -- TODO helper function
-              G.create_from_data img width height False fmt byteArray
-              G.create_from_image gsvt img (7 .|. 16 :: Int)
-              godot_pool_byte_array_destroy byteArray
-              return ()
-              where asGodotFormat shmFmt = do
-                      format <- fromIntegral <$> [C.exp| int wl_shm_format { WL_SHM_FORMAT_ARGB8888 } |]
-                      return $ case shmFmt of
-                                 format -> Image.FORMAT_RGBA8
-                                 _ -> error $ "Unknown SHM format " ++ show shmFmt
