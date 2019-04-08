@@ -6,7 +6,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Plugin.SimulaViewTexture where
+module Plugin.Types where
 
 import           Data.Coerce
 import           Control.Monad
@@ -108,13 +108,17 @@ data SurfaceLocalCoordinates = SurfaceLocalCoordinates (Double, Double)
 data SubSurfaceLocalCoordinates = SubSurfaceLocalCoordinates (Double, Double)
 data SurfaceDimension = SurfaceDimension (Int, Int)
 
--- data GodotSimulaServer
-data GodotWlrSurface
+-- | Dummy wlroots types until godot-haskell is properly synced up with gdwlroots
+-- data GodotWlrSurface
+-- data GodotWlrXdgSurface
+-- data GodotWlrXdgToplevel
 
 data SimulaView = SimulaView
   { _svServer                  :: GodotSimulaServer
-  , _svWlrSurface              :: GodotWlrSurface
+  -- , _svWlrSurface              :: GodotWlrSurface -- Might be unneeded
   , _svMapped                  :: TVar Bool
+  , _gsvsWlrXdgSurface         :: GodotWlrXdgSurface -- Contains the WlrSurface, its texture data, & even its subsurfaces (via `surface_at`).
+  , _gsvsWlrXdgToplevel        :: Maybe GodotWlrXdgToplevel -- Jam this into a Maybe type since views aren't necessarily top level?
   }
 
 -- | We will say that two views are "equal" when they have the same Ptr WlrXdgSurface (this is
@@ -130,44 +134,27 @@ instance Ord SimulaView where
   -- (<=) = (<=) `on` _svXdgSurface
   (<=) x y = True
 
--- type ViewMap = M.Map SimulaView GodotSimulaViewSprite
+-- Wish there was a more elegant way to jam values into these fields at classInit
 data GodotSimulaViewSprite = GodotSimulaViewSprite
-  { _gsvsObj        :: GodotObject
-  , _gsvsShouldMove :: TVar Bool
-  , _gsvsSprite     :: TVar GodotSprite3D
-  , _gsvsShape      :: TVar GodotBoxShape
-  , _gsvsTexture    :: TVar GodotSimulaViewTexture
-  -- , _gsvsSeat    :: TVar WestonSeat -- Accessible from GodotSimulaViewTexture argument
+  { _gsvsObj            :: GodotObject
+  , _gsvsServer         :: TVar GodotSimulaServer    -- Contains the WlrSeat
+  , _gsvsShouldMove     :: TVar Bool
+  , _gsvsSprite         :: TVar GodotSprite3D
+  , _gsvsShape          :: TVar GodotBoxShape
+  , _gsvsView           :: TVar SimulaView -- Contains Wlr data
+  -- , gsvsGeometry     :: GodotRect2
+  -- , gsvsWlrSeat      :: GodotWlrSeat
+  -- , gsvsInputMode    :: TVar InteractiveMode
   }
 
-data GodotSimulaViewTexture = GodotSimulaViewTexture
-  { _gsvtObj       :: GodotObject
-  , _gsvtView      :: TVar SimulaView
-  , _gsvtImage     :: TVar GodotImage
-  , _gsvtImageData :: TVar GodotPoolByteArray
-  }
+-- At some point it might be useful to let each sprite have state keeping track of whether it's being moved, resized, etc.
+-- data InteractiveMode
+--   = InteractivePassthrough -- i.e., VR controllers can just point at it as normally
+--   | InteractiveMove
+--   | InteractiveResize
 
 makeLenses ''GodotSimulaViewSprite
-makeLenses ''GodotSimulaViewTexture
 makeLenses ''SimulaView
 makeLenses ''GodotSimulaServer
 
-instance GodotClass GodotSimulaViewTexture where
-  godotClassName = "SimulaSurfaceTexture"
-
-instance ClassExport GodotSimulaViewTexture where
-  classInit obj = do
-    img <- unsafeInstance GodotImage "Image"
-    imgdt <- godot_pool_byte_array_new
-    GodotSimulaViewTexture obj
-      <$> atomically (newTVar (error "SimulaViewTexture not initialized."))
-      <*> atomically (newTVar img)
-      <*> atomically (newTVar imgdt)
-  classExtends = "ImageTexture"
-  classMethods = []
-  classSignals = []
-
-instance HasBaseClass GodotSimulaViewTexture where
-  type BaseClass GodotSimulaViewTexture = GodotImageTexture
-  super (GodotSimulaViewTexture obj _ _ _) = GodotImageTexture obj
 

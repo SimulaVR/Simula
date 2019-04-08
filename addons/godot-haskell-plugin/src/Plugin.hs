@@ -8,7 +8,7 @@ import           Plugin.Simula
 import           Plugin.SimulaController
 import           Plugin.SimulaServer
 import           Plugin.SimulaViewSprite
-import           Plugin.SimulaViewTexture
+import           Plugin.Types
 
 
 registerClasses :: GdnativeHandle -> IO ()
@@ -18,4 +18,3 @@ registerClasses desc = do
   reg $ classInit @GodotSimulaController
   reg $ classInit @GodotSimulaServer
   reg $ classInit @GodotSimulaViewSprite
-  reg $ classInit @GodotSimulaViewTexture

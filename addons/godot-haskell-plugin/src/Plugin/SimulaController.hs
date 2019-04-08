@@ -22,7 +22,7 @@ import qualified Data.Text                     as T
 import           Linear
 
 import           Plugin.Imports
-import           Plugin.SimulaViewTexture
+import           Plugin.Types
 import           Plugin.SimulaViewSprite
 import           Plugin.SimulaServer
 import           Plugin.Input.Telekinesis
@@ -240,19 +240,19 @@ physicsProcess self _ = do
 processTouchpadScroll :: GodotSimulaController -> GodotSimulaViewSprite -> GodotVector3 -> IO ()
 processTouchpadScroll ct gsvs pos = do
   -- Get a bunch of needed state
-  time <- getTime Realtime
-  let msec = fromIntegral $ toNanoSecs time `div` 1000000
-  gsvt <- atomically $ readTVar $ _gsvsTexture gsvs
-  simulaView <- atomically $ readTVar (gsvt ^. gsvtView)
-  let seat = (simulaView ^. svServer ^. gssSeat)
-  curPos <- V2 <$> (ct `G.get_joystick_axis` 0) <*> (ct `G.get_joystick_axis` 1)
-  lastPos <- readTVarIO (_gscLastScrollPos ct)
-  let diff = curPos - lastPos
-  let validChange = norm lastPos > 0.01 && norm curPos > 0.01
-  let xDiff = diff ^. _x
-  let yDiff = diff ^. _y
-  let minScale = 1
-  let maxScale = 8
+  -- time <- getTime Realtime
+  -- let msec = fromIntegral $ toNanoSecs time `div` 1000000
+  -- gsvt <- atomically $ readTVar $ _gsvsTexture gsvs
+  -- simulaView <- atomically $ readTVar (gsvt ^. gsvtView)
+  -- let seat = (simulaView ^. svServer ^. gssSeat)
+  -- curPos <- V2 <$> (ct `G.get_joystick_axis` 0) <*> (ct `G.get_joystick_axis` 1)
+  -- lastPos <- readTVarIO (_gscLastScrollPos ct)
+  -- let diff = curPos - lastPos
+  -- let validChange = norm lastPos > 0.01 && norm curPos > 0.01
+  -- let xDiff = diff ^. _x
+  -- let yDiff = diff ^. _y
+  -- let minScale = 1
+  -- let maxScale = 8
 
   -- Print a debug message
   printDebugAxis
@@ -260,15 +260,15 @@ processTouchpadScroll ct gsvs pos = do
   -- Send an "axis" event (for y-axis only) to the currently focused surface,
   -- provided the scroll event is past the required magnitude.
   -- TODO: Optimize these thresholds
-  if
-    | xDiff < 0.0001     -> return ()
-    | yDiff < 0.0001     -> return ()
-    | otherwise          -> sendAxisEvent seat msec AxisVertical yDiff -- >> sendAxisEvent seat msec AxisHorizontal xDiff
+  -- if
+  --   | xDiff < 0.0001     -> return ()
+  --   | yDiff < 0.0001     -> return ()
+  --   | otherwise          -> sendAxisEvent seat msec AxisVertical yDiff -- >> sendAxisEvent seat msec AxisHorizontal xDiff
 
-  -- Update controller state.
-  -- NOTE: `rescale` actually does this for us, but it's harmless/safer to
-  --       do it again:
-  atomically $ writeTVar (ct ^. gscLastScrollPos) curPos
+  -- -- Update controller state.
+  -- -- NOTE: `rescale` actually does this for us, but it's harmless/safer to
+  -- --       do it again:
+  -- atomically $ writeTVar (ct ^. gscLastScrollPos) curPos
 
   where printDebugAxis = do
           -- NOTE: Axis 1 corresponds to the x-axis while axis 0 corresponds
@@ -283,12 +283,12 @@ processTouchpadScroll ct gsvs pos = do
         -- | I'm (only somewhat) confident that this sends a "continuous" scroll
         -- | event to the currently focused surface (which implies we don't have
         -- | to mess with i.e. `viewAt`).
-        sendAxisEvent seat time32 axisOrientation axisDeltaValue = do
-          let time32          = time32
-          let axisSource      = AxisContinuous :: AxisSource -- We don't even use this value?
-          let axisOrientation = axisOrientation :: AxisOrientation -- data AxisOrientation = AxisVertical | AxisHorizontal
-          let axisDeltaValue  = axisDeltaValue :: Double
-          let axisDiscrete    = 0 -- mwheelup = -1, mwheeldown = 1; 
-                                  -- I believe "0" means "continuous"; try that first
+        -- sendAxisEvent seat time32 axisOrientation axisDeltaValue = do
+        --   let time32          = time32
+        --   let axisSource      = AxisContinuous :: AxisSource -- We don't even use this value?
+        --   let axisOrientation = axisOrientation :: AxisOrientation -- data AxisOrientation = AxisVertical | AxisHorizontal
+        --   let axisDeltaValue  = axisDeltaValue :: Double
+        --   let axisDiscrete    = 0 -- mwheelup = -1, mwheeldown = 1; 
+        --                           -- I believe "0" means "continuous"; try that first
 
-          pointerNotifyAxis seat time32 axisOrientation axisDeltaValue axisDiscrete
+        --   pointerNotifyAxis seat time32 axisOrientation axisDeltaValue axisDiscrete

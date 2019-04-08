@@ -9,7 +9,7 @@ import           Plugin.Input.Grab
 import           Plugin.SimulaController
 import           Plugin.SimulaViewSprite
 import           Plugin.VR
-import           Plugin.SimulaViewTexture
+import           Plugin.Types
 
 import           Godot.Core.GodotGlobalConstants
 import           Godot.Extra.Register

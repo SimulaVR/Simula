@@ -22,7 +22,7 @@ import qualified Godot.Core.GodotRigidBody   as RigidBody
 import           Godot.Gdnative.Internal.Api
 import qualified Godot.Methods               as G
 
-import Plugin.SimulaViewTexture
+import Plugin.Types
 
 import           Foreign
 import           Foreign.Ptr
@@ -77,10 +77,11 @@ instance GodotClass GodotSimulaViewSprite where
 instance ClassExport GodotSimulaViewSprite where
   classInit obj =
     GodotSimulaViewSprite obj
-                  <$> atomically (newTVar True)
-                  <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite.")) 
+                  <$> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
+                  <*> atomically (newTVar True)
                   <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
-                  <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite.")) 
+                  <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
+                  <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
   classExtends = "RigidBody"
   classMethods =
     [ GodotMethod NoRPC "_input_event" inputEvent
@@ -90,40 +91,42 @@ instance ClassExport GodotSimulaViewSprite where
 
 instance HasBaseClass GodotSimulaViewSprite where
   type BaseClass GodotSimulaViewSprite = GodotRigidBody
-  super (GodotSimulaViewSprite obj _ _ _ _ ) = GodotRigidBody obj
+  super (GodotSimulaViewSprite obj _ _ _ _ _ ) = GodotRigidBody obj
 
-newGodotSimulaViewSprite :: GodotSimulaViewTexture -> IO GodotSimulaViewSprite
-newGodotSimulaViewSprite gsvt = do
-  gsvs <- "res://addons/godot-haskell-plugin/SimulaViewSprite.gdns"
-    & newNS' []
-    >>= godot_nativescript_get_userdata
-    >>= deRefStablePtr . castPtrToStablePtr
+newGodotSimulaViewSprite :: GodotSimulaServer -> IO GodotSimulaViewSprite
+newGodotSimulaViewSprite gss = do
+  -- gsvs <- "res://addons/godot-haskell-plugin/SimulaViewSprite.gdns"
+  --   & newNS' []
+  --   >>= godot_nativescript_get_userdata
+  --   >>= deRefStablePtr . castPtrToStablePtr
 
-  sprite <- unsafeInstance GodotSprite3D "Sprite3D"
-  G.set_pixel_size sprite 0.001
-  G.add_child gsvs (safeCast sprite) True
-  G.set_flip_h sprite True
+  -- sprite <- unsafeInstance GodotSprite3D "Sprite3D"
+  -- G.set_pixel_size sprite 0.001
+  -- G.add_child gsvs (safeCast sprite) True
+  -- G.set_flip_h sprite True
 
-  shape <- unsafeInstance GodotBoxShape "BoxShape"
-  ownerId <- G.create_shape_owner gsvs (safeCast gsvs)
-  G.shape_owner_add_shape gsvs ownerId (safeCast shape)
+  -- shape <- unsafeInstance GodotBoxShape "BoxShape"
+  -- ownerId <- G.create_shape_owner gsvs (safeCast gsvs)
+  -- G.shape_owner_add_shape gsvs ownerId (safeCast shape)
 
-  -- We don't need to fill gsvsObj or gsvsShouldMove (already set via classInit)
-  atomically $ writeTVar (_gsvsSprite  gsvs ) sprite -- We create the sprite above
-  atomically $ writeTVar (_gsvsShape   gsvs ) shape  -- We create the shape above
-  atomically $ writeTVar (_gsvsTexture gsvs ) gsvt    -- We pass in the texture argument
+  -- -- We don't need to fill gsvsObj or gsvsShouldMove (already set via classInit)
+  -- atomically $ writeTVar (_gsvsSprite  gsvs ) sprite -- We create the sprite above
+  -- atomically $ writeTVar (_gsvsShape   gsvs ) shape  -- We create the shape above
+  -- atomically $ writeTVar (_gsvsTexture gsvs ) gsvt    -- We pass in the texture argument
 
-  updateSimulaViewSprite gsvs -- Now we update everything
+  -- updateSimulaViewSprite gsvs -- Now we update everything
 
-  return gsvs
+  -- return gsvs
+  return undefined
 
 updateSimulaViewSprite :: GodotSimulaViewSprite -> IO ()
 updateSimulaViewSprite gsvs = do
-  sprite <- atomically $ readTVar (_gsvsSprite gsvs)
-  tex <- atomically $ readTVar (_gsvsTexture gsvs)
+  -- sprite <- atomically $ readTVar (_gsvsSprite gsvs)
+  -- tex <- atomically $ readTVar (_gsvsTexture gsvs)
   -- updateSimulaViewTexture tex
-  G.set_texture sprite (safeCast tex)
-  sizeChanged gsvs
+  -- G.set_texture sprite (safeCast tex)
+  -- sizeChanged gsvs
+  return ()
 
 -- Seems poorly named function.
 sizeChanged :: GodotSimulaViewSprite -> IO ()

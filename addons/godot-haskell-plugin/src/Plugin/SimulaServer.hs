@@ -22,7 +22,7 @@ import qualified Data.Map.Strict as M
 
 import Plugin.Input
 import Plugin.SimulaViewSprite
-import Plugin.SimulaViewTexture
+import Plugin.Types
 
 import Control.Monad
 import Control.Concurrent
@@ -119,13 +119,13 @@ ready gss _ = do
 
 input :: GFunc GodotSimulaServer
 input self args = do
-  (getArg' 0 args :: IO GodotObject)
-    >>= asClass GodotInputEventKey "InputEventKey" >>= \case
-      Just evk -> do
-        processKeyEvent self evk
-        setInputHandled self
+  -- (getArg' 0 args :: IO GodotObject)
+  --   >>= asClass GodotInputEventKey "InputEventKey" >>= \case
+  --     Just evk -> do
+  --       processKeyEvent self evk
+  --       setInputHandled self
 
-      Nothing  -> return () -- not a key
+  --     Nothing  -> return () -- not a key
   toLowLevel VariantNil
 
 -- TODO: check the origin plane?

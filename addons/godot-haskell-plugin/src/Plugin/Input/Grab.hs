@@ -7,7 +7,7 @@ import qualified Godot.Methods                 as G
 import           Plugin.Imports
 import           Plugin.SimulaController
 import           Plugin.SimulaViewSprite
-import           Plugin.SimulaViewTexture
+import           Plugin.Types
 
 data GrabState
   = NoGrab

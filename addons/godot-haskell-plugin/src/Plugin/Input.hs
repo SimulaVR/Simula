@@ -19,7 +19,7 @@ import           Debug.Marshal
 import           System.IO.Unsafe
 
 import           Plugin.Imports
-import           Plugin.SimulaViewTexture
+import           Plugin.Types
 
 import           Graphics.Wayland.Server
 import           Graphics.Wayland.Internal.Server
@@ -36,84 +36,84 @@ initializeSimulaCtxAndIncludes
 
 -- i don't want to touch godot-haskell for proprietary changes
 
-get_raw_keycode :: Method "get_raw_keycode" cls sig => cls -> sig
-get_raw_keycode = runMethod @"get_raw_keycode"
+-- get_raw_keycode :: Method "get_raw_keycode" cls sig => cls -> sig
+-- get_raw_keycode = runMethod @"get_raw_keycode"
 
-bindInputEventKey_get_raw_keycode
-  = unsafePerformIO $
-      withCString "InputEventKey" $
-        \ clsNamePtr ->
-          withCString "get_raw_keycode" $
-            \ methodNamePtr ->
-              Api.godot_method_bind_get_method clsNamePtr methodNamePtr
+-- bindInputEventKey_get_raw_keycode
+--   = unsafePerformIO $
+--       withCString "InputEventKey" $
+--         \ clsNamePtr ->
+--           withCString "get_raw_keycode" $
+--             \ methodNamePtr ->
+--               Api.godot_method_bind_get_method clsNamePtr methodNamePtr
 
-{-# NOINLINE bindInputEventKey_get_raw_keycode #-}
+-- {-# NOINLINE bindInputEventKey_get_raw_keycode #-}
 
-instance Method "get_raw_keycode" GodotInputEventKey (IO Int) where
-        runMethod cls
-          = withVariantArray []
-              (\ (arrPtr, len) ->
-                 Api.godot_method_bind_call bindInputEventKey_get_raw_keycode (coerce cls)
-                   arrPtr
-                   len
-                   >>= \ (err, res) -> throwIfErr err >> fromGodotVariant res)
+-- instance Method "get_raw_keycode" GodotInputEventKey (IO Int) where
+--         runMethod cls
+--           = withVariantArray []
+--               (\ (arrPtr, len) ->
+--                  Api.godot_method_bind_call bindInputEventKey_get_raw_keycode (coerce cls)
+--                    arrPtr
+--                    len
+--                    >>= \ (err, res) -> throwIfErr err >> fromGodotVariant res)
 
--- | This function passes Godot key events to wlroots. It doesn't yet input lock
--- | keys. It also uses wlr_seat_keyboard_notify_* instead of
--- | wlr_seat_keyboard_send_*, which I'm not sure is correct.
-processKeyEvent :: GodotSimulaServer -> GodotInputEventKey -> IO ()
-processKeyEvent gss evk = do
-  whenM (withGodotMethodBind bindInputEventKey_get_raw_keycode $ \ptr -> return $ ptr == coerce nullPtr) $ error "You need a patched Godot version to run this"
-  x11Code <- get_raw_keycode evk
+-- -- | This function passes Godot key events to wlroots. It doesn't yet input lock
+-- -- | keys. It also uses wlr_seat_keyboard_notify_* instead of
+-- -- | wlr_seat_keyboard_send_*, which I'm not sure is correct.
+-- processKeyEvent :: GodotSimulaServer -> GodotInputEventKey -> IO ()
+-- processKeyEvent gss evk = do
+--   whenM (withGodotMethodBind bindInputEventKey_get_raw_keycode $ \ptr -> return $ ptr == coerce nullPtr) $ error "You need a patched Godot version to run this"
+--   x11Code <- get_raw_keycode evk
 
-  -- See: https://github.com/swaywm/wlroots/blob/master/backend/x11/input_device.c#L79
-  let code = x11Code - 8
+--   -- See: https://github.com/swaywm/wlroots/blob/master/backend/x11/input_device.c#L79
+--   let code = x11Code - 8
 
-  altPressed <- fromEnum <$> G.get_alt evk
-  shiftPressed <- fromEnum <$> G.get_shift evk
-  ctrlPressed <- fromEnum <$> G.get_control evk
-  superPressed <- fromEnum <$> G.get_metakey evk
-  let mods = fromIntegral $ shiftPressed + superPressed * 2 + ctrlPressed * 4 + altPressed * 8
+--   altPressed <- fromEnum <$> G.get_alt evk
+--   shiftPressed <- fromEnum <$> G.get_shift evk
+--   ctrlPressed <- fromEnum <$> G.get_control evk
+--   superPressed <- fromEnum <$> G.get_metakey evk
+--   let mods = fromIntegral $ shiftPressed + superPressed * 2 + ctrlPressed * 4 + altPressed * 8
 
-  pressed <- G.is_pressed evk
-  now32 <- getNow32
+--   pressed <- G.is_pressed evk
+--   now32 <- getNow32
 
-  -- TODO: Fix lock keys:
-      ---- mask/values => numlock: 1, capslock: 2
-      ---- also, small note: watch out for the indent on that case statement, it's not immediately obvious what parses and what doesn't
-      --let lockMask = case code of
-      --      69 -> 1
-      --      58 -> 2
-      --      _ -> 0
-      --let lockValue = _ -- need to store lock values!
-      --weston_keyboard_set_locks kbd lockMask lockValue
+--   -- TODO: Fix lock keys:
+--       ---- mask/values => numlock: 1, capslock: 2
+--       ---- also, small note: watch out for the indent on that case statement, it's not immediately obvious what parses and what doesn't
+--       --let lockMask = case code of
+--       --      69 -> 1
+--       --      58 -> 2
+--       --      _ -> 0
+--       --let lockValue = _ -- need to store lock values!
+--       --weston_keyboard_set_locks kbd lockMask lockValue
 
-  -- See: ftp://www.x.org/pub/X11R7.7/doc/kbproto/xkbproto.html#Locking_and_Latching_Modifiers_and_Groups
-  let keyboardModifiers = Modifiers { modDepressed = mods :: Word32  -- HACK: We use mods repeatedly; need to fix lock/latched, etc.
-                                    , modLatched = mods :: Word32
-                                    , modLocked = 0 :: Word32
-                                    , modGroup = mods :: Word32
-                                    }
-  -- We could use either wlr_seat_keyboard_send_modifiers or
-  -- wlr_seat_keyboard_notify_modifiers (which "respects keyboard grabs"); we
-  -- choose the latter
-  with keyboardModifiers (\ptrKeyboardModifiers -> 
-                            keyboardNotifyModifiers 
-                              (gss ^. gssSeat) 
-                              ptrKeyboardModifiers)
+--   -- See: ftp://www.x.org/pub/X11R7.7/doc/kbproto/xkbproto.html#Locking_and_Latching_Modifiers_and_Groups
+--   let keyboardModifiers = Modifiers { modDepressed = mods :: Word32  -- HACK: We use mods repeatedly; need to fix lock/latched, etc.
+--                                     , modLatched = mods :: Word32
+--                                     , modLocked = 0 :: Word32
+--                                     , modGroup = mods :: Word32
+--                                     }
+--   -- We could use either wlr_seat_keyboard_send_modifiers or
+--   -- wlr_seat_keyboard_notify_modifiers (which "respects keyboard grabs"); we
+--   -- choose the latter
+--   with keyboardModifiers (\ptrKeyboardModifiers -> 
+--                             keyboardNotifyModifiers 
+--                               (gss ^. gssSeat) 
+--                               ptrKeyboardModifiers)
 
-  -- We could use wlr_seat_keyboard_send_key or wlr_seat_keyboard_notify_key; we
-  -- experiment with the latter first since the former isn't in hsroots
-  keyboardNotifyKey (gss ^. gssSeat) now32 (fromIntegral code) (toKeyState pressed)
+--   -- We could use wlr_seat_keyboard_send_key or wlr_seat_keyboard_notify_key; we
+--   -- experiment with the latter first since the former isn't in hsroots
+--   keyboardNotifyKey (gss ^. gssSeat) now32 (fromIntegral code) (toKeyState pressed)
 
-  where
-    getNow32 = do
-      time <- getTime Realtime
-      let msec = fromIntegral $ toNanoSecs time `div` 1000000
-      return msec
-    -- See [[file:~/hsroots/src/Graphics/Wayland/WlRoots/Input/Keyboard.hsc::data%20KeyState]] 
-    toKeyState pressed | pressed = KeyPressed
-                       | otherwise = KeyReleased
+--   where
+--     getNow32 = do
+--       time <- getTime Realtime
+--       let msec = fromIntegral $ toNanoSecs time `div` 1000000
+--       return msec
+--     -- See [[file:~/hsroots/src/Graphics/Wayland/WlRoots/Input/Keyboard.hsc::data%20KeyState]] 
+--     toKeyState pressed | pressed = KeyPressed
+--                        | otherwise = KeyReleased
 
 setInputHandled :: (GodotNode :< a) => a -> IO ()
 setInputHandled self = do
