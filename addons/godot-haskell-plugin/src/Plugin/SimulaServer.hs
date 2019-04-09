@@ -87,9 +87,6 @@ import           Control.Monad.Extra
 
 initializeSimulaCtxAndIncludes
 
--- To (probably) be used with Simula's resizing function (to make sure we stop propogating wayland events during grabs).
--- data SimulaCursorMode = SimulaCursorPassthrough | SimulaCursorMove |  SimulaCursorResize
-
 instance GodotClass GodotSimulaServer where
   godotClassName = "SimulaServer"
 
@@ -99,7 +96,7 @@ instance ClassExport GodotSimulaServer where
   classExtends = "Spatial"
   classMethods =
     [ GodotMethod NoRPC "_ready" Plugin.SimulaServer.ready
-    , GodotMethod NoRPC "_input" Plugin.SimulaServer.input
+    -- , GodotMethod NoRPC "_input" Plugin.SimulaServer.input -- replaced by _on_wlr_* handlers
     ]
 
   -- Test:
@@ -115,17 +112,6 @@ ready :: GFunc GodotSimulaServer
 ready gss _ = do
   -- startSimulaServerOnNewThread gss
   -- startTelemetry (gss ^. gssViews) -- Doesn't seem to require previous function to get to displayRunServer
-  toLowLevel VariantNil
-
-input :: GFunc GodotSimulaServer
-input self args = do
-  -- (getArg' 0 args :: IO GodotObject)
-  --   >>= asClass GodotInputEventKey "InputEventKey" >>= \case
-  --     Just evk -> do
-  --       processKeyEvent self evk
-  --       setInputHandled self
-
-  --     Nothing  -> return () -- not a key
   toLowLevel VariantNil
 
 -- TODO: check the origin plane?
@@ -157,68 +143,17 @@ moveToUnoccupied gss gsvs = do
 
 initGodotSimulaServer :: GodotObject -> IO (GodotSimulaServer)
 initGodotSimulaServer obj = mdo
-  let gss = GodotSimulaServer {
-      _gssObj           = undefined :: GodotObject
-    , _gssDisplay       = undefined :: DisplayServer
-    , _gssViews         = undefined :: TVar (M.Map SimulaView GodotSimulaViewSprite)
-    , _gssBackend       = undefined :: Ptr Backend
-    , _gssXdgShell      = undefined :: Ptr WlrXdgShell
-    , _gssSeat          = undefined :: Ptr WlrSeat
-    , _gssKeyboards     = undefined :: TVar [SimulaKeyboard]
-    , _gssOutputs       = undefined :: TVar [SimulaOutput]
-    , _gssRenderer      = undefined :: Ptr Renderer
-    , _gssNewXdgSurface = undefined :: ListenerToken
-  }
-  return gss
-
--- | Here we set socket(s), start the backend, and finally call displayRun (which
--- | blocks until the compositor is shut down). Once the compositor is shut down,
--- | we free everything.
-startSimulaServerOnNewThread :: GodotSimulaServer -> IO ()
-startSimulaServerOnNewThread gss = void $ forkOS $ mdo
-      -- prevDisplay <- getEnv "DISPLAY"
-      setLogPrio Debug
-
-      let socketName = "simula-0"
-      putStrLn $ "Socket: " ++ socketName
-      setEnv "WAYLAND_DISPLAY" socketName
-      displayAddSocket (gss ^. gssDisplay) (Just socketName)
-
-      -- This just calls backend_start, which with wlr_godot_backend is just a shim
-      -- (compare to the backend_start of the headless backend).
-      backendStart (gss ^. gssBackend)
-
-      -- In case it matters for debugging: I'm assuming that WlRoots doesn't force
-      -- us to change compositor frame internals like we had to with Weston, i.e.:
-        -- $(struct weston_compositor * compositor')->repaint_msec = 1000
-        -- forkOS $ forever $ weston_output_schedule_repaint output >> threadDelay 1000
-
-      -- setEnv "DISPLAY" prevDisplay
-      displayRun (gss ^. gssDisplay)
-      -- destroyDisplayClients displayServer
-      displayDestroy (gss ^. gssDisplay)
-      freeListenerToken (gss ^. gssNewXdgSurface)
-      -- freeListenerToken (gss ^. gssNewInput)  -- Not needed now that we're using wlr_godot_backend
-      -- freeListenerToken (gss ^. gssNewOutput) -- "
-
-      where destroyDisplayClients displayServer = do
-              let displayServer' = toInlineC displayServer
-              [C.exp| void { wl_display_destroy_clients($(struct wl_display * displayServer'))} |]
-
--- | This is a terrible hack. It requires a dummy GodotNode as its first
--- | argument (can possibly cast nullPtr as GodotNode internally?). Moreover, 
--- | it uses a hardcoded path that may change in the future. Finally, it somehow
--- | doesn't return a Maybe type (attempts to access a null Godot instance
--- | will just crash our program). See https://docs.godotengine.org/en/3.0/classes/class_node.html#class-node-get-node
-getSimulaServerFromHardcodedNodePath :: GodotNode -> IO (GodotSimulaServer)
-getSimulaServerFromHardcodedNodePath node = do
-  gss <- getGodotSimualServerFromNodePath (node :: GodotNode) "/root/Root/Simula" -- Confusingly, this path is set in Simula.hs and not this module
-  return gss
-  where getGodotSimualServerFromNodePath :: GodotNode -> String -> IO GodotSimulaServer
-        getGodotSimualServerFromNodePath node nodePathStr = do
-          nodePath <- (toLowLevel (pack nodePathStr))
-          gssNode <- G.get_node node nodePath
-          -- G.print_tree ((safeCast gssNode) :: GodotNode)
-          -- let gss = (unsafeCoerce gssNode) :: GodotSimulaServer
-          gss <- (fromNativeScript (safeCast gssNode)) :: IO GodotSimulaServer
-          return gss
+  -- let gss = GodotSimulaServer {
+  --     _gssObj           = undefined :: GodotObject
+  --   , _gssDisplay       = undefined :: DisplayServer
+  --   , _gssViews         = undefined :: TVar (M.Map SimulaView GodotSimulaViewSprite)
+  --   , _gssBackend       = undefined :: Ptr Backend
+  --   , _gssXdgShell      = undefined :: Ptr WlrXdgShell
+  --   , _gssSeat          = undefined :: Ptr WlrSeat
+  --   , _gssKeyboards     = undefined :: TVar [SimulaKeyboard]
+  --   , _gssOutputs       = undefined :: TVar [SimulaOutput]
+  --   , _gssRenderer      = undefined :: Ptr Renderer
+  --   , _gssNewXdgSurface = undefined :: ListenerToken
+  -- }
+  -- return gss
+  return undefined

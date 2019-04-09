@@ -209,8 +209,8 @@ process self args = do
           processClickEvent window Motion pos
           processTouchpadScroll self window pos
         Nothing -> do
-          gss <- getSimulaServerFromHardcodedNodePath (safeCast self)
-          pointerClearFocus (gss ^. gssSeat) -- If we aren't pointing at anything, clear the wlroots seat pointer focus.
+          -- gss <- getSimulaServerFromHardcodedNodePath (safeCast self)
+          -- pointerClearFocus (gss ^. gssSeat) -- If we aren't pointing at anything, clear the wlroots seat pointer focus.
           G.set_visible (_gscLaser self) False
           return ()
     | otherwise -> do
