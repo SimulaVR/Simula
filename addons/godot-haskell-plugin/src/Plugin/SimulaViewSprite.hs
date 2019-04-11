@@ -1,4 +1,4 @@
-{-# LANGUAGE DataKinds             #-}
+
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
@@ -92,32 +92,6 @@ instance ClassExport GodotSimulaViewSprite where
 instance HasBaseClass GodotSimulaViewSprite where
   type BaseClass GodotSimulaViewSprite = GodotRigidBody
   super (GodotSimulaViewSprite obj _ _ _ _ _ ) = GodotRigidBody obj
-
-newGodotSimulaViewSprite :: GodotSimulaServer -> IO GodotSimulaViewSprite
-newGodotSimulaViewSprite gss = do
-  -- gsvs <- "res://addons/godot-haskell-plugin/SimulaViewSprite.gdns"
-  --   & newNS' []
-  --   >>= godot_nativescript_get_userdata
-  --   >>= deRefStablePtr . castPtrToStablePtr
-
-  -- sprite <- unsafeInstance GodotSprite3D "Sprite3D"
-  -- G.set_pixel_size sprite 0.001
-  -- G.add_child gsvs (safeCast sprite) True
-  -- G.set_flip_h sprite True
-
-  -- shape <- unsafeInstance GodotBoxShape "BoxShape"
-  -- ownerId <- G.create_shape_owner gsvs (safeCast gsvs)
-  -- G.shape_owner_add_shape gsvs ownerId (safeCast shape)
-
-  -- -- We don't need to fill gsvsObj or gsvsShouldMove (already set via classInit)
-  -- atomically $ writeTVar (_gsvsSprite  gsvs ) sprite -- We create the sprite above
-  -- atomically $ writeTVar (_gsvsShape   gsvs ) shape  -- We create the shape above
-  -- atomically $ writeTVar (_gsvsTexture gsvs ) gsvt    -- We pass in the texture argument
-
-  -- updateSimulaViewSprite gsvs -- Now we update everything
-
-  -- return gsvs
-  return undefined
 
 updateSimulaViewSprite :: GodotSimulaViewSprite -> IO ()
 updateSimulaViewSprite gsvs = do
@@ -249,3 +223,34 @@ processClickEvent gsvs evt clickPos = do
   --       ButtonPressed -> do
   --         putStrLn "button pressed"
   --         focusView simulaView subSurfaceAtPoint -- Ensure the keyboard has focus if there's a view at point
+
+
+
+-- | This function used in `_on_WlrXdgShell_new_surface` (where we have access
+-- | to GodotSimulaServer + GodotWlrXdgSurface).
+newGodotSimulaViewSprite :: GodotSimulaServer -> SimulaView -> IO (GodotSimulaViewSprite)
+newGodotSimulaViewSprite gss simulaView = do
+  gsvs <- "res://addons/godot-haskell-plugin/SimulaViewSprite.gdns"
+    & newNS' []
+    >>= godot_nativescript_get_userdata
+    >>= deRefStablePtr . castPtrToStablePtr :: IO GodotSimulaViewSprite -- w/_gsvsObj populated + mempty TVars
+
+  godotSprite3D <- unsafeInstance GodotSprite3D "Sprite3D"
+  G.set_pixel_size godotSprite3D 0.001
+  G.add_child gsvs (safeCast godotSprite3D) True
+  G.set_flip_h godotSprite3D True
+
+  godotBoxShape <- unsafeInstance GodotBoxShape "BoxShape"
+  ownerId <- G.create_shape_owner gsvs (safeCast gsvs)
+  G.shape_owner_add_shape gsvs ownerId (safeCast godotBoxShape)
+
+  -- atomically $ writeTVar (_gsvsObj       gss) gsObj'      -- :: GodotObject (filled in classInit)
+  atomically $ writeTVar (_gsvsServer    gsvs) gss           -- :: TVar GodotSimulaServer
+  -- atomically $ writeTVar (_gsvsShouldMoe gsvs) gsvsShouldMoe' -- :: TVar Bool   (filled in classInit)
+  atomically $ writeTVar (_gsvsSprite    gsvs) godotSprite3D -- :: TVar GodotSprite3D
+  atomically $ writeTVar (_gsvsShape     gsvs) godotBoxShape -- :: TVar GodotBoxShape
+  atomically $ writeTVar (_gsvsView      gsvs) simulaView    -- :: TVar SimulaView
+
+  updateSimulaViewSprite gsvs -- Now we update everything
+
+  return gsvs

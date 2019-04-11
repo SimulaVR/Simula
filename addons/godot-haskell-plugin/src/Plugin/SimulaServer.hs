@@ -20,6 +20,9 @@ import           Godot.Extra.Register
 
 import qualified Data.Map.Strict as M
 
+import Data.UUID
+import Data.UUID.V1
+
 import Plugin.Input
 import Plugin.SimulaViewSprite
 import Plugin.Types
@@ -97,6 +100,8 @@ instance ClassExport GodotSimulaServer where
   classMethods =
     [ GodotMethod NoRPC "_ready" Plugin.SimulaServer.ready
     -- , GodotMethod NoRPC "_input" Plugin.SimulaServer.input -- replaced by _on_wlr_* handlers
+    , GodotMethod NoRPC "_on_WaylandDisplay_ready"    Plugin.SimulaServer._on_WaylandDisplay_ready
+    , GodotMethod NoRPC "_on_WlrXdgShell_new_surface" Plugin.SimulaServer._on_WlrXdgShell_new_surface
     ]
 
   -- Test:
@@ -162,6 +167,30 @@ addWlrChildren gss = do
   atomically $ writeTVar (_gssWlrSeat gss) wlrSeat
   atomically $ writeTVar (_gssWlrDataDeviceManager gss) wlrDataDeviceManager
   atomically $ writeTVar (_gssWlrKeyboard gss) wlrKeyboard
+  
+  -- Connect signals from Wlr types to their methods
+  -- [connection signal="ready" from="WaylandDisplay" to="." method="_on_WaylandDisplay_ready"]
+  signalName1   <- toLowLevel "ready" :: IO GodotString
+  methodName1   <- toLowLevel "_on_WaylandDisplay_ready" :: IO GodotString
+  defaultArgs1  <- toLowLevel [] :: IO GodotArray      -- Api.godot_array_new -- Wraps godot_array_new; do we have to clean this up via godot_array_destroy ?
+  G.connect ((safeCast waylandDisplay) :: GodotObject) -- signal source
+            (signalName1 :: GodotString)               -- signal name
+            ((safeCast gss) :: GodotObject)            -- object which has the method
+            (methodName1 :: GodotString)               -- name of method to attach to signal
+            (defaultArgs1 :: GodotArray)               -- default arguments
+            (0 :: Int)                                 -- flag info (ignore)
+
+  -- [connection signal="new_surface" from="WaylandDisplay/WlrXdgShell" to="." method="_on_WlrXdgShell_new_surface"]
+  signalName2  <- toLowLevel "new_surface" :: IO GodotString
+  methodName2  <- toLowLevel "_on_WaylandDisplay_new_surface" :: IO GodotString
+  defaultArgs2 <- toLowLevel [] :: IO GodotArray    -- Api.godot_array_new -- Wraps godot_array_new; do we have to clean this up via godot_array_destroy ?
+  G.connect ((safeCast wlrXdgShell) :: GodotObject) -- signal source
+            (signalName2 :: GodotString)            -- signal name
+            ((safeCast gss) :: GodotObject)         -- object which has the method
+            (methodName2 :: GodotString)            -- name of method to attach to signal
+            (defaultArgs2 :: GodotArray)            -- default arguments
+            (0 :: Int)                              -- flag info (ignore)
+  return ()
 
 -- TODO: check the origin plane?
 moveToUnoccupied :: GodotSimulaServer -> GodotSimulaViewSprite -> IO ()
@@ -213,3 +242,45 @@ getSimulaServerNodeFromPath gss nodePathStr = do
   gssNode <- G.get_node ((safeCast gss) :: GodotNode) nodePath
   ret  <- (fromNativeScript (safeCast gssNode)) :: IO a
   return ret
+
+_on_WaylandDisplay_ready :: GFunc GodotSimulaServer
+_on_WaylandDisplay_ready gss vecOfGodotVariant = do
+  --waylandDisplay <- getSimulaServerNodeFromPath gss "WaylandDisplay"
+  waylandDisplay <- atomically $ readTVar (_gssWaylandDisplay gss)
+  G.run waylandDisplay
+  toLowLevel VariantNil
+
+_on_WlrXdgShell_new_surface :: GFunc GodotSimulaServer
+_on_WlrXdgShell_new_surface gss args = do
+  case toList args of
+    [wlrXdgSurfaceVariant] -> do
+      wlrXdgSurface <-fromGodotVariant wlrXdgSurfaceVariant :: IO GodotWlrXdgSurface -- Not sure if godot-haskell provides this for us
+      simulaView <- newSimulaView gss wlrXdgSurface
+      gsvs <- newGodotSimulaViewSprite gss simulaView
+
+      -- Mutate the server with our updated state
+      atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
+
+      -- Add the gsvs as a child to the SimulaServer
+      G.add_child ((safeCast gss) :: GodotNode ) 
+                  ((safeCast gsvs) :: GodotObject) 
+                  True
+
+      -- Add godotston logic: [[file:~/SimulaOKR/SimulaGdwlrootsPlan.org::*_on_WlrXdgShell_new_surface(xdg_surface)][_on_WlrXdgShell_new_surface(xdg_surface)]] 
+
+      toLowLevel VariantNil
+
+   where
+        newSimulaView :: GodotSimulaServer -> GodotWlrXdgSurface -> IO (SimulaView)
+        newSimulaView gss wlrXdgSurface = do
+          let gss' = gss :: GodotSimulaServer
+          svMapped' <- atomically (newTVar False) :: IO (TVar Bool)
+          let gsvsWlrXdgSurface' = wlrXdgSurface
+          gsvsUUID' <- nextUUID :: IO (Maybe UUID)
+
+          return SimulaView
+              { _svServer          = gss :: GodotSimulaServer
+              , _svMapped          = svMapped' :: TVar Bool
+              , _gsvsWlrXdgSurface = wlrXdgSurface :: GodotWlrXdgSurface 
+              , _gsvsUUID          = gsvsUUID' :: Maybe UUID
+              }
