@@ -82,7 +82,7 @@ data GodotSimulaServer = GodotSimulaServer
   }
 
 data SimulaView = SimulaView
-  { _svServer                  :: GodotSimulaServer
+  { _svServer                  :: GodotSimulaServer -- Can obtain WlrSeat
   -- , _svWlrSurface              :: GodotWlrSurface -- Can obtain GodotWlrSurface from GodotWlrXdgSurface
   , _svMapped                  :: TVar Bool
   , _gsvsWlrXdgSurface         :: GodotWlrXdgSurface -- Contains the WlrSurface, its texture data, & even its subsurfaces (via `surface_at`).
@@ -118,3 +118,20 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
 makeLenses ''GodotSimulaViewSprite
 makeLenses ''SimulaView
 makeLenses ''GodotSimulaServer
+
+connectGodotSignal :: (GodotObject :< source) -- , GodotObject :< method_object)
+                   => (GodotObject :< method_object)
+                   => source                  -- signal source
+                   -> String                  -- signal name
+                   -> method_object           -- Godot object which has the method being attached to the signal
+                   -> String                  -- Name of method to attach to signal
+                   -> [GodotVariant]       -- default arguments to supply to method (jammed /after/ manual arguments supplied)
+                   -> IO (Int)                -- 
+connectGodotSignal sourceObj signalName methodObj methodName defaultArgs = do
+  let sourceObj' = safeCast sourceObj      :: GodotObject
+  signalName'    <- (toLowLevel (pack signalName))  :: IO GodotString
+  let methodObj' =  safeCast methodObj     :: GodotObject
+  methodName'    <- (toLowLevel (pack methodName))  :: IO GodotString
+  defaultArgs'   <- (toLowLevel defaultArgs) :: IO GodotArray -- Wraps godot_array_new; do we have to clean this up via godot_array_destroy ?
+  G.connect sourceObj' signalName' methodObj' methodName' defaultArgs' 0
+  return 1

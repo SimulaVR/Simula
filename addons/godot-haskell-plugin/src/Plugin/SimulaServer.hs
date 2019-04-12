@@ -102,6 +102,8 @@ instance ClassExport GodotSimulaServer where
     -- , GodotMethod NoRPC "_input" Plugin.SimulaServer.input -- replaced by _on_wlr_* handlers
     , GodotMethod NoRPC "_on_WaylandDisplay_ready"    Plugin.SimulaServer._on_WaylandDisplay_ready
     , GodotMethod NoRPC "_on_WlrXdgShell_new_surface" Plugin.SimulaServer._on_WlrXdgShell_new_surface
+    , GodotMethod NoRPC "handle_map_surface" Plugin.SimulaServer.handle_map_surface
+    , GodotMethod NoRPC "handle_unmap_surface" Plugin.SimulaServer.handle_unmap_surface
     ]
 
   -- Test:
@@ -169,27 +171,11 @@ addWlrChildren gss = do
   atomically $ writeTVar (_gssWlrKeyboard gss) wlrKeyboard
   
   -- Connect signals from Wlr types to their methods
-  -- [connection signal="ready" from="WaylandDisplay" to="." method="_on_WaylandDisplay_ready"]
-  signalName1   <- toLowLevel "ready" :: IO GodotString
-  methodName1   <- toLowLevel "_on_WaylandDisplay_ready" :: IO GodotString
-  defaultArgs1  <- toLowLevel [] :: IO GodotArray      -- Api.godot_array_new -- Wraps godot_array_new; do we have to clean this up via godot_array_destroy ?
-  G.connect ((safeCast waylandDisplay) :: GodotObject) -- signal source
-            (signalName1 :: GodotString)               -- signal name
-            ((safeCast gss) :: GodotObject)            -- object which has the method
-            (methodName1 :: GodotString)               -- name of method to attach to signal
-            (defaultArgs1 :: GodotArray)               -- default arguments
-            (0 :: Int)                                 -- flag info (ignore)
 
+  -- [connection signal="ready" from="WaylandDisplay" to="." method="_on_WaylandDisplay_ready"]
+  connectGodotSignal waylandDisplay "ready" gss "_on_WaylandDisplay_ready" []
   -- [connection signal="new_surface" from="WaylandDisplay/WlrXdgShell" to="." method="_on_WlrXdgShell_new_surface"]
-  signalName2  <- toLowLevel "new_surface" :: IO GodotString
-  methodName2  <- toLowLevel "_on_WaylandDisplay_new_surface" :: IO GodotString
-  defaultArgs2 <- toLowLevel [] :: IO GodotArray    -- Api.godot_array_new -- Wraps godot_array_new; do we have to clean this up via godot_array_destroy ?
-  G.connect ((safeCast wlrXdgShell) :: GodotObject) -- signal source
-            (signalName2 :: GodotString)            -- signal name
-            ((safeCast gss) :: GodotObject)         -- object which has the method
-            (methodName2 :: GodotString)            -- name of method to attach to signal
-            (defaultArgs2 :: GodotArray)            -- default arguments
-            (0 :: Int)                              -- flag info (ignore)
+  connectGodotSignal wlrXdgShell "new_surface" gss "_on_WaylandDisplay_new_surface" []
   return ()
 
 -- TODO: check the origin plane?
@@ -254,25 +240,37 @@ _on_WlrXdgShell_new_surface :: GFunc GodotSimulaServer
 _on_WlrXdgShell_new_surface gss args = do
   case toList args of
     [wlrXdgSurfaceVariant] -> do
-      wlrXdgSurface <-fromGodotVariant wlrXdgSurfaceVariant :: IO GodotWlrXdgSurface -- Not sure if godot-haskell provides this for us
-      simulaView <- newSimulaView gss wlrXdgSurface
-      gsvs <- newGodotSimulaViewSprite gss simulaView
+      wlrXdgSurface <- fromGodotVariant wlrXdgSurfaceVariant :: IO GodotWlrXdgSurface -- Not sure if godot-haskell provides this for us
+      -- enum XdgSurfaceRole {
+      -- 	XDG_SURFACE_ROLE_NONE,     -- = 0
+      -- 	XDG_SURFACE_ROLE_TOPLEVEL, -- = 1
+      -- 	XDG_SURFACE_ROLE_POPUP,    -- = 2
+      -- };
+      roleInt <- G.get_role wlrXdgSurface
+      case roleInt of
+          0 -> toLowLevel VariantNil -- XDG_SURFACE_ROLE_NONE
+          2 -> toLowLevel VariantNil -- XDG_SURFACE_ROLE_POPUP
+          1 -> do                    -- XDG_SURFACE_ROLE_TOPLEVEL
+                  simulaView <- newSimulaView gss wlrXdgSurface
+                  gsvs <- newGodotSimulaViewSprite gss simulaView
 
-      -- Mutate the server with our updated state
-      atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
+                  -- Mutate the server with our updated state
+                  atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
 
-      -- Add the gsvs as a child to the SimulaServer
-      G.add_child ((safeCast gss) :: GodotNode ) 
-                  ((safeCast gsvs) :: GodotObject) 
-                  True
+                  -- Add the gsvs as a child to the SimulaServer
+                  G.add_child ((safeCast gss) :: GodotNode )
+                              ((safeCast gsvs) :: GodotObject)
+                              True
 
-      -- Add godotston logic: [[file:~/SimulaOKR/SimulaGdwlrootsPlan.org::*_on_WlrXdgShell_new_surface(xdg_surface)][_on_WlrXdgShell_new_surface(xdg_surface)]] 
+                  --surface.connect("map", self, "handle_map_surface")
+                  connectGodotSignal gss "map" gss "handle_map_surface" []
+                  --surface.connect("unmap", self, "handle_unmap_surface")
+                  connectGodotSignal gss "unmap" gss "handle_unmap_surface" []
 
-      toLowLevel VariantNil
+                  toLowLevel VariantNil
 
-   where
-        newSimulaView :: GodotSimulaServer -> GodotWlrXdgSurface -> IO (SimulaView)
-        newSimulaView gss wlrXdgSurface = do
+   where newSimulaView :: GodotSimulaServer -> GodotWlrXdgSurface -> IO (SimulaView)
+         newSimulaView gss wlrXdgSurface = do
           let gss' = gss :: GodotSimulaServer
           svMapped' <- atomically (newTVar False) :: IO (TVar Bool)
           let gsvsWlrXdgSurface' = wlrXdgSurface
@@ -284,3 +282,14 @@ _on_WlrXdgShell_new_surface gss args = do
               , _gsvsWlrXdgSurface = wlrXdgSurface :: GodotWlrXdgSurface 
               , _gsvsUUID          = gsvsUUID' :: Maybe UUID
               }
+
+handle_map_surface :: GFunc GodotSimulaServer
+handle_map_surface gss args = do
+  -- case toList args of
+  --   [wlrXdgSurfaceVariant] -> do
+  toLowLevel VariantNil
+handle_unmap_surface :: GFunc GodotSimulaServer
+handle_unmap_surface gss args = do
+  -- case toList args of
+  --   [wlrXdgSurfaceVariant] -> do
+  toLowLevel VariantNil
