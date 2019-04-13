@@ -81,6 +81,19 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssViews                :: TVar (M.Map SimulaView GodotSimulaViewSprite)
   }
 
+-- Wish there was a more elegant way to jam values into these fields at classInit
+data GodotSimulaViewSprite = GodotSimulaViewSprite
+  { _gsvsObj            :: GodotObject
+  , _gsvsServer         :: TVar GodotSimulaServer    -- Contains the WlrSeat
+  , _gsvsShouldMove     :: TVar Bool
+  , _gsvsSprite         :: TVar GodotSprite3D
+  , _gsvsShape          :: TVar GodotBoxShape
+  , _gsvsView           :: TVar SimulaView -- Contains Wlr data
+  -- , gsvsGeometry     :: GodotRect2
+  -- , gsvsWlrSeat      :: GodotWlrSeat
+  -- , gsvsInputMode    :: TVar InteractiveMode
+  }
+
 data SimulaView = SimulaView
   { _svServer                  :: GodotSimulaServer -- Can obtain WlrSeat
   -- , _svWlrSurface              :: GodotWlrSurface -- Can obtain GodotWlrSurface from GodotWlrXdgSurface
@@ -96,19 +109,6 @@ instance Eq SimulaView where
 instance Ord SimulaView where
   (<=) sv1 sv2 = (_gsvsUUID sv1) <= (_gsvsUUID sv2)
 
--- Wish there was a more elegant way to jam values into these fields at classInit
-data GodotSimulaViewSprite = GodotSimulaViewSprite
-  { _gsvsObj            :: GodotObject
-  , _gsvsServer         :: TVar GodotSimulaServer    -- Contains the WlrSeat
-  , _gsvsShouldMove     :: TVar Bool
-  , _gsvsSprite         :: TVar GodotSprite3D
-  , _gsvsShape          :: TVar GodotBoxShape
-  , _gsvsView           :: TVar SimulaView -- Contains Wlr data
-  -- , gsvsGeometry     :: GodotRect2
-  -- , gsvsWlrSeat      :: GodotWlrSeat
-  -- , gsvsInputMode    :: TVar InteractiveMode
-  }
-
 -- At some point it might be useful to let each sprite have state keeping track of whether it's being moved, resized, etc.
 -- data InteractiveMode
 --   = InteractivePassthrough -- i.e., VR controllers can just point at it as normally
@@ -118,6 +118,8 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
 makeLenses ''GodotSimulaViewSprite
 makeLenses ''SimulaView
 makeLenses ''GodotSimulaServer
+
+-- Godot helper functions (should eventually be exported to godot-extra).
 
 connectGodotSignal :: (GodotObject :< source) -- , GodotObject :< method_object)
                    => (GodotObject :< method_object)
@@ -134,4 +136,23 @@ connectGodotSignal sourceObj signalName methodObj methodName defaultArgs = do
   methodName'    <- (toLowLevel (pack methodName))  :: IO GodotString
   defaultArgs'   <- (toLowLevel defaultArgs) :: IO GodotArray -- Wraps godot_array_new; do we have to clean this up via godot_array_destroy ?
   G.connect sourceObj' signalName' methodObj' methodName' defaultArgs' 0
-  return 1
+
+addChild :: (GodotNode :< parent)
+         => (GodotObject :< child)
+         => parent
+         -> child
+         -> IO ()
+addChild parent child = do
+  G.add_child ((safeCast parent) :: GodotNode )
+              ((safeCast child) :: GodotObject)
+              True -- Sets legible_unique_name flag to True
+
+
+removeChild :: (GodotNode :< parent)
+               => (GodotObject :< child)
+               => parent
+               -> child
+               -> IO ()
+removeChild parent child = do
+  G.remove_child ((safeCast parent) :: GodotNode )
+                 ((safeCast child) :: GodotObject)

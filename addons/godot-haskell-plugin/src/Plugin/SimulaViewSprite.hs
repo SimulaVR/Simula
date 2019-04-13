@@ -254,3 +254,17 @@ newGodotSimulaViewSprite gss simulaView = do
   updateSimulaViewSprite gsvs -- Now we update everything
 
   return gsvs
+
+focus :: GodotSimulaViewSprite -> IO ()
+focus gsvs = do
+  simulaView <- atomically $ readTVar (gsvs ^. gsvsView) 
+  let wlrXdgSurface = (simulaView ^. gsvsWlrXdgSurface)
+  wlrSurface <- G.get_wlr_surface wlrXdgSurface
+  -- wlrSurfaceVariant <- toLowLevel (safeCast wlrSurface)
+  toplevel <- G.get_xdg_toplevel wlrXdgSurface :: IO GodotWlrXdgToplevel
+  gss <- atomically $ readTVar (gsvs ^. gsvsServer) -- ^. gssWlrSeat)
+  wlrSeat <- atomically $ readTVar (gss ^. gssWlrSeat)
+
+  G.set_activated toplevel True
+  -- G.keyboard_notify_enter wlrSeat wlrSurfaceVariant
+  return ()
