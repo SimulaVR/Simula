@@ -5,6 +5,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE DataKinds #-}
 
 module Plugin.SimulaViewSprite where
 
@@ -33,6 +35,8 @@ import           Debug.C as C
 import           Debug.Marshal
 
 import           Control.Lens                hiding (Context)
+
+import Data.Typeable
 
 import           Graphics.Wayland.Server
 import           Graphics.Wayland.Internal.Server
@@ -257,14 +261,17 @@ newGodotSimulaViewSprite gss simulaView = do
 
 focus :: GodotSimulaViewSprite -> IO ()
 focus gsvs = do
-  simulaView <- atomically $ readTVar (gsvs ^. gsvsView) 
+  -- Get state:
+  simulaView  <- atomically $ readTVar (gsvs ^. gsvsView) 
   let wlrXdgSurface = (simulaView ^. gsvsWlrXdgSurface)
-  wlrSurface <- G.get_wlr_surface wlrXdgSurface
-  -- wlrSurfaceVariant <- toLowLevel (safeCast wlrSurface)
-  toplevel <- G.get_xdg_toplevel wlrXdgSurface :: IO GodotWlrXdgToplevel
-  gss <- atomically $ readTVar (gsvs ^. gsvsServer) -- ^. gssWlrSeat)
-  wlrSeat <- atomically $ readTVar (gss ^. gssWlrSeat)
+  wlrSurface  <- G.get_wlr_surface wlrXdgSurface
+  wlrSurface' <- asGodotVariant wlrSurface
+  toplevel    <- G.get_xdg_toplevel wlrXdgSurface :: IO GodotWlrXdgToplevel
+  gss         <- atomically $ readTVar (gsvs ^. gsvsServer) -- ^. gssWlrSeat)
+  wlrSeat     <- atomically $ readTVar (gss ^. gssWlrSeat)
 
+  -- Make calls:
   G.set_activated toplevel True
-  -- G.keyboard_notify_enter wlrSeat wlrSurfaceVariant
+  G.keyboard_notify_enter wlrSeat wlrSurface'
+
   return ()

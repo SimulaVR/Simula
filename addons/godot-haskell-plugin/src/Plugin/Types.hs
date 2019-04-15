@@ -12,6 +12,10 @@ module Plugin.Types where
 import           Control.Monad
 import           Data.Coerce
 
+import           Data.Typeable
+import           Godot.Gdnative.Types
+import           Godot.Nativescript
+
 import           Plugin.Imports
 import           Godot.Extra.Register
 
@@ -156,3 +160,29 @@ removeChild :: (GodotNode :< parent)
 removeChild parent child = do
   G.remove_child ((safeCast parent) :: GodotNode )
                  ((safeCast child) :: GodotObject)
+
+asGodotVariant :: (GodotObject :< godot_type) => godot_type -> IO (GodotVariant)
+asGodotVariant godotComplexObj = do
+  -- Original method:
+  -- godotVariant <- toLowLevel (VariantObject (safeCast godotComplexObj)) :: IO GodotVariant
+
+  -- More idiomatic method:
+  godotVariant2 <- (toLowLevel (toVariant ((safeCast godotComplexObj) :: GodotObject))) :: IO GodotVariant
+
+  return godotVariant2
+
+-- | These helper functions can be used to jam Haskell types into emit_signal, and
+-- | then retrieve them in their corresponding signal handlers. Use these
+-- | functions *only* for (i) registered types that are (ii) instantiated with
+-- | classInit. If you try to use these functions with a registered type that
+-- | isn't instantiated with classInit, then it could break your program at run-time.
+regToVariant :: (GodotObject :< object) => (GodotClass object) => object -> IO (Variant 'GodotTy)
+regToVariant obj = return $ VariantObject (safeCast obj) :: IO (Variant 'GodotTy)
+
+variantToReg :: (GodotClass a, Typeable a) => GodotVariant -> IO (Maybe a)
+variantToReg godotVariant = do
+  godotVariant' <- fromLowLevel godotVariant
+  ret <- case godotVariant' of
+              (VariantObject registeredTypeAsObj) -> tryObjectCast registeredTypeAsObj -- tryObjectCast should return Nothing when this object isn't registered
+              _ -> return Nothing
+  return ret

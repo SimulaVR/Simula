@@ -287,18 +287,24 @@ handle_map_surface :: GFunc GodotSimulaServer
 handle_map_surface gss args = do
   case toList args of
     [gsvsVariant] -> do -- Unlike in Godotston, we assume this function gives us a GodotSimulaViewSprite
-       -- gsvs <-  fromGodotVariant gsvsVariant :: IO GodotSimulaViewSprite
-       -- focus gsvs
-       -- simulaView <- atomically $ readTVar (gsvs ^. gsvsView)
-       -- atomically $ writeTVar (simulaView ^. svMapped) True
-       -- -- addChild gss gsvs -- Performed in _on_WlrXdgShell_new_surface
+       maybeGsvs <- variantToReg gsvsVariant :: IO (Maybe GodotSimulaViewSprite)
+       case maybeGsvs of
+         Nothing -> putStrLn "Failed to cast GodotSimulaViewSprite!"
+         Just gsvs -> do focus gsvs
+                         simulaView <- atomically $ readTVar (gsvs ^. gsvsView)
+                         atomically $ writeTVar (simulaView ^. svMapped) True
+                         -- addChild gss gsvs -- Performed in _on_WlrXdgShell_new_surface
        toLowLevel VariantNil
 
 handle_unmap_surface :: GFunc GodotSimulaServer
 handle_unmap_surface gss args = do
   case toList args of
     [gsvsVariant] -> do -- Unlike in Godotston, we assume this function gives us a GodotSimulaViewSprite
-       -- gsvs <-  fromGodotVariant   toLowLevel VariantNil
-       -- atomically $ writeTVar (gsvs ^. gsvsView ^. svMapped) False
-       -- removeChild gss gsvs
+       maybeGsvs <- variantToReg gsvsVariant :: IO (Maybe GodotSimulaViewSprite)
+       case maybeGsvs of
+         Nothing -> putStrLn "Failed to cast GodotSimulaViewSprite!"
+         Just gsvs -> do simulaView <- atomically $ readTVar (gsvs ^. gsvsView)
+                         atomically $ writeTVar (simulaView ^. svMapped) False
+                         removeChild gss gsvs
+                         -- Deletion should be handled elsewhere.
        toLowLevel VariantNil
