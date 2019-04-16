@@ -91,7 +91,11 @@ instance ClassExport GodotSimulaViewSprite where
     [ GodotMethod NoRPC "_input_event" inputEvent
     , GodotMethod NoRPC "_ready" ready
     ]
-  classSignals = []
+
+  -- Test:
+  classSignals = [ signal "test_signal1" [("arg1", GodotVariantTypeVector3), ("arg2", GodotVariantTypeObject)]
+                 , signal "test_signal2" []
+                 ]
 
 instance HasBaseClass GodotSimulaViewSprite where
   type BaseClass GodotSimulaViewSprite = GodotRigidBody

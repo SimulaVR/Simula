@@ -104,12 +104,11 @@ instance ClassExport GodotSimulaServer where
     , GodotMethod NoRPC "_on_WlrXdgShell_new_surface" Plugin.SimulaServer._on_WlrXdgShell_new_surface
     , GodotMethod NoRPC "handle_map_surface" Plugin.SimulaServer.handle_map_surface
     , GodotMethod NoRPC "handle_unmap_surface" Plugin.SimulaServer.handle_unmap_surface
+    , GodotMethod NoRPC "_on_wlr_key" Plugin.SimulaServer._on_wlr_key
+    , GodotMethod NoRPC "_on_wlr_modifiers" Plugin.SimulaServer._on_wlr_modifiers
     ]
 
-  -- Test:
-  classSignals = [ signal "test_signal1" [("arg1", GodotVariantTypeVector3), ("arg2", GodotVariantTypeObject)]
-                 , signal "test_signal2" []
-                 ]
+  classSignals = []
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
@@ -117,11 +116,29 @@ instance HasBaseClass GodotSimulaServer where
 
 ready :: GFunc GodotSimulaServer
 ready gss _ = do
+  -- Set state / start compositor
   addWlrChildren gss
-  -- startSimulaServerOnNewThread gss
-  -- startTelemetry (gss ^. gssViews) -- Doesn't seem to require previous function to get to displayRunServer
+
+  -- Get state
+  wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+  wlrKeyboard <- readTVarIO (gss ^. gssWlrKeyboard)
+  wlrKeyboardGV <- asGodotVariant wlrKeyboard
+
+  -- Set state
+  G.set_keyboard wlrSeat wlrKeyboardGV
+
+  -- Connect signals
+  connectGodotSignal gss "key" gss "_on_wlr_key" []
+  connectGodotSignal gss "modifiers" gss "_on_wlr_modifiers" []
+    -- Omission: We omit connecting "size_changed" with "_on_viewport_change"
+
+  -- Start telemetry
+  startTelemetry (gss ^. gssViews)
+
   toLowLevel VariantNil
 
+-- | Populate the GodotSimulaServer's TVar's with Wlr types; connect some Wlr methods
+-- | to their signals. This implicitly starts the compositor.
 addWlrChildren :: GodotSimulaServer -> IO ()
 addWlrChildren gss = do
   -- Here we assume gss is already a node in our scene tree.
@@ -205,29 +222,42 @@ moveToUnoccupied gss gsvs = do
   G.translate gsvs =<< toLowLevel newPos
 
 
+-- | We first fill the TVars with dummy state, before updating them with their
+-- | real values in `ready`.
 initGodotSimulaServer :: GodotObject -> IO (GodotSimulaServer)
-initGodotSimulaServer obj = mdo
-  -- let gss = GodotSimulaServer {
-  --     _gssObj           = undefined :: GodotObject
-  --   , _gssDisplay       = undefined :: DisplayServer
-  --   , _gssViews         = undefined :: TVar (M.Map SimulaView GodotSimulaViewSprite)
-  --   , _gssBackend       = undefined :: Ptr Backend
-  --   , _gssXdgShell      = undefined :: Ptr WlrXdgShell
-  --   , _gssSeat          = undefined :: Ptr WlrSeat
-  --   , _gssKeyboards     = undefined :: TVar [SimulaKeyboard]
-  --   , _gssOutputs       = undefined :: TVar [SimulaOutput]
-  --   , _gssRenderer      = undefined :: Ptr Renderer
-  --   , _gssNewXdgSurface = undefined :: ListenerToken
-  -- }
-  -- return gss
-  return undefined
+initGodotSimulaServer obj = do
+  gssWaylandDisplay'       <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar GodotWaylandDisplay)
+  gssWlrBackend'           <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar GodotWlrBackend)
+  gssWlrOutput'            <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar GodotWlrOutput)
+  gssWlrCompositor'        <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar GodotWlrCompositor)
+  gssWlrXdgShell'          <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar GodotWlrXdgShell)
+  gssWlrSeat'              <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar GodotWlrSeat)
+  gssWlrDataDeviceManager' <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar GodotWlrDataDeviceManager)
+  gssWlrKeyboard'          <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar GodotWlrKeyboard)
+  gssViews'                <- newTVarIO M.empty                                          :: IO (TVar (M.Map SimulaView GodotSimulaViewSprite))
 
-getSimulaServerNodeFromPath :: GodotSimulaServer -> String -> IO a
-getSimulaServerNodeFromPath gss nodePathStr = do
-  nodePath <- (toLowLevel (pack nodePathStr))
-  gssNode <- G.get_node ((safeCast gss) :: GodotNode) nodePath
-  ret  <- (fromNativeScript (safeCast gssNode)) :: IO a
-  return ret
+  let gss = GodotSimulaServer {
+    _gssObj                  = obj                      :: GodotObject
+  , _gssWaylandDisplay       = gssWaylandDisplay'       :: TVar GodotWaylandDisplay
+  , _gssWlrBackend           = gssWlrBackend'           :: TVar GodotWlrBackend
+  , _gssWlrOutput            = gssWlrOutput'            :: TVar GodotWlrOutput
+  , _gssWlrCompositor        = gssWlrCompositor'        :: TVar GodotWlrCompositor
+  , _gssWlrXdgShell          = gssWlrXdgShell'          :: TVar GodotWlrXdgShell
+  , _gssWlrSeat              = gssWlrSeat'              :: TVar GodotWlrSeat
+  , _gssWlrDataDeviceManager = gssWlrDataDeviceManager' :: TVar GodotWlrDataDeviceManager
+  , _gssWlrKeyboard          = gssWlrKeyboard'          :: TVar GodotWlrKeyboard
+  , _gssViews                = gssViews'                :: TVar (M.Map SimulaView GodotSimulaViewSprite)
+  }
+
+  return gss
+
+-- Don't think we should need this. Delete after a while.
+-- getSimulaServerNodeFromPath :: GodotSimulaServer -> String -> IO a
+-- getSimulaServerNodeFromPath gss nodePathStr = do
+--   nodePath <- (toLowLevel (pack nodePathStr))
+--   gssNode <- G.get_node ((safeCast gss) :: GodotNode) nodePath
+--   ret  <- (fromNativeScript (safeCast gssNode)) :: IO a
+--   return ret
 
 _on_WaylandDisplay_ready :: GFunc GodotSimulaServer
 _on_WaylandDisplay_ready gss vecOfGodotVariant = do
@@ -308,3 +338,21 @@ handle_unmap_surface gss args = do
                          removeChild gss gsvs
                          -- Deletion should be handled elsewhere.
        toLowLevel VariantNil
+
+_on_wlr_key :: GFunc GodotSimulaServer
+_on_wlr_key gss args = do
+  case toList args of
+    [keyboardGVar, eventGVar] -> do
+      wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+      G.keyboard_notify_key wlrSeat eventGVar
+
+      toLowLevel VariantNil
+
+_on_wlr_modifiers :: GFunc GodotSimulaServer
+_on_wlr_modifiers gss args = do
+  case toList args of
+    [keyboardGVar] -> do
+      wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+      G.keyboard_notify_modifiers wlrSeat
+
+      toLowLevel VariantNil

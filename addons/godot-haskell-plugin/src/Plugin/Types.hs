@@ -181,6 +181,11 @@ regToVariant obj = return $ VariantObject (safeCast obj) :: IO (Variant 'GodotTy
 
 variantToReg :: (GodotClass a, Typeable a) => GodotVariant -> IO (Maybe a)
 variantToReg godotVariant = do
+  -- How it's done in Simula.hs:
+  -- godotVariantObj <- fromGodotVariant godotVariant :: IO GodotObject
+  -- Just a <- tryObjectCast godotVariantObj
+  -- return a
+
   godotVariant' <- fromLowLevel godotVariant
   ret <- case godotVariant' of
               (VariantObject registeredTypeAsObj) -> tryObjectCast registeredTypeAsObj -- tryObjectCast should return Nothing when this object isn't registered
