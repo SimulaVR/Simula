@@ -72,7 +72,7 @@ C.initializeSimulaCtxAndIncludes
 
 -- We use TVar excessively since these datatypes must be retrieved from the
 -- scene graph (requiring IO)
-data GodotSimulaServer = GodotSimulaServer 
+data GodotSimulaServer = GodotSimulaServer
   { _gssObj                  :: GodotObject
   , _gssWaylandDisplay       :: TVar GodotWaylandDisplay
   , _gssWlrBackend            :: TVar GodotWlrBackend
@@ -122,6 +122,9 @@ instance Ord SimulaView where
 makeLenses ''GodotSimulaViewSprite
 makeLenses ''SimulaView
 makeLenses ''GodotSimulaServer
+
+data SurfaceLocalCoordinates    = SurfaceLocalCoordinates (Float, Float)
+data SubSurfaceLocalCoordinates = SubSurfaceLocalCoordinates (Float, Float)
 
 -- Godot helper functions (should eventually be exported to godot-extra).
 
