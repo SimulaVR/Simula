@@ -214,6 +214,8 @@ focus gsvs = do
 
 -- | This function isn't called unless a surface is being pointed at (by VR
 -- | controllers or a mouse in pancake mode).
+-- |
+-- | TODO: Change this horifically named function.
 processClickEvent :: GodotSimulaViewSprite
                   -> InputEventType
                   -> GodotVector3
@@ -223,130 +225,79 @@ processClickEvent gsvs evt clickPos = do
   gss        <- readTVarIO (gsvs ^. gsvsServer)
   wlrSeat    <- readTVarIO (gss ^. gssWlrSeat)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
+  let godotWlrXdgSurface = (simulaView ^. gsvsWlrXdgSurface)
 
-  return ()
+  -- Compute subsurface local coordinates at clickPos
+  surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)) <- getSurfaceLocalCoordinates
+  (godotWlrSurface, subSurfaceLocalCoords@(SubSurfaceLocalCoordinates (ssx, ssy))) <- getSubsurfaceAndCoords godotWlrXdgSurface surfaceLocalCoords
 
-  -- maybeSubSurfaceData <- viewAt simulaView (SurfaceLocalCoordinates (sx, sy))
-  -- case (maybeSubSurfaceData, evt) of
-  --   (Nothing, _) -> return ()
-  --   (Just (subSurfaceAtPoint, SubSurfaceLocalCoordinates (ssx, ssy)), Motion)                -> processMouseMotionEvent seat subSurfaceAtPoint ssx ssy
-  --   (Just (subSurfaceAtPoint, SubSurfaceLocalCoordinates (ssx, ssy)), Button pressed button) -> processMouseButtonEvent seat simulaView subSurfaceAtPoint ssx ssy pressed button
-  -- where
-  --   getSurfaceLocalCoordinates gsvs _ clickPos = do
-  --     lpos <- G.to_local gsvs clickPos >>= fromLowLevel
-  --     sprite <- atomically $ readTVar (_gsvsSprite gsvs)
-  --     aabb <- G.get_aabb sprite
-  --     size <- godot_aabb_get_size aabb >>= fromLowLevel
-  --     let topleftPos =
-  --           V2 (size ^. _x / 2 - lpos ^. _x) (size ^. _y / 2 - lpos ^. _y)
-  --     let scaledPos = liftI2 (/) topleftPos (size ^. _xy)
-  --     rect <- G.get_item_rect sprite
-  --     recSize <- godot_rect2_get_size rect >>= fromLowLevel
-  --     let coords = liftI2 (*) recSize scaledPos
-  --     -- coords = surface coordinates in pixel with (0,0) at top left
-  --     let sx = fromIntegral $ truncate (256 * coords ^. _x)
-  --         sy = fromIntegral $ truncate (256 * coords ^. _y)
-  --     return (SurfaceLocalCoordinates (sx, sy))
-  --  -- See https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h
-  --   toInputEventCode :: Int -> Word32
-  --   toInputEventCode BUTTON_LEFT = 0x110 -- BTN_LEFT
-  --   toInputEventCode BUTTON_RIGHT = 0x111 -- BTN_RIGHT
-  --   toInputEventCode BUTTON_MIDDLE = 0x112 -- BTN_MIDDLE
-  --   toInputEventCode BUTTON_WHEEL_DOWN = 0x150 -- BTN_GEAR_DOWN
-  --   toInputEventCode BUTTON_WHEEL_UP = 0x151 -- BTN_GEAR_UP
-  --   toInputEventCode _ = 0x110
-  --   toButtonState True = ButtonPressed
-  --   toButtonState False = ButtonReleased
-  --   getSeatFocusedSurface seat = do
-  --     let seat' = toInlineC seat
-  --     lastFocusedSurface' <-
-  --       [C.exp| struct wlr_surface * { $(struct wlr_seat * seat')->pointer_state.focused_surface } |] -- hsroots doesn't provide access to this data structure AFAIK
-  --     return $ toC2HS lastFocusedSurface'
-  --   getNow32 = do
-  --     nowTimeSpec <- (getTime Realtime)
-  --     now32 <- toMsec32 nowTimeSpec
-  --     return now32
-  --   processMouseMotionEvent seat subSurfaceAtPoint ssx ssy = do
-  --     now32 <- getNow32
-  --     seatFocusedSurface <- getSeatFocusedSurface seat
-  --     let isNewSurface = (seatFocusedSurface /= subSurfaceAtPoint)
-  --     -- Core calls:
-  --     when isNewSurface       $ do pointerNotifyEnter seat subSurfaceAtPoint ssx ssy
-  --     when (not isNewSurface) $ do pointerNotifyMotion seat now32 ssx ssy
-  --   processMouseButtonEvent seat simulaView subSurfaceAtPoint ssx ssy pressed button = do
-  --     now32 <- getNow32
-  --     let button' = (toInputEventCode button)   :: Word32
-  --     let buttonState = (toButtonState pressed) :: ButtonState
-  --     -- Core calls:
-  --     pointerNotifyButton seat now32 button' buttonState -- Notify the client with pointer focus that a button press (or release) has occurred; I'm assuming the surface coordinates are obtained internally
-  --     case buttonState of
-  --       ButtonReleased -> putStrLn "button released" -- Here would be a good time to adjust SimulaCursorMode state back to pass-through in the future
-  --       ButtonPressed -> do
-  --         putStrLn "button pressed"
-  --         focusView simulaView subSurfaceAtPoint -- Ensure the keyboard has focus if there's a view at point
+  -- -- Send events
+  case evt of
+    Motion                -> do pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
+                                pointerNotifyMotion wlrSeat subSurfaceLocalCoords
+    Button pressed button ->    pointerNotifyButton wlrSeat evt
 
+  pointerNotifyFrame wlrSeat -- No matter what, send a frame event to the surface with pointer focus
+                             -- TODO: Is this necessary in VR?
 
--- | Takes a GodotWlrXdgSurface and returns the subsurface at point (which is likely the surface itself, or one of its popups).
-getSubsurfaceAndCoords :: GodotWlrXdgSurface -> SurfaceLocalCoordinates -> IO (GodotWlrSurface, SubSurfaceLocalCoordinates)
-getSubsurfaceAndCoords wlrXdgSurface (SurfaceLocalCoordinates (sx, sy)) = do
-  wlrSurfaceAtResult   <- G.surface_at  wlrXdgSurface sx sy
-  wlrSurfaceSubSurface <- G.get_surface wlrSurfaceAtResult
-  ssx                  <- G.get_sub_x wlrSurfaceAtResult
-  ssy                  <- G.get_sub_y wlrSurfaceAtResult
-  let ssCoordinates    = SubSurfaceLocalCoordinates (ssx, ssy)
-  return (wlrSurfaceSubSurface, ssCoordinates)
+  where
+    getSurfaceLocalCoordinates :: IO (SurfaceLocalCoordinates)
+    getSurfaceLocalCoordinates = do
+      lpos <- G.to_local gsvs clickPos >>= fromLowLevel
+      sprite <- atomically $ readTVar (_gsvsSprite gsvs)
+      aabb <- G.get_aabb sprite
+      size <- godot_aabb_get_size aabb >>= fromLowLevel
+      let topleftPos =
+            V2 (size ^. _x / 2 - lpos ^. _x) (size ^. _y / 2 - lpos ^. _y)
+      let scaledPos = liftI2 (/) topleftPos (size ^. _xy)
+      rect <- G.get_item_rect sprite
+      recSize <- godot_rect2_get_size rect >>= fromLowLevel
+      let coords = liftI2 (*) recSize scaledPos
+      -- coords = surface coordinates in pixel with (0,0) at top left
+      let sx = fromIntegral $ truncate (256 * coords ^. _x)
+          sy = fromIntegral $ truncate (256 * coords ^. _y)
+      return (SurfaceLocalCoordinates (sx, sy))
 
-pointerNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> SubSurfaceLocalCoordinates -> IO ()
-pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (ssx, ssy)) = do
-  let maybeWlrSurfaceGV = (fromVariant ((toVariant wlrSurface) :: Variant 'GodotTy) :: Maybe GodotVariant)
-  case maybeWlrSurfaceGV of
-       Nothing -> putStrLn "Failed to convert GodotWlrSurface to GodotVariant!"
-       Just wlrSurfaceGV -> G.pointer_notify_enter wlrSeat wlrSurfaceGV ssx ssy
+    -- | Takes a GodotWlrXdgSurface and returns the subsurface at point (which is likely the surface itself, or one of its popups).
+    getSubsurfaceAndCoords :: GodotWlrXdgSurface -> SurfaceLocalCoordinates -> IO (GodotWlrSurface, SubSurfaceLocalCoordinates)
+    getSubsurfaceAndCoords wlrXdgSurface (SurfaceLocalCoordinates (sx, sy)) = do
+      wlrSurfaceAtResult   <- G.surface_at  wlrXdgSurface sx sy
+      wlrSurfaceSubSurface <- G.get_surface wlrSurfaceAtResult
+      ssx                  <- G.get_sub_x wlrSurfaceAtResult
+      ssy                  <- G.get_sub_y wlrSurfaceAtResult
+      let ssCoordinates    = SubSurfaceLocalCoordinates (ssx, ssy)
+      return (wlrSurfaceSubSurface, ssCoordinates)
 
--- | This function conspiciously lacks a GodotWlrSurface argument, but doesn't
--- | need one since the GodotWlrSeat keeps internal track of what the currently
--- | active surface is.
-pointerNotifyMotion :: GodotWlrSeat -> SubSurfaceLocalCoordinates -> IO ()
-pointerNotifyMotion wlrSeat (SubSurfaceLocalCoordinates (ssx, ssy)) = do
-  G.pointer_notify_motion wlrSeat ssx ssy
+    -- | Let wlroots know we have entered a new surface. We can safely call this
+    -- | over and over (wlroots checks if we've called it already for this surface
+    -- | and, if so, returns early.
+    pointerNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> SubSurfaceLocalCoordinates -> IO ()
+    pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (ssx, ssy)) = do
+      let maybeWlrSurfaceGV = (fromVariant ((toVariant wlrSurface) :: Variant 'GodotTy) :: Maybe GodotVariant)
+      case maybeWlrSurfaceGV of
+          Nothing -> putStrLn "Failed to convert GodotWlrSurface to GodotVariant!"
+          Just wlrSurfaceGV -> G.pointer_notify_enter wlrSeat wlrSurfaceGV ssx ssy
 
-pointerNotifyButton :: GodotWlrSeat -> InputEventType -> IO ()
-pointerNotifyButton wlrSeat inputEventType = do
-  case inputEventType of
-       Motion -> return ()
-       Button pressed buttonIndex -> pointerNotifyButton' pressed buttonIndex
-  where pointerNotifyButton' pressed buttonIndex = do
-           buttonIndexVariant <- toLowLevel (VariantInt buttonIndex) :: IO GodotVariant
-           G.pointer_notify_button wlrSeat buttonIndexVariant pressed
-           return ()
+    -- | This function conspiciously lacks a GodotWlrSurface argument, but doesn't
+    -- | need one since the GodotWlrSeat keeps internal track of what the currently
+    -- | active surface is.
+    pointerNotifyMotion :: GodotWlrSeat -> SubSurfaceLocalCoordinates -> IO ()
+    pointerNotifyMotion wlrSeat (SubSurfaceLocalCoordinates (ssx, ssy)) = do
+      G.pointer_notify_motion wlrSeat ssx ssy
 
--- | gdwlroots input functions dictionary
-{-
-G.get_surface :: GodotWlrSurfaceAtResult -> (IO GodotWlrSurface)
+    pointerNotifyButton :: GodotWlrSeat -> InputEventType -> IO ()
+    pointerNotifyButton wlrSeat inputEventType = do
+      case inputEventType of
+          Motion -> return ()
+          Button pressed buttonIndex -> pointerNotifyButton' pressed buttonIndex
+      where pointerNotifyButton' pressed buttonIndex = do
+              buttonIndexVariant <- toLowLevel (VariantInt buttonIndex) :: IO GodotVariant
+              G.pointer_notify_button wlrSeat buttonIndexVariant pressed
+              return ()
 
-G.get_sub_x :: GodotWlrSurfaceAtResult
-            -> (IO Float) -- ssx
-G.get_sub_y :: GodotWlrSurfaceAtResult
-            -> (IO Float) -- ssy
-
-G.surface_at :: GodotWlrXdgSurface
-             -> Float -- sx
-             -> Float -- sy
-             -> IO (GodotWlrSurfaceAtResult) -- i.e. xdg subsurface at local surface coords
-
-G.pointer_notify_enter :: GodotWlrSeat
-                       -> GodotVariant -- WlrSurface (I'm assuming "subsurface" in our lingo) casted as GodotVariant
-                       -> Float        -- ssx
-                       -> Float        -- ssy
-                       -> IO ()
-
-G.pointer_notify_motion :: GodotWlrSeat
-                        -> Float        -- ssx
-                        -> Float        -- ssy
-                           IO ()
-
-G.pointer_notify_button :: GodotWlrSeat
-                        -> GodotVariant -- event.button_index (need to go Int -> GodotVariant)
-                        -> Bool         -- event.pressed
-                        -> IO Int       -- Sort sort exit code?
--}
+    -- | Sends a frame event to the surface with pointer focus (apparently
+    -- | useful in particular for axis events); unclear if this is needed in VR but we
+    -- | use it regardless.
+    pointerNotifyFrame :: GodotWlrSeat -> IO ()
+    pointerNotifyFrame wlrSeat = do
+      G.pointer_notify_frame wlrSeat

@@ -209,8 +209,11 @@ process self args = do
           processClickEvent window Motion pos
           processTouchpadScroll self window pos
         Nothing -> do
-          -- gss <- getSimulaServerFromHardcodedNodePath (safeCast self)
-          -- pointerClearFocus (gss ^. gssSeat) -- If we aren't pointing at anything, clear the wlroots seat pointer focus.
+          -- If we aren't pointing at anything, clear the wlroots seat pointer focus.
+          -- TODO: See what happens if we omit this; might not need it.
+          wlrSeat <- getWlrSeatFromPath self
+          G.pointer_clear_focus wlrSeat -- pointer_clear_focus :: GodotWlrSeat -> IO ()
+
           G.set_visible (_gscLaser self) False
           return ()
     | otherwise -> do
@@ -221,6 +224,16 @@ process self args = do
       G.set_visible self True
 
   toLowLevel VariantNil
+  where
+    getWlrSeatFromPath :: GodotSimulaController -> IO GodotWlrSeat
+    getWlrSeatFromPath self = do
+      let nodePathStr = "/root/Root/SimulaServer" -- I'm not 100% sure this is correct!
+      nodePath <- (toLowLevel (pack nodePathStr))
+      gssNode  <- G.get_node ((safeCast self) :: GodotNode) nodePath
+      gss      <- (fromNativeScript (safeCast gssNode)) :: IO GodotSimulaServer
+      wlrSeat  <- readTVarIO (gss ^. gssWlrSeat)
+
+      return wlrSeat
 
 physicsProcess :: GFunc GodotSimulaController
 physicsProcess self _ = do
@@ -236,7 +249,7 @@ physicsProcess self _ = do
   retnil
 
 -- See http://docs.godotengine.org/en/latest/tutorials/vr/vr_starter_tutorial.html
--- Ultimately should wrap a call to 
+-- Ultimately should wrap a call to
 processTouchpadScroll :: GodotSimulaController -> GodotSimulaViewSprite -> GodotVector3 -> IO ()
 processTouchpadScroll ct gsvs pos = do
   -- Get a bunch of needed state
