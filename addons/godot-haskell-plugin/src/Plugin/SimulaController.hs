@@ -92,8 +92,8 @@ instance ClassExport GodotSimulaController where
 
   classExtends = "ARVRController"
   classMethods =
-    [ GodotMethod NoRPC "_process" process
-    , GodotMethod NoRPC "_physics_process" physicsProcess
+    [ GodotMethod NoRPC "_process" Plugin.SimulaController.process
+    , GodotMethod NoRPC "_physics_process" Plugin.SimulaController.physicsProcess
     ]
   classSignals = []
 

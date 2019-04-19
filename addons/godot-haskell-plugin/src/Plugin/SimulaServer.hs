@@ -128,8 +128,8 @@ ready gss _ = do
   G.set_keyboard wlrSeat wlrKeyboardGV
 
   -- Connect signals
-  connectGodotSignal gss "key" gss "_on_wlr_key" []
-  connectGodotSignal gss "modifiers" gss "_on_wlr_modifiers" []
+  connectGodotSignal wlrKeyboard "key" gss "_on_wlr_key" []
+  connectGodotSignal wlrKeyboard "modifiers" gss "_on_wlr_modifiers" []
     -- Omission: We omit connecting "size_changed" with "_on_viewport_change"
 
   -- Start telemetry
@@ -186,7 +186,7 @@ addWlrChildren gss = do
   atomically $ writeTVar (_gssWlrSeat gss) wlrSeat
   atomically $ writeTVar (_gssWlrDataDeviceManager gss) wlrDataDeviceManager
   atomically $ writeTVar (_gssWlrKeyboard gss) wlrKeyboard
-  
+
   -- Connect signals from Wlr types to their methods
 
   -- [connection signal="ready" from="WaylandDisplay" to="." method="_on_WaylandDisplay_ready"]
@@ -271,11 +271,6 @@ _on_WlrXdgShell_new_surface gss args = do
   case toList args of
     [wlrXdgSurfaceVariant] -> do
       wlrXdgSurface <- fromGodotVariant wlrXdgSurfaceVariant :: IO GodotWlrXdgSurface -- Not sure if godot-haskell provides this for us
-      -- enum XdgSurfaceRole {
-      -- 	XDG_SURFACE_ROLE_NONE,     -- = 0
-      -- 	XDG_SURFACE_ROLE_TOPLEVEL, -- = 1
-      -- 	XDG_SURFACE_ROLE_POPUP,    -- = 2
-      -- };
       roleInt <- G.get_role wlrXdgSurface
       case roleInt of
           0 -> toLowLevel VariantNil -- XDG_SURFACE_ROLE_NONE
@@ -293,10 +288,20 @@ _on_WlrXdgShell_new_surface gss args = do
                               True
 
                   --surface.connect("map", self, "handle_map_surface")
-                  connectGodotSignal gss "map" gss "handle_map_surface" []
+                  connectGodotSignal gsvs "map" gss "handle_map_surface" []
                   --surface.connect("unmap", self, "handle_unmap_surface")
-                  connectGodotSignal gss "unmap" gss "handle_unmap_surface" []
+                  connectGodotSignal gsvs "unmap" gss "handle_unmap_surface" []
 
+                  -- _xdg_surface_set logic from godotston:
+                  -- xdg_surface.connect("destroy", self, "_handle_destroy"):
+                  connectGodotSignal gsvs "destroy" gsvs "_handle_destroy" []
+                  -- xdg_surface.connect("map", self, "_handle_map"):
+                  connectGodotSignal gsvs "map" gsvs "_handle_map" []
+                  -- xdg_surface.connect("unmap", self, "_handle_unmap"):
+                  connectGodotSignal gsvs "unmap" gsvs "_handle_unmap" []
+
+                  -- Handles 2D window movement across a viewport; not needed:
+                  -- toplevel.connect("request_move", self, "_handle_request_move") 
                   toLowLevel VariantNil
 
    where newSimulaView :: GodotSimulaServer -> GodotWlrXdgSurface -> IO (SimulaView)

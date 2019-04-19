@@ -135,7 +135,7 @@ connectGodotSignal :: (GodotObject :< source) -- , GodotObject :< method_object)
                    -> method_object           -- Godot object which has the method being attached to the signal
                    -> String                  -- Name of method to attach to signal
                    -> [GodotVariant]       -- default arguments to supply to method (jammed /after/ manual arguments supplied)
-                   -> IO (Int)                -- 
+                   -> IO (Int)                --
 connectGodotSignal sourceObj signalName methodObj methodName defaultArgs = do
   let sourceObj' = safeCast sourceObj      :: GodotObject
   signalName'    <- (toLowLevel (pack signalName))  :: IO GodotString
@@ -194,3 +194,22 @@ variantToReg godotVariant = do
               (VariantObject registeredTypeAsObj) -> tryObjectCast registeredTypeAsObj -- tryObjectCast should return Nothing when this object isn't registered
               _ -> return Nothing
   return ret
+
+-- | Helper function to emit signals with registered arguments that inherit from
+-- | GodotObject (like, i.e., GodotSimulaViewSprite).
+emitSignal :: (GodotObject :< a)
+           => (GodotClass b, Typeable b, GodotObject :< b)
+           => a      -- Object emitting the signal
+           -> String -- Signal name
+           -> [b]    -- Arguments emitted (must be registered types that inherit from GodotObject like i.e. GodotSimulaViewSprite)
+           -> IO ()
+emitSignal signalEmitter signalName signalArgs = do
+  let signalEmitter' = (safeCast signalEmitter) :: GodotObject
+  signalName'        <- toLowLevel (pack signalName) :: IO GodotString
+  signalArgs'        <- mapM regToVariant signalArgs
+  -- G.emit_signal :: GodotObject        -- Object emitting the signal
+  --               -> GodotString        -- Signal name
+  --               -> [Variant 'GodotTy] -- Signal argumetns
+  --               -> IO (GodotVariant)  -- Some sort of exit code?
+  G.emit_signal signalEmitter' signalName' signalArgs'
+  return ()

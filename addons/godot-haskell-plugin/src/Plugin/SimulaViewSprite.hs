@@ -90,6 +90,11 @@ instance ClassExport GodotSimulaViewSprite where
   classMethods =
     [ GodotMethod NoRPC "_input_event" inputEvent
     , GodotMethod NoRPC "_ready" ready
+
+    , GodotMethod NoRPC "_handle_destroy" _handle_destroy -- Connected in SimulaServer.hs
+    , GodotMethod NoRPC "_handle_map" _handle_map         -- Connected in SimulaServer.hs
+    , GodotMethod NoRPC "_handle_unmap" _handle_unmap     -- Connected in SimulaServer.hs
+    , GodotMethod NoRPC "_process" Plugin.SimulaViewSprite._process
     ]
 
   -- Test:
@@ -103,14 +108,32 @@ instance HasBaseClass GodotSimulaViewSprite where
 
 updateSimulaViewSprite :: GodotSimulaViewSprite -> IO ()
 updateSimulaViewSprite gsvs = do
+  -- Get state
   -- sprite <- atomically $ readTVar (_gsvsSprite gsvs)
   -- tex <- atomically $ readTVar (_gsvsTexture gsvs)
-  -- updateSimulaViewTexture tex
+  -- --updateSimulaViewTexture tex
   -- G.set_texture sprite (safeCast tex)
-  -- sizeChanged gsvs
-  return ()
 
--- Seems poorly named function.
+  -- Set extents
+  -- sizeChanged gsvs
+
+  -- Tell client it should start drawing next frame.
+  -- G.send_frame_done wlrSurface 
+
+  -- whenM (spriteShouldMove gsvs) $ do
+  --   atomically $ writeTVar (_gsvsShouldMove gsvs) False
+  --   moveToUnoccupied gss gsvs
+
+  -- for_each_surface :: GodotWlrXdgSurface
+  --                     -> GodotVariant -- function
+  --                     -> IO ()
+  return ()
+  where drawIndividual sprite wlrSurface = do
+          texture <- G.get_texture wlrSurface
+          G.set_texture sprite texture
+
+-- Sets extents (meant to be called every frame). Seems poorly named function.
+-- Will be called every frame fromUpdateSimulaViewSprite in new Simula.
 sizeChanged :: GodotSimulaViewSprite -> IO ()
 sizeChanged gsvs = do
   sprite <- atomically $ readTVar (_gsvsSprite gsvs)
@@ -122,6 +145,8 @@ sizeChanged gsvs = do
 
   G.set_extents shape size'
 
+-- Is being called every frame in old Simula; will called from
+-- updateSimulaViewSprite in new Simula.
 spriteShouldMove :: GodotSimulaViewSprite -> IO Bool
 spriteShouldMove gsvs = do
   en <- atomically $ readTVar (_gsvsShouldMove gsvs)
@@ -301,3 +326,70 @@ processClickEvent gsvs evt clickPos = do
     pointerNotifyFrame :: GodotWlrSeat -> IO ()
     pointerNotifyFrame wlrSeat = do
       G.pointer_notify_frame wlrSeat
+
+_handle_map :: GFunc GodotSimulaViewSprite
+_handle_map self args = do
+  case toList args of
+    [gsvsGV] ->  do
+      G.set_process self True
+      -- G.set_process_input self True -- We do this in Godotston but not in original Simula; deciding to not do it
+
+      -- Am mirroring godotston here, but conceptually it's unclear to me what
+      -- this is doing, and why it wouldn't just result in a _handle_map call
+      -- loop that never terminates.
+      emitSignal self "map" ([] :: [GodotSimulaViewSprite])
+      putStrLn "Called _handle_map. Should only see this once per surface launch." -- <- Test
+
+  toLowLevel VariantNil
+
+_handle_unmap :: GFunc GodotSimulaViewSprite
+_handle_unmap self args = do
+  case toList args of
+    [gsvsGV] ->  do
+      maybeGsvs <- variantToReg gsvsGV :: IO (Maybe GodotSimulaViewSprite)
+      case maybeGsvs of
+        Nothing -> putStrLn "Failed to cast gsvs in _handle_destroy!"
+        (Just gsvs) -> G.set_process gsvs False
+                      -- G.set_process_input gsvs False -- We do this in Godotston but not in original Simula; deciding to not do it
+
+      -- Am mirroring godotston here, but conceptually it's unclear to me what
+      -- this is doing, and why it wouldn't just result in a _handle_unmap call
+      -- loop that never terminates.
+      emitSignal self "unmap" ([] :: [GodotSimulaViewSprite])
+      putStrLn "Called _handle_unmap. Should only see this once per surface launch." -- <- Test
+  toLowLevel VariantNil
+
+-- Passes control entirely to updateSimulaViewSprite.
+_process :: GFunc GodotSimulaViewSprite
+_process self args = do
+  case toList args of
+    [deltaGV] ->  do
+      updateSimulaViewSprite self
+
+  toLowLevel VariantNil
+
+
+-- The original Simula didn't have a destroy handler at the Godot level.
+-- 1. Was it leaking?
+-- 2. Do Godot objects get deleted eventually anyway, even if we don't call queue_free?
+-- 3. I'm assuming that `registerClass` passes a destructor for
+--    GodotSimulaViewSprite that calls to `queue_free` can use.
+_handle_destroy :: GFunc GodotSimulaViewSprite
+_handle_destroy self args = do
+  case toList args of
+    [gsvsGV] ->  do
+      -- Get state
+      maybeGsvs <- variantToReg gsvsGV :: IO (Maybe GodotSimulaViewSprite)
+      case maybeGsvs of
+        Nothing -> putStrLn "Failed to cast gsvs in _handle_destroy!"
+        (Just gsvs) -> do simulaView <- readTVarIO (gsvs ^. gsvsView)
+                          gss <- readTVarIO (gsvs ^. gsvsServer)
+
+                          -- Destroy
+                          G.queue_free gsvs -- Queue the `gsvs` for destruction
+                          G.set_process gsvs False -- Remove the `simulaView ↦ gsvs` mapping from the gss
+                          atomically $ modifyTVar' (gss ^. gssViews) (M.delete simulaView)
+                            -- Old method of gsvs deletion from Simula; bring back if we face leakage issues:
+                            -- Api.godot_object_destroy (safeCast gsvs)
+
+  toLowLevel VariantNil
