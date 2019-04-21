@@ -26,6 +26,8 @@ import qualified Godot.Methods               as G
 
 import Plugin.Types
 
+-- import           Data.Vector.V2
+
 import           Foreign
 import           Foreign.Ptr
 import           Foreign.Marshal.Alloc
@@ -112,7 +114,6 @@ updateSimulaViewSprite gsvs = do
   -- sprite <- atomically $ readTVar (_gsvsSprite gsvs)
   -- tex <- atomically $ readTVar (_gsvsTexture gsvs)
   -- --updateSimulaViewTexture tex
-  -- G.set_texture sprite (safeCast tex)
 
   -- Set extents
   -- sizeChanged gsvs
@@ -124,9 +125,16 @@ updateSimulaViewSprite gsvs = do
   --   atomically $ writeTVar (_gsvsShouldMove gsvs) False
   --   moveToUnoccupied gss gsvs
 
-  -- for_each_surface :: GodotWlrXdgSurface
-  --                     -> GodotVariant -- function
-  --                     -> IO ()
+  -- TODO: Fix this logic to allow for popup drawing.
+  -- What we have now: we just paint the toplevel surface onto our sprite.
+  -- What we need: recursively draw all of the subsurfaces of the toplevel surface onto our space.
+  -- What will probably be useful:j
+  --
+  --   for_each_surface :: GodotWlrXdgSurface
+  --                       -> GodotVariant -- function
+  --                       -> IO ()
+  --
+  -- This 
   return ()
   where drawIndividual sprite wlrSurface = do
           texture <- G.get_texture wlrSurface
@@ -393,3 +401,104 @@ _handle_destroy self args = do
                             -- Api.godot_object_destroy (safeCast gsvs)
 
   toLowLevel VariantNil
+
+
+-- _draw_surface :: GFunc GodotSimulaViewSprite
+-- _draw_surface self args = do
+--   case toList args of
+--     [gsvsGV, sxGV, syGV] ->  do
+--       -- Get state
+--       gsvs             <- --...
+--       sx               <- --...
+--       sy               <- --...
+--       simulaView       <- --...
+--       wlrXdgSurface    <- --...
+--       wlrSurfaceParent <- G.get_wlr_surface wlrXdgSurface
+--       texture          <- G.get_texture wlrSurface
+--       stateParent      <- G.get_current_state wlrSurfaceParent
+
+--       -- Compute position point from sx, y arguments
+--       stateWidth <- G.get_buffer_width stateParent
+--       stateHeight <- G.get_buffer_height stateParent
+--       let vx = (0stateWidth / 2) + sx
+--       let vy = (0stateheight / 2) + sx
+--       let position = Vector2 vx vy
+
+--       -- Send draw command
+--       color = Color (1,1,1,1)
+--       nullTexture = -- ... :: IO GodotTexture
+
+--       -- G.draw_texture :: GodotCanvasItem -- Where do we get a GodotCanvasItem?
+--       --                -> GodotTexture
+--       --                -> GodotVector2
+--       --                -> GodotColor
+--       --                -> GodotTexture -- 
+--       --                -> IO ()
+
+--       G.draw_texture ? texture position color nullTexture
+
+--       -- Tell surface that we're finished drawing
+--       G.send_frame_done wlrSurface 
+
+
+  
+--         -- G.set_texture sprite (safeCast tex)
+--         -- G.get_texture :: GodotSprite3D -> IO (GodotTexture)
+--         -- G.get_texture :: GodotWlrSurface -> IO (GodotTexture)
+
+
+initializeRenderTarget :: GodotWlrXdgSurface -> IO (GodotViewport)
+initializeRenderTarget wlrXdgSurface = do
+  -- "When we are drawing to a Viewport that is not the Root, we call it a
+  --  render target." -- Godot documentation"
+  renderTarget <- unsafeInstance GodotViewport "Viewport"
+  -- No need to add the Viewport to the SceneGraph since we plan to use it as a render target
+    -- G.set_name viewport =<< toLowLevel "Viewport"
+    -- G.add_child gsvs ((safeCast viewport) :: GodotObject) True
+
+  G.set_disable_input renderTarget True -- Turns off input handling
+
+  G.set_usage renderTarget 0 -- USAGE_2D = 0
+  -- G.set_hdr renderTarget False -- Might be useful to disable HDR rendering for performance in the future
+
+  -- CLEAR_MODE_ALWAYS = 0
+  -- CLEAR_MODE_NEVER = 1
+  -- I think we need CLEAR_MODE_ALWAYS since, i.e., a popup dragging might cause a trail?
+  G.set_clear_mode renderTarget 0
+
+  -- Perhaps we should never update the render target, since we do so manually each frame?
+  -- UPDATE_DISABLED = 0 — Do not update the render target.
+  -- UPDATE_ONCE = 1 — Update the render target once, then switch to UPDATE_DISABLED.
+  -- UPDATE_WHEN_VISIBLE = 2 — Update the render target only when it is visible. This is the default value.
+  -- UPDATE_ALWAYS = 3 — Always update the render target. 
+  G.set_update_mode renderTarget 3 -- Using UPDATE_ALWAYS for now
+
+  -- "Note that due to the way OpenGL works, the resulting ViewportTexture is flipped vertically. You can use Image.flip_y on the result of Texture.get_data to flip it back[or you can also use set_vflip]:" -- Godot documentation
+  G.set_vflip renderTarget True -- In tutorials this is set as True, but no reference to it in Godotston; will set to True for now
+
+  -- We could alternatively set the size of the renderTarget via set_size_override [and set_size_override_stretch]
+  (width, height) <- getGodotWlrXdgSurfaceBufferDimensions wlrXdgSurface
+  -- TODO: G.set_size call
+  -- G.set_size renderTarget (Vector2 widthOfXdgSurface heightOfSurface)
+  -- G.set_size_override renderTarget True vector2
+  -- G.set_size_override_stretch renderTarget True
+
+  return renderTarget
+  where getGodotWlrXdgSurfaceBufferDimensions :: GodotWlrXdgSurface -> IO (Int, Int)
+        getGodotWlrXdgSurfaceBufferDimensions wlrXdgSurface = do
+          wlrSurface <- G.get_wlr_surface wlrXdgSurface
+          wlrSurfaceState <- G.get_current_state wlrSurface
+          bufferWidth <- G.get_buffer_width wlrSurfaceState
+          bufferHeight <- G.get_buffer_height wlrSurfaceState
+          -- width <- G.get_width wlrSurfaceState
+          -- height <-G.get_height wlrSurfaceState
+          return (bufferWidth, bufferHeight)
+
+getTextureFromRenderTarget :: GodotViewport -> IO (GodotTexture)
+getTextureFromRenderTarget renderTarget = do
+    viewportTexture' <- G.get_texture renderTarget -- G.get_texture :: GodotViewport -> (IO GodotViewportTexture)
+    let viewportTexture = (safeCast viewportTexture) :: GodotTexture -- GodotTexture :< GodotViewportTexture
+    -- -- Retrieving an image
+    -- G.get_data viewportTexture :: IO GodotImage -- requires viewportTexture to be cast as GodotTexture
+    return viewportTexture
+
