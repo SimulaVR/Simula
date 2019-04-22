@@ -402,11 +402,29 @@ _handle_destroy self args = do
 
   toLowLevel VariantNil
 
+ -- Our overall rendering strategy: each GodotSimulaViewSprite has a
+ -- GodotSprite3D, which expects a texture with our wlroots surface. In order to
+ -- supply this wlroots texture, we have to make it.
 
--- _draw_surface :: GFunc GodotSimulaViewSprite
--- _draw_surface self args = do
---   case toList args of
---     [gsvsGV, sxGV, syGV] ->  do
+ -- To do this, we start with the texture provided by our GodotWlrXdgSurface,
+ -- and apply it it to a Viewport (used purely as a "rendering target") as a
+ -- base, and then render each of the GodotWlrXdgSurface's subsurfaces over it
+ -- (which contain popups, menus, etc). The final result will be a Viewport
+ -- texture with all of the subsurfaces pancaked on top of each other, creating
+ -- the illusion of one large wlroots surface. We finish by supplying this
+ -- Viewport texture to our Sprite3D, creating the desired illusion of having a
+ -- wlroots surface floating in 3-space.
+
+ -- NOTE: You might ask, "why must we use a Viewport?" The answer is that this
+ -- is the ritual we engage in to modify 2D textures in a 3D Godot game. As long
+ -- as our Viewport isn't the Root Viewport, it is treated by Godot as a
+ -- "rendering target" instead of a screen to render onto. For this reason we
+ -- associate with each GodotSimulaViewSprite its own unique GodotViewport.
+-- | Draws the given subsurface onto the GodotSimulaViewSprite's Viewport (treated as a rendering target). Meant to be called for all of the GodotSimulaViewSprite's subsurfaces to create the texture to be applied for the GodotSimulaViewSprite's Sprite3D.
+_draw_surface :: GFunc GodotSimulaViewSprite
+_draw_surface self args = do
+  case toList args of
+    [gsvsGV, sxGV, syGV] ->  do
 --       -- Get state
 --       gsvs             <- --...
 --       sx               <- --...
@@ -420,8 +438,8 @@ _handle_destroy self args = do
 --       -- Compute position point from sx, y arguments
 --       stateWidth <- G.get_buffer_width stateParent
 --       stateHeight <- G.get_buffer_height stateParent
---       let vx = (0stateWidth / 2) + sx
---       let vy = (0stateheight / 2) + sx
+--       let vx = (stateWidth / 2) + sx
+--       let vy = (stateheight / 2) + sx
 --       let position = Vector2 vx vy
 
 --       -- Send draw command
@@ -437,14 +455,15 @@ _handle_destroy self args = do
 
 --       G.draw_texture ? texture position color nullTexture
 
---       -- Tell surface that we're finished drawing
---       G.send_frame_done wlrSurface 
+-- --       -- Tell surface that we're finished drawing
+-- --       G.send_frame_done wlrSurface 
 
 
   
---         -- G.set_texture sprite (safeCast tex)
---         -- G.get_texture :: GodotSprite3D -> IO (GodotTexture)
---         -- G.get_texture :: GodotWlrSurface -> IO (GodotTexture)
+-- --         -- G.set_texture sprite (safeCast tex)
+-- --         -- G.get_texture :: GodotSprite3D -> IO (GodotTexture)
+-- --         -- G.get_texture :: GodotWlrSurface -> IO (GodotTexture)
+      retnil
 
 
 initializeRenderTarget :: GodotWlrXdgSurface -> IO (GodotViewport)
@@ -477,22 +496,34 @@ initializeRenderTarget wlrXdgSurface = do
   G.set_vflip renderTarget True -- In tutorials this is set as True, but no reference to it in Godotston; will set to True for now
 
   -- We could alternatively set the size of the renderTarget via set_size_override [and set_size_override_stretch]
-  (width, height) <- getGodotWlrXdgSurfaceBufferDimensions wlrXdgSurface
-  -- TODO: G.set_size call
-  -- G.set_size renderTarget (Vector2 widthOfXdgSurface heightOfSurface)
-  -- G.set_size_override renderTarget True vector2
-  -- G.set_size_override_stretch renderTarget True
+  dimensions@(width, height) <- getDimensions wlrXdgSurface
+  pixelDimensionsOfWlrXdgSurface <- toGodotVector2 dimensions
+
+  -- Here I'm attempting to set the size of the viewport to the pixel dimensions of our wlrXdgSurface argument:
+  G.set_size renderTarget pixelDimensionsOfWlrXdgSurface
+
+  -- There is, however, an additional way to do this and I'm not sure which one is better/more idiomatic:
+    -- G.set_size_override renderTarget True vector2
+    -- G.set_size_override_stretch renderTarget True
 
   return renderTarget
-  where getGodotWlrXdgSurfaceBufferDimensions :: GodotWlrXdgSurface -> IO (Int, Int)
-        getGodotWlrXdgSurfaceBufferDimensions wlrXdgSurface = do
+  where getDimensions:: GodotWlrXdgSurface -> IO (Int, Int)
+        getDimensions wlrXdgSurface = do
           wlrSurface <- G.get_wlr_surface wlrXdgSurface
           wlrSurfaceState <- G.get_current_state wlrSurface
           bufferWidth <- G.get_buffer_width wlrSurfaceState
           bufferHeight <- G.get_buffer_height wlrSurfaceState
           -- width <- G.get_width wlrSurfaceState
           -- height <-G.get_height wlrSurfaceState
-          return (bufferWidth, bufferHeight)
+          return (bufferWidth, bufferHeight) -- G.set_size expects "the width and height of viewport" according to Godot documentation
+
+        -- | Used to supply GodotVector2 to
+        -- |   G.set_size :: GodotViewport -> GodotVector2 -> IO ()
+        toGodotVector2 :: (Int, Int) -> IO (GodotVector2)
+        toGodotVector2 (width, height) = do
+          let v2 = (V2 (fromIntegral width) (fromIntegral height))
+          gv2 <- toLowLevel v2 :: IO (GodotVector2)
+          return gv2
 
 getTextureFromRenderTarget :: GodotViewport -> IO (GodotTexture)
 getTextureFromRenderTarget renderTarget = do
