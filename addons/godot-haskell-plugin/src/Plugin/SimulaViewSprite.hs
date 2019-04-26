@@ -12,6 +12,9 @@ module Plugin.SimulaViewSprite where
 
 import Debug.C
 
+import Data.Colour
+import Data.Colour.SRGB.Linear
+
 import Control.Monad
 import Data.Coerce
 
@@ -25,6 +28,7 @@ import           Godot.Gdnative.Internal.Api
 import qualified Godot.Methods               as G
 
 import Plugin.Types
+import Data.Maybe
 
 -- import           Data.Vector.V2
 
@@ -88,6 +92,7 @@ instance ClassExport GodotSimulaViewSprite where
                   <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                   <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                   <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
+                  <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
   classExtends = "RigidBody"
   classMethods =
     [ GodotMethod NoRPC "_input_event" inputEvent
@@ -106,7 +111,7 @@ instance ClassExport GodotSimulaViewSprite where
 
 instance HasBaseClass GodotSimulaViewSprite where
   type BaseClass GodotSimulaViewSprite = GodotRigidBody
-  super (GodotSimulaViewSprite obj _ _ _ _ _ ) = GodotRigidBody obj
+  super (GodotSimulaViewSprite obj _ _ _ _ _ _) = GodotRigidBody obj
 
 updateSimulaViewSprite :: GodotSimulaViewSprite -> IO ()
 updateSimulaViewSprite gsvs = do
@@ -223,6 +228,11 @@ newGodotSimulaViewSprite gss simulaView = do
   atomically $ writeTVar (_gsvsShape     gsvs) godotBoxShape -- :: TVar GodotBoxShape
   atomically $ writeTVar (_gsvsView      gsvs) simulaView    -- :: TVar SimulaView
 
+  -- Initialize and load render target into _gsvsViewport field
+  let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
+  renderTarget <- initializeRenderTarget wlrXdgSurface
+  atomically $ writeTVar (_gsvsViewport gsvs) renderTarget
+
   updateSimulaViewSprite gsvs -- Now we update everything
 
   return gsvs
@@ -231,7 +241,7 @@ focus :: GodotSimulaViewSprite -> IO ()
 focus gsvs = do
   -- Get state:
   simulaView  <- atomically $ readTVar (gsvs ^. gsvsView) 
-  let wlrXdgSurface = (simulaView ^. gsvsWlrXdgSurface)
+  let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
   wlrSurface  <- G.get_wlr_surface wlrXdgSurface
   wlrSurface' <- asGodotVariant wlrSurface
   toplevel    <- G.get_xdg_toplevel wlrXdgSurface :: IO GodotWlrXdgToplevel
@@ -258,7 +268,8 @@ processClickEvent gsvs evt clickPos = do
   gss        <- readTVarIO (gsvs ^. gsvsServer)
   wlrSeat    <- readTVarIO (gss ^. gssWlrSeat)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
-  let godotWlrXdgSurface = (simulaView ^. gsvsWlrXdgSurface)
+  let godotWlrXdgSurface = (simulaView ^. svWlrXdgSurface)
+
 
   -- Compute subsurface local coordinates at clickPos
   surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)) <- getSurfaceLocalCoordinates
@@ -420,50 +431,102 @@ _handle_destroy self args = do
  -- as our Viewport isn't the Root Viewport, it is treated by Godot as a
  -- "rendering target" instead of a screen to render onto. For this reason we
  -- associate with each GodotSimulaViewSprite its own unique GodotViewport.
--- | Draws the given subsurface onto the GodotSimulaViewSprite's Viewport (treated as a rendering target). Meant to be called for all of the GodotSimulaViewSprite's subsurfaces to create the texture to be applied for the GodotSimulaViewSprite's Sprite3D.
-_draw_surface :: GFunc GodotSimulaViewSprite
-_draw_surface self args = do
-  case toList args of
-    [gsvsGV, sxGV, syGV] ->  do
+
+-- | Draws the given surface onto the GodotSimulaViewSprite's Viewport (treated
+-- | as a rendering target). Meant to be called for all of the
+-- | GodotSimulaViewSprite's subsurfaces, to create the texture to be applied for
+-- | the GodotSimulaViewSprite's Sprite3D.
+-- | 
+-- | NOTE: This function is intended to be used as a closure over its first
+-- |       argument and fed to for_each_ffi as a FunPtr.
+drawSurface :: GodotSimulaViewSprite
+            -> GodotWlrSurface
+            -> CInt
+            -> CInt
+            -> IO ()
+drawSurface gsvs wlrSurface sx sy = do
+  -- Get state
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
+  renderPosition <- getCoordinatesFromCenter wlrXdgSurface sx sy -- Surface coordinates are relative to the size of the GodotWlrXdgSurface
+  textureToDraw <- G.get_texture wlrSurface :: IO GodotTexture
+  renderTarget <- readTVarIO (gsvs ^. gsvsViewport)
+
+    -- Send draw command
+  godotColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1) :: IO GodotColor
+  let nullTexture = Data.Maybe.fromJust ((fromVariant VariantNil) :: Maybe GodotTexture) :: GodotTexture
+  -- G.draw_texture ((safeCast renderTarget) :: GodotCanvasItem) textureToDraw renderPosition godotColor nullTexture
+
+  -- Tell the surface being drawn it can start to render its next frame
+  G.send_frame_done wlrSurface
+  -- NOTE: I'm omitting re-mutating gsvsViewport, G.draw_texture should merely
+  -- mutate what it's pointing to anyway.
+  where
+        -- | Convert (sx,sy) coordinates from "top-left" to "from-center" coordinate systems.
+        getCoordinatesFromCenter :: GodotWlrXdgSurface -> CInt -> CInt -> IO GodotVector2
+        getCoordinatesFromCenter wlrXdgSurface sx sy = do
+          (bufferWidth', bufferHeight')    <- getBufferDimensions wlrXdgSurface
+          let (bufferWidth, bufferHeight)  = (fromIntegral bufferWidth', fromIntegral bufferHeight')
+          let (fromTopLeftX, fromTopLeftY) = (fromIntegral sx, fromIntegral sy)
+          let fromCenterX                  = -(bufferWidth/2) + fromTopLeftX
+          let fromCenterY                  = -(-(bufferHeight/2) + fromTopLeftY)
+          -- NOTE: In godotston fromCenterY is isn't negative, but since we set
+          -- `G.render_target_v_flip viewport True` we can set this
+          -- appropriately
+          -- NOTE: We above assume that
+          --    G.render_target_v_flip viewport True
+          -- has been set.
+          let v2 = (V2 fromCenterX fromCenterY) :: V2 Float
+          gv2 <- toLowLevel v2 :: IO GodotVector2
+          return gv2
+
+-- Leaving up for a day in case I need it; delete tomorrow.
+--
+-- _draw_surface :: GFunc GodotSimulaViewSprite
+-- _draw_surface self args = do
+--   case toList args of
+--     [gsvsGV, sxGV, syGV] -> do
 --       -- Get state
---       gsvs             <- --...
---       sx               <- --...
---       sy               <- --...
---       simulaView       <- --...
---       wlrXdgSurface    <- --...
---       wlrSurfaceParent <- G.get_wlr_surface wlrXdgSurface
---       texture          <- G.get_texture wlrSurface
---       stateParent      <- G.get_current_state wlrSurfaceParent
+--       maybeGsvs <- variantToReg gsvsGV
+--       sxV <- fromLowLevel sxGV
+--       sxY <- fromLowLevel syGV
+--       case (maybeGsvs, sxV, sxY) of
+--         (Just gsvs, (VariantInt sx), (VariantInt sy)) -> do
+--            (fromCenterX, fromCenterY) <- getCoordinatesFromCenter gsvs sx sy
 
---       -- Compute position point from sx, y arguments
---       stateWidth <- G.get_buffer_width stateParent
---       stateHeight <- G.get_buffer_height stateParent
---       let vx = (stateWidth / 2) + sx
---       let vy = (stateheight / 2) + sx
---       let position = Vector2 vx vy
+--             -- Send draw command let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
+--             renderTarget <- readTVarIO (gsvs ^. gsvsViewport)
+--             godotColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1) :: IO GodotColor
+--             let nullTexture = Data.Maybe.fromJust ((fromVariant VariantNil) :: Maybe GodotTexture) :: GodotTexture
+--            -- G.draw_texture renderTarget ..
+--            -- G.send_frame_done wlrSurface
+--            -- mutate GodotViewport
+--       retnil
 
---       -- Send draw command
---       color = Color (1,1,1,1)
---       nullTexture = -- ... :: IO GodotTexture
+--            -- Draw subsurface onto Viewport
+--         _ -> do putStrLn "Unable to cast types in _draw_surface!"
+--                 retnil
+--      where getCoordinatesFromCenter :: GodotSimulaViewSprite -> Int -> Int -> GodotVector2
+--            getCoordinatesFromCenter gsvs sx sy = do
+--             -- Get more state
+--             simulaView            <- readTVarIO (gsvs ^. gsvsView)
+--             let wlrXdgSurface     = (simulaView ^. svWlrXdgSurface)
 
---       -- G.draw_texture :: GodotCanvasItem -- Where do we get a GodotCanvasItem?
---       --                -> GodotTexture
---       --                -> GodotVector2
---       --                -> GodotColor
---       --                -> GodotTexture -- 
---       --                -> IO ()
-
---       G.draw_texture ? texture position color nullTexture
-
--- --       -- Tell surface that we're finished drawing
--- --       G.send_frame_done wlrSurface 
-
-
-  
--- --         -- G.set_texture sprite (safeCast tex)
--- --         -- G.get_texture :: GodotSprite3D -> IO (GodotTexture)
--- --         -- G.get_texture :: GodotWlrSurface -> IO (GodotTexture)
-      retnil
+--             -- Convert (sx,sy) coordinates from "top-left" to "from-center" coordinate systems.
+--             (bufferWidth', bufferHeight')      <- getBufferDimensions wlrXdgSurface
+--             let (bufferWidth, bufferHeight)  = (fromIntegral bufferWidth', fromIntegral bufferHeight')
+--             let (fromTopLeftX, fromTopLeftY) = (fromIntegral sx, fromIntegral sy)
+--             let fromCenterX                  = -(bufferWidth/2) + fromTopLeftX
+--             let fromCenterY                  = -(-(bufferHeight/2) + fromTopLeftY)
+--             -- NOTE: In godotston fromCenterY is isn't negative, but since we set
+--             -- `G.render_target_v_flip viewport True` we can set this
+--             -- appropriately
+--             -- NOTE: We above assume that
+--             --    G.render_target_v_flip viewport True
+--             -- has been set.
+--             let v2 = (V2 fromCenterX fromCenterY) :: V2 Float
+--             gv2 <- toLowLevel v2 :: IO GodotVector2
+--             return gv2
 
 
 initializeRenderTarget :: GodotWlrXdgSurface -> IO (GodotViewport)
@@ -496,27 +559,20 @@ initializeRenderTarget wlrXdgSurface = do
   G.set_vflip renderTarget True -- In tutorials this is set as True, but no reference to it in Godotston; will set to True for now
 
   -- We could alternatively set the size of the renderTarget via set_size_override [and set_size_override_stretch]
-  dimensions@(width, height) <- getDimensions wlrXdgSurface
+  dimensions@(width, height) <- getBufferDimensions wlrXdgSurface
   pixelDimensionsOfWlrXdgSurface <- toGodotVector2 dimensions
 
-  -- Here I'm attempting to set the size of the viewport to the pixel dimensions of our wlrXdgSurface argument:
+  -- Here I'm attempting to set the size of the viewport to the pixel dimensions
+  -- of our wlrXdgSurface argument:
   G.set_size renderTarget pixelDimensionsOfWlrXdgSurface
 
-  -- There is, however, an additional way to do this and I'm not sure which one is better/more idiomatic:
+  -- There is, however, an additional way to do this and I'm not sure which one
+  -- is better/more idiomatic:
     -- G.set_size_override renderTarget True vector2
     -- G.set_size_override_stretch renderTarget True
 
   return renderTarget
-  where getDimensions:: GodotWlrXdgSurface -> IO (Int, Int)
-        getDimensions wlrXdgSurface = do
-          wlrSurface <- G.get_wlr_surface wlrXdgSurface
-          wlrSurfaceState <- G.get_current_state wlrSurface
-          bufferWidth <- G.get_buffer_width wlrSurfaceState
-          bufferHeight <- G.get_buffer_height wlrSurfaceState
-          -- width <- G.get_width wlrSurfaceState
-          -- height <-G.get_height wlrSurfaceState
-          return (bufferWidth, bufferHeight) -- G.set_size expects "the width and height of viewport" according to Godot documentation
-
+  where
         -- | Used to supply GodotVector2 to
         -- |   G.set_size :: GodotViewport -> GodotVector2 -> IO ()
         toGodotVector2 :: (Int, Int) -> IO (GodotVector2)
@@ -524,6 +580,21 @@ initializeRenderTarget wlrXdgSurface = do
           let v2 = (V2 (fromIntegral width) (fromIntegral height))
           gv2 <- toLowLevel v2 :: IO (GodotVector2)
           return gv2
+
+-- Possible TODO: Place types for different coordinate systems
+-- newtype BufferDimensions = BufferDimensions (Int, Int)
+-- data FromTopLeftCoordinates = FromTopLeftCoordinates (Int, Int)
+-- data FromCenterCoordinates = FromCenterCoordinates (Int, Int)
+
+getBufferDimensions :: GodotWlrXdgSurface -> IO (Int, Int)
+getBufferDimensions wlrXdgSurface = do
+  wlrSurface <- G.get_wlr_surface wlrXdgSurface
+  wlrSurfaceState <- G.get_current_state wlrSurface
+  bufferWidth <- G.get_buffer_width wlrSurfaceState
+  bufferHeight <- G.get_buffer_height wlrSurfaceState
+  -- width <- G.get_width wlrSurfaceState
+  -- height <-G.get_height wlrSurfaceState
+  return (bufferWidth, bufferHeight) -- G.set_size expects "the width and height of viewport" according to Godot documentation
 
 getTextureFromRenderTarget :: GodotViewport -> IO (GodotTexture)
 getTextureFromRenderTarget renderTarget = do

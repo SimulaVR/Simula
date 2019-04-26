@@ -93,6 +93,7 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsSprite         :: TVar GodotSprite3D
   , _gsvsShape          :: TVar GodotBoxShape
   , _gsvsView           :: TVar SimulaView -- Contains Wlr data
+  , _gsvsViewport       :: TVar GodotViewport
   -- , gsvsGeometry     :: GodotRect2
   -- , gsvsWlrSeat      :: GodotWlrSeat
   -- , gsvsInputMode    :: TVar InteractiveMode
@@ -102,7 +103,7 @@ data SimulaView = SimulaView
   { _svServer                  :: GodotSimulaServer -- Can obtain WlrSeat
   -- , _svWlrSurface              :: GodotWlrSurface -- Can obtain GodotWlrSurface from GodotWlrXdgSurface
   , _svMapped                  :: TVar Bool
-  , _gsvsWlrXdgSurface         :: GodotWlrXdgSurface -- Contains the WlrSurface, its texture data, & even its subsurfaces (via `surface_at`).
+  , _svWlrXdgSurface         :: GodotWlrXdgSurface -- Contains the WlrSurface, its texture data, & even its subsurfaces (via `surface_at`).
   , _gsvsUUID                  :: Maybe UUID
   }
 

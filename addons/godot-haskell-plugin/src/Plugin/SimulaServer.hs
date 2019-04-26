@@ -314,7 +314,7 @@ _on_WlrXdgShell_new_surface gss args = do
           return SimulaView
               { _svServer          = gss :: GodotSimulaServer
               , _svMapped          = svMapped' :: TVar Bool
-              , _gsvsWlrXdgSurface = wlrXdgSurface :: GodotWlrXdgSurface 
+              , _svWlrXdgSurface   = wlrXdgSurface :: GodotWlrXdgSurface
               , _gsvsUUID          = gsvsUUID' :: Maybe UUID
               }
 
