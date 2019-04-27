@@ -195,33 +195,6 @@ addWlrChildren gss = do
   connectGodotSignal wlrXdgShell "new_surface" gss "_on_WaylandDisplay_new_surface" []
   return ()
 
--- TODO: check the origin plane?
-moveToUnoccupied :: GodotSimulaServer -> GodotSimulaViewSprite -> IO ()
-moveToUnoccupied gss gsvs = do
-  viewMap <- atomically $ readTVar (_gssViews gss)
-  let otherGsvs = filter (\x -> asObj x /= asObj gsvs) $ M.elems viewMap
-
-  extents <- forM otherGsvs $ \viewSprite -> do
-    sprite <- atomically $ readTVar (gsvs ^. gsvsSprite) -- getSprite viewSprite
-    aabb   <- G.get_transformed_aabb sprite
-    size   <- Api.godot_aabb_get_size aabb >>= fromLowLevel
-    pos    <- Api.godot_aabb_get_position aabb >>= fromLowLevel
-    return (pos, size + pos)
-
-  let minX = minimum $ 0 : map (view $ _1._x) extents
-      maxX = maximum $ 0 :  map (view $ _2._x) extents
-  sprite <- atomically $ readTVar (gsvs ^. gsvsSprite)
-  aabb   <- G.get_aabb sprite
-  size   <- Api.godot_aabb_get_size aabb >>= fromLowLevel
-  let sizeX  = size ^. _x
-      newPos =
-        if abs minX < abs maxX
-        then V3 (minX - sizeX/2) 0 0
-        else V3 (maxX + sizeX/2) 0 0
-
-  G.translate gsvs =<< toLowLevel newPos
-
-
 -- | We first fill the TVars with dummy state, before updating them with their
 -- | real values in `ready`.
 initGodotSimulaServer :: GodotObject -> IO (GodotSimulaServer)
