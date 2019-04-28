@@ -45,7 +45,7 @@ instance HasBaseClass GodotSimula where
 
 ready :: GFunc GodotSimula
 ready self _ = do
-  addCompositorNode
+  addSimulaServerNode
 
   -- OpenHMD is unfortunately not yet a working substitute for OpenVR
   -- https://github.com/SimulaVR/Simula/issues/72
@@ -71,15 +71,15 @@ ready self _ = do
 
   retnil
  where
-  addCompositorNode :: IO ()
-  addCompositorNode = do
+  addSimulaServerNode :: IO ()
+  addSimulaServerNode = do
     -- gwc <- "res://addons/godot-haskell-plugin/SimulaServer.gdns"
     --   & unsafeNewNS GodotSpatial "Spatial" []
-    gwcObj <- newNS' [] "res://addons/godot-haskell-plugin/SimulaServer.gdns"
-    gwc <- Plugin.Imports.fromNativeScript gwcObj :: IO GodotSpatial
+    gssObj <- newNS' [] "res://addons/godot-haskell-plugin/SimulaServer.gdns"
+    gss <- Plugin.Imports.fromNativeScript gssObj :: IO GodotSpatial
 
-    G.set_name gwc =<< toLowLevel "Simula"
-    G.add_child self (asObj gwc) True
+    G.set_name gss =<< toLowLevel "SimulaServer"
+    G.add_child self (asObj gss) True
 
   connectController :: GodotSimulaController -> IO ()
   connectController ct = do

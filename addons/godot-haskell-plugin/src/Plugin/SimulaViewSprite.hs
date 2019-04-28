@@ -255,7 +255,8 @@ updateSimulaViewSprite gsvs = do
            let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
            -- listOfWlrSurface <- getSubsurfaces wlrXdgSurface -- getSurfaces :: GodotWlrXdgSurface -> IO [(WlrSurface, sx, sy)]
            -- forM_ listOfWlrSurface
-           --    (\(wlrSurface, sx, sy) -> drawSubsurfaceOnViewport wlrSurface sx sy)
+           --    (\(wlrSurface, sx, sy) -> do drawSubsurfaceOnViewport wlrSurface sx sy)
+           --                                 G.send_frame_done wlrSurface
            -- viewportTexture <- ...
            -- G.set_texture sprite3D parentWlrTexture
            return ()
