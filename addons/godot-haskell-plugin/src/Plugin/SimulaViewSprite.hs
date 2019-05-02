@@ -535,7 +535,7 @@ initializeRenderTarget wlrXdgSurface = do
   G.set_disable_input renderTarget True -- Turns off input handling
 
   G.set_usage renderTarget 0 -- USAGE_2D = 0
-  -- G.set_hdr renderTarget False -- Might be useful to disable HDR rendering for performance in the future
+  -- G.set_hdr renderTarget False -- Might be useful to disable HDR rendering for performance in the future (requires upgrading gdwlroots to GLES3)
 
   -- CLEAR_MODE_ALWAYS = 0
   -- CLEAR_MODE_NEVER = 1

@@ -214,3 +214,20 @@ emitSignal signalEmitter signalName signalArgs = do
   --               -> IO (GodotVariant)  -- Some sort of exit code?
   G.emit_signal signalEmitter' signalName' signalArgs'
   return ()
+
+
+-- | This is equivalent to the old version of newNS' (formerly called unsafeNewNS)
+-- | from godot-extra. The way we were using the new version was causing type
+-- | casting errors, so we revert to the old one for now.
+newNS'' :: (GodotObject :< a)
+  => (GodotObject -> a) -> Text -> [Variant 'GodotTy] -> Text -> IO a
+newNS'' constr clsName args url = do
+  newNSOld constr clsName args url >>= \case
+    Just ns -> return ns
+    Nothing -> error $ "Error" -- "Could not instance the " ++ (unpack clsName) ++ " from " ++ (unpack url)
+  where
+    newNSOld constr clsName args url = do
+      load GodotNativeScript "NativeScript" url >>= \case
+        Just ns -> (G.new (ns :: GodotNativeScript) args :: IO GodotObject)
+          >>= asClass constr clsName
+        Nothing -> return Nothing

@@ -1,5 +1,9 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TypeFamilies #-}
+
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+
 module Plugin.Simula (GodotSimula(..)) where
 
 import           Plugin.Imports
@@ -16,6 +20,17 @@ import           Godot.Extra.Register
 import           Godot.Nativescript
 import qualified Godot.Gdnative.Internal.Api   as Api
 import qualified Godot.Methods                 as G
+
+import           Godot.Gdnative.Types
+import           Godot.Api
+import qualified Godot.Gdnative.Internal.Api   as Api
+import qualified Godot.Methods                 as G
+import           Godot.Internal.Dispatch                  ( (:<)
+                                                          , safeCast
+                                                          )
+import           Godot.Gdnative.Internal                  ( GodotNodePath
+                                                          , GodotObject
+                                                          )
 
 
 data GodotSimula = GodotSimula
@@ -73,13 +88,12 @@ ready self _ = do
  where
   addSimulaServerNode :: IO ()
   addSimulaServerNode = do
-    -- gwc <- "res://addons/godot-haskell-plugin/SimulaServer.gdns"
-    --   & unsafeNewNS GodotSpatial "Spatial" []
-    gssObj <- newNS' [] "res://addons/godot-haskell-plugin/SimulaServer.gdns"
-    gss <- Plugin.Imports.fromNativeScript gssObj :: IO GodotSpatial
+    gss <- "res://addons/godot-haskell-plugin/SimulaServer.gdns"
+      & newNS'' GodotSpatial "Spatial" []
 
     G.set_name gss =<< toLowLevel "SimulaServer"
     G.add_child self (asObj gss) True
+    return ()
 
   connectController :: GodotSimulaController -> IO ()
   connectController ct = do

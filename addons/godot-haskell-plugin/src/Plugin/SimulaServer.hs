@@ -193,7 +193,16 @@ addWlrChildren gss = do
   connectGodotSignal waylandDisplay "ready" gss "_on_WaylandDisplay_ready" []
   -- [connection signal="new_surface" from="WaylandDisplay/WlrXdgShell" to="." method="_on_WlrXdgShell_new_surface"]
   connectGodotSignal wlrXdgShell "new_surface" gss "_on_WaylandDisplay_new_surface" []
+
+  -- Test to manually set wayland compositor socket name:
+    -- socketNameManual <- toLowLevel (pack "godot-0")
+    -- G.set_socket_name waylandDisplay socketNameManual
+    -- godotStr <- G.get_socket_name waylandDisplay
+    -- txt <- fromLowLevel godotStr
+    -- putStrLn $ "socket name: " ++ (unpack txt)
   return ()
+
+
 
 -- | We first fill the TVars with dummy state, before updating them with their
 -- | real values in `ready`.
@@ -235,6 +244,7 @@ initGodotSimulaServer obj = do
 _on_WaylandDisplay_ready :: GFunc GodotSimulaServer
 _on_WaylandDisplay_ready gss vecOfGodotVariant = do
   --waylandDisplay <- getSimulaServerNodeFromPath gss "WaylandDisplay"
+  putStrLn "_on_WaylandDisplay_ready"
   waylandDisplay <- atomically $ readTVar (_gssWaylandDisplay gss)
   G.run waylandDisplay
   toLowLevel VariantNil

@@ -230,7 +230,7 @@ process self args = do
       let nodePathStr = "/root/Root/SimulaServer" -- I'm not 100% sure this is correct!
       nodePath <- (toLowLevel (pack nodePathStr))
       gssNode  <- G.get_node ((safeCast self) :: GodotNode) nodePath
-      gss      <- (fromNativeScript (safeCast gssNode)) :: IO GodotSimulaServer
+      gss      <- (fromNativeScript (safeCast gssNode)) :: IO GodotSimulaServer -- Recall we had trouble with this call in Simula.hs (see newNS''); it might actually work in this context, though.
       wlrSeat  <- readTVarIO (gss ^. gssWlrSeat)
 
       return wlrSeat

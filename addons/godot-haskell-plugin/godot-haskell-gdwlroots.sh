@@ -41,3 +41,32 @@ generateGodotHaskellGdwlroots() {
   cabal sdist
   mv ./dist/godot-haskell-3.1.0.0.tar.gz ../../godot-haskell-gdwlroots-3.1.0.0.tar.gz
 }
+
+
+generateGodotHaskellGdwlroots3.1() {
+    # Remove old files from last time this command ran
+    sudo rm -r godot
+    sudo rm ./godot-haskell-gdwlroots-3.1.0.0.tar.gz
+    sudo rm ./godot-3.1-gdwlroots.tar.gz
+
+    # Get Godot source code
+    wget -O godot-3.1-gdwlroots.tar.gz "https://github.com/lboklin/godot/archive/3.1-gdwlroots.tar.gz"
+    tar -xvf godot-3.1-gdwlroots.tar.gz
+    mv godot-3.1-gdwlroots godot
+
+    # Put Godot binary inside new source code
+    cd godot
+    mkdir bin
+    cd bin
+    wget -O godot.x11.opt.tools.64 "https://github.com/lboklin/godot/releases/download/3.1-gdwlroots/godot.x11.opt.tools.64"
+    cd ..
+
+    # Get godot-haskell-gdwlroots
+    git clone --recursive --branch gdwlroots-3.1 https://github.com/SimulaVR/godot-haskell.git godot-haskell-gdwlroots
+    cd godot-haskell-gdwlroots
+
+    # Create and place godot-haskell-gdwlroots-3.1.0.0.tar.gz
+    cabal sdist
+    mv ./dist/godot-haskell-3.1.0.0.tar.gz ../../godot-haskell-gdwlroots-3.1.0.0.tar.gz
+    cd ../..
+}
