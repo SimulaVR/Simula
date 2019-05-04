@@ -117,6 +117,7 @@ initializeSimulaCtxAndIncludes
 
 setInputHandled :: (GodotNode :< a) => a -> IO ()
 setInputHandled self = do
+  putStrLn "setInputHandled"
   st <- G.get_tree (safeCast self :: GodotNode)
   G.set_input_as_handled st
 

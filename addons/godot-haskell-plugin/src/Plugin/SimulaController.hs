@@ -252,6 +252,7 @@ physicsProcess self _ = do
 -- Ultimately should wrap a call to
 processTouchpadScroll :: GodotSimulaController -> GodotSimulaViewSprite -> GodotVector3 -> IO ()
 processTouchpadScroll ct gsvs pos = do
+  putStrLn "processTouchpadScroll"
   -- Get a bunch of needed state
   -- time <- getTime Realtime
   -- let msec = fromIntegral $ toNanoSecs time `div` 1000000

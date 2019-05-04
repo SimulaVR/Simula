@@ -60,6 +60,7 @@ instance HasBaseClass GodotSimula where
 
 ready :: GFunc GodotSimula
 ready self _ = do
+  putStrLn "ready in Simula.hs"
   addSimulaServerNode
 
   -- OpenHMD is unfortunately not yet a working substitute for OpenVR
@@ -93,6 +94,7 @@ ready self _ = do
 
     G.set_name gss =<< toLowLevel "SimulaServer"
     G.add_child self (asObj gss) True
+    -- G.print_tree ((safeCast gss) :: GodotNode)
     return ()
 
   connectController :: GodotSimulaController -> IO ()
@@ -117,6 +119,7 @@ ready self _ = do
 
 on_button_signal :: GFunc GodotSimula
 on_button_signal self args = do
+  putStrLn "on_button_signal in Simula.hs"
   case toList args of
     [buttonVar, controllerVar, pressedVar] -> do
       button <- fromGodotVariant buttonVar
@@ -129,7 +132,8 @@ on_button_signal self args = do
 
 
 onButton :: GodotSimula -> GodotSimulaController -> Int -> Bool -> IO ()
-onButton self gsc button pressed =
+onButton self gsc button pressed = do
+  putStrLn "onButton in Simula.hs"
   case (button, pressed) of
     (OVR_Button_Grip, False) -> -- Release grabbed
       readTVarIO gst
@@ -159,6 +163,7 @@ onButton self gsc button pressed =
 
 process :: GFunc GodotSimula
 process self _ = do
+  -- putStrLn "process in Simula.hs"
   let gst = _sGrabState self
   atomically (readTVar gst)
     >>= handleState

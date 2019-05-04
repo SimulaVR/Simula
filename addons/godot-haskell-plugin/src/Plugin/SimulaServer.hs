@@ -116,6 +116,7 @@ instance HasBaseClass GodotSimulaServer where
 
 ready :: GFunc GodotSimulaServer
 ready gss _ = do
+  putStrLn "ready in SimulaServer.hs"
   -- Set state / start compositor
   addWlrChildren gss
 
@@ -138,76 +139,71 @@ ready gss _ = do
   toLowLevel VariantNil
 
 -- | Populate the GodotSimulaServer's TVar's with Wlr types; connect some Wlr methods
--- | to their signals. This implicitly starts the compositor.
+-- | to their signals. NOTE: This implicitly starts the compositor.
 addWlrChildren :: GodotSimulaServer -> IO ()
 addWlrChildren gss = do
+  putStrLn "addWlrChildren"
   -- Here we assume gss is already a node in our scene tree.
+
+  -- WaylandDisplay
   waylandDisplay <- unsafeInstance GodotWaylandDisplay "WaylandDisplay"
+  setWaylandSocket waylandDisplay "simula-0"
+  atomically $ writeTVar (_gssWaylandDisplay gss) waylandDisplay
+  connectGodotSignal waylandDisplay "ready" gss "_on_WaylandDisplay_ready" [] -- [connection signal="ready" from="WaylandDisplay" to="." method="_on_WaylandDisplay_ready"]
   G.set_name waylandDisplay =<< toLowLevel "WaylandDisplay"
-  G.add_child gss ((safeCast waylandDisplay) :: GodotObject) True
+  G.add_child gss ((safeCast waylandDisplay) :: GodotObject) True -- Triggers "ready" signal, calls "_on_WaylandDisplay_ready", and starts the compositor
+
   -- We omit having ViewportBounds children
 
   -- Children of WaylandDisplay
   wlrDataDeviceManager <- unsafeInstance GodotWlrDataDeviceManager "WlrDataDeviceManager"
+  atomically $ writeTVar (_gssWlrDataDeviceManager gss) wlrDataDeviceManager
   G.set_name wlrDataDeviceManager =<< toLowLevel "WlrDataDeviceManager"
   G.add_child waylandDisplay ((safeCast wlrDataDeviceManager) :: GodotObject) True
 
   wlrBackend <- unsafeInstance GodotWlrBackend "WlrBackend"
+  atomically $ writeTVar (_gssWlrBackend gss) wlrBackend
   G.set_name wlrBackend =<< toLowLevel "WlrBackend"
   G.add_child waylandDisplay ((safeCast wlrBackend) :: GodotObject) True
 
   wlrXdgShell <- unsafeInstance GodotWlrXdgShell "WlrXdgShell"
+  connectGodotSignal wlrXdgShell "new_surface" gss "_on_WlrXdgShell_new_surface" [] -- [connection signal="new_surface" from="WaylandDisplay/WlrXdgShell" to="." method="_on_WlrXdgShell_new_surface"]
+  atomically $ writeTVar (_gssWlrXdgShell gss) wlrXdgShell
   G.set_name wlrXdgShell =<< toLowLevel "WlrXdgShell"
   G.add_child waylandDisplay ((safeCast wlrXdgShell) :: GodotObject) True
 
   wlrSeat <- unsafeInstance GodotWlrSeat "WlrSeat"
+  atomically $ writeTVar (_gssWlrSeat gss) wlrSeat
   G.set_name wlrSeat =<< toLowLevel "WlrSeat"
   G.add_child waylandDisplay ((safeCast wlrSeat) :: GodotObject) True
 
   wlrKeyboard <- unsafeInstance GodotWlrKeyboard "WlrKeyboard"
+  atomically $ writeTVar (_gssWlrKeyboard gss) wlrKeyboard
   G.set_name wlrKeyboard =<< toLowLevel "WlrKeyboard"
   G.add_child waylandDisplay ((safeCast wlrKeyboard) :: GodotObject) True
 
   -- Children of WlrBackend
   wlrOutput <- unsafeInstance GodotWlrOutput "WlrOutput"
+  atomically $ writeTVar (_gssWlrOutput gss) wlrOutput
   G.set_name wlrOutput =<< toLowLevel "WlrOutput"
   G.add_child wlrBackend ((safeCast wlrOutput) :: GodotObject) True
 
   wlrCompositor <- unsafeInstance GodotWlrCompositor "WlrCompositor"
+  atomically $ writeTVar (_gssWlrCompositor gss) wlrCompositor
   G.set_name wlrCompositor =<< toLowLevel "WlrCompositor"
   G.add_child wlrBackend ((safeCast wlrCompositor) :: GodotObject) True
 
-  -- Update GodotSimulaServer's TVars
-  atomically $ writeTVar (_gssWaylandDisplay gss) waylandDisplay
-  atomically $ writeTVar (_gssWlrBackend gss) wlrBackend
-  atomically $ writeTVar (_gssWlrOutput gss) wlrOutput
-  atomically $ writeTVar (_gssWlrCompositor gss) wlrCompositor
-  atomically $ writeTVar (_gssWlrXdgShell gss) wlrXdgShell
-  atomically $ writeTVar (_gssWlrSeat gss) wlrSeat
-  atomically $ writeTVar (_gssWlrDataDeviceManager gss) wlrDataDeviceManager
-  atomically $ writeTVar (_gssWlrKeyboard gss) wlrKeyboard
-
-  -- Connect signals from Wlr types to their methods
-
-  -- [connection signal="ready" from="WaylandDisplay" to="." method="_on_WaylandDisplay_ready"]
-  connectGodotSignal waylandDisplay "ready" gss "_on_WaylandDisplay_ready" []
-  -- [connection signal="new_surface" from="WaylandDisplay/WlrXdgShell" to="." method="_on_WlrXdgShell_new_surface"]
-  connectGodotSignal wlrXdgShell "new_surface" gss "_on_WaylandDisplay_new_surface" []
-
-  -- Test to manually set wayland compositor socket name:
-    -- socketNameManual <- toLowLevel (pack "godot-0")
-    -- G.set_socket_name waylandDisplay socketNameManual
-    -- godotStr <- G.get_socket_name waylandDisplay
-    -- txt <- fromLowLevel godotStr
-    -- putStrLn $ "socket name: " ++ (unpack txt)
   return ()
-
-
+  where setWaylandSocket :: GodotWaylandDisplay -> String -> IO ()
+        setWaylandSocket waylandDisplay socketName = do
+          socketName' <- toLowLevel (pack socketName)
+          G.set_socket_name waylandDisplay socketName'
 
 -- | We first fill the TVars with dummy state, before updating them with their
 -- | real values in `ready`.
 initGodotSimulaServer :: GodotObject -> IO (GodotSimulaServer)
 initGodotSimulaServer obj = do
+  putStrLn "initGodotSimulaServer"
   gssWaylandDisplay'       <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar GodotWaylandDisplay)
   gssWlrBackend'           <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar GodotWlrBackend)
   gssWlrOutput'            <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar GodotWlrOutput)
@@ -243,14 +239,15 @@ initGodotSimulaServer obj = do
 
 _on_WaylandDisplay_ready :: GFunc GodotSimulaServer
 _on_WaylandDisplay_ready gss vecOfGodotVariant = do
-  --waylandDisplay <- getSimulaServerNodeFromPath gss "WaylandDisplay"
   putStrLn "_on_WaylandDisplay_ready"
+  --waylandDisplay <- getSimulaServerNodeFromPath gss "WaylandDisplay"
   waylandDisplay <- atomically $ readTVar (_gssWaylandDisplay gss)
   G.run waylandDisplay
   toLowLevel VariantNil
 
 _on_WlrXdgShell_new_surface :: GFunc GodotSimulaServer
 _on_WlrXdgShell_new_surface gss args = do
+  putStrLn "_on_WlrXdgShell_new_surface"
   case toList args of
     [wlrXdgSurfaceVariant] -> do
       wlrXdgSurface <- fromGodotVariant wlrXdgSurfaceVariant :: IO GodotWlrXdgSurface -- Not sure if godot-haskell provides this for us
@@ -303,6 +300,7 @@ _on_WlrXdgShell_new_surface gss args = do
 
 handle_map_surface :: GFunc GodotSimulaServer
 handle_map_surface gss args = do
+  putStrLn "handle_map_surface"
   case toList args of
     [gsvsVariant] -> do -- Unlike in Godotston, we assume this function gives us a GodotSimulaViewSprite
        maybeGsvs <- variantToReg gsvsVariant :: IO (Maybe GodotSimulaViewSprite)
@@ -316,6 +314,7 @@ handle_map_surface gss args = do
 
 handle_unmap_surface :: GFunc GodotSimulaServer
 handle_unmap_surface gss args = do
+  putStrLn "handle_unmap_surface"
   case toList args of
     [gsvsVariant] -> do -- Unlike in Godotston, we assume this function gives us a GodotSimulaViewSprite
        maybeGsvs <- variantToReg gsvsVariant :: IO (Maybe GodotSimulaViewSprite)
@@ -329,6 +328,7 @@ handle_unmap_surface gss args = do
 
 _on_wlr_key :: GFunc GodotSimulaServer
 _on_wlr_key gss args = do
+  putStrLn "_on_wlr_key"
   case toList args of
     [keyboardGVar, eventGVar] -> do
       wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
@@ -338,6 +338,7 @@ _on_wlr_key gss args = do
 
 _on_wlr_modifiers :: GFunc GodotSimulaServer
 _on_wlr_modifiers gss args = do
+  putStrLn "_on_wlr_modifiers"
   case toList args of
     [keyboardGVar] -> do
       wlrSeat <- readTVarIO (gss ^. gssWlrSeat)

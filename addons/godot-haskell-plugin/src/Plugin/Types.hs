@@ -138,6 +138,7 @@ connectGodotSignal :: (GodotObject :< source) -- , GodotObject :< method_object)
                    -> [GodotVariant]       -- default arguments to supply to method (jammed /after/ manual arguments supplied)
                    -> IO (Int)                --
 connectGodotSignal sourceObj signalName methodObj methodName defaultArgs = do
+  putStrLn "connectGodotSignal"
   let sourceObj' = safeCast sourceObj      :: GodotObject
   signalName'    <- (toLowLevel (pack signalName))  :: IO GodotString
   let methodObj' =  safeCast methodObj     :: GodotObject
@@ -205,6 +206,7 @@ emitSignal :: (GodotObject :< a)
            -> [b]    -- Arguments emitted (must be registered types that inherit from GodotObject like i.e. GodotSimulaViewSprite)
            -> IO ()
 emitSignal signalEmitter signalName signalArgs = do
+  putStrLn "emitSignal"
   let signalEmitter' = (safeCast signalEmitter) :: GodotObject
   signalName'        <- toLowLevel (pack signalName) :: IO GodotString
   signalArgs'        <- mapM regToVariant signalArgs

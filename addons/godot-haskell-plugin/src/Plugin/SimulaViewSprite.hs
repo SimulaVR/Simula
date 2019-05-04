@@ -118,6 +118,7 @@ instance HasBaseClass GodotSimulaViewSprite where
 -- | Intended to be called every frame.
 updateSimulaViewSprite :: GodotSimulaViewSprite -> IO ()
 updateSimulaViewSprite gsvs = do
+  putStrLn "updateSimulaViewSprite"
   -- Update sprite texture; doesn't yet include popups or other subsurfaces.
   drawParentWlrSurfaceTextureOntoSprite gsvs
     -- drawSurfacesOnSprite gsvs
@@ -263,11 +264,13 @@ updateSimulaViewSprite gsvs = do
 
 ready :: GFunc GodotSimulaViewSprite
 ready self _ = do
+  putStrLn "ready in SimulaViewSprite.hs"
   G.set_mode self RigidBody.MODE_KINEMATIC
   toLowLevel VariantNil
 
 inputEvent :: GFunc GodotSimulaViewSprite
 inputEvent self args = do
+  putStrLn "inputEvent in SimulaViewSprite.hs"
   case toList args of
     [_cam, evObj, clickPosObj, _clickNormal, _shapeIdx] ->  do
       ev <- fromGodotVariant evObj
@@ -286,6 +289,7 @@ data InputEventType
 -- | Handles mouse (i.e., non-VR controller) events in pancake mode.
 processInputEvent :: GodotSimulaViewSprite -> GodotObject -> GodotVector3 -> IO ()
 processInputEvent gsvs ev clickPos = do
+  putStrLn "processInputEvent"
   whenM (ev `isClass` "InputEventMouseMotion") $ processClickEvent gsvs Motion clickPos
   whenM (ev `isClass` "InputEventMouseButton") $ do
     let ev' = GodotInputEventMouseButton (coerce ev)
@@ -297,6 +301,7 @@ processInputEvent gsvs ev clickPos = do
 -- | to GodotSimulaServer + GodotWlrXdgSurface).
 newGodotSimulaViewSprite :: GodotSimulaServer -> SimulaView -> IO (GodotSimulaViewSprite)
 newGodotSimulaViewSprite gss simulaView = do
+  putStrLn "newGodotSimulaViewSprite"
   gsvs <- "res://addons/godot-haskell-plugin/SimulaViewSprite.gdns"
     & newNS' []
     >>= godot_nativescript_get_userdata
@@ -329,6 +334,7 @@ newGodotSimulaViewSprite gss simulaView = do
 
 focus :: GodotSimulaViewSprite -> IO ()
 focus gsvs = do
+  putStrLn "focus in SimulaViewSprite.hs"
   -- Get state:
   simulaView  <- atomically $ readTVar (gsvs ^. gsvsView) 
   let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
@@ -354,6 +360,7 @@ processClickEvent :: GodotSimulaViewSprite
                   -> GodotVector3
                   -> IO ()
 processClickEvent gsvs evt clickPos = do
+  putStrLn "processClickEvent"
   -- Get state
   gss        <- readTVarIO (gsvs ^. gsvsServer)
   wlrSeat    <- readTVarIO (gss ^. gssWlrSeat)
@@ -438,6 +445,7 @@ processClickEvent gsvs evt clickPos = do
 
 _handle_map :: GFunc GodotSimulaViewSprite
 _handle_map self args = do
+  putStrLn "_handle_map"
   case toList args of
     [gsvsGV] ->  do
       G.set_process self True
@@ -453,6 +461,7 @@ _handle_map self args = do
 
 _handle_unmap :: GFunc GodotSimulaViewSprite
 _handle_unmap self args = do
+  putStrLn "_handle_unmap"
   case toList args of
     [gsvsGV] ->  do
       maybeGsvs <- variantToReg gsvsGV :: IO (Maybe GodotSimulaViewSprite)
@@ -471,6 +480,7 @@ _handle_unmap self args = do
 -- Passes control entirely to updateSimulaViewSprite.
 _process :: GFunc GodotSimulaViewSprite
 _process self args = do
+  putStrLn "_process"
   case toList args of
     [deltaGV] ->  do
       updateSimulaViewSprite self
@@ -485,6 +495,7 @@ _process self args = do
 --    GodotSimulaViewSprite that calls to `queue_free` can use.
 _handle_destroy :: GFunc GodotSimulaViewSprite
 _handle_destroy self args = do
+  putStrLn "_handle_destroy"
   case toList args of
     [gsvsGV] ->  do
       -- Get state
@@ -525,6 +536,7 @@ _handle_destroy self args = do
 
 initializeRenderTarget :: GodotWlrXdgSurface -> IO (GodotViewport)
 initializeRenderTarget wlrXdgSurface = do
+  putStrLn "initializeRenderTarget"
   -- "When we are drawing to a Viewport that is not the Root, we call it a
   --  render target." -- Godot documentation"
   renderTarget <- unsafeInstance GodotViewport "Viewport"
@@ -582,6 +594,7 @@ initializeRenderTarget wlrXdgSurface = do
 
 getBufferDimensions :: GodotWlrXdgSurface -> IO (Int, Int)
 getBufferDimensions wlrXdgSurface = do
+  putStrLn "getBufferDimensions"
   wlrSurface <- G.get_wlr_surface wlrXdgSurface
   wlrSurfaceState <- G.get_current_state wlrSurface
   bufferWidth <- G.get_buffer_width wlrSurfaceState
@@ -592,9 +605,9 @@ getBufferDimensions wlrXdgSurface = do
 
 getTextureFromRenderTarget :: GodotViewport -> IO (GodotTexture)
 getTextureFromRenderTarget renderTarget = do
-    viewportTexture' <- G.get_texture renderTarget -- G.get_texture :: GodotViewport -> (IO GodotViewportTexture)
-    let viewportTexture = (safeCast viewportTexture) :: GodotTexture -- GodotTexture :< GodotViewportTexture
-    -- -- Retrieving an image
-    -- G.get_data viewportTexture :: IO GodotImage -- requires viewportTexture to be cast as GodotTexture
-    return viewportTexture
-
+  putStrLn "getTextureFromRenderTarget"
+  viewportTexture' <- G.get_texture renderTarget -- G.get_texture :: GodotViewport -> (IO GodotViewportTexture)
+  let viewportTexture = (safeCast viewportTexture) :: GodotTexture -- GodotTexture :< GodotViewportTexture
+  -- -- Retrieving an image
+  -- G.get_data viewportTexture :: IO GodotImage -- requires viewportTexture to be cast as GodotTexture
+  return viewportTexture
