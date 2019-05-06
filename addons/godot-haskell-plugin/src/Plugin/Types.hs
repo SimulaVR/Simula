@@ -11,6 +11,7 @@ module Plugin.Types where
 
 import           Control.Monad
 import           Data.Coerce
+import           Unsafe.Coerce
 
 import           Data.Typeable
 import           Godot.Gdnative.Types
@@ -233,3 +234,15 @@ newNS'' constr clsName args url = do
         Just ns -> (G.new (ns :: GodotNativeScript) args :: IO GodotObject)
           >>= asClass constr clsName
         Nothing -> return Nothing
+
+-- | Unsafe helper function to determine if a Godot type is null.
+isGodotTypeNull :: (Typeable a) => a -> IO ()
+isGodotTypeNull godotValue = do
+  let isNull = ((unsafeCoerce godotValue) == nullPtr)
+  putStrLn $ (show (typeOf godotValue)) ++ ": " ++ (show isNull)
+
+isGodotTypeNullErr :: (Typeable a) => a -> IO ()
+isGodotTypeNullErr godotValue = do
+  let isNull = ((unsafeCoerce godotValue) == nullPtr)
+  if isNull then error $ "isGodotTypeNull: True"
+            else putStrLn $ (show (typeOf godotValue)) ++ ": False"

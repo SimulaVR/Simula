@@ -99,6 +99,7 @@ ready self _ = do
 
   connectController :: GodotSimulaController -> IO ()
   connectController ct = do
+    putStrLn "connectController"
     argsPressed <- Api.godot_array_new
     Api.godot_array_append argsPressed =<< toLowLevel (toVariant $ asObj ct)
     Api.godot_array_append argsPressed =<< toLowLevel (toVariant True)

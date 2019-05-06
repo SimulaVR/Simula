@@ -120,14 +120,18 @@ updateSimulaViewSprite :: GodotSimulaViewSprite -> IO ()
 updateSimulaViewSprite gsvs = do
   putStrLn "updateSimulaViewSprite"
   -- Update sprite texture; doesn't yet include popups or other subsurfaces.
+  putStrLn "1"
   drawParentWlrSurfaceTextureOntoSprite gsvs
     -- drawSurfacesOnSprite gsvs
 
+  putStrLn "2"
   -- Set extents
   setExtents gsvs
+  putStrLn "3"
 
   -- Move if needed
   whenM (spriteShouldMove gsvs) $ do
+    putStrLn "4"
     atomically $ writeTVar (_gsvsShouldMove gsvs) False
     moveToUnoccupied gsvs
 
@@ -143,6 +147,7 @@ updateSimulaViewSprite gsvs = do
           let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
           wlrSurface <- G.get_wlr_surface wlrXdgSurface -- G.get_wlr_surface :: GodotWlrXdgSurface -> IO (GodotWlrSurface)
           parentWlrTexture <- G.get_texture wlrSurface -- G.get_texture :: GodotWlrSurface -> IO (GodotTexture)
+          isGodotTypeNull parentWlrTexture
 
           -- Set Sprite3D texture
           G.set_texture sprite3D parentWlrTexture
@@ -168,6 +173,7 @@ updateSimulaViewSprite gsvs = do
         spriteShouldMove gsvs = do
           en <- atomically $ readTVar (_gsvsShouldMove gsvs)
           if en then do
+            putStrLn "spriteShouldMove"
             sprite <- atomically $ readTVar (_gsvsSprite gsvs)
             aabb <- G.get_aabb sprite
             size <- godot_aabb_get_size aabb
@@ -178,6 +184,7 @@ updateSimulaViewSprite gsvs = do
         -- TODO: check the origin plane?
         moveToUnoccupied :: GodotSimulaViewSprite -> IO ()
         moveToUnoccupied gsvs = do
+          putStrLn "moveToUnoccupied"
           gss <- readTVarIO (gsvs ^. gsvsServer)
           viewMap <- atomically $ readTVar (_gssViews gss)
           let otherGsvs = filter (\x -> asObj x /= asObj gsvs) $ M.elems viewMap
@@ -214,6 +221,7 @@ updateSimulaViewSprite gsvs = do
                                   -> CInt
                                   -> IO ()
         drawSubsurfaceOnViewport gsvs wlrSurface sx sy = do
+          putStrLn "drawSubsurfaceOnViewport"
           -- Get state
           simulaView <- readTVarIO (gsvs ^. gsvsView)
           let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
@@ -234,6 +242,7 @@ updateSimulaViewSprite gsvs = do
         -- | Convert (sx,sy) coordinates from "top-left" to "from-center" coordinate systems.
         getCoordinatesFromCenter :: GodotWlrXdgSurface -> CInt -> CInt -> IO GodotVector2
         getCoordinatesFromCenter wlrXdgSurface sx sy = do
+          putStrLn "getCoordinatesFromCenter"
           (bufferWidth', bufferHeight')    <- getBufferDimensions wlrXdgSurface
           let (bufferWidth, bufferHeight)  = (fromIntegral bufferWidth', fromIntegral bufferHeight')
           let (fromTopLeftX, fromTopLeftY) = (fromIntegral sx, fromIntegral sy)
@@ -252,6 +261,7 @@ updateSimulaViewSprite gsvs = do
         -- TODO: Implement this function
         drawSurfacesOnSprite :: GodotSimulaViewSprite -> IO ()
         drawSurfacesOnSprite gsvs = do
+           putStrLn "drawSurfacesOnSprite"
            simulaView <- readTVarIO (gsvs ^. gsvsView)
            let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
            -- listOfWlrSurface <- getSubsurfaces wlrXdgSurface -- getSurfaces :: GodotWlrXdgSurface -> IO [(WlrSurface, sx, sy)]
@@ -417,7 +427,7 @@ processClickEvent gsvs evt clickPos = do
       let maybeWlrSurfaceGV = (fromVariant ((toVariant wlrSurface) :: Variant 'GodotTy) :: Maybe GodotVariant)
       case maybeWlrSurfaceGV of
           Nothing -> putStrLn "Failed to convert GodotWlrSurface to GodotVariant!"
-          Just wlrSurfaceGV -> G.pointer_notify_enter wlrSeat wlrSurfaceGV ssx ssy
+          Just wlrSurfaceGV -> G.pointer_notify_enter wlrSeat wlrSurfaceGV ssx ssy -- Causing a crash
 
     -- | This function conspiciously lacks a GodotWlrSurface argument, but doesn't
     -- | need one since the GodotWlrSeat keeps internal track of what the currently
@@ -480,7 +490,7 @@ _handle_unmap self args = do
 -- Passes control entirely to updateSimulaViewSprite.
 _process :: GFunc GodotSimulaViewSprite
 _process self args = do
-  putStrLn "_process"
+  -- putStrLn "_process in SimulaViewSprite.hs"
   case toList args of
     [deltaGV] ->  do
       updateSimulaViewSprite self

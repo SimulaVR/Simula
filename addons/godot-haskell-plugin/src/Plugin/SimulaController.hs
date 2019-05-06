@@ -105,30 +105,27 @@ loadOpenVRControllerMesh :: Text -> IO (Maybe GodotMesh)
 loadOpenVRControllerMesh name = do
   -- "res://addons/godot-openvr/OpenVRRenderModel.gdns"
   --   & newNS GodotArrayMesh "ArrayMesh" [] >>= \case
-  maybeObj <- newNS [] "res://addons/godot-openvr/OpenVRRenderModel.gdns" 
-  case maybeObj of
-      Nothing  ->
-        Nothing <$ godotPrint "Couldn't find an OpenVR render model."
 
-      Just obj -> do
-        msh <- Plugin.Imports.fromNativeScript obj :: IO GodotArrayMesh
-        loadModelStr <- toLowLevel "load_model"
-        nameStr :: GodotString <- toLowLevel $ T.dropEnd 2 name
-        ret <- G.call msh loadModelStr [toVariant nameStr] >>= fromGodotVariant
-        if ret
-          then return $ Just $ safeCast msh
-          else do
-            genericControllerStr :: GodotString <- toLowLevel "generic_controller"
-            ret' <- G.call msh loadModelStr [toVariant genericControllerStr]
-              >>= fromGodotVariant
-            if ret'
-              then return $ Just $ safeCast msh
-              else return Nothing
+  msh <- "res://addons/godot-openvr/OpenVRRenderModel.gdns"
+    & newNS'' GodotArrayMesh "ArrayMesh" []
 
+  loadModelStr <- toLowLevel "load_model"
+  nameStr :: GodotString <- toLowLevel $ T.dropEnd 2 name
+  ret <- G.call msh loadModelStr [toVariant nameStr] >>= fromGodotVariant
+  if ret
+    then return $ Just $ safeCast msh
+    else do
+      genericControllerStr :: GodotString <- toLowLevel "generic_controller"
+      ret' <- G.call msh loadModelStr [toVariant genericControllerStr]
+        >>= fromGodotVariant
+      if ret'
+        then return $ Just $ safeCast msh
+        else return Nothing
 
 -- Because the ARVRController member method is_button_pressed returns Int, not Bool
 isButtonPressed :: Int -> GodotSimulaController -> IO Bool
 isButtonPressed btnId gsc = do
+  putStrLn "isButtonPressed"
   ctId <- G.get_joystick_id $ (safeCast gsc :: GodotARVRController)
   getSingleton GodotInput "Input" >>= \inp -> G.is_joy_button_pressed inp ctId btnId
 
@@ -136,6 +133,7 @@ isButtonPressed btnId gsc = do
 -- | Get the window pointed at if any.
 pointerWindow :: GodotSimulaController -> IO (Maybe GodotSimulaViewSprite)
 pointerWindow gsc = do
+  putStrLn "pointerWindow"
   isColliding <- G.is_colliding $ _gscRayCast gsc
   if isColliding
     then G.get_collider (_gscRayCast gsc) >>= tryObjectCast @GodotSimulaViewSprite
@@ -144,6 +142,7 @@ pointerWindow gsc = do
 -- | Change the scale of the grabbed object
 rescale :: GodotSimulaController -> Float -> IO ()
 rescale ct delta = do
+  putStrLn "rescale"
   curPos <- V2 <$> (ct `G.get_joystick_axis` 0) <*> (ct `G.get_joystick_axis` 1)
 
   _tkBody <$> (readTVarIO (_gscTelekinesis ct)) >>= \case
@@ -178,11 +177,16 @@ rescale ct delta = do
 
 addSimulaController :: GodotARVROrigin -> Text -> Int -> IO GodotSimulaController
 addSimulaController originNode nodeName ctID = do
+  putStrLn "addSimulaController"
+  -- Requires too "large" of a type constructor:
+  -- ct <- "res://addons/godot-haskell-plugin/SimulaController.gdns"
+  --       & newNS'' GodotSimulaController "SimulaController" []
+
+  -- Casts type properly; passes putStrLn inspection test:
   ct <- "res://addons/godot-haskell-plugin/SimulaController.gdns"
-    & newNS' []
-    -- TODO: Make this implicit in newNS (godot-extra)?
-    >>= Api.godot_nativescript_get_userdata
-    >>= deRefStablePtr . castPtrToStablePtr
+        & newNS'' id "Object" []
+        >>= Api.godot_nativescript_get_userdata
+        >>= deRefStablePtr . castPtrToStablePtr
 
   G.add_child originNode (safeCast ct) True
 
@@ -227,6 +231,7 @@ process self args = do
   where
     getWlrSeatFromPath :: GodotSimulaController -> IO GodotWlrSeat
     getWlrSeatFromPath self = do
+      putStrLn "getWlrSeatFromPath"
       let nodePathStr = "/root/Root/SimulaServer" -- I'm not 100% sure this is correct!
       nodePath <- (toLowLevel (pack nodePathStr))
       gssNode  <- G.get_node ((safeCast self) :: GodotNode) nodePath

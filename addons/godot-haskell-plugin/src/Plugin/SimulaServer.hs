@@ -262,11 +262,6 @@ _on_WlrXdgShell_new_surface gss args = do
                   -- Mutate the server with our updated state
                   atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
 
-                  -- Add the gsvs as a child to the SimulaServer
-                  G.add_child ((safeCast gss) :: GodotNode )
-                              ((safeCast gsvs) :: GodotObject)
-                              True
-
                   --surface.connect("map", self, "handle_map_surface")
                   connectGodotSignal gsvs "map" gss "handle_map_surface" []
                   --surface.connect("unmap", self, "handle_unmap_surface")
@@ -280,8 +275,13 @@ _on_WlrXdgShell_new_surface gss args = do
                   -- xdg_surface.connect("unmap", self, "_handle_unmap"):
                   connectGodotSignal gsvs "unmap" gsvs "_handle_unmap" []
 
+                  -- Add the gsvs as a child to the SimulaServer
+                  G.add_child ((safeCast gss) :: GodotNode )
+                              ((safeCast gsvs) :: GodotObject)
+                              True
+
                   -- Handles 2D window movement across a viewport; not needed:
-                  -- toplevel.connect("request_move", self, "_handle_request_move") 
+                  -- toplevel.connect("request_move", self, "_handle_request_move")
                   toLowLevel VariantNil
 
    where newSimulaView :: GodotSimulaServer -> GodotWlrXdgSurface -> IO (SimulaView)
