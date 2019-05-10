@@ -17,6 +17,7 @@ import Data.Colour.SRGB.Linear
 
 import Control.Monad
 import Data.Coerce
+import Unsafe.Coerce
 
 import           Linear
 import           Plugin.Imports
@@ -70,15 +71,6 @@ import qualified Data.Map.Strict as M
 
 C.initializeSimulaCtxAndIncludes
 
--- | Helper function to convert Haskell timestamps to milliseconds (which wlroots expects) for C marshalling.
-toMsec32 :: TimeSpec -> IO (Word32)
-toMsec32 timeSpec = do
-  let msec = fromIntegral $ toNanoSecs timeSpec `div` 1000000
-  return msec
-
-toTimeSpec :: (Integral a) => a -> TimeSpec
-toTimeSpec word = (let nsec = (fromIntegral word) * 1000000 in fromNanoSecs nsec)
-
 instance Eq GodotSimulaViewSprite where
   (==) = (==) `on` _gsvsObj
 
@@ -120,22 +112,75 @@ updateSimulaViewSprite :: GodotSimulaViewSprite -> IO ()
 updateSimulaViewSprite gsvs = do
   putStrLn "updateSimulaViewSprite"
   -- Update sprite texture; doesn't yet include popups or other subsurfaces.
-  putStrLn "1"
   drawParentWlrSurfaceTextureOntoSprite gsvs
+    -- useViewportToDrawParentSurface gsvs -- Causes _draw() error
     -- drawSurfacesOnSprite gsvs
 
-  putStrLn "2"
   -- Set extents
   setExtents gsvs
-  putStrLn "3"
 
   -- Move if needed
   whenM (spriteShouldMove gsvs) $ do
-    putStrLn "4"
     atomically $ writeTVar (_gsvsShouldMove gsvs) False
     moveToUnoccupied gsvs
 
+  -- Manually call _queue_update (doesn't fix black textures)
+    -- sprite3D <- readTVarIO (gsvs ^. gsvsSprite)
+    -- G._queue_update sprite3D -- ((safeCast gsvs) :: GodotSpriteBase3D )-- :: GodotSpriteBase3D IO ()
+  return ()
+
   where
+        -- Doesn't work; raises _draw() error.
+        useViewportToDrawParentSurface :: GodotSimulaViewSprite -> IO ()
+        useViewportToDrawParentSurface gsvs  = do
+          putStrLn "drawParentSubsurfaceOnViewport"
+          -- Get state
+          sprite3D <- readTVarIO (gsvs ^. gsvsSprite)
+          simulaView <- readTVarIO (gsvs ^. gsvsView)
+          let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
+          wlrSurface <- G.get_wlr_surface wlrXdgSurface -- G.get_wlr_surface :: GodotWlrXdgSurface -> IO (GodotWlrSurface)
+          parentWlrTexture <- G.get_texture wlrSurface -- G.get_texture :: GodotWlrSurface -> IO (GodotTexture)
+
+          -- Draw texture on Viewport; get its texture; set it to Sprite3D's texture; call G.send_frame_done
+          let isNull = ((unsafeCoerce parentWlrTexture) == nullPtr)
+          case isNull of
+               True -> putStrLn "Texture is null!"
+               False -> do renderTarget <- initializeRenderTarget wlrXdgSurface     -- Dumb, but we reset the renderTarget every frame to make sure the dimensions aren't (0,0)
+                           atomically $ writeTVar (_gsvsViewport gsvs) renderTarget -- "
+                           -- Get state
+                           -- let zero = (V2 0 0) :: V2 Float
+                           -- gv2 <- toLowLevel zero :: IO GodotVector2
+                           -- return zero
+                           renderPosition <- getCoordinatesFromCenter wlrXdgSurface 0 0 -- Surface coordinates are relative to the size of the GodotWlrXdgSurface; We draw at the top left.
+
+                           textureToDraw <- G.get_texture wlrSurface :: IO GodotTexture
+                           renderTarget <- readTVarIO (gsvs ^. gsvsViewport)
+
+                             -- Send draw command
+                           godotColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1) :: IO GodotColor
+                           let nullTexture = Data.Maybe.fromJust ((fromVariant VariantNil) :: Maybe GodotTexture) :: GodotTexture
+                           G.draw_texture ((unsafeCoerce renderTarget) :: GodotCanvasItem) textureToDraw renderPosition godotColor nullTexture
+                           viewportTexture <- G.get_texture renderTarget
+                           G.set_texture sprite3D (safeCast viewportTexture)
+                           -- Tell the surface being drawn it can start to render its next frame
+                           G.send_frame_done wlrSurface
+
+        -- Doesn't work in Simula or Godotston
+        saveTextureToDisk :: GodotWlrXdgSurface -> GodotTexture -> IO ()
+        saveTextureToDisk wlrXdgSurface texture = do
+            let isNull = ((unsafeCoerce texture) == nullPtr)
+            case isNull of
+                True -> putStrLn "Texture is null!"
+                False -> do rid <- G.get_rid texture
+                            isGodotTypeNull rid
+                            visualServer <- getSingleton GodotVisualServer "VisualServer"
+                            getBufferDimensions wlrXdgSurface
+                            image <- G.texture_get_data visualServer rid 0
+
+                            url <- toLowLevel (pack "res://SimulaTexture.png") :: IO GodotString
+                            exitCode <- G.save_png image url
+                            return ()
+
         -- As the name makes clear, this function *only* draws the parent WlrSurface
         -- onto a GodotSimulaViewSprite's Sprite3D field. It doesn't include popups or
         -- any other subsurfaces. This is a temporary hack that needs fixed.
@@ -147,13 +192,41 @@ updateSimulaViewSprite gsvs = do
           let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
           wlrSurface <- G.get_wlr_surface wlrXdgSurface -- G.get_wlr_surface :: GodotWlrXdgSurface -> IO (GodotWlrSurface)
           parentWlrTexture <- G.get_texture wlrSurface -- G.get_texture :: GodotWlrSurface -> IO (GodotTexture)
-          isGodotTypeNull parentWlrTexture
 
+          -- saveTextureToDisk wlrXdgSurface parentWlrTexture -- Causes crash
           -- Set Sprite3D texture
-          G.set_texture sprite3D parentWlrTexture
+          let isNull = ((unsafeCoerce parentWlrTexture) == nullPtr)
+          case isNull of
+               True -> putStrLn "Texture is null!"
+               False -> G.set_texture sprite3D parentWlrTexture
+
+          -- Failed texture jamming test:
+            -- sampleTexture <- getTextureFromURL "res://sample_texture.png"
+            -- G.set_texture sprite3D sampleTexture
+
+          -- Failed texture extraction test:
+            -- textureImage <- G.get_data sampleTexture -- parentWlrTexture :: IO (GodotImage) -- Causes crash
+            -- url <- toLowLevel (pack "/home/george/Downloads/SimulaTexture.png") :: IO GodotString
+            -- exitCode <- G.save_png textureImage url -- G.save_png GodotImage -> GodotString -> IO Int
+            -- putStrLn $ "G.save_png exit code: " ++ (show exitCode)
 
           -- Tell client surface it should start rendering the next frame
           G.send_frame_done wlrSurface
+
+        getTextureFromURL :: String -> IO (GodotTexture)
+        getTextureFromURL urlStr = do
+          -- instance new types
+          godotImage <- unsafeInstance GodotImage "Image" :: IO GodotImage
+          godotImageTexture <- unsafeInstance GodotImageTexture "ImageTexture"
+
+          -- Get image from URL
+          pngUrl <- toLowLevel (pack urlStr) :: IO GodotString
+          exitCode <- G.load godotImageTexture pngUrl -- load :: GodotImageTexture -> GodotString -> IO Int
+
+          -- Load image into texture
+          G.create_from_image godotImageTexture godotImage 7 -- uses FLAGS_DEFAULT = 7
+
+          return (safeCast godotImageTexture) -- NOTE: This [probably] leaks godotImage?
 
         setExtents :: GodotSimulaViewSprite -> IO ()
         setExtents gsvs = do
@@ -380,7 +453,7 @@ processClickEvent gsvs evt clickPos = do
 
   -- Compute subsurface local coordinates at clickPos
   surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)) <- getSurfaceLocalCoordinates
-  (godotWlrSurface, subSurfaceLocalCoords@(SubSurfaceLocalCoordinates (ssx, ssy))) <- getSubsurfaceAndCoords godotWlrXdgSurface surfaceLocalCoords
+  (godotWlrSurface, subSurfaceLocalCoords@(SubSurfaceLocalCoordinates (ssx, ssy))) <- getSubsurfaceAndCoords godotWlrXdgSurface surfaceLocalCoords -- This function is a hack that only returns parent surface + its coordinates; needs fixing.
 
   -- -- Send events
   case evt of
@@ -410,14 +483,18 @@ processClickEvent gsvs evt clickPos = do
       return (SurfaceLocalCoordinates (sx, sy))
 
     -- | Takes a GodotWlrXdgSurface and returns the subsurface at point (which is likely the surface itself, or one of its popups).
+    -- | TODO: This function just returns parent surface/coords. Fix!
     getSubsurfaceAndCoords :: GodotWlrXdgSurface -> SurfaceLocalCoordinates -> IO (GodotWlrSurface, SubSurfaceLocalCoordinates)
     getSubsurfaceAndCoords wlrXdgSurface (SurfaceLocalCoordinates (sx, sy)) = do
-      wlrSurfaceAtResult   <- G.surface_at  wlrXdgSurface sx sy
-      wlrSurfaceSubSurface <- G.get_surface wlrSurfaceAtResult
-      ssx                  <- G.get_sub_x wlrSurfaceAtResult
-      ssy                  <- G.get_sub_y wlrSurfaceAtResult
-      let ssCoordinates    = SubSurfaceLocalCoordinates (ssx, ssy)
-      return (wlrSurfaceSubSurface, ssCoordinates)
+      -- BROKEN since G.surface_at is broken (which causes G.get_surface to be broken).
+      -- wlrSurfaceAtResult   <- G.surface_at  wlrXdgSurface sx sy -- Not NULL itself, but the wlr_surface within this data structure is NULL due to ~wlr_xdg_surface_surface_at(wlr_xdg_surface, ..)~ being NULL (but not because wlr_xdg_surface is NULL).
+      -- wlrSurfaceSubSurface <- G.get_surface wlrSurfaceAtResult
+      -- ssx                  <- G.get_sub_x wlrSurfaceAtResult
+      -- ssy                  <- G.get_sub_y wlrSurfaceAtResult
+      -- let ssCoordinates    = SubSurfaceLocalCoordinates (ssx, ssy)
+      -- return (wlrSurfaceSubSurface, ssCoordinates)
+      wlrSurfaceParent <- G.get_wlr_surface wlrXdgSurface            -- hack!
+      return (wlrSurfaceParent, SubSurfaceLocalCoordinates (sx, sy)) -- hack!
 
     -- | Let wlroots know we have entered a new surface. We can safely call this
     -- | over and over (wlroots checks if we've called it already for this surface
@@ -466,6 +543,7 @@ _handle_map self args = do
       -- loop that never terminates.
       emitSignal self "map" ([] :: [GodotSimulaViewSprite])
       putStrLn "Called _handle_map. Should only see this once per surface launch." -- <- Test
+    _ -> putStrLn "Failed to get arguments in _handle_map"
 
   toLowLevel VariantNil
 
@@ -605,12 +683,14 @@ initializeRenderTarget wlrXdgSurface = do
 getBufferDimensions :: GodotWlrXdgSurface -> IO (Int, Int)
 getBufferDimensions wlrXdgSurface = do
   putStrLn "getBufferDimensions"
-  wlrSurface <- G.get_wlr_surface wlrXdgSurface
-  wlrSurfaceState <- G.get_current_state wlrSurface
+  wlrSurface <- G.get_wlr_surface wlrXdgSurface -- isNull: False
+  wlrSurfaceState <- G.get_current_state wlrSurface -- isNull: False
   bufferWidth <- G.get_buffer_width wlrSurfaceState
   bufferHeight <- G.get_buffer_height wlrSurfaceState
-  -- width <- G.get_width wlrSurfaceState
-  -- height <-G.get_height wlrSurfaceState
+  width <- G.get_width wlrSurfaceState
+  height <-G.get_height wlrSurfaceState
+  putStrLn $ "getBufferDimensions (buffer width/height): (" ++ (show bufferWidth) ++ "," ++ (show bufferHeight) ++ ")"
+  putStrLn $ "getBufferDimensions (width/height): (" ++ (show width) ++ "," ++ (show height) ++ ")"
   return (bufferWidth, bufferHeight) -- G.set_size expects "the width and height of viewport" according to Godot documentation
 
 getTextureFromRenderTarget :: GodotViewport -> IO (GodotTexture)

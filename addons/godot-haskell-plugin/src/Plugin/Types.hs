@@ -239,10 +239,10 @@ newNS'' constr clsName args url = do
 isGodotTypeNull :: (Typeable a) => a -> IO ()
 isGodotTypeNull godotValue = do
   let isNull = ((unsafeCoerce godotValue) == nullPtr)
-  putStrLn $ (show (typeOf godotValue)) ++ ": " ++ (show isNull)
+  putStrLn $ (show (typeOf godotValue)) ++ ": isNull " ++ (show isNull)
 
 isGodotTypeNullErr :: (Typeable a) => a -> IO ()
 isGodotTypeNullErr godotValue = do
   let isNull = ((unsafeCoerce godotValue) == nullPtr)
-  if isNull then error $ "isGodotTypeNull: True"
-            else putStrLn $ (show (typeOf godotValue)) ++ ": False"
+  if isNull then error $ (show (typeOf godotValue)) ++ ": isNull True"
+            else putStrLn $ (show (typeOf godotValue)) ++ ": isNull False"

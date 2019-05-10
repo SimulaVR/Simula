@@ -280,6 +280,8 @@ _on_WlrXdgShell_new_surface gss args = do
                               ((safeCast gsvs) :: GodotObject)
                               True
 
+                  -- emitSignal gsvs "map" ([gsvs] :: [GodotSimulaViewSprite]) -- hack to ensure map functions get called; needs fixed
+
                   -- Handles 2D window movement across a viewport; not needed:
                   -- toplevel.connect("request_move", self, "_handle_request_move")
                   toLowLevel VariantNil
@@ -310,7 +312,9 @@ handle_map_surface gss args = do
                          simulaView <- atomically $ readTVar (gsvs ^. gsvsView)
                          atomically $ writeTVar (simulaView ^. svMapped) True
                          -- addChild gss gsvs -- Performed in _on_WlrXdgShell_new_surface
-       toLowLevel VariantNil
+       
+    _ -> putStrLn "Failed to get arguments in handle_map_surface" 
+  toLowLevel VariantNil
 
 handle_unmap_surface :: GFunc GodotSimulaServer
 handle_unmap_surface gss args = do
