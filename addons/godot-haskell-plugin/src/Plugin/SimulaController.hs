@@ -125,7 +125,7 @@ loadOpenVRControllerMesh name = do
 -- Because the ARVRController member method is_button_pressed returns Int, not Bool
 isButtonPressed :: Int -> GodotSimulaController -> IO Bool
 isButtonPressed btnId gsc = do
-  putStrLn "isButtonPressed"
+  -- putStrLn "isButtonPressed"
   ctId <- G.get_joystick_id $ (safeCast gsc :: GodotARVRController)
   getSingleton GodotInput "Input" >>= \inp -> G.is_joy_button_pressed inp ctId btnId
 
@@ -133,7 +133,7 @@ isButtonPressed btnId gsc = do
 -- | Get the window pointed at if any.
 pointerWindow :: GodotSimulaController -> IO (Maybe GodotSimulaViewSprite)
 pointerWindow gsc = do
-  putStrLn "pointerWindow"
+  -- putStrLn "pointerWindow"
   isColliding <- G.is_colliding $ _gscRayCast gsc
   if isColliding
     then G.get_collider (_gscRayCast gsc) >>= tryObjectCast @GodotSimulaViewSprite
@@ -142,7 +142,7 @@ pointerWindow gsc = do
 -- | Change the scale of the grabbed object
 rescale :: GodotSimulaController -> Float -> IO ()
 rescale ct delta = do
-  putStrLn "rescale"
+  -- putStrLn "rescale"
   curPos <- V2 <$> (ct `G.get_joystick_axis` 0) <*> (ct `G.get_joystick_axis` 1)
 
   _tkBody <$> (readTVarIO (_gscTelekinesis ct)) >>= \case
@@ -177,7 +177,7 @@ rescale ct delta = do
 
 addSimulaController :: GodotARVROrigin -> Text -> Int -> IO GodotSimulaController
 addSimulaController originNode nodeName ctID = do
-  putStrLn "addSimulaController"
+  -- putStrLn "addSimulaController"
   -- Requires too "large" of a type constructor:
   -- ct <- "res://addons/godot-haskell-plugin/SimulaController.gdns"
   --       & newNS'' GodotSimulaController "SimulaController" []
@@ -231,7 +231,7 @@ process self args = do
   where
     getWlrSeatFromPath :: GodotSimulaController -> IO GodotWlrSeat
     getWlrSeatFromPath self = do
-      putStrLn "getWlrSeatFromPath"
+      -- putStrLn "getWlrSeatFromPath"
       let nodePathStr = "/root/Root/SimulaServer" -- I'm not 100% sure this is correct!
       nodePath <- (toLowLevel (pack nodePathStr))
       gssNode  <- G.get_node ((safeCast self) :: GodotNode) nodePath
@@ -257,7 +257,7 @@ physicsProcess self _ = do
 -- Ultimately should wrap a call to
 processTouchpadScroll :: GodotSimulaController -> GodotSimulaViewSprite -> GodotVector3 -> IO ()
 processTouchpadScroll ct gsvs pos = do
-  putStrLn "processTouchpadScroll"
+  -- putStrLn "processTouchpadScroll"
   -- Get a bunch of needed state
   -- time <- getTime Realtime
   -- let msec = fromIntegral $ toNanoSecs time `div` 1000000

@@ -110,7 +110,7 @@ instance HasBaseClass GodotSimulaViewSprite where
 -- | Intended to be called every frame.
 updateSimulaViewSprite :: GodotSimulaViewSprite -> IO ()
 updateSimulaViewSprite gsvs = do
-  putStrLn "updateSimulaViewSprite"
+  -- putStrLn "updateSimulaViewSprite"
   -- Update sprite texture; doesn't yet include popups or other subsurfaces.
   drawParentWlrSurfaceTextureOntoSprite gsvs
     -- useViewportToDrawParentSurface gsvs -- Causes _draw() error
@@ -133,7 +133,7 @@ updateSimulaViewSprite gsvs = do
         -- Doesn't work; raises _draw() error.
         useViewportToDrawParentSurface :: GodotSimulaViewSprite -> IO ()
         useViewportToDrawParentSurface gsvs  = do
-          putStrLn "drawParentSubsurfaceOnViewport"
+          -- putStrLn "drawParentSubsurfaceOnViewport"
           -- Get state
           sprite3D <- readTVarIO (gsvs ^. gsvsSprite)
           simulaView <- readTVarIO (gsvs ^. gsvsView)
@@ -201,8 +201,8 @@ updateSimulaViewSprite gsvs = do
                False -> G.set_texture sprite3D parentWlrTexture
 
           -- Failed texture jamming test:
-            -- sampleTexture <- getTextureFromURL "res://sample_texture.png"
-            -- G.set_texture sprite3D sampleTexture
+          -- sampleTexture <- getTextureFromURL "res://twitter.png"
+          -- G.set_texture sprite3D sampleTexture
 
           -- Failed texture extraction test:
             -- textureImage <- G.get_data sampleTexture -- parentWlrTexture :: IO (GodotImage) -- Causes crash
@@ -246,7 +246,7 @@ updateSimulaViewSprite gsvs = do
         spriteShouldMove gsvs = do
           en <- atomically $ readTVar (_gsvsShouldMove gsvs)
           if en then do
-            putStrLn "spriteShouldMove"
+            -- putStrLn "spriteShouldMove"
             sprite <- atomically $ readTVar (_gsvsSprite gsvs)
             aabb <- G.get_aabb sprite
             size <- godot_aabb_get_size aabb
@@ -257,7 +257,7 @@ updateSimulaViewSprite gsvs = do
         -- TODO: check the origin plane?
         moveToUnoccupied :: GodotSimulaViewSprite -> IO ()
         moveToUnoccupied gsvs = do
-          putStrLn "moveToUnoccupied"
+          -- putStrLn "moveToUnoccupied"
           gss <- readTVarIO (gsvs ^. gsvsServer)
           viewMap <- atomically $ readTVar (_gssViews gss)
           let otherGsvs = filter (\x -> asObj x /= asObj gsvs) $ M.elems viewMap
@@ -294,7 +294,7 @@ updateSimulaViewSprite gsvs = do
                                   -> CInt
                                   -> IO ()
         drawSubsurfaceOnViewport gsvs wlrSurface sx sy = do
-          putStrLn "drawSubsurfaceOnViewport"
+          -- putStrLn "drawSubsurfaceOnViewport"
           -- Get state
           simulaView <- readTVarIO (gsvs ^. gsvsView)
           let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
@@ -315,7 +315,7 @@ updateSimulaViewSprite gsvs = do
         -- | Convert (sx,sy) coordinates from "top-left" to "from-center" coordinate systems.
         getCoordinatesFromCenter :: GodotWlrXdgSurface -> CInt -> CInt -> IO GodotVector2
         getCoordinatesFromCenter wlrXdgSurface sx sy = do
-          putStrLn "getCoordinatesFromCenter"
+          -- putStrLn "getCoordinatesFromCenter"
           (bufferWidth', bufferHeight')    <- getBufferDimensions wlrXdgSurface
           let (bufferWidth, bufferHeight)  = (fromIntegral bufferWidth', fromIntegral bufferHeight')
           let (fromTopLeftX, fromTopLeftY) = (fromIntegral sx, fromIntegral sy)
@@ -334,7 +334,7 @@ updateSimulaViewSprite gsvs = do
         -- TODO: Implement this function
         drawSurfacesOnSprite :: GodotSimulaViewSprite -> IO ()
         drawSurfacesOnSprite gsvs = do
-           putStrLn "drawSurfacesOnSprite"
+           -- putStrLn "drawSurfacesOnSprite"
            simulaView <- readTVarIO (gsvs ^. gsvsView)
            let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
            -- listOfWlrSurface <- getSubsurfaces wlrXdgSurface -- getSurfaces :: GodotWlrXdgSurface -> IO [(WlrSurface, sx, sy)]
@@ -347,13 +347,13 @@ updateSimulaViewSprite gsvs = do
 
 ready :: GFunc GodotSimulaViewSprite
 ready self _ = do
-  putStrLn "ready in SimulaViewSprite.hs"
+  -- putStrLn "ready in SimulaViewSprite.hs"
   G.set_mode self RigidBody.MODE_KINEMATIC
   toLowLevel VariantNil
 
 inputEvent :: GFunc GodotSimulaViewSprite
 inputEvent self args = do
-  putStrLn "inputEvent in SimulaViewSprite.hs"
+  -- putStrLn "inputEvent in SimulaViewSprite.hs"
   case toList args of
     [_cam, evObj, clickPosObj, _clickNormal, _shapeIdx] ->  do
       ev <- fromGodotVariant evObj
@@ -372,7 +372,7 @@ data InputEventType
 -- | Handles mouse (i.e., non-VR controller) events in pancake mode.
 processInputEvent :: GodotSimulaViewSprite -> GodotObject -> GodotVector3 -> IO ()
 processInputEvent gsvs ev clickPos = do
-  putStrLn "processInputEvent"
+  -- putStrLn "processInputEvent"
   whenM (ev `isClass` "InputEventMouseMotion") $ processClickEvent gsvs Motion clickPos
   whenM (ev `isClass` "InputEventMouseButton") $ do
     let ev' = GodotInputEventMouseButton (coerce ev)
@@ -384,7 +384,7 @@ processInputEvent gsvs ev clickPos = do
 -- | to GodotSimulaServer + GodotWlrXdgSurface).
 newGodotSimulaViewSprite :: GodotSimulaServer -> SimulaView -> IO (GodotSimulaViewSprite)
 newGodotSimulaViewSprite gss simulaView = do
-  putStrLn "newGodotSimulaViewSprite"
+  -- putStrLn "newGodotSimulaViewSprite"
   gsvs <- "res://addons/godot-haskell-plugin/SimulaViewSprite.gdns"
     & newNS' []
     >>= godot_nativescript_get_userdata
@@ -417,7 +417,7 @@ newGodotSimulaViewSprite gss simulaView = do
 
 focus :: GodotSimulaViewSprite -> IO ()
 focus gsvs = do
-  putStrLn "focus in SimulaViewSprite.hs"
+  -- putStrLn "focus in SimulaViewSprite.hs"
   -- Get state:
   simulaView  <- atomically $ readTVar (gsvs ^. gsvsView) 
   let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
@@ -443,7 +443,7 @@ processClickEvent :: GodotSimulaViewSprite
                   -> GodotVector3
                   -> IO ()
 processClickEvent gsvs evt clickPos = do
-  putStrLn "processClickEvent"
+  -- putStrLn "processClickEvent"
   -- Get state
   gss        <- readTVarIO (gsvs ^. gsvsServer)
   wlrSeat    <- readTVarIO (gss ^. gssWlrSeat)
@@ -532,7 +532,7 @@ processClickEvent gsvs evt clickPos = do
 
 _handle_map :: GFunc GodotSimulaViewSprite
 _handle_map self args = do
-  putStrLn "_handle_map"
+  -- putStrLn "_handle_map"
   case toList args of
     [gsvsGV] ->  do
       G.set_process self True
@@ -583,7 +583,7 @@ _process self args = do
 --    GodotSimulaViewSprite that calls to `queue_free` can use.
 _handle_destroy :: GFunc GodotSimulaViewSprite
 _handle_destroy self args = do
-  putStrLn "_handle_destroy"
+  -- putStrLn "_handle_destroy"
   case toList args of
     [gsvsGV] ->  do
       -- Get state
@@ -624,7 +624,7 @@ _handle_destroy self args = do
 
 initializeRenderTarget :: GodotWlrXdgSurface -> IO (GodotViewport)
 initializeRenderTarget wlrXdgSurface = do
-  putStrLn "initializeRenderTarget"
+  -- putStrLn "initializeRenderTarget"
   -- "When we are drawing to a Viewport that is not the Root, we call it a
   --  render target." -- Godot documentation"
   renderTarget <- unsafeInstance GodotViewport "Viewport"
@@ -682,20 +682,20 @@ initializeRenderTarget wlrXdgSurface = do
 
 getBufferDimensions :: GodotWlrXdgSurface -> IO (Int, Int)
 getBufferDimensions wlrXdgSurface = do
-  putStrLn "getBufferDimensions"
+  -- putStrLn "getBufferDimensions"
   wlrSurface <- G.get_wlr_surface wlrXdgSurface -- isNull: False
   wlrSurfaceState <- G.get_current_state wlrSurface -- isNull: False
   bufferWidth <- G.get_buffer_width wlrSurfaceState
   bufferHeight <- G.get_buffer_height wlrSurfaceState
   width <- G.get_width wlrSurfaceState
   height <-G.get_height wlrSurfaceState
-  putStrLn $ "getBufferDimensions (buffer width/height): (" ++ (show bufferWidth) ++ "," ++ (show bufferHeight) ++ ")"
-  putStrLn $ "getBufferDimensions (width/height): (" ++ (show width) ++ "," ++ (show height) ++ ")"
+  -- putStrLn $ "getBufferDimensions (buffer width/height): (" ++ (show bufferWidth) ++ "," ++ (show bufferHeight) ++ ")"
+  -- putStrLn $ "getBufferDimensions (width/height): (" ++ (show width) ++ "," ++ (show height) ++ ")"
   return (bufferWidth, bufferHeight) -- G.set_size expects "the width and height of viewport" according to Godot documentation
 
 getTextureFromRenderTarget :: GodotViewport -> IO (GodotTexture)
 getTextureFromRenderTarget renderTarget = do
-  putStrLn "getTextureFromRenderTarget"
+  -- putStrLn "getTextureFromRenderTarget"
   viewportTexture' <- G.get_texture renderTarget -- G.get_texture :: GodotViewport -> (IO GodotViewportTexture)
   let viewportTexture = (safeCast viewportTexture) :: GodotTexture -- GodotTexture :< GodotViewportTexture
   -- -- Retrieving an image

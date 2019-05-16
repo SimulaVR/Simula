@@ -60,7 +60,7 @@ instance HasBaseClass GodotSimula where
 
 ready :: GFunc GodotSimula
 ready self _ = do
-  putStrLn "ready in Simula.hs"
+  -- putStrLn "ready in Simula.hs"
   addSimulaServerNode
 
   -- OpenHMD is unfortunately not yet a working substitute for OpenVR
@@ -87,6 +87,49 @@ ready self _ = do
 
   retnil
  where
+  -- Helper function for black texture debugging.
+  --   From the internet:
+  --   var img = Image()
+  --   var tex = ImageTexture.new()
+  --   img.load("image.png")
+  --   tex.create_from_image(img)
+  getTextureFromURL :: String -> IO (GodotTexture)
+  getTextureFromURL urlStr = do
+    -- instance new types
+    godotImage <- unsafeInstance GodotImage "Image" :: IO GodotImage
+    godotImageTexture <- unsafeInstance GodotImageTexture "ImageTexture"
+
+    -- Get image from URL
+    pngUrl <- toLowLevel (pack urlStr) :: IO GodotString
+    exitCode <- G.load godotImageTexture pngUrl -- load :: GodotImageTexture -> GodotString -> IO Int
+    -- Load image into texture
+    G.create_from_image godotImageTexture godotImage 7 -- uses FLAGS_DEFAULT = 7
+
+    return (safeCast godotImageTexture) -- NOTE: This [probably] leaks godotImage?
+
+  -- Another helper function for black texture debugging (that uses
+  -- getTextureFromURL).
+  addDummySprite3D gss = do
+    godotSprite3D <- unsafeInstance GodotSprite3D "Sprite3D"
+    G.set_pixel_size godotSprite3D 0.001
+    -- G.add_child gsvs (safeCast godotSprite3D) True
+    G.set_flip_h godotSprite3D True
+
+    G.set_name godotSprite3D =<< toLowLevel "DummySprite3D"
+    addChild gss godotSprite3D -- Add as child to SimulaServer
+    -- G.set_opacity ((safeCast godotSprite3D) GodotSpriteBase3D) (1 :: Float) -- Added from editor
+    G.set_opacity godotSprite3D 1.0
+
+    sampleTexture <- getTextureFromURL "res://twitter.png"
+    G.set_texture godotSprite3D sampleTexture
+    G.set_visible godotSprite3D True
+
+    -- G.translate godotSprite3D =<< toLowLevel (V3 1 1 1)
+
+    -- Print to console to verify we see a "DummySprite3D" in scenegraph
+    G.print_tree ((safeCast gss) :: GodotNode)
+    return ()
+
   addSimulaServerNode :: IO ()
   addSimulaServerNode = do
     gss <- "res://addons/godot-haskell-plugin/SimulaServer.gdns"
@@ -94,12 +137,13 @@ ready self _ = do
 
     G.set_name gss =<< toLowLevel "SimulaServer"
     G.add_child self (asObj gss) True
-    -- G.print_tree ((safeCast gss) :: GodotNode)
+    -- G.print_tree ((safeCast gss) :: GodotNode) -- Print tree for debugging
+    -- addDummySprite3D gss -- Test
     return ()
 
   connectController :: GodotSimulaController -> IO ()
   connectController ct = do
-    putStrLn "connectController"
+    -- putStrLn "connectController"
     argsPressed <- Api.godot_array_new
     Api.godot_array_append argsPressed =<< toLowLevel (toVariant $ asObj ct)
     Api.godot_array_append argsPressed =<< toLowLevel (toVariant True)
@@ -120,7 +164,7 @@ ready self _ = do
 
 on_button_signal :: GFunc GodotSimula
 on_button_signal self args = do
-  putStrLn "on_button_signal in Simula.hs"
+  -- putStrLn "on_button_signal in Simula.hs"
   case toList args of
     [buttonVar, controllerVar, pressedVar] -> do
       button <- fromGodotVariant buttonVar
@@ -134,7 +178,7 @@ on_button_signal self args = do
 
 onButton :: GodotSimula -> GodotSimulaController -> Int -> Bool -> IO ()
 onButton self gsc button pressed = do
-  putStrLn "onButton in Simula.hs"
+  -- putStrLn "onButton in Simula.hs"
   case (button, pressed) of
     (OVR_Button_Grip, False) -> -- Release grabbed
       readTVarIO gst

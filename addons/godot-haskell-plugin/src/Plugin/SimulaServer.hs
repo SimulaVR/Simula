@@ -116,7 +116,7 @@ instance HasBaseClass GodotSimulaServer where
 
 ready :: GFunc GodotSimulaServer
 ready gss _ = do
-  putStrLn "ready in SimulaServer.hs"
+  -- putStrLn "ready in SimulaServer.hs"
   -- Set state / start compositor
   addWlrChildren gss
 
@@ -142,7 +142,7 @@ ready gss _ = do
 -- | to their signals. NOTE: This implicitly starts the compositor.
 addWlrChildren :: GodotSimulaServer -> IO ()
 addWlrChildren gss = do
-  putStrLn "addWlrChildren"
+  -- putStrLn "addWlrChildren"
   -- Here we assume gss is already a node in our scene tree.
 
   -- WaylandDisplay
@@ -203,7 +203,7 @@ addWlrChildren gss = do
 -- | real values in `ready`.
 initGodotSimulaServer :: GodotObject -> IO (GodotSimulaServer)
 initGodotSimulaServer obj = do
-  putStrLn "initGodotSimulaServer"
+  -- putStrLn "initGodotSimulaServer"
   gssWaylandDisplay'       <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar GodotWaylandDisplay)
   gssWlrBackend'           <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar GodotWlrBackend)
   gssWlrOutput'            <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar GodotWlrOutput)
@@ -239,7 +239,7 @@ initGodotSimulaServer obj = do
 
 _on_WaylandDisplay_ready :: GFunc GodotSimulaServer
 _on_WaylandDisplay_ready gss vecOfGodotVariant = do
-  putStrLn "_on_WaylandDisplay_ready"
+  -- putStrLn "_on_WaylandDisplay_ready"
   --waylandDisplay <- getSimulaServerNodeFromPath gss "WaylandDisplay"
   waylandDisplay <- atomically $ readTVar (_gssWaylandDisplay gss)
   G.run waylandDisplay
@@ -247,7 +247,7 @@ _on_WaylandDisplay_ready gss vecOfGodotVariant = do
 
 _on_WlrXdgShell_new_surface :: GFunc GodotSimulaServer
 _on_WlrXdgShell_new_surface gss args = do
-  putStrLn "_on_WlrXdgShell_new_surface"
+  -- putStrLn "_on_WlrXdgShell_new_surface"
   case toList args of
     [wlrXdgSurfaceVariant] -> do
       wlrXdgSurface <- fromGodotVariant wlrXdgSurfaceVariant :: IO GodotWlrXdgSurface -- Not sure if godot-haskell provides this for us
@@ -302,7 +302,7 @@ _on_WlrXdgShell_new_surface gss args = do
 
 handle_map_surface :: GFunc GodotSimulaServer
 handle_map_surface gss args = do
-  putStrLn "handle_map_surface"
+  -- putStrLn "handle_map_surface"
   case toList args of
     [gsvsVariant] -> do -- Unlike in Godotston, we assume this function gives us a GodotSimulaViewSprite
        maybeGsvs <- variantToReg gsvsVariant :: IO (Maybe GodotSimulaViewSprite)
@@ -318,7 +318,7 @@ handle_map_surface gss args = do
 
 handle_unmap_surface :: GFunc GodotSimulaServer
 handle_unmap_surface gss args = do
-  putStrLn "handle_unmap_surface"
+  -- putStrLn "handle_unmap_surface"
   case toList args of
     [gsvsVariant] -> do -- Unlike in Godotston, we assume this function gives us a GodotSimulaViewSprite
        maybeGsvs <- variantToReg gsvsVariant :: IO (Maybe GodotSimulaViewSprite)
@@ -332,7 +332,7 @@ handle_unmap_surface gss args = do
 
 _on_wlr_key :: GFunc GodotSimulaServer
 _on_wlr_key gss args = do
-  putStrLn "_on_wlr_key"
+  -- putStrLn "_on_wlr_key"
   case toList args of
     [keyboardGVar, eventGVar] -> do
       wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
@@ -342,7 +342,7 @@ _on_wlr_key gss args = do
 
 _on_wlr_modifiers :: GFunc GodotSimulaServer
 _on_wlr_modifiers gss args = do
-  putStrLn "_on_wlr_modifiers"
+  -- putStrLn "_on_wlr_modifiers"
   case toList args of
     [keyboardGVar] -> do
       wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
