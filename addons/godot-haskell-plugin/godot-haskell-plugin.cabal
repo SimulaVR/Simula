@@ -135,7 +135,7 @@ foreign-library godot-haskell-plugin
     Debug.C
     Debug.Marshal
   other-modules: FLib
-  ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -threaded -fobject-code
+  ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code
   build-depends:
       base >=4.12 && <5
     , lens

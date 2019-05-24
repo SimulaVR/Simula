@@ -111,6 +111,7 @@ instance HasBaseClass GodotSimulaViewSprite where
 updateSimulaViewSprite :: GodotSimulaViewSprite -> IO ()
 updateSimulaViewSprite gsvs = do
   -- putStrLn "updateSimulaViewSprite"
+
   -- Update sprite texture; doesn't yet include popups or other subsurfaces.
   drawParentWlrSurfaceTextureOntoSprite gsvs
     -- useViewportToDrawParentSurface gsvs -- Causes _draw() error
@@ -123,11 +124,6 @@ updateSimulaViewSprite gsvs = do
   whenM (spriteShouldMove gsvs) $ do
     atomically $ writeTVar (_gsvsShouldMove gsvs) False
     moveToUnoccupied gsvs
-
-  -- Manually call _queue_update (doesn't fix black textures)
-    -- sprite3D <- readTVarIO (gsvs ^. gsvsSprite)
-    -- G._queue_update sprite3D -- ((safeCast gsvs) :: GodotSpriteBase3D )-- :: GodotSpriteBase3D IO ()
-  return ()
 
   where
         -- Doesn't work; raises _draw() error.
@@ -165,22 +161,6 @@ updateSimulaViewSprite gsvs = do
                            -- Tell the surface being drawn it can start to render its next frame
                            G.send_frame_done wlrSurface
 
-        -- Doesn't work in Simula or Godotston
-        saveTextureToDisk :: GodotWlrXdgSurface -> GodotTexture -> IO ()
-        saveTextureToDisk wlrXdgSurface texture = do
-            let isNull = ((unsafeCoerce texture) == nullPtr)
-            case isNull of
-                True -> putStrLn "Texture is null!"
-                False -> do rid <- G.get_rid texture
-                            isGodotTypeNull rid
-                            visualServer <- getSingleton GodotVisualServer "VisualServer"
-                            getBufferDimensions wlrXdgSurface
-                            image <- G.texture_get_data visualServer rid 0
-
-                            url <- toLowLevel (pack "res://SimulaTexture.png") :: IO GodotString
-                            exitCode <- G.save_png image url
-                            return ()
-
         -- As the name makes clear, this function *only* draws the parent WlrSurface
         -- onto a GodotSimulaViewSprite's Sprite3D field. It doesn't include popups or
         -- any other subsurfaces. This is a temporary hack that needs fixed.
@@ -199,16 +179,6 @@ updateSimulaViewSprite gsvs = do
           case isNull of
                True -> putStrLn "Texture is null!"
                False -> G.set_texture sprite3D parentWlrTexture
-
-          -- Failed texture jamming test:
-          -- sampleTexture <- getTextureFromURL "res://twitter.png"
-          -- G.set_texture sprite3D sampleTexture
-
-          -- Failed texture extraction test:
-            -- textureImage <- G.get_data sampleTexture -- parentWlrTexture :: IO (GodotImage) -- Causes crash
-            -- url <- toLowLevel (pack "/home/george/Downloads/SimulaTexture.png") :: IO GodotString
-            -- exitCode <- G.save_png textureImage url -- G.save_png GodotImage -> GodotString -> IO Int
-            -- putStrLn $ "G.save_png exit code: " ++ (show exitCode)
 
           -- Tell client surface it should start rendering the next frame
           G.send_frame_done wlrSurface
@@ -426,6 +396,8 @@ focus gsvs = do
   toplevel    <- G.get_xdg_toplevel wlrXdgSurface :: IO GodotWlrXdgToplevel
   gss         <- atomically $ readTVar (gsvs ^. gsvsServer) -- ^. gssWlrSeat)
   wlrSeat     <- atomically $ readTVar (gss ^. gssWlrSeat)
+  
+  isGodotTypeNull wlrSurface
 
   -- Make calls:
   G.set_activated toplevel True
@@ -452,21 +424,22 @@ processClickEvent gsvs evt clickPos = do
 
 
   -- Compute subsurface local coordinates at clickPos
-  surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)) <- getSurfaceLocalCoordinates
+  surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)) <- getSurfaceLocalCoordinates clickPos
   (godotWlrSurface, subSurfaceLocalCoords@(SubSurfaceLocalCoordinates (ssx, ssy))) <- getSubsurfaceAndCoords godotWlrXdgSurface surfaceLocalCoords -- This function is a hack that only returns parent surface + its coordinates; needs fixing.
 
   -- -- Send events
   case evt of
     Motion                -> do pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
                                 pointerNotifyMotion wlrSeat subSurfaceLocalCoords
+                                keyboardNotifyEnter wlrSeat godotWlrSurface -- TEMPORARY HACK; shouldn't have to call this every frame we're pointing at a surface
     Button pressed button ->    pointerNotifyButton wlrSeat evt
 
   pointerNotifyFrame wlrSeat -- No matter what, send a frame event to the surface with pointer focus
                              -- TODO: Is this necessary in VR?
 
   where
-    getSurfaceLocalCoordinates :: IO (SurfaceLocalCoordinates)
-    getSurfaceLocalCoordinates = do
+    getSurfaceLocalCoordinates :: GodotVector3 -> IO (SurfaceLocalCoordinates)
+    getSurfaceLocalCoordinates clickPos = do
       lpos <- G.to_local gsvs clickPos >>= fromLowLevel
       sprite <- atomically $ readTVar (_gsvsSprite gsvs)
       aabb <- G.get_aabb sprite
@@ -478,8 +451,11 @@ processClickEvent gsvs evt clickPos = do
       recSize <- godot_rect2_get_size rect >>= fromLowLevel
       let coords = liftI2 (*) recSize scaledPos
       -- coords = surface coordinates in pixel with (0,0) at top left
-      let sx = fromIntegral $ truncate (256 * coords ^. _x)
-          sy = fromIntegral $ truncate (256 * coords ^. _y)
+      let sx = fromIntegral $ truncate (1 * coords ^. _x) -- 256 was old factor
+          sy = fromIntegral $ truncate (1 * coords ^. _y) -- 256 was old factor
+      clickPos' <- fromLowLevel clickPos
+      -- putStrLn $ "getSurfaceLocalCoordinates clickPos: " ++ (show clickPos')
+      -- putStrLn $ "getSurfaceLocalCoordinates (sx, sy):" ++ "(" ++ (show sx) ++ ", " ++ (show sy) ++ ")"
       return (SurfaceLocalCoordinates (sx, sy))
 
     -- | Takes a GodotWlrXdgSurface and returns the subsurface at point (which is likely the surface itself, or one of its popups).
@@ -504,7 +480,15 @@ processClickEvent gsvs evt clickPos = do
       let maybeWlrSurfaceGV = (fromVariant ((toVariant wlrSurface) :: Variant 'GodotTy) :: Maybe GodotVariant)
       case maybeWlrSurfaceGV of
           Nothing -> putStrLn "Failed to convert GodotWlrSurface to GodotVariant!"
-          Just wlrSurfaceGV -> G.pointer_notify_enter wlrSeat wlrSurfaceGV ssx ssy -- Causing a crash
+          Just wlrSurfaceGV -> do G.pointer_notify_enter wlrSeat wlrSurfaceGV ssx ssy -- Causing a crash
+                                  -- putStrLn $ "G.point_notify_enter: " ++ "(" ++ (show ssx) ++ ", " ++ (show ssy) ++ ")"
+
+    keyboardNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> IO ()
+    keyboardNotifyEnter wlrSeat wlrSurface = do
+      let maybeWlrSurfaceGV = (fromVariant ((toVariant wlrSurface) :: Variant 'GodotTy) :: Maybe GodotVariant)
+      case maybeWlrSurfaceGV of
+          Nothing -> putStrLn "Failed to convert GodotWlrSurface to GodotVariant!"
+          Just wlrSurfaceGV -> do G.keyboard_notify_enter wlrSeat wlrSurfaceGV
 
     -- | This function conspiciously lacks a GodotWlrSurface argument, but doesn't
     -- | need one since the GodotWlrSeat keeps internal track of what the currently
@@ -512,6 +496,7 @@ processClickEvent gsvs evt clickPos = do
     pointerNotifyMotion :: GodotWlrSeat -> SubSurfaceLocalCoordinates -> IO ()
     pointerNotifyMotion wlrSeat (SubSurfaceLocalCoordinates (ssx, ssy)) = do
       G.pointer_notify_motion wlrSeat ssx ssy
+      -- putStrLn $ "G.point_notify_motion: " ++ "(" ++ (show ssx) ++ ", " ++ (show ssy) ++ ")"
 
     pointerNotifyButton :: GodotWlrSeat -> InputEventType -> IO ()
     pointerNotifyButton wlrSeat inputEventType = do
@@ -521,6 +506,7 @@ processClickEvent gsvs evt clickPos = do
       where pointerNotifyButton' pressed buttonIndex = do
               buttonIndexVariant <- toLowLevel (VariantInt buttonIndex) :: IO GodotVariant
               G.pointer_notify_button wlrSeat buttonIndexVariant pressed
+              -- putStrLn $ "G.pointer_notify_button: pressed/buttonIndex" ++ (show pressed) ++ "/" ++ (show buttonIndex)
               return ()
 
     -- | Sends a frame event to the surface with pointer focus (apparently
@@ -542,7 +528,7 @@ _handle_map self args = do
       -- this is doing, and why it wouldn't just result in a _handle_map call
       -- loop that never terminates.
       emitSignal self "map" ([] :: [GodotSimulaViewSprite])
-      putStrLn "Called _handle_map. Should only see this once per surface launch." -- <- Test
+      -- putStrLn "Called _handle_map. Should only see this once per surface launch." -- <- Test
     _ -> putStrLn "Failed to get arguments in _handle_map"
 
   toLowLevel VariantNil
@@ -562,7 +548,7 @@ _handle_unmap self args = do
       -- this is doing, and why it wouldn't just result in a _handle_unmap call
       -- loop that never terminates.
       emitSignal self "unmap" ([] :: [GodotSimulaViewSprite])
-      putStrLn "Called _handle_unmap. Should only see this once per surface launch." -- <- Test
+      -- putStrLn "Called _handle_unmap. Should only see this once per surface launch." -- <- Test
   toLowLevel VariantNil
 
 -- Passes control entirely to updateSimulaViewSprite.

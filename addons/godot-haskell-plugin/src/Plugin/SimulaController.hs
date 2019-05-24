@@ -43,13 +43,42 @@ import Foreign.C.Types
 import Foreign.Ptr
 import GHC.Float
 
+import           System.IO.Unsafe
+import           Data.Coerce
+import           Foreign
+import           Foreign.C
+
+pointer_notify_axis_continuous :: Method "pointer_notify_axis_continuous" cls sig => cls -> sig
+pointer_notify_axis_continuous = runMethod @"pointer_notify_axis_continuous"
+
+bindWlrSeat_pointer_notify_axis_continuous
+  = unsafePerformIO $
+      withCString "WlrSeat" $
+        \ clsNamePtr ->
+          withCString "pointer_notify_axis_continuous" $
+            \ methodNamePtr ->
+              Api.godot_method_bind_get_method clsNamePtr methodNamePtr
+
+{-# NOINLINE bindWlrSeat_pointer_notify_axis_continuous#-}
+
+instance Method "pointer_notify_axis_continuous" GodotWlrSeat (Float -> Float -> IO ()) where
+        runMethod cls arg1 arg2
+          = withVariantArray [toVariant arg1, toVariant arg2]
+              (\ (arrPtr, len) ->
+                 Api.godot_method_bind_call bindWlrSeat_pointer_notify_axis_continuous (coerce cls)
+                   arrPtr
+                   len
+                   >>= \ (err, res) -> throwIfErr err >> fromGodotVariant res)
+
 data GodotSimulaController = GodotSimulaController
   { _gscObj     :: GodotObject
   , _gscRayCast :: GodotRayCast
   , _gscMeshInstance :: GodotMeshInstance
   , _gscLaser :: GodotMeshInstance
   , _gscTelekinesis :: TVar Telekinesis
+  , _gscCurrentPos :: TVar (V2 Float)
   , _gscLastScrollPos :: TVar (V2 Float)
+  , _gscDiff :: TVar (V2 Float)
   }
 
 makeLenses ''GodotSimulaController
@@ -78,6 +107,8 @@ instance ClassExport GodotSimulaController where
     tk <- newTVarIO $ initTk (GodotSpatial obj) rc tf
 
     lsp <- newTVarIO 0
+    diff <- newTVarIO 0
+    curPos <- newTVarIO 0
 
     G.set_visible (GodotSpatial obj) False
 
@@ -88,6 +119,8 @@ instance ClassExport GodotSimulaController where
       , _gscLaser         = laser
       , _gscTelekinesis   = tk
       , _gscLastScrollPos = lsp
+      , _gscDiff          = diff
+      , _gscCurrentPos    = curPos
       }
 
   classExtends = "ARVRController"
@@ -99,7 +132,7 @@ instance ClassExport GodotSimulaController where
 
 instance HasBaseClass GodotSimulaController where
   type BaseClass GodotSimulaController = GodotARVRController
-  super (GodotSimulaController obj _ _ _ _ _) = GodotARVRController obj
+  super (GodotSimulaController obj _ _ _ _ _ _ _) = GodotARVRController obj
 
 loadOpenVRControllerMesh :: Text -> IO (Maybe GodotMesh)
 loadOpenVRControllerMesh name = do
@@ -139,41 +172,59 @@ pointerWindow gsc = do
     then G.get_collider (_gscRayCast gsc) >>= tryObjectCast @GodotSimulaViewSprite
     else return Nothing
 
--- | Change the scale of the grabbed object
-rescale :: GodotSimulaController -> Float -> IO ()
-rescale ct delta = do
-  -- putStrLn "rescale"
-  curPos <- V2 <$> (ct `G.get_joystick_axis` 0) <*> (ct `G.get_joystick_axis` 1)
+updateTouchpadState :: GodotSimulaController -> IO ()
+updateTouchpadState gsc = do
+  -- oldLastPos <- readTVarIO (_gscLastScrollPos gsc)
+  oldCurPos <- readTVarIO (_gscCurrentPos gsc)
+  newCurPos <- V2 <$> (gsc `G.get_joystick_axis` 0) <*> (gsc `G.get_joystick_axis` 1)
+  let newDiff = newCurPos - oldCurPos
 
+  atomically $ writeTVar (_gscCurrentPos gsc) newCurPos
+  atomically $ writeTVar (_gscLastScrollPos gsc) oldCurPos
+  atomically $ writeTVar (_gscDiff gsc) newDiff
+
+-- | Change the scale of the grabbed object
+rescaleOrScroll :: GodotSimulaController -> Float -> IO ()
+rescaleOrScroll ct delta = do
+  curPos <- readTVarIO (_gscCurrentPos ct)
+  lastPos <- readTVarIO (_gscLastScrollPos ct) -- Going to be same as curPos..
+  diff <- readTVarIO (_gscDiff ct)
+  let validChange = norm lastPos > 0.01 && norm curPos > 0.01
+  isGripPressed <- isButtonPressed 2 ct
+
+  -- This branch seems to only gets activated if we are "gripped"
   _tkBody <$> (readTVarIO (_gscTelekinesis ct)) >>= \case
     Just (obj, _) -> do
-      isGripPressed <- isButtonPressed 2 ct
-      lastPos <- readTVarIO (_gscLastScrollPos ct)
+      -- isGripPressed <- isButtonPressed 2 ct
+      -- lastPos <- readTVarIO (_gscLastScrollPos ct)
       curScale <- G.get_scale (safeCast obj :: GodotSpatial) >>= fromLowLevel
 
-      let diff = curPos - lastPos
-          validChange = norm lastPos > 0.01 && norm curPos > 0.01
-          minScale = 1
+      let minScale = 1
           maxScale = 8
 
-      -- NOTE: Here might be a good time to call beginInteractive (if needed)
       if
         | norm curScale < minScale     -> rescaleBy (V2 delta delta) obj
         | norm curScale > maxScale     -> rescaleBy (V2 (-delta) (-delta)) obj
         | isGripPressed && validChange -> rescaleBy diff obj
         | otherwise                    -> return ()
 
-    Nothing -> return ()
-
-  atomically $ writeTVar (_gscLastScrollPos ct) curPos
+    Nothing -> if ((not isGripPressed) && validChange)
+      then scrollWindow diff
+      else return ()
 
  where
+  scrollWindow :: V2 (Float) -> IO ()
+  scrollWindow diff = do
+    maybeWindow <- pointerWindow ct
+    wlrSeat <- getWlrSeatFromPath ct
+    case maybeWindow of
+      Nothing -> putStrLn "Couldn't get wlrSeat!"
+      _ -> pointer_notify_axis_continuous wlrSeat (diff ^. _x) (diff ^. _y)
   rescaleBy :: (GodotSpatial :< child) => V2 Float -> child -> IO ()
   rescaleBy (V2 _ y) a =
     V3 1 1 1 ^* (1 + y * 0.5)
       & toLowLevel
       >>= G.scale_object_local (safeCast a :: GodotSpatial)
-
 
 addSimulaController :: GodotARVROrigin -> Text -> Int -> IO GodotSimulaController
 addSimulaController originNode nodeName ctID = do
@@ -205,18 +256,19 @@ process self args = do
   if
     | not active -> G.set_visible self False
     | visible -> do
-      rescale self delta -- <- Updates SimulaController state
+      updateTouchpadState self
+      rescaleOrScroll self delta -- <- Updates SimulaController state
       pointerWindow self >>= \case
         Just window -> do
           G.set_visible (_gscLaser self) True
           pos <- G.get_collision_point $ _gscRayCast self
           processClickEvent window Motion pos
-          processTouchpadScroll self window pos
+          --processTouchpadScroll self window pos
         Nothing -> do
           -- If we aren't pointing at anything, clear the wlroots seat pointer focus.
           -- TODO: See what happens if we omit this; might not need it.
-          wlrSeat <- getWlrSeatFromPath self
-          G.pointer_clear_focus wlrSeat -- pointer_clear_focus :: GodotWlrSeat -> IO ()
+          -- wlrSeat <- getWlrSeatFromPath self
+          -- G.pointer_clear_focus wlrSeat -- pointer_clear_focus :: GodotWlrSeat -> IO ()
 
           G.set_visible (_gscLaser self) False
           return ()
@@ -228,17 +280,17 @@ process self args = do
       G.set_visible self True
 
   toLowLevel VariantNil
-  where
-    getWlrSeatFromPath :: GodotSimulaController -> IO GodotWlrSeat
-    getWlrSeatFromPath self = do
-      -- putStrLn "getWlrSeatFromPath"
-      let nodePathStr = "/root/Root/SimulaServer" -- I'm not 100% sure this is correct!
-      nodePath <- (toLowLevel (pack nodePathStr))
-      gssNode  <- G.get_node ((safeCast self) :: GodotNode) nodePath
-      gss      <- (fromNativeScript (safeCast gssNode)) :: IO GodotSimulaServer -- Recall we had trouble with this call in Simula.hs (see newNS''); it might actually work in this context, though.
-      wlrSeat  <- readTVarIO (gss ^. gssWlrSeat)
 
-      return wlrSeat
+getWlrSeatFromPath :: GodotSimulaController -> IO GodotWlrSeat
+getWlrSeatFromPath self = do
+  -- putStrLn "getWlrSeatFromPath"
+  let nodePathStr = "/root/Root/SimulaServer" -- I'm not 100% sure this is correct!
+  nodePath <- (toLowLevel (pack nodePathStr))
+  gssNode  <- G.get_node ((safeCast self) :: GodotNode) nodePath
+  gss      <- (fromNativeScript (safeCast gssNode)) :: IO GodotSimulaServer -- Recall we had trouble with this call in Simula.hs (see newNS''); it might actually work in this context, though.
+  wlrSeat  <- readTVarIO (gss ^. gssWlrSeat)
+
+  return wlrSeat
 
 physicsProcess :: GFunc GodotSimulaController
 physicsProcess self _ = do
@@ -252,62 +304,3 @@ physicsProcess self _ = do
     atomically $ writeTVar (_gscTelekinesis self) tk
 
   retnil
-
--- See http://docs.godotengine.org/en/latest/tutorials/vr/vr_starter_tutorial.html
--- Ultimately should wrap a call to
-processTouchpadScroll :: GodotSimulaController -> GodotSimulaViewSprite -> GodotVector3 -> IO ()
-processTouchpadScroll ct gsvs pos = do
-  -- putStrLn "processTouchpadScroll"
-  -- Get a bunch of needed state
-  -- time <- getTime Realtime
-  -- let msec = fromIntegral $ toNanoSecs time `div` 1000000
-  -- gsvt <- atomically $ readTVar $ _gsvsTexture gsvs
-  -- simulaView <- atomically $ readTVar (gsvt ^. gsvtView)
-  -- let seat = (simulaView ^. svServer ^. gssSeat)
-  -- curPos <- V2 <$> (ct `G.get_joystick_axis` 0) <*> (ct `G.get_joystick_axis` 1)
-  -- lastPos <- readTVarIO (_gscLastScrollPos ct)
-  -- let diff = curPos - lastPos
-  -- let validChange = norm lastPos > 0.01 && norm curPos > 0.01
-  -- let xDiff = diff ^. _x
-  -- let yDiff = diff ^. _y
-  -- let minScale = 1
-  -- let maxScale = 8
-
-  -- Print a debug message
-  printDebugAxis
-
-  -- Send an "axis" event (for y-axis only) to the currently focused surface,
-  -- provided the scroll event is past the required magnitude.
-  -- TODO: Optimize these thresholds
-  -- if
-  --   | xDiff < 0.0001     -> return ()
-  --   | yDiff < 0.0001     -> return ()
-  --   | otherwise          -> sendAxisEvent seat msec AxisVertical yDiff -- >> sendAxisEvent seat msec AxisHorizontal xDiff
-
-  -- -- Update controller state.
-  -- -- NOTE: `rescale` actually does this for us, but it's harmless/safer to
-  -- --       do it again:
-  -- atomically $ writeTVar (ct ^. gscLastScrollPos) curPos
-
-  where printDebugAxis = do
-          -- NOTE: Axis 1 corresponds to the x-axis while axis 0 corresponds
-          -- with the y-axis (matrix style)
-          valueX <- G.get_joystick_axis ct 1
-          valueY <- G.get_joystick_axis ct 0
-          let valueX' = CDouble (float2Double valueX)
-          let valueY' = CDouble (float2Double valueY)
-          print $ "valueX': " ++ (show valueX')
-          print $ "valueY': " ++ (show valueY')
-          
-        -- | I'm (only somewhat) confident that this sends a "continuous" scroll
-        -- | event to the currently focused surface (which implies we don't have
-        -- | to mess with i.e. `viewAt`).
-        -- sendAxisEvent seat time32 axisOrientation axisDeltaValue = do
-        --   let time32          = time32
-        --   let axisSource      = AxisContinuous :: AxisSource -- We don't even use this value?
-        --   let axisOrientation = axisOrientation :: AxisOrientation -- data AxisOrientation = AxisVertical | AxisHorizontal
-        --   let axisDeltaValue  = axisDeltaValue :: Double
-        --   let axisDiscrete    = 0 -- mwheelup = -1, mwheeldown = 1; 
-        --                           -- I believe "0" means "continuous"; try that first
-
-        --   pointerNotifyAxis seat time32 axisOrientation axisDeltaValue axisDiscrete

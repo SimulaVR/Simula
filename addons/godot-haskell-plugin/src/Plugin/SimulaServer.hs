@@ -139,7 +139,7 @@ ready gss _ = do
   toLowLevel VariantNil
 
 -- | Populate the GodotSimulaServer's TVar's with Wlr types; connect some Wlr methods
--- | to their signals. NOTE: This implicitly starts the compositor.
+-- | to their signals. This implicitly starts the compositor.
 addWlrChildren :: GodotSimulaServer -> IO ()
 addWlrChildren gss = do
   -- putStrLn "addWlrChildren"
@@ -173,6 +173,7 @@ addWlrChildren gss = do
   G.add_child waylandDisplay ((safeCast wlrXdgShell) :: GodotObject) True
 
   wlrSeat <- unsafeInstance GodotWlrSeat "WlrSeat"
+  G.set_capabilities wlrSeat 3
   atomically $ writeTVar (_gssWlrSeat gss) wlrSeat
   G.set_name wlrSeat =<< toLowLevel "WlrSeat"
   G.add_child waylandDisplay ((safeCast wlrSeat) :: GodotObject) True
@@ -335,6 +336,7 @@ _on_wlr_key gss args = do
   -- putStrLn "_on_wlr_key"
   case toList args of
     [keyboardGVar, eventGVar] -> do
+      -- putStrLn "G.keyboard_notify_key"
       wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
       G.keyboard_notify_key wlrSeat eventGVar
 
@@ -345,6 +347,7 @@ _on_wlr_modifiers gss args = do
   -- putStrLn "_on_wlr_modifiers"
   case toList args of
     [keyboardGVar] -> do
+      -- putStrLn "G.keyboard_notify_modifiers"
       wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
       G.keyboard_notify_modifiers wlrSeat
 
