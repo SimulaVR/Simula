@@ -173,12 +173,19 @@ updateSimulaViewSprite gsvs = do
           wlrSurface <- G.get_wlr_surface wlrXdgSurface -- G.get_wlr_surface :: GodotWlrXdgSurface -> IO (GodotWlrSurface)
           parentWlrTexture <- G.get_texture wlrSurface -- G.get_texture :: GodotWlrSurface -> IO (GodotTexture)
 
+
           -- saveTextureToDisk wlrXdgSurface parentWlrTexture -- Causes crash
           -- Set Sprite3D texture
           let isNull = ((unsafeCoerce parentWlrTexture) == nullPtr)
           case isNull of
                True -> putStrLn "Texture is null!"
-               False -> G.set_texture sprite3D parentWlrTexture
+               False -> do -- Attempt to force maximize windows doesn't work:
+                             -- wlrXdgSurfaceToplevel <- G.get_xdg_toplevel wlrXdgSurface
+                             -- G.set_maximized wlrXdgSurfaceToplevel True -- Doesn't seem to work
+                           rid <- G.get_rid parentWlrTexture
+                           visualServer <- getSingleton GodotVisualServer "VisualServer"
+                           G.texture_set_flags visualServer rid 7 -- Enable mipmapping, antialiasing, etc.
+                           G.set_texture sprite3D parentWlrTexture
 
           -- Tell client surface it should start rendering the next frame
           G.send_frame_done wlrSurface

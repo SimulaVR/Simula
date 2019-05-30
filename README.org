@@ -4,88 +4,64 @@ Simula is a 3D window manager for Linux that runs on top of [[https://godotengin
 
 [[https://d.tube/#!/v/sudoreboot/t026ny0m][file:./doc/SimulaDesktop.png]]
 
-*Video:* [[https://d.tube/#!/v/sudoreboot/t026ny0m][See here.]]
+# *Video:* [[https://d.tube/#!/v/sudoreboot/t026ny0m][See here.]]
 
-*Mission:* Facilitate a Linux future for VR & AR Desktop. In the short-run, this means allowing people to run 2D Linux apps with current generation headsets. In the long-run, this means allowing people to run Linux in standalone AR & VR HMDs. Currently, Simula is aiming to be compatible with the HTC Vive. 
+*Mission:* Facilitate a Linux future for VR & AR Desktop. In the short-run, this means allowing people to run 2D Linux apps with current generation headsets. In the long-run, this means allowing people to run Linux in standalone AR & VR HMDs. Currently, Simula is only compatible with the HTC Vive and HTC Vive Pro.
 
 *Origins:* Simula is a reimplementation fork of [[https://github.com/evil0sheep/motorcar][motorcar]]. To read about motorcar, see /[[https://github.com/evil0sheep/MastersThesis/blob/master/thesis.pdf?raw=true][Toward General Purpose 3D User Interfaces: Extending Windowing Systems to Three Dimensions]]/
-
 
 * Installation
 
 [[https://gitter.im/SimulaVR/Simula][file:./doc/GitterBadge.png]]
 
-Simula is in alpha phase, and can be difficult to get working on many setups. For help with installation, please visit our [[https://gitter.im/SimulaVR/Simula][chat room]].
+Simula is in alpha phase, and can be difficult to get working on many setups. For help with installation, please visit our [[https://gitter.im/SimulaVR/Simula][chat room]]. Note that Simula has only been tested on Ubuntu 19.04 (Disco Dingo), but the instructions below should in principle work on (i) older versions of Ubuntu and/or other distros that use ~apt~ (i.e., Debian) or (ii) Arch Linux (or distros that use ~pacman~).
 
-** Ubuntu/Debian
-
-Simula has only been tested on Ubuntu bionic beaver (18.04), but the instructions below should in principle work on older versions of Ubuntu and other distros that use ~apt~/~apt-get~ (i.e., Debian).
-
-1. *Clone the repo and run the helper commands.*
+1. *Clone the repo and run the helper commands.* Depending upon your distro, you'll need to run some combination of ~make ubuntu~, ~make arch~, ~make nvidia~ and ~make amd~.
 
   #+BEGIN_SRC shell
   git clone --recursive https://github.com/SimulaVR/Simula
   cd Simula
-  source utils/UbuntuHelpers.sh
 
-  installNvidiaDrivers # this will update you to nvidia-396 if you don't have it already
-                       # If you run AMD, ensure that mesa is updated to at least mesa-17.3
+  make ubuntu    # Installs needed packages via apt-get
+  # make arch    # Installs needed packages via pacman
 
-  installUbuntuDependencies
-  installSteam # if you haven't already
-  installGodot # Installs Godot 3.1 master branch; this will probably take a while.
+  # make nvidia # If needed: installs nvidia-driver-418 (via apt-get)
+  # make amd    # If needed: installs mesa-vulkan-drivers and other packages for SteamVR on AMD (via apt-get)
   #+END_SRC
 
-2. *Ensure udev rules are up to date.* Ensure that ~/lib/udev/rules.d/60-HTC-Vive-perms.rules~ exists and contains the following:
+2. *Compile Simula.* Warning: this can take a while.
 
-  #+BEGIN_SRC shell
-  # HTC Vive HID Sensor naming and permissioning
-  KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0bb4", ATTRS{idProduct}=="2c87", TAG+="uaccess"
-  KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="28de", ATTRS{idProduct}=="2101", TAG+="uaccess"
-  KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="28de", ATTRS{idProduct}=="2000", TAG+="uaccess"
-  KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="28de", ATTRS{idProduct}=="1043", TAG+="uaccess"
-  KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="28de", ATTRS{idProduct}=="2050", TAG+="uaccess"
-  KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="28de", ATTRS{idProduct}=="2011", TAG+="uaccess"
-  KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="28de", ATTRS{idProduct}=="2012", TAG+="uaccess"
-  SUBSYSTEM=="usb", ATTRS{idVendor}=="0bb4", ATTRS{idProduct}=="2c87", TAG+="uaccess"
-  # HTC Camera USB Node
-  SUBSYSTEM=="usb", ATTRS{idVendor}=="114d", ATTRS{idProduct}=="8328", TAG+="uaccess"
-  # HTC Mass Storage Node
-  SUBSYSTEM=="usb", ATTRS{idVendor}=="114d", ATTRS{idProduct}=="8200", TAG+="uaccess"
-  SUBSYSTEM=="usb", ATTRS{idVendor}=="114d", ATTRS{idProduct}=="8a12", TAG+="uaccess"
+  #+BEGIN_SRC  shell
+  make all
   #+END_SRC
 
-3. *Compile & launch Simula.* 
-  #+BEGIN_SRC shell
-  # Ensure that SteamVR is launched.
-  cd /path/to/simula
-  make run # this should take a while also
+3. *Launch Simula.* You must first launch SteamVR before you can run Simula.
 
-  # Once Simula starts, launch some Wayland apps to interact with:
-  weston-terminal # Wayland terminal
-  epiphany        # Wayland web browser
+  #+begin_src shell
+  steam &  # First launch SteamVR from steam
+  make run # ..then launch Simula
   
-  # You can also launch X apps:
-  DISPLAY=:1 firefox # You have to tell X apps that Simula is located on DISPLAY 1
-  # NOTE: This assumes Simula is launched on DISPLAY 1.
-  #       Unless you have an unusual setup, this is usually the case by default; 
-  #       check Simula console output to check for sure.
+  # make godot # If you have trouble launching Simula, try recompiling Godot via this command.
+  #+end_src
 
+4. *Launch some apps.* Once Simula starts, launch some Wayland apps to interact with.  Simula apps must be launched with ~WAYLAND_DISPLAY~ set to ~simula-0~.
 
-  #+END_SRC
+  #+begin_src shell
+  WAYLAND_DISPLAY=simula-0 sakura   # Wayland terminal
+  WAYLAND_DISPLAY=simula-0 epiphany # Wayland web browser
 
-** COMMENT Arch
-** COMMENT Nix[OS]
-** Other Distros
-
-Pending.
-
+  # In a few days, you'll be able to launch normal X apps as follows (you have to guide X apps to Simula's DISPLAY).
+  # DISPLAY=:1 firefox
+  # DISPLAY=:1 google-chrome-stable
+  # DISPLAY=:1 emacs
+  # DISPLAY=:1 gvim
+  #+end_src
 
 * Contributing
 
 We're looking for open-source contributors. If you're interested in using Haskell to bring VR and Linux together, drop by our [[https://gitter.im/SimulaVR/Simula][chat room]], or email georgewsinger@gmail.com.
 
-* Donations
+* COMMENT Donations
 
 If you're interested in a future where Linux and VR co-exist, you can donate to the following addresses:
 
@@ -104,10 +80,8 @@ If you're interested in a future where Linux and VR co-exist, you can donate to 
   - Vive donations to contributors (x 3)
   - 
 
-* Plans & Monthly Updates
+
+* COMMENT Plans & Monthly Updates
 
 See Simula's [[https://github.com/SimulaVR/Simula/wiki][Wiki]] for our Master Plan and list of Monthly Updates.
 
-* TODO COMMENT TODOs
-- [ ] SteamVR-for-Linux link
-- [X] Explicit video link.

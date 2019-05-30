@@ -1,15 +1,49 @@
-all: check
+all: check godot
 	cd addons/godot-haskell-plugin && make ; cd -
+
+godot:
+	. ./utils/Helpers.sh && ensureGodotBinaryExists
+
+.PHONY: resources
+resources:
+	. ./utils/Helpers.sh && generateResourceTarballs
+
+arch:
+	. ./utils/Helpers.sh && installArchDependencies
+
+ubuntu:
+	. ./utils/Helpers.sh && installUbuntuDependencies
+
+nvidia:
+	. ./utils/Helpers.sh && installNvidiaDrivers
+
+amd:
+	. ./utils/Helpers.sh && installAMDDRivers
+
+stack:
+	. ./utils/Helpers.sh && upgradeStack
+
+run: godot
+	cd addons/godot-haskell-plugin && make run ; cd -
+
+debug-run: godot
+	cd addons/godot-haskell-plugin && make debug-run ; cd -
+
+local-run:
+	cd addons/godot-haskell-plugin && make local-run ; cd -
+
+local-debug-run:
+	cd addons/godot-haskell-plugin && make local-debug-run ; cd -
+
+watch:
+	cd addons/godot-haskell-plugin && make watch ; cd -
+
+clean:
+	rm -r build
 
 .PHONY: nix
 nix:
 	cd addons/godot-haskell-plugin && make nix ; cd -
-run:
-	cd addons/godot-haskell-plugin && make run ; cd -
-debug-run:
-	cd addons/godot-haskell-plugin && make debug-run ; cd -
-watch:
-	cd addons/godot-haskell-plugin && make watch ; cd -
 
 .PHONY: check
 check:

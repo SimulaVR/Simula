@@ -14,8 +14,16 @@ nix:
 run:
 	stack --verbosity=error build godot-haskell-plugin $$TELEMETRY
 	cp $(LIBFILE) $(PROJECTROOT)
-	godot --path $(GODOTPROJECT)
+	$(GODOTPROJECT)/bin/godot --path $(GODOTPROJECT)
 debug-run:
+	stack --verbosity=error build godot-haskell-plugin $$TELEMETRY
+	cp $(LIBFILE) $(PROJECTROOT)
+	gdb --args $(GODOTPROJECT)/bin/godot --path $(GODOTPROJECT)
+local-run:
+	stack --verbosity=error build godot-haskell-plugin $$TELEMETRY
+	cp $(LIBFILE) $(PROJECTROOT)
+	godot --path $(GODOTPROJECT)
+local-debug-run:
 	stack --verbosity=error build godot-haskell-plugin $$TELEMETRY
 	cp $(LIBFILE) $(PROJECTROOT)
 	gdb --args godot --path $(GODOTPROJECT)
