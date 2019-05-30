@@ -23,6 +23,9 @@ amd:
 stack:
 	. ./utils/Helpers.sh && upgradeStack
 
+wlroots:
+	. ./utils/Helpers.sh && installWlrootsManually
+
 run: godot
 	cd addons/godot-haskell-plugin && make run ; cd -
 

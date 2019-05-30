@@ -44,7 +44,7 @@ installUbuntuDependencies() {
                       steam-runtime \
                       wayland-protocols \
                       yasm \
-
+                      wlroots # 0.3-1
   upgradeStack
 }
 
@@ -74,9 +74,22 @@ installArchDependencies() {
                 wayland \
                 wayland-protocols \
                 yasm \
+                wlroots # 0.5.0-1
  # yaourt -S elogind # optional dependency so we omit to avoid dealing with yaourt
 
   upgradeStack
+}
+
+# Warning: subverts package managers!
+installWlrootsManually() {
+    cd /tmp
+    sudo rm -r wlroots
+    git clone https://github.com/swaywm/wlroots
+    cd wlroots
+    git checkout 9e49ceb12985697fbfc0b2fa8f86143b29cc837b
+    meson build
+    ninja -C build
+    sudo ninja -C build install
 }
 
 # Only works on Ubuntu (or Debian based distros) and Arch

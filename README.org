@@ -2,7 +2,8 @@
 
 Simula is a 3D window manager for Linux that runs on top of [[https://godotengine.org/][Godot]].
 
-[[https://d.tube/#!/v/sudoreboot/t026ny0m][file:./doc/SimulaDesktop.png]]
+# [[https://d.tube/#!/v/sudoreboot/t026ny0m][file:./doc/SimulaDesktop.png]]
+[[https://i.imgur.com/zNTYTiG.png]]
 
 # *Video:* [[https://d.tube/#!/v/sudoreboot/t026ny0m][See here.]]
 
@@ -24,9 +25,6 @@ Simula is in alpha phase, and can be difficult to get working on many setups. Fo
 
   make ubuntu    # Installs needed packages via apt-get
   # make arch    # Installs needed packages via pacman
-
-  # make nvidia # If needed: installs nvidia-driver-418 (via apt-get)
-  # make amd    # If needed: installs mesa-vulkan-drivers and other packages for SteamVR on AMD (via apt-get)
   #+END_SRC
 
 2. *Compile Simula.* Warning: this can take a while.
@@ -38,24 +36,41 @@ Simula is in alpha phase, and can be difficult to get working on many setups. Fo
 3. *Launch Simula.* You must first launch SteamVR before you can run Simula.
 
   #+begin_src shell
-  steam &  # First launch SteamVR from steam
-  make run # ..then launch Simula
-  
-  # make godot # If you have trouble launching Simula, try recompiling Godot via this command.
+  steam &        # First launch SteamVR from steam
+  make run       # ..then launch Simula
   #+end_src
 
 4. *Launch some apps.* Once Simula starts, launch some Wayland apps to interact with.  Simula apps must be launched with ~WAYLAND_DISPLAY~ set to ~simula-0~.
 
   #+begin_src shell
-  WAYLAND_DISPLAY=simula-0 sakura   # Wayland terminal
-  WAYLAND_DISPLAY=simula-0 epiphany # Wayland web browser
-
-  # In a few days, you'll be able to launch normal X apps as follows (you have to guide X apps to Simula's DISPLAY).
-  # DISPLAY=:1 firefox
-  # DISPLAY=:1 google-chrome-stable
-  # DISPLAY=:1 emacs
-  # DISPLAY=:1 gvim
+  WAYLAND_DISPLAY=simula-0 sakura   # Wayland-based terminal
+  WAYLAND_DISPLAY=simula-0 epiphany # Wayland-based web browser
   #+end_src
+
+* Troubleshooting
+
+Any errors can be immediately helped with in [[https://gitter.im/SimulaVR/Simula][Simula's chatroom]]. Here are some helpers though:
+
+1. *Driver errors.* If you get driver related errors, try running ~make nvidia~ or ~make amd~ to try to upgrade to the latest drivers for your respective video card. These helpers only work on Ubuntu/Arch:
+
+  #+begin_src shell
+  make nvidia # If needed: installs nvidia-driver-418 (via apt-get)
+  make amd    # If needed: installs mesa-vulkan-drivers and other packages for SteamVR on AMD (via apt-get)
+  #+end_src
+
+2. *Godot errors.* If you get godot related errors, trying rebuilding ~godot~ from scratch:
+
+  #+begin_src shell
+  make godot
+  #+end_src
+
+3. *Wlroots errors.* If you get wrloots related errors (i.e., any error that complains about missing ~wlr_*~ references), try rebuilding wlroots from scratch:
+
+  #+begin_src
+  make wlroots   # If you have trouble launching Simula, try recompiling Godot via this command.
+  #+end_src
+
+4. *Unable to launch a particular app.* Many Linux apps don't work right now in Simula (technically: any app that doesn't implement the XDG Wayland protocol). We're working on fixing this ASAP so that all Linux apps are compatible with Simula. This should be done by end of month (June 2019).
 
 * Contributing
 
