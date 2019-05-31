@@ -17,7 +17,7 @@ Simula is a 3D window manager for Linux that runs on top of [[https://godotengin
 
 Simula is in alpha phase, and can be difficult to get working on many setups. For help with installation, please visit our [[https://gitter.im/SimulaVR/Simula][chat room]]. Note that Simula has only been tested on Ubuntu 19.04 (Disco Dingo), but the instructions below should in principle work on (i) older versions of Ubuntu and/or other distros that use ~apt~ (i.e., Debian) or (ii) Arch Linux (or distros that use ~pacman~).
 
-1. *Clone the repo and run the helper commands.* Depending upon your distro, you'll need to run some combination of ~make ubuntu~, ~make arch~, ~make nvidia~ and ~make amd~.
+1. *Clone Simula and install its dependencies.* Depending upon your distro, you'll need to run some combination of ~make ubuntu~, ~make arch~, ~make nvidia~ and ~make amd~.
 
   #+BEGIN_SRC shell
   git clone --recursive https://github.com/SimulaVR/Simula
@@ -40,12 +40,28 @@ Simula is in alpha phase, and can be difficult to get working on many setups. Fo
   make run       # ..then launch Simula
   #+end_src
 
-4. *Launch some apps.* Once Simula starts, launch some Wayland apps to interact with.  Simula apps must be launched with ~WAYLAND_DISPLAY~ set to ~simula-0~.
+4. *Launch some apps.* Once Simula starts, launch some Wayland apps to interact with (at this point Simula only supports Wayland apps).  Apps must be launched with ~WAYLAND_DISPLAY~ set to ~simula-0~.
 
   #+begin_src shell
   WAYLAND_DISPLAY=simula-0 sakura   # Wayland-based terminal
   WAYLAND_DISPLAY=simula-0 epiphany # Wayland-based web browser
   #+end_src
+
+* Using Simula
+
+[[https://www.evetech.co.za/repository/ProductImages/htc-vive-controller-730px-v1.jpg]]
+
+- *Left-clicking.* Use (7) gently (you don't have to go all the way down to click).
+
+- *Right-clicking.* Not yet implemented.
+
+- *Scrolling.* Scroll up and down via (2).
+
+- *Text dragging.* Hold (7) down and drag.
+
+- *Window manipulation.* Point at a window and, while holding (7) + (8), move your controller around. The windows should "levitate" in the direction of your movement.
+
+- *Window resizing.* Point at a window, hold (8) down, and then scroll up and down on (2).
 
 * Troubleshooting
 

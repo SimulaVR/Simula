@@ -2,7 +2,7 @@
 
 installUbuntuDependencies() {
  sudo apt-get install build-essential \
-                      haskell-stack
+                      haskell-stack \
                       libasound2-dev \
                       libcap-dev \
                       libdrm-dev \
