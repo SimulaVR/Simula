@@ -29,6 +29,9 @@ wlroots:
 run: godot
 	cd addons/godot-haskell-plugin && make run ; cd -
 
+nix-run: godot
+	cd addons/godot-haskell-plugin && make nix-run ; cd -
+
 debug-run: godot
 	cd addons/godot-haskell-plugin && make debug-run ; cd -
 

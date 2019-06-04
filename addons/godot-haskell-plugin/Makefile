@@ -1,4 +1,5 @@
 LIBFILE = $(shell stack path --local-install-root)/lib/libgodot-haskell-plugin.so
+NIXLIBFILE = $(shell stack --nix path --local-install-root)/lib/libgodot-haskell-plugin.so
 PROJECTROOT = $(shell stack path --project-root)
 GODOTPROJECT = $(PROJECTROOT)/../../
 all:
@@ -14,6 +15,10 @@ nix:
 run:
 	stack --verbosity=error build godot-haskell-plugin $$TELEMETRY
 	cp $(LIBFILE) $(PROJECTROOT)
+	$(GODOTPROJECT)/bin/godot --path $(GODOTPROJECT)
+nix-run:
+	stack --nix --verbosity=error build godot-haskell-plugin $$TELEMETRY
+	cp $(NIXLIBFILE) $(PROJECTROOT)
 	$(GODOTPROJECT)/bin/godot --path $(GODOTPROJECT)
 debug-run:
 	stack --verbosity=error build godot-haskell-plugin $$TELEMETRY
