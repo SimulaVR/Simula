@@ -1,4 +1,4 @@
-all: check godot
+all: godot
 	cd addons/godot-haskell-plugin && make ; cd -
 
 godot:
@@ -51,10 +51,11 @@ clean:
 nix:
 	cd addons/godot-haskell-plugin && make nix ; cd -
 
-.PHONY: check
-check:
-ifndef TELEMETRY
-	@cat  "./Consent.md"
-	@read line; if [ $$line == "n" ]; then echo "Please set TELEMETRY='--flag godot-haskell-plugin:no-tracking' and re-run make."; exit 1 ; fi
-  # @read line; if [ $$line == "n" ]; then export TELEMETRY='--flag godot-haskell-plugin:no-tracking'; fi # Doesn't work
-endif
+# TODO: Fix this (giving "/bin/sh: 1: [: Y: unexpected operator" error).
+# .PHONY: check
+# check:
+# ifndef TELEMETRY
+# 	@cat  "./Consent.md"
+# 	@read line; if [ $$line == "n" ]; then echo "Please set TELEMETRY='--flag godot-haskell-plugin:no-tracking' and re-run make."; exit 1 ; fi
+#   # @read line; if [ $$line == "n" ]; then export TELEMETRY='--flag godot-haskell-plugin:no-tracking'; fi # Doesn't work
+# endif

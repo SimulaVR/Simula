@@ -3,14 +3,14 @@ NIXLIBFILE = $(shell stack --nix path --local-install-root)/lib/libgodot-haskell
 PROJECTROOT = $(shell stack path --project-root)
 GODOTPROJECT = $(PROJECTROOT)/../../
 all:
-	cd include && make xdg-shell-protocol.h
+	mkdir -p include && cd include && make xdg-shell-protocol.h
 	cd cbits && make xdg-shell-protocol.c
 	stack clean godot-haskell-plugin 
 	stack build godot-haskell-plugin $$TELEMETRY
 	cp $(LIBFILE) $(PROJECTROOT)
 .PHONY: nix
 nix:
-	cd include && make nix
+	mkdir -p include && cd include && make nix
 	cd cbits && make nix
 run:
 	stack --verbosity=error build godot-haskell-plugin $$TELEMETRY
@@ -35,5 +35,5 @@ local-debug-run:
 watch:
 	stack build --file-watch --fast --exec "cp $(LIBFILE) $(PROJECTROOT)"
 clean:
-	cd include && make clean
+	mkdir -p include && cd include && make clean
 	cd cbits && make clean

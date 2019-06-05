@@ -6,7 +6,6 @@ installUbuntuDependencies() {
                       libasound2-dev \
                       libcap-dev \
                       libdrm-dev \
-                      # libegl-dev \ # Not provided in disco dango
                       libegl1-mesa-dev \
                       libelogind-dev \
                       libfreetype6-dev \
@@ -24,7 +23,6 @@ installUbuntuDependencies() {
                       libx11-dev \
                       libx11-xcb-dev \
                       libxcb-composite0-dev \
-                      # libxcb-iccm4-dev \ # Not provided in disco dango
                       libxcb-image0-dev \
                       libxcb-render-util0-dev \
                       libxcb-render0-dev \
@@ -41,10 +39,14 @@ installUbuntuDependencies() {
                       scons \
                       steam \
                       steam-devices \
-                      # steam-runtime \ # Not provided in disco dango
                       wayland-protocols \
                       yasm \
                       libwlroots-dev
+                      # libegl-dev       # Not provided in disco dango
+                      # libxcb-iccm4-dev # Not provided in disco dango
+                      # steam-runtime    # Not provided in disco dango
+
+
   upgradeStack
 }
 
@@ -122,7 +124,7 @@ installAMDDrivers() {
 }
 
 upgradeStack() {
-  stack upgrade --git
+  stack upgrade
 }
 
 ensureGodotBinaryExists() {
