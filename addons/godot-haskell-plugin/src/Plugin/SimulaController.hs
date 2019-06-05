@@ -48,28 +48,6 @@ import           Data.Coerce
 import           Foreign
 import           Foreign.C
 
-pointer_notify_axis_continuous :: Method "pointer_notify_axis_continuous" cls sig => cls -> sig
-pointer_notify_axis_continuous = runMethod @"pointer_notify_axis_continuous"
-
-bindWlrSeat_pointer_notify_axis_continuous
-  = unsafePerformIO $
-      withCString "WlrSeat" $
-        \ clsNamePtr ->
-          withCString "pointer_notify_axis_continuous" $
-            \ methodNamePtr ->
-              Api.godot_method_bind_get_method clsNamePtr methodNamePtr
-
-{-# NOINLINE bindWlrSeat_pointer_notify_axis_continuous#-}
-
-instance Method "pointer_notify_axis_continuous" GodotWlrSeat (Float -> Float -> IO ()) where
-        runMethod cls arg1 arg2
-          = withVariantArray [toVariant arg1, toVariant arg2]
-              (\ (arrPtr, len) ->
-                 Api.godot_method_bind_call bindWlrSeat_pointer_notify_axis_continuous (coerce cls)
-                   arrPtr
-                   len
-                   >>= \ (err, res) -> throwIfErr err >> fromGodotVariant res)
-
 data GodotSimulaController = GodotSimulaController
   { _gscObj     :: GodotObject
   , _gscRayCast :: GodotRayCast
