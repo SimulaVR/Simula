@@ -5,7 +5,7 @@ GODOTPROJECT = $(PROJECTROOT)/../../
 all:
 	mkdir -p include && cd include && make xdg-shell-protocol.h
 	cd cbits && make xdg-shell-protocol.c
-	stack clean godot-haskell-plugin 
+	stack clean godot-haskell-plugin
 	stack build godot-haskell-plugin $$TELEMETRY
 	cp $(LIBFILE) $(PROJECTROOT)
 .PHONY: nix

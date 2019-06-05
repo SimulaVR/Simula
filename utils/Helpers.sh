@@ -12,6 +12,7 @@ installUbuntuDependencies() {
                       libgbm-dev \
                       libgl1-mesa-dev \
                       libgles2 \
+                      libgles2-mesa-dev \
                       libgudev-1.0-dev \
                       libinput-dev \
                       libpixman-1-dev \
