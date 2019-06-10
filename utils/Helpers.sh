@@ -42,7 +42,9 @@ installUbuntuDependencies() {
                       steam-devices \
                       wayland-protocols \
                       yasm \
-                      libwlroots-dev
+                      libwlroots-dev \
+                      epiphany \
+                      sakura
                       # libegl-dev       # Not provided in disco dango
                       # libxcb-iccm4-dev # Not provided in disco dango
                       # steam-runtime    # Not provided in disco dango
@@ -77,7 +79,9 @@ installArchDependencies() {
                 wayland \
                 wayland-protocols \
                 yasm \
-                wlroots # 0.5.0-1
+                wlroots \ # 0.5.0-1
+                epiphany \
+                sakura
  # yaourt -S elogind # optional dependency so we omit to avoid dealing with yaourt
 
   upgradeStack
