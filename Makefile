@@ -1,8 +1,14 @@
-all: godot
+all: resources godot
 	cd addons/godot-haskell-plugin && make ; cd -
 
 godot:
 	. ./utils/Helpers.sh && ensureGodotBinaryExists
+
+godot-update:
+	. ./utils/Helpers.sh && updateResourceGodot
+
+godot-haskell-gdwlroots-update:
+	. ./utils/Helpers.sh && updateResourceGodotHaskellGdwlroots
 
 .PHONY: resources
 resources:
