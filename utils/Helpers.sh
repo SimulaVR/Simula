@@ -187,7 +187,7 @@ generateResourceTarballs() {
     # Generate ./godot/godot-haskell-gdwlroots/api.json
     cd godot-haskell-gdwlroots
     rm api.json
-    DISPLAY=:1 ../bin/godot.x11.tools.64 --gdnative-generate-json-api api.json
+    ../bin/godot.x11.tools.64 --gdnative-generate-json-api api.json
 
     # Morph ./godot/godot-haskell-gdwlroots source code to reflect updated api.json
     cd classgen
