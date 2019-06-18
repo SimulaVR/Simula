@@ -1,0 +1,79 @@
+[gd_scene load_steps=2 format=2]
+
+[sub_resource type="GDScript" id=1]
+
+script/source = "extends ARVRController
+
+signal controller_activated(controller)
+
+var ovr_render_model
+var components = Array()
+var ws = 0
+
+func _ready():
+	# instance our render model object
+	ovr_render_model = preload(\"res://addons/godot-openvr/OpenVRRenderModel.gdns\").new()
+	
+	# hide to begin with
+	visible = false
+
+func apply_world_scale():
+	var new_ws = ARVRServer.world_scale
+	if (ws != new_ws):
+		ws = new_ws
+		$Controller_mesh.scale = Vector3(ws, ws, ws)
+
+func load_controller_mesh(controller_name):
+	if ovr_render_model.load_model(controller_name.substr(0, controller_name.length()-2)):
+		return ovr_render_model
+	
+	if ovr_render_model.load_model(\"generic_controller\"):
+		return ovr_render_model
+	
+	return Mesh.new()
+
+func _process(delta):
+	if !get_is_active():
+		visible = false
+		return
+	
+	# always set our world scale, user may end up changing this
+	apply_world_scale()
+	
+	if visible:
+		return
+	
+	# became active? lets handle it...
+	var controller_name = get_controller_name()
+	print(\"Controller \" + controller_name + \" became active\")
+			
+	# attempt to load a mesh for this
+	$Controller_mesh.mesh = load_controller_mesh(controller_name)
+			
+	# make it visible
+	visible = true
+	emit_signal(\"controller_activated\", self)
+"
+
+[node name="OVRController" type="ARVRController" index="0"]
+
+controller_id = 1
+rumble = 0.0
+script = SubResource( 1 )
+_sections_unfolded = [ "Transform" ]
+
+[node name="Controller_mesh" type="MeshInstance" parent="." index="0"]
+
+layers = 1
+material_override = null
+cast_shadow = 1
+extra_cull_margin = 0.0
+use_in_baked_light = false
+lod_min_distance = 0.0
+lod_min_hysteresis = 0.0
+lod_max_distance = 0.0
+lod_max_hysteresis = 0.0
+mesh = null
+skeleton = NodePath("..")
+
+
