@@ -44,7 +44,8 @@ installUbuntuDependencies() {
                       yasm \
                       libwlroots-dev \
                       epiphany \
-                      sakura
+                      sakura \
+                      cabal-install
                       # libegl-dev       # Not provided in disco dango
                       # libxcb-iccm4-dev # Not provided in disco dango
                       # steam-runtime    # Not provided in disco dango
@@ -81,7 +82,8 @@ installArchDependencies() {
                 yasm \
                 wlroots \ # 0.5.0-1
                 epiphany \
-                sakura
+                sakura \
+                cabal-install
  # yaourt -S elogind # optional dependency so we omit to avoid dealing with yaourt
 
   upgradeStack
