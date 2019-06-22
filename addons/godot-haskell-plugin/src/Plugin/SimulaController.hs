@@ -124,14 +124,18 @@ loadOpenVRControllerMesh name = do
   nameStr :: GodotString <- toLowLevel $ T.dropEnd 2 name
   ret <- G.call msh loadModelStr [toVariant nameStr] >>= fromGodotVariant
   if ret
-    then return $ Just $ safeCast msh
+    then do putStrLn "1"
+            return $ Just $ safeCast msh
     else do
+      putStrLn "2"
       genericControllerStr :: GodotString <- toLowLevel "generic_controller"
       ret' <- G.call msh loadModelStr [toVariant genericControllerStr]
         >>= fromGodotVariant
       if ret'
-        then return $ Just $ safeCast msh
-        else return Nothing
+        then do putStrLn "3"
+                return $ Just $ safeCast msh
+        else do putStrLn "4"
+                return Nothing
 
 -- Because the ARVRController member method is_button_pressed returns Int, not Bool
 isButtonPressed :: Int -> GodotSimulaController -> IO Bool
@@ -234,10 +238,14 @@ process self args = do
   if
     | not active -> G.set_visible self False
     | visible -> do
+      putStrLn "A"
       updateTouchpadState self
+      putStrLn "B"
       rescaleOrScroll self delta -- <- Updates SimulaController state
+      putStrLn "C"
       pointerWindow self >>= \case
         Just window -> do
+          putStrLn "D"
           G.set_visible (_gscLaser self) True
           pos <- G.get_collision_point $ _gscRayCast self
           processClickEvent window Motion pos
@@ -248,9 +256,11 @@ process self args = do
           -- wlrSeat <- getWlrSeatFromPath self
           -- G.pointer_clear_focus wlrSeat -- pointer_clear_focus :: GodotWlrSeat -> IO ()
 
+          putStrLn "F"
           G.set_visible (_gscLaser self) False
           return ()
     | otherwise -> do
+      putStrLn "G"
       cname <- G.get_controller_name self >>= fromLowLevel
       loadOpenVRControllerMesh cname >>= \case
         Just mesh -> G.set_mesh (_gscMeshInstance self) mesh
@@ -273,12 +283,15 @@ getWlrSeatFromPath self = do
 physicsProcess :: GFunc GodotSimulaController
 physicsProcess self _ = do
   whenM (G.get_is_active self) $ do
+    putStrLn "H"
     isGripPressed <- isButtonPressed 2 self
     triggerPull <- G.get_joystick_axis self 2
     let levitateCond = isGripPressed -- && triggerPull > 0.01
     let moveCond = triggerPull > 0.2
 
+    putStrLn "I"
     tk <- readTVarIO (_gscTelekinesis self) >>= telekinesis levitateCond moveCond
+    putStrLn "J"
     atomically $ writeTVar (_gscTelekinesis self) tk
 
   retnil

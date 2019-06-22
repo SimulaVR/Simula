@@ -35,6 +35,9 @@ wlroots:
 run: godot
 	cd addons/godot-haskell-plugin && make run ; cd -
 
+steam-run:
+	~/.steam/ubuntu12_32/steam-runtime/run.sh ./bin/godot
+
 nix-run: godot
 	cd addons/godot-haskell-plugin && make nix-run ; cd -
 

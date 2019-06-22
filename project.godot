@@ -18,6 +18,14 @@ _global_script_class_icons={
 config/name="haskell-test"
 run/main_scene="res://addons/godot-haskell-plugin/demo/Demo.tscn"
 
+[debug]
+
+settings/stdout/print_fps=true
+
+[display]
+
+window/vsync/use_vsync=false
+
 [gdnative]
 
 singletons=[ "res://addons/godot-openhmd/godot_openhmd.gdnlib", "res://addons/godot-openvr/godot_openvr.gdnlib" ]
@@ -30,6 +38,6 @@ common/physics_fps=90
 [rendering]
 
 quality/driver/driver_name="GLES2"
-quality/filters/msaa=2
+quality/filters/msaa=8
 environment/default_environment="res://default_env.tres"
 quality/filters/anisotropic_filter_level=16
