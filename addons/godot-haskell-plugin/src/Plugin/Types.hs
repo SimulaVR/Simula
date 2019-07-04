@@ -104,7 +104,7 @@ data SimulaView = SimulaView
   { _svServer                  :: GodotSimulaServer -- Can obtain WlrSeat
   -- , _svWlrSurface              :: GodotWlrSurface -- Can obtain GodotWlrSurface from GodotWlrXdgSurface
   , _svMapped                  :: TVar Bool
-  , _svWlrXdgSurface         :: GodotWlrXdgSurface -- Contains the WlrSurface, its texture data, & even its subsurfaces (via `surface_at`).
+  , _svWlrEitherSurface        :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface -- Contains the WlrSurface, its texture data, & even its subsurfaces (via `surface_at`).
   , _gsvsUUID                  :: Maybe UUID
   }
 

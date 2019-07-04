@@ -44,6 +44,7 @@ import           Control.Monad.STM
 import           Data.Maybe
 import           Data.List
 import           Data.Coerce
+import           Data.Either
 
 import           Foreign hiding (void)
 import           Foreign.C.Error
@@ -295,10 +296,10 @@ _on_WlrXdgShell_new_surface gss args = do
           gsvsUUID' <- nextUUID :: IO (Maybe UUID)
 
           return SimulaView
-              { _svServer          = gss :: GodotSimulaServer
-              , _svMapped          = svMapped' :: TVar Bool
-              , _svWlrXdgSurface   = wlrXdgSurface :: GodotWlrXdgSurface
-              , _gsvsUUID          = gsvsUUID' :: Maybe UUID
+              { _svServer           = gss :: GodotSimulaServer
+              , _svMapped           = svMapped' :: TVar Bool
+              , _svWlrEitherSurface = (Left wlrXdgSurface) :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface
+              , _gsvsUUID           = gsvsUUID' :: Maybe UUID
               }
 
 handle_map_surface :: GFunc GodotSimulaServer

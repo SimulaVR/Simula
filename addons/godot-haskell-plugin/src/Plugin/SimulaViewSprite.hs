@@ -31,6 +31,7 @@ import qualified Godot.Gdnative.Internal.Api as Api
 
 import Plugin.Types
 import Data.Maybe
+import Data.Either
 
 -- import           Data.Vector.V2
 
@@ -126,41 +127,6 @@ updateSimulaViewSprite gsvs = do
     moveToUnoccupied gsvs
 
   where
-        -- Doesn't work; raises _draw() error.
-        useViewportToDrawParentSurface :: GodotSimulaViewSprite -> IO ()
-        useViewportToDrawParentSurface gsvs  = do
-          -- putStrLn "drawParentSubsurfaceOnViewport"
-          -- Get state
-          sprite3D <- readTVarIO (gsvs ^. gsvsSprite)
-          simulaView <- readTVarIO (gsvs ^. gsvsView)
-          let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
-          wlrSurface <- G.get_wlr_surface wlrXdgSurface -- G.get_wlr_surface :: GodotWlrXdgSurface -> IO (GodotWlrSurface)
-          parentWlrTexture <- G.get_texture wlrSurface -- G.get_texture :: GodotWlrSurface -> IO (GodotTexture)
-
-          -- Draw texture on Viewport; get its texture; set it to Sprite3D's texture; call G.send_frame_done
-          let isNull = ((unsafeCoerce parentWlrTexture) == nullPtr)
-          case isNull of
-               True -> putStrLn "Texture is null!"
-               False -> do renderTarget <- initializeRenderTarget wlrXdgSurface     -- Dumb, but we reset the renderTarget every frame to make sure the dimensions aren't (0,0)
-                           atomically $ writeTVar (_gsvsViewport gsvs) renderTarget -- "
-                           -- Get state
-                           -- let zero = (V2 0 0) :: V2 Float
-                           -- gv2 <- toLowLevel zero :: IO GodotVector2
-                           -- return zero
-                           renderPosition <- getCoordinatesFromCenter wlrXdgSurface 0 0 -- Surface coordinates are relative to the size of the GodotWlrXdgSurface; We draw at the top left.
-
-                           textureToDraw <- G.get_texture wlrSurface :: IO GodotTexture
-                           renderTarget <- readTVarIO (gsvs ^. gsvsViewport)
-
-                             -- Send draw command
-                           godotColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1) :: IO GodotColor
-                           let nullTexture = Data.Maybe.fromJust ((fromVariant VariantNil) :: Maybe GodotTexture) :: GodotTexture
-                           G.draw_texture ((unsafeCoerce renderTarget) :: GodotCanvasItem) textureToDraw renderPosition godotColor nullTexture
-                           viewportTexture <- G.get_texture renderTarget
-                           G.set_texture sprite3D (safeCast viewportTexture)
-                           -- Tell the surface being drawn it can start to render its next frame
-                           G.send_frame_done wlrSurface
-
         -- As the name makes clear, this function *only* draws the parent WlrSurface
         -- onto a GodotSimulaViewSprite's Sprite3D field. It doesn't include popups or
         -- any other subsurfaces. This is a temporary hack that needs fixed.
@@ -169,8 +135,11 @@ updateSimulaViewSprite gsvs = do
           -- Get state
           sprite3D <- readTVarIO (gsvs ^. gsvsSprite)
           simulaView <- readTVarIO (gsvs ^. gsvsView)
-          let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
-          wlrSurface <- G.get_wlr_surface wlrXdgSurface -- G.get_wlr_surface :: GodotWlrXdgSurface -> IO (GodotWlrSurface)
+          let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
+          wlrSurface <- case wlrEitherSurface of
+                                Left wlrXdgSurface -> do G.get_wlr_surface wlrXdgSurface
+                                Right wlrXWaylandSurface -> do putStrLn "We can't handle XWayland surfaces yet."
+                                                               return (unsafeCoerce nullPtr)
           parentWlrTexture <- G.get_texture wlrSurface -- G.get_texture :: GodotWlrSurface -> IO (GodotTexture)
 
 
@@ -189,21 +158,6 @@ updateSimulaViewSprite gsvs = do
 
           -- Tell client surface it should start rendering the next frame
           G.send_frame_done wlrSurface
-
-        getTextureFromURL :: String -> IO (GodotTexture)
-        getTextureFromURL urlStr = do
-          -- instance new types
-          godotImage <- unsafeInstance GodotImage "Image" :: IO GodotImage
-          godotImageTexture <- unsafeInstance GodotImageTexture "ImageTexture"
-
-          -- Get image from URL
-          pngUrl <- toLowLevel (pack urlStr) :: IO GodotString
-          exitCode <- G.load godotImageTexture pngUrl -- load :: GodotImageTexture -> GodotString -> IO Int
-
-          -- Load image into texture
-          G.create_from_image godotImageTexture godotImage 7 -- uses FLAGS_DEFAULT = 7
-
-          return (safeCast godotImageTexture) -- NOTE: This [probably] leaks godotImage?
 
         setExtents :: GodotSimulaViewSprite -> IO ()
         setExtents gsvs = do
@@ -258,69 +212,6 @@ updateSimulaViewSprite gsvs = do
                 else V3 (maxX + sizeX/2) 0 0
 
           G.translate gsvs =<< toLowLevel newPos
-
-        -- | Draws the given surface onto the GodotSimulaViewSprite's Viewport (treated
-        -- | as a rendering target). Meant to be called for all of the
-        -- | GodotSimulaViewSprite's subsurfaces, to create the texture to be applied for
-        -- | the GodotSimulaViewSprite's Sprite3D.
-        -- |
-        -- | TODO: This function is missing a G.draw_texture call (we need a CanvasItem argument). Fix this.
-        drawSubsurfaceOnViewport :: GodotSimulaViewSprite -- Contains the viewport
-                                  -> GodotWlrSurface
-                                  -> CInt
-                                  -> CInt
-                                  -> IO ()
-        drawSubsurfaceOnViewport gsvs wlrSurface sx sy = do
-          -- putStrLn "drawSubsurfaceOnViewport"
-          -- Get state
-          simulaView <- readTVarIO (gsvs ^. gsvsView)
-          let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
-          renderPosition <- getCoordinatesFromCenter wlrXdgSurface sx sy -- Surface coordinates are relative to the size of the GodotWlrXdgSurface
-          textureToDraw <- G.get_texture wlrSurface :: IO GodotTexture
-          renderTarget <- readTVarIO (gsvs ^. gsvsViewport)
-
-            -- Send draw command
-          godotColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1) :: IO GodotColor
-          let nullTexture = Data.Maybe.fromJust ((fromVariant VariantNil) :: Maybe GodotTexture) :: GodotTexture
-          -- G.draw_texture ((safeCast renderTarget) :: GodotCanvasItem) textureToDraw renderPosition godotColor nullTexture
-
-          -- Tell the surface being drawn it can start to render its next frame
-          G.send_frame_done wlrSurface
-          -- NOTE: I'm omitting re-mutating gsvsViewport, G.draw_texture should merely
-          -- mutate what it's pointing to anyway.
-
-        -- | Convert (sx,sy) coordinates from "top-left" to "from-center" coordinate systems.
-        getCoordinatesFromCenter :: GodotWlrXdgSurface -> CInt -> CInt -> IO GodotVector2
-        getCoordinatesFromCenter wlrXdgSurface sx sy = do
-          -- putStrLn "getCoordinatesFromCenter"
-          (bufferWidth', bufferHeight')    <- getBufferDimensions wlrXdgSurface
-          let (bufferWidth, bufferHeight)  = (fromIntegral bufferWidth', fromIntegral bufferHeight')
-          let (fromTopLeftX, fromTopLeftY) = (fromIntegral sx, fromIntegral sy)
-          let fromCenterX                  = -(bufferWidth/2) + fromTopLeftX
-          let fromCenterY                  = -(-(bufferHeight/2) + fromTopLeftY)
-          -- NOTE: In godotston fromCenterY is isn't negative, but since we set
-          -- `G.render_target_v_flip viewport True` we can set this
-          -- appropriately
-          -- NOTE: We above assume that
-          --    G.render_target_v_flip viewport True
-          -- has been set.
-          let v2 = (V2 fromCenterX fromCenterY) :: V2 Float
-          gv2 <- toLowLevel v2 :: IO GodotVector2
-          return gv2
-
-        -- TODO: Implement this function
-        drawSurfacesOnSprite :: GodotSimulaViewSprite -> IO ()
-        drawSurfacesOnSprite gsvs = do
-           -- putStrLn "drawSurfacesOnSprite"
-           simulaView <- readTVarIO (gsvs ^. gsvsView)
-           let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
-           -- listOfWlrSurface <- getSubsurfaces wlrXdgSurface -- getSurfaces :: GodotWlrXdgSurface -> IO [(WlrSurface, sx, sy)]
-           -- forM_ listOfWlrSurface
-           --    (\(wlrSurface, sx, sy) -> do drawSubsurfaceOnViewport wlrSurface sx sy)
-           --                                 G.send_frame_done wlrSurface
-           -- viewportTexture <- ...
-           -- G.set_texture sprite3D parentWlrTexture
-           return ()
 
 ready :: GFunc GodotSimulaViewSprite
 ready self _ = do
@@ -384,9 +275,9 @@ newGodotSimulaViewSprite gss simulaView = do
   atomically $ writeTVar (_gsvsView      gsvs) simulaView    -- :: TVar SimulaView
 
   -- Initialize and load render target into _gsvsViewport field
-  let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
-  renderTarget <- initializeRenderTarget wlrXdgSurface
-  atomically $ writeTVar (_gsvsViewport gsvs) renderTarget
+    -- let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
+    -- renderTarget <- initializeRenderTarget wlrXdgSurface
+    -- atomically $ writeTVar (_gsvsViewport gsvs) renderTarget
 
   updateSimulaViewSprite gsvs -- Now we update everything
 
@@ -397,21 +288,21 @@ focus gsvs = do
   -- putStrLn "focus in SimulaViewSprite.hs"
   -- Get state:
   simulaView  <- atomically $ readTVar (gsvs ^. gsvsView) 
-  let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
-  wlrSurface  <- G.get_wlr_surface wlrXdgSurface
-  wlrSurface' <- asGodotVariant wlrSurface
-  toplevel    <- G.get_xdg_toplevel wlrXdgSurface :: IO GodotWlrXdgToplevel
-  gss         <- atomically $ readTVar (gsvs ^. gsvsServer) -- ^. gssWlrSeat)
-  wlrSeat     <- atomically $ readTVar (gss ^. gssWlrSeat)
-  
-  isGodotTypeNull wlrSurface
+  let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
+  case wlrEitherSurface of
+    Left wlrXdgSurface -> do wlrSurface  <- G.get_wlr_surface wlrXdgSurface
+                             wlrSurface' <- asGodotVariant wlrSurface
+                             toplevel    <- G.get_xdg_toplevel wlrXdgSurface :: IO GodotWlrXdgToplevel
+                             gss         <- atomically $ readTVar (gsvs ^. gsvsServer) -- ^. gssWlrSeat)
+                             wlrSeat     <- atomically $ readTVar (gss ^. gssWlrSeat)
 
-  -- Make calls:
-  G.set_activated toplevel True
-  G.keyboard_notify_enter wlrSeat wlrSurface'
+                             isGodotTypeNull wlrSurface
 
-  return ()
-
+                             -- Make calls:
+                             G.set_activated toplevel True
+                             G.keyboard_notify_enter wlrSeat wlrSurface'
+                             return ()
+    Right wlrXWaylandSurface -> do putStrLn "Don't know how to handle XWayland surfaces yet!"
 
 -- | This function isn't called unless a surface is being pointed at (by VR
 -- | controllers or a mouse in pancake mode).
@@ -427,22 +318,23 @@ processClickEvent gsvs evt clickPos = do
   gss        <- readTVarIO (gsvs ^. gsvsServer)
   wlrSeat    <- readTVarIO (gss ^. gssWlrSeat)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
-  let godotWlrXdgSurface = (simulaView ^. svWlrXdgSurface)
+  let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
+  case wlrEitherSurface of
+    Right godotWlrXWaylandSurface -> do putStrLn "Can't handle XWayland surfaces yet!"
+    Left godotWlrXdgSurface ->
+      do -- Compute subsurface local coordinates at clickPos
+         surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)) <- getSurfaceLocalCoordinates clickPos
+         (godotWlrSurface, subSurfaceLocalCoords@(SubSurfaceLocalCoordinates (ssx, ssy))) <- getSubsurfaceAndCoords godotWlrXdgSurface surfaceLocalCoords -- This function is a hack that only returns parent surface + its coordinates; needs fixing.
 
+         -- -- Send events
+         case evt of
+           Motion                -> do pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
+                                       pointerNotifyMotion wlrSeat subSurfaceLocalCoords
+                                       keyboardNotifyEnter wlrSeat godotWlrSurface -- TEMPORARY HACK; shouldn't have to call this every frame we're pointing at a surface
+           Button pressed button ->    pointerNotifyButton wlrSeat evt
 
-  -- Compute subsurface local coordinates at clickPos
-  surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)) <- getSurfaceLocalCoordinates clickPos
-  (godotWlrSurface, subSurfaceLocalCoords@(SubSurfaceLocalCoordinates (ssx, ssy))) <- getSubsurfaceAndCoords godotWlrXdgSurface surfaceLocalCoords -- This function is a hack that only returns parent surface + its coordinates; needs fixing.
-
-  -- -- Send events
-  case evt of
-    Motion                -> do pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
-                                pointerNotifyMotion wlrSeat subSurfaceLocalCoords
-                                keyboardNotifyEnter wlrSeat godotWlrSurface -- TEMPORARY HACK; shouldn't have to call this every frame we're pointing at a surface
-    Button pressed button ->    pointerNotifyButton wlrSeat evt
-
-  pointerNotifyFrame wlrSeat -- No matter what, send a frame event to the surface with pointer focus
-                             -- TODO: Is this necessary in VR?
+         pointerNotifyFrame wlrSeat -- No matter what, send a frame event to the surface with pointer focus
+                                    -- TODO: Is this necessary in VR?
 
   where
     getSurfaceLocalCoordinates :: GodotVector3 -> IO (SurfaceLocalCoordinates)
