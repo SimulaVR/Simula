@@ -51,7 +51,7 @@ installUbuntuDependencies() {
                       # steam-runtime    # Not provided in disco dango
 
 
-  upgradeStack
+  # upgradeStack
 }
 
 installArchDependencies() {
@@ -105,7 +105,7 @@ installWlrootsManually() {
 installNvidiaDrivers() {
     if hash apt 2>/dev/null; then
         sudo apt-get install nvidia-driver-418
-    elif hash pacman 2>/dev/null; then 
+    elif hash pacman 2>/dev/null; then
         sudo pacman -S nvidia
     else
         echo "Neither apt nor pacman is installed."
@@ -121,8 +121,8 @@ installAMDDrivers() {
         sudo apt-get install linux-generic-steamvr-18.04 \
                              xserver-xorg-hwe-18.04
                              mesa-vulkan-drivers
-                             mesa-vulkan-drivers:i386      
-    elif hash pacman 2>/dev/null; then 
+                             mesa-vulkan-drivers:i386
+    elif hash pacman 2>/dev/null; then
         sudo pacman -S mesa vulkan-radeon libva-mesa-driver mesa-vdpau
     else
         echo "Neither apt nor pacman is installed."
@@ -167,7 +167,7 @@ generateResourceTarballs() {
 
     # Get ./godot + ./godot/modules/gdwlroots + ./godot/godot-haskell-gdwlroots
         # 3.06-stable doesn't work (compilation issues)
-        # 3.1 doesn't work (compilation issues) 
+        # 3.1 doesn't work (compilation issues)
         # TODO: Use godot 3.1
     git clone --recursive https://github.com/SimulaVR/godot godot
     cd godot
