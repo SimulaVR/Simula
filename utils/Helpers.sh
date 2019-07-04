@@ -173,7 +173,7 @@ generateResourceTarballs() {
     cd godot
     git clone --branch gdwlroots --recursive https://github.com/SimulaVR/godot-haskell godot-haskell-gdwlroots
     cd modules
-    git clone --branch master --recursive https://github.com/SimulaVR/gdwlroots gdwlroots
+    git clone --branch xwayland --recursive https://github.com/SimulaVR/gdwlroots gdwlroots
     cd gdwlroots
     make all
 
