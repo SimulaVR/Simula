@@ -80,6 +80,7 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssWlrOutput            :: TVar GodotWlrOutput
   , _gssWlrCompositor        :: TVar GodotWlrCompositor
   , _gssWlrXdgShell          :: TVar GodotWlrXdgShell
+  , _gssWlrXWayland          :: TVar GodotWlrXWayland
   , _gssWlrSeat              :: TVar GodotWlrSeat -- Probably make this a TVar since you have to find the node for this in the scene graph.
   , _gssWlrDataDeviceManager :: TVar GodotWlrDataDeviceManager
   , _gssWlrKeyboard          :: TVar GodotWlrKeyboard -- "
