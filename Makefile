@@ -54,7 +54,10 @@ watch:
 	cd addons/godot-haskell-plugin && make watch ; cd -
 
 clean:
+	cd addons/godot-haskell-plugin && rm -r .stack-work && cd -
 	rm -r build
+	rm -r resources
+	rm -r bin
 
 .PHONY: nix
 nix:

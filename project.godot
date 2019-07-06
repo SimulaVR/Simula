@@ -37,6 +37,7 @@ common/physics_fps=90
 
 [rendering]
 
+; threads/thread_model=2 ; <- Causes textures to render black
 quality/driver/driver_name="GLES2"
 quality/filters/msaa=8
 environment/default_environment="res://default_env.tres"

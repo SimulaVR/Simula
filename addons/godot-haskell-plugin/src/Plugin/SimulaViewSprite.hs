@@ -137,9 +137,8 @@ updateSimulaViewSprite gsvs = do
           simulaView <- readTVarIO (gsvs ^. gsvsView)
           let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
           wlrSurface <- case wlrEitherSurface of
-                                Left wlrXdgSurface -> do G.get_wlr_surface wlrXdgSurface
-                                Right wlrXWaylandSurface -> do putStrLn "We can't handle XWayland surfaces yet."
-                                                               return (unsafeCoerce nullPtr)
+                                Left wlrXdgSurface       -> G.get_wlr_surface wlrXdgSurface
+                                Right wlrXWaylandSurface -> G.get_wlr_surface wlrXWaylandSurface
           parentWlrTexture <- G.get_texture wlrSurface -- G.get_texture :: GodotWlrSurface -> IO (GodotTexture)
 
 
@@ -287,22 +286,22 @@ focus :: GodotSimulaViewSprite -> IO ()
 focus gsvs = do
   -- putStrLn "focus in SimulaViewSprite.hs"
   -- Get state:
-  simulaView  <- atomically $ readTVar (gsvs ^. gsvsView) 
+  simulaView  <- atomically $ readTVar (gsvs ^. gsvsView)
+  gss         <- atomically $ readTVar (gsvs ^. gsvsServer) -- ^. gssWlrSeat)
+  wlrSeat     <- atomically $ readTVar (gss ^. gssWlrSeat)
   let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
   case wlrEitherSurface of
     Left wlrXdgSurface -> do wlrSurface  <- G.get_wlr_surface wlrXdgSurface
                              wlrSurface' <- asGodotVariant wlrSurface
                              toplevel    <- G.get_xdg_toplevel wlrXdgSurface :: IO GodotWlrXdgToplevel
-                             gss         <- atomically $ readTVar (gsvs ^. gsvsServer) -- ^. gssWlrSeat)
-                             wlrSeat     <- atomically $ readTVar (gss ^. gssWlrSeat)
-
                              isGodotTypeNull wlrSurface
-
-                             -- Make calls:
                              G.set_activated toplevel True
                              G.keyboard_notify_enter wlrSeat wlrSurface'
-                             return ()
-    Right wlrXWaylandSurface -> do putStrLn "Don't know how to handle XWayland surfaces yet!"
+    Right wlrXWaylandSurface -> do wlrSurface  <- G.get_wlr_surface wlrXWaylandSurface
+                                   wlrSurface' <- asGodotVariant wlrSurface
+                                   isGodotTypeNull wlrSurface
+                                   G.set_activated wlrXWaylandSurface True
+                                   G.keyboard_notify_enter wlrSeat wlrSurface'
 
 -- | This function isn't called unless a surface is being pointed at (by VR
 -- | controllers or a mouse in pancake mode).
@@ -318,23 +317,22 @@ processClickEvent gsvs evt clickPos = do
   gss        <- readTVarIO (gsvs ^. gsvsServer)
   wlrSeat    <- readTVarIO (gss ^. gssWlrSeat)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
+
+  surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)) <- getSurfaceLocalCoordinates clickPos
   let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
-  case wlrEitherSurface of
-    Right godotWlrXWaylandSurface -> do putStrLn "Can't handle XWayland surfaces yet!"
-    Left godotWlrXdgSurface ->
-      do -- Compute subsurface local coordinates at clickPos
-         surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)) <- getSurfaceLocalCoordinates clickPos
-         (godotWlrSurface, subSurfaceLocalCoords@(SubSurfaceLocalCoordinates (ssx, ssy))) <- getSubsurfaceAndCoords godotWlrXdgSurface surfaceLocalCoords -- This function is a hack that only returns parent surface + its coordinates; needs fixing.
+  (godotWlrSurface, subSurfaceLocalCoords@(SubSurfaceLocalCoordinates (ssx, ssy))) <-
+    case wlrEitherSurface of
+      Right godotWlrXWaylandSurface -> getXWaylandSubsurfaceAndCoords godotWlrXWaylandSurface surfaceLocalCoords
+      Left godotWlrXdgSurface -> getXdgSubsurfaceAndCoords godotWlrXdgSurface surfaceLocalCoords
+  -- -- Send events
+  case evt of
+    Motion                -> do pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
+                                pointerNotifyMotion wlrSeat subSurfaceLocalCoords
+                                keyboardNotifyEnter wlrSeat godotWlrSurface -- TEMPORARY HACK; shouldn't have to call this every frame we're pointing at a surface
+    Button pressed button ->    pointerNotifyButton wlrSeat evt
 
-         -- -- Send events
-         case evt of
-           Motion                -> do pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
-                                       pointerNotifyMotion wlrSeat subSurfaceLocalCoords
-                                       keyboardNotifyEnter wlrSeat godotWlrSurface -- TEMPORARY HACK; shouldn't have to call this every frame we're pointing at a surface
-           Button pressed button ->    pointerNotifyButton wlrSeat evt
-
-         pointerNotifyFrame wlrSeat -- No matter what, send a frame event to the surface with pointer focus
-                                    -- TODO: Is this necessary in VR?
+  pointerNotifyFrame wlrSeat -- No matter what, send a frame event to the surface with pointer focus
+                              -- TODO: Is this necessary in VR?
 
   where
     getSurfaceLocalCoordinates :: GodotVector3 -> IO (SurfaceLocalCoordinates)
@@ -359,8 +357,8 @@ processClickEvent gsvs evt clickPos = do
 
     -- | Takes a GodotWlrXdgSurface and returns the subsurface at point (which is likely the surface itself, or one of its popups).
     -- | TODO: This function just returns parent surface/coords. Fix!
-    getSubsurfaceAndCoords :: GodotWlrXdgSurface -> SurfaceLocalCoordinates -> IO (GodotWlrSurface, SubSurfaceLocalCoordinates)
-    getSubsurfaceAndCoords wlrXdgSurface (SurfaceLocalCoordinates (sx, sy)) = do
+    getXdgSubsurfaceAndCoords :: GodotWlrXdgSurface -> SurfaceLocalCoordinates -> IO (GodotWlrSurface, SubSurfaceLocalCoordinates)
+    getXdgSubsurfaceAndCoords wlrXdgSurface (SurfaceLocalCoordinates (sx, sy)) = do
       -- BROKEN since G.surface_at is broken (which causes G.get_surface to be broken).
       -- wlrSurfaceAtResult   <- G.surface_at  wlrXdgSurface sx sy -- Not NULL itself, but the wlr_surface within this data structure is NULL due to ~wlr_xdg_surface_surface_at(wlr_xdg_surface, ..)~ being NULL (but not because wlr_xdg_surface is NULL).
       -- wlrSurfaceSubSurface <- G.get_surface wlrSurfaceAtResult
@@ -369,6 +367,11 @@ processClickEvent gsvs evt clickPos = do
       -- let ssCoordinates    = SubSurfaceLocalCoordinates (ssx, ssy)
       -- return (wlrSurfaceSubSurface, ssCoordinates)
       wlrSurfaceParent <- G.get_wlr_surface wlrXdgSurface            -- hack!
+      return (wlrSurfaceParent, SubSurfaceLocalCoordinates (sx, sy)) -- hack!
+
+    getXWaylandSubsurfaceAndCoords :: GodotWlrXWaylandSurface -> SurfaceLocalCoordinates -> IO (GodotWlrSurface, SubSurfaceLocalCoordinates)
+    getXWaylandSubsurfaceAndCoords wlrXWaylandSurface (SurfaceLocalCoordinates (sx, sy)) = do
+      wlrSurfaceParent <- G.get_wlr_surface wlrXWaylandSurface
       return (wlrSurfaceParent, SubSurfaceLocalCoordinates (sx, sy)) -- hack!
 
     -- | Let wlroots know we have entered a new surface. We can safely call this
@@ -486,103 +489,3 @@ _handle_destroy self args = do
                             -- Api.godot_object_destroy (safeCast gsvs)
 
   toLowLevel VariantNil
-
- -- Our ideal rendering strategy: each GodotSimulaViewSprite has a
- -- GodotSprite3D, which expects a texture with our wlroots surface. In order to
- -- supply this wlroots texture, we have to make it.
-
- -- To do this, we start with the texture provided by our GodotWlrXdgSurface,
- -- and apply it it to a Viewport (used purely as a "rendering target") as a
- -- base, and then render each of the GodotWlrXdgSurface's subsurfaces over it
- -- (which contain popups, menus, etc). The final result will be a Viewport
- -- texture with all of the subsurfaces pancaked on top of each other, creating
- -- the illusion of one large wlroots surface. We finish by supplying this
- -- Viewport texture to our Sprite3D, creating the desired illusion of having a
- -- wlroots surface floating in 3-space.
-
- -- NOTE: You might ask, "why must we use a Viewport?" The answer is that this
- -- is the ritual we engage in to modify 2D textures in a 3D Godot game. As long
- -- as our Viewport isn't the Root Viewport, it is treated by Godot as a
- -- "rendering target" instead of a screen to render onto. For this reason we
- -- associate with each GodotSimulaViewSprite its own unique GodotViewport.
-
-
-initializeRenderTarget :: GodotWlrXdgSurface -> IO (GodotViewport)
-initializeRenderTarget wlrXdgSurface = do
-  -- putStrLn "initializeRenderTarget"
-  -- "When we are drawing to a Viewport that is not the Root, we call it a
-  --  render target." -- Godot documentation"
-  renderTarget <- unsafeInstance GodotViewport "Viewport"
-  -- No need to add the Viewport to the SceneGraph since we plan to use it as a render target
-    -- G.set_name viewport =<< toLowLevel "Viewport"
-    -- G.add_child gsvs ((safeCast viewport) :: GodotObject) True
-
-  G.set_disable_input renderTarget True -- Turns off input handling
-
-  G.set_usage renderTarget 0 -- USAGE_2D = 0
-  -- G.set_hdr renderTarget False -- Might be useful to disable HDR rendering for performance in the future (requires upgrading gdwlroots to GLES3)
-
-  -- CLEAR_MODE_ALWAYS = 0
-  -- CLEAR_MODE_NEVER = 1
-  -- I think we need CLEAR_MODE_ALWAYS since, i.e., a popup dragging might cause a trail?
-  G.set_clear_mode renderTarget 0
-
-  -- Perhaps we should never update the render target, since we do so manually each frame?
-  -- UPDATE_DISABLED = 0 — Do not update the render target.
-  -- UPDATE_ONCE = 1 — Update the render target once, then switch to UPDATE_DISABLED.
-  -- UPDATE_WHEN_VISIBLE = 2 — Update the render target only when it is visible. This is the default value.
-  -- UPDATE_ALWAYS = 3 — Always update the render target. 
-  G.set_update_mode renderTarget 3 -- Using UPDATE_ALWAYS for now
-
-  -- "Note that due to the way OpenGL works, the resulting ViewportTexture is flipped vertically. You can use Image.flip_y on the result of Texture.get_data to flip it back[or you can also use set_vflip]:" -- Godot documentation
-  G.set_vflip renderTarget True -- In tutorials this is set as True, but no reference to it in Godotston; will set to True for now
-
-  -- We could alternatively set the size of the renderTarget via set_size_override [and set_size_override_stretch]
-  dimensions@(width, height) <- getBufferDimensions wlrXdgSurface
-  pixelDimensionsOfWlrXdgSurface <- toGodotVector2 dimensions
-
-  -- Here I'm attempting to set the size of the viewport to the pixel dimensions
-  -- of our wlrXdgSurface argument:
-  G.set_size renderTarget pixelDimensionsOfWlrXdgSurface
-
-  -- There is, however, an additional way to do this and I'm not sure which one
-  -- is better/more idiomatic:
-    -- G.set_size_override renderTarget True vector2
-    -- G.set_size_override_stretch renderTarget True
-
-  return renderTarget
-  where
-        -- | Used to supply GodotVector2 to
-        -- |   G.set_size :: GodotViewport -> GodotVector2 -> IO ()
-        toGodotVector2 :: (Int, Int) -> IO (GodotVector2)
-        toGodotVector2 (width, height) = do
-          let v2 = (V2 (fromIntegral width) (fromIntegral height))
-          gv2 <- toLowLevel v2 :: IO (GodotVector2)
-          return gv2
-
--- Possible TODO: Place types for different coordinate systems
--- newtype BufferDimensions = BufferDimensions (Int, Int)
--- data FromTopLeftCoordinates = FromTopLeftCoordinates (Int, Int)
--- data FromCenterCoordinates = FromCenterCoordinates (Int, Int)
-
-getBufferDimensions :: GodotWlrXdgSurface -> IO (Int, Int)
-getBufferDimensions wlrXdgSurface = do
-  -- putStrLn "getBufferDimensions"
-  wlrSurface <- G.get_wlr_surface wlrXdgSurface -- isNull: False
-  wlrSurfaceState <- G.get_current_state wlrSurface -- isNull: False
-  bufferWidth <- G.get_buffer_width wlrSurfaceState
-  bufferHeight <- G.get_buffer_height wlrSurfaceState
-  width <- G.get_width wlrSurfaceState
-  height <-G.get_height wlrSurfaceState
-  -- putStrLn $ "getBufferDimensions (buffer width/height): (" ++ (show bufferWidth) ++ "," ++ (show bufferHeight) ++ ")"
-  -- putStrLn $ "getBufferDimensions (width/height): (" ++ (show width) ++ "," ++ (show height) ++ ")"
-  return (bufferWidth, bufferHeight) -- G.set_size expects "the width and height of viewport" according to Godot documentation
-
-getTextureFromRenderTarget :: GodotViewport -> IO (GodotTexture)
-getTextureFromRenderTarget renderTarget = do
-  -- putStrLn "getTextureFromRenderTarget"
-  viewportTexture' <- G.get_texture renderTarget -- G.get_texture :: GodotViewport -> (IO GodotViewportTexture)
-  let viewportTexture = (safeCast viewportTexture) :: GodotTexture -- GodotTexture :< GodotViewportTexture
-  -- -- Retrieving an image
-  -- G.get_data viewportTexture :: IO GodotImage -- requires viewportTexture to be cast as GodotTexture
-  return viewportTexture
