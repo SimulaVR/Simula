@@ -141,8 +141,17 @@ ready gss _ = do
   wlrCompositorGV <- asGodotVariant wlrCompositor
   wlrXWayland <- readTVarIO (gss ^. gssWlrXWayland)
 
+
+  oldDisplay <- getEnv "DISPLAY"  
+
   -- We wait till here to start XWayland so we can feed it a seat + compositor
   G.start_xwayland wlrXWayland wlrCompositorGV wlrSeatGV
+
+  newDisplay <- getEnv "DISPLAY"
+  putStr "New DISPLAY="
+  putStrLn newDisplay
+  setEnv "DISPLAY" oldDisplay  
+
   connectGodotSignal wlrXWayland "new_surface" gss "_on_WlrXWayland_new_surface" []
 
   -- Start telemetry
