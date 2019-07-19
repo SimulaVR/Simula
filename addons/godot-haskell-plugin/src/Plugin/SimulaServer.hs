@@ -143,7 +143,7 @@ ready gss _ = do
 
   -- We wait till here to start XWayland so we can feed it a seat + compositor
   G.start_xwayland wlrXWayland wlrCompositorGV wlrSeatGV
-  connectGodotSignal wlrXWayland "new_surface" gss "_on_WlrXWayland_newSurface" []
+  connectGodotSignal wlrXWayland "new_surface" gss "_on_WlrXWayland_new_surface" []
 
   -- Start telemetry
   startTelemetry (gss ^. gssViews)
