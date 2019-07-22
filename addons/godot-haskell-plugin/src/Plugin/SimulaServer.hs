@@ -300,18 +300,16 @@ _on_WlrXdgShell_new_surface gss args = do
 
                   -- _xdg_surface_set logic from godotston:
                   -- xdg_surface.connect("destroy", self, "_handle_destroy"):
-                  connectGodotSignal gsvs "destroy" gsvs "_handle_destroy" []
+                  connectGodotSignal wlrXdgSurface "destroy" gsvs "_handle_destroy" []
                   -- xdg_surface.connect("map", self, "_handle_map"):
-                  connectGodotSignal gsvs "map" gsvs "_handle_map" []
+                  connectGodotSignal wlrXdgSurface "map" gsvs "_handle_map" []
                   -- xdg_surface.connect("unmap", self, "_handle_unmap"):
-                  connectGodotSignal gsvs "unmap" gsvs "_handle_unmap" []
+                  connectGodotSignal wlrXdgSurface "unmap" gsvs "_handle_unmap" []
 
                   -- Add the gsvs as a child to the SimulaServer
                   G.add_child ((safeCast gss) :: GodotNode )
                               ((safeCast gsvs) :: GodotObject)
                               True
-
-                  -- emitSignal gsvs "map" ([gsvs] :: [GodotSimulaViewSprite]) -- hack to ensure map functions get called; needs fixed
 
                   -- Handles 2D window movement across a viewport; not needed:
                   -- toplevel.connect("request_move", self, "_handle_request_move")
@@ -333,18 +331,16 @@ _on_WlrXdgShell_new_surface gss args = do
 
 handle_map_surface :: GFunc GodotSimulaServer
 handle_map_surface gss args = do
-  -- putStrLn "handle_map_surface"
+  putStrLn "handle_map_surface"
   case toList args of
     [gsvsVariant] -> do -- Unlike in Godotston, we assume this function gives us a GodotSimulaViewSprite
        maybeGsvs <- variantToReg gsvsVariant :: IO (Maybe GodotSimulaViewSprite)
        case maybeGsvs of
-         Nothing -> putStrLn "Failed to cast GodotSimulaViewSprite!"
+         Nothing -> putStrLn "Failed to cast GodotSimulaViewSprite in handle_map_surface!"
          Just gsvs -> do focus gsvs
                          simulaView <- atomically $ readTVar (gsvs ^. gsvsView)
                          atomically $ writeTVar (simulaView ^. svMapped) True
-                         -- addChild gss gsvs -- Performed in _on_WlrXdgShell_new_surface
-       
-    _ -> putStrLn "Failed to get arguments in handle_map_surface" 
+    _ -> putStrLn "Failed to get arguments in handle_map_surface"
   toLowLevel VariantNil
 
 handle_unmap_surface :: GFunc GodotSimulaServer
@@ -385,24 +381,24 @@ _on_wlr_modifiers gss args = do
 
 _on_WlrXWayland_new_surface :: GFunc GodotSimulaServer
 _on_WlrXWayland_new_surface gss args = do
-  -- putStrLn "_on_WlrXdgShell_new_surface"
+  putStrLn "_on_WlrXWayland_new_surface"
   case toList args of
     [wlrXWaylandSurfaceVariant] -> do
       wlrXWaylandSurface <- fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface
-      putStrLn "_on_WlrXdgShell_new_surface not yet implemented!"
 
       simulaView <- newSimulaView gss wlrXWaylandSurface
       gsvs <- newGodotSimulaViewSprite gss simulaView
-
       -- Mutate the server with our updated state
       atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
+
 
       connectGodotSignal gsvs "map" gss "handle_map_surface" []
       connectGodotSignal gsvs "unmap" gss "handle_unmap_surface" []
 
-      connectGodotSignal gsvs "destroy" gsvs "_handle_destroy" []
-      connectGodotSignal gsvs "map" gsvs "_handle_map" []
-      connectGodotSignal gsvs "unmap" gsvs "_handle_unmap" []
+      connectGodotSignal wlrXWaylandSurface "destroy" gsvs "_handle_destroy" []
+      connectGodotSignal wlrXWaylandSurface "map" gsvs "_handle_map" []
+      connectGodotSignal wlrXWaylandSurface "unmap" gsvs "_handle_unmap" []
+
 
       -- Add the gsvs as a child to the SimulaServer
       G.add_child ((safeCast gss) :: GodotNode )

@@ -299,12 +299,13 @@ updateResourceGodotHaskellGdwlroots() {
     # Generate ./godot/godot-haskell-gdwlroots/api.json
     local ROOTSIMULADIR=$(pwd)
 
+    sudo rm ./resources/godot-haskell-gdwlroots.tar.gz
     cd build/godot
     sudo rm -r godot-haskell-gdwlroots
     git clone --branch gdwlroots --recursive https://github.com/SimulaVR/godot-haskell godot-haskell-gdwlroots
     cd godot-haskell-gdwlroots
     rm api.json
-    DISPLAY=:1 ../bin/godot.x11.tools.64 --gdnative-generate-json-api api.json
+    ../bin/godot.x11.tools.64 --gdnative-generate-json-api api.json
 
     # Morph ./godot/godot-haskell-gdwlroots source code to reflect updated api.json
     cd classgen

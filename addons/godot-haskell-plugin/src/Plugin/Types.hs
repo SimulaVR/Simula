@@ -6,9 +6,11 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Plugin.Types where
 
+import           Data.Maybe
 import           Control.Monad
 import           Data.Coerce
 import           Unsafe.Coerce
@@ -96,6 +98,7 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsShape          :: TVar GodotBoxShape
   , _gsvsView           :: TVar SimulaView -- Contains Wlr data
   , _gsvsViewport       :: TVar GodotViewport
+  -- , _gsvsMapped         :: TVar Bool
   -- , gsvsGeometry     :: GodotRect2
   -- , gsvsWlrSeat      :: GodotWlrSeat
   -- , gsvsInputMode    :: TVar InteractiveMode
@@ -219,7 +222,6 @@ emitSignal signalEmitter signalName signalArgs = do
   G.emit_signal signalEmitter' signalName' signalArgs'
   return ()
 
-
 -- | This is equivalent to the old version of newNS' (formerly called unsafeNewNS)
 -- | from godot-extra. The way we were using the new version was causing type
 -- | casting errors, so we revert to the old one for now.
@@ -247,3 +249,30 @@ isGodotTypeNullErr godotValue = do
   let isNull = ((unsafeCoerce godotValue) == nullPtr)
   if isNull then error $ (show (typeOf godotValue)) ++ ": isNull True"
             else putStrLn $ (show (typeOf godotValue)) ++ ": isNull False"
+
+deriving instance Eq GodotWlrXdgSurface
+deriving instance Eq GodotWlrXWaylandSurface
+
+-- Unused/untested.
+getGSVSFromEitherSurface :: GodotSimulaServer -> Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO (Maybe GodotSimulaViewSprite)
+getGSVSFromEitherSurface gss eitherSurface = do
+  viewMap <- atomically $ readTVar (_gssViews gss) -- (M.Map SimulaView GodotSimulaViewSprite)
+  
+  case eitherSurface of
+    (Left wlrXdgSurface) -> do
+      -- let gsvsList = filter (containsGodotWlrXdgSurface wlrXdgSurface) $ M.keys viewMap
+      let filteredMap = M.filterWithKey (containsGodotWlrXdgSurface wlrXdgSurface) viewMap
+      let maybeGsvs = Data.Maybe.listToMaybe (M.elems filteredMap)
+      return maybeGsvs
+    (Right wlrXWaylandSurface) -> do
+      -- let gsvsList = filter (containsGodotWlrXWaylandSurface wlrXWaylandSurface) $ M.keys viewMap
+      let filteredMap = M.filterWithKey (containsGodotWlrXWaylandSurface wlrXWaylandSurface) viewMap
+      let maybeGsvs = Data.Maybe.listToMaybe (M.elems filteredMap)
+      return maybeGsvs
+  where
+    containsGodotWlrXdgSurface :: GodotWlrXdgSurface -> SimulaView -> GodotSimulaViewSprite -> Bool
+    containsGodotWlrXdgSurface wlrXdgSurface simulaView _ = 
+      ((simulaView ^. svWlrEitherSurface) == Left wlrXdgSurface)
+    containsGodotWlrXWaylandSurface :: GodotWlrXWaylandSurface -> SimulaView -> GodotSimulaViewSprite -> Bool
+    containsGodotWlrXWaylandSurface wlrXWaylandSurface simulaView _ = 
+      ((simulaView ^. svWlrEitherSurface) == Right wlrXWaylandSurface)

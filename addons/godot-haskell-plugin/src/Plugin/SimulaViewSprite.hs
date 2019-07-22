@@ -10,6 +10,8 @@
 
 module Plugin.SimulaViewSprite where
 
+import Control.Exception
+
 import Debug.C
 
 import Data.Colour
@@ -87,6 +89,7 @@ instance ClassExport GodotSimulaViewSprite where
                   <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                   <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                   <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
+                  -- <*> atomically (newTVar False)
   classExtends = "RigidBody"
   classMethods =
     [ GodotMethod NoRPC "_input_event" inputEvent
@@ -139,21 +142,19 @@ updateSimulaViewSprite gsvs = do
           wlrSurface <- case wlrEitherSurface of
                                 Left wlrXdgSurface       -> G.get_wlr_surface wlrXdgSurface
                                 Right wlrXWaylandSurface -> G.get_wlr_surface wlrXWaylandSurface
-          parentWlrTexture <- G.get_texture wlrSurface -- G.get_texture :: GodotWlrSurface -> IO (GodotTexture)
+          parentWlrTexture <- G.get_texture wlrSurface
 
 
           -- saveTextureToDisk wlrXdgSurface parentWlrTexture -- Causes crash
           -- Set Sprite3D texture
-          let isNull = ((unsafeCoerce parentWlrTexture) == nullPtr)
-          case isNull of
-               True -> putStrLn "Texture is null!"
-               False -> do -- Attempt to force maximize windows doesn't work:
-                             -- wlrXdgSurfaceToplevel <- G.get_xdg_toplevel wlrXdgSurface
-                             -- G.set_maximized wlrXdgSurfaceToplevel True -- Doesn't seem to work
-                           rid <- G.get_rid parentWlrTexture
-                           visualServer <- getSingleton GodotVisualServer "VisualServer"
-                           G.texture_set_flags visualServer rid 7 -- Enable mipmapping, antialiasing, etc.
-                           G.set_texture sprite3D parentWlrTexture
+         
+          -- Attempt to force maximize windows doesn't work:
+          -- wlrXdgSurfaceToplevel <- G.get_xdg_toplevel wlrXdgSurface
+          -- G.set_maximized wlrXdgSurfaceToplevel True -- Doesn't seem to work
+          rid <- G.get_rid parentWlrTexture
+          visualServer <- getSingleton GodotVisualServer "VisualServer"
+          G.texture_set_flags visualServer rid 7 -- Enable mipmapping, antialiasing, etc.
+          G.set_texture sprite3D parentWlrTexture
 
           -- Tell client surface it should start rendering the next frame
           G.send_frame_done wlrSurface
@@ -277,15 +278,14 @@ newGodotSimulaViewSprite gss simulaView = do
     -- let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
     -- renderTarget <- initializeRenderTarget wlrXdgSurface
     -- atomically $ writeTVar (_gsvsViewport gsvs) renderTarget
+  G.set_process gsvs False
 
-  updateSimulaViewSprite gsvs -- Now we update everything
+--  updateSimulaViewSprite gsvs -- Now we update everything
 
   return gsvs
 
 focus :: GodotSimulaViewSprite -> IO ()
 focus gsvs = do
-  -- putStrLn "focus in SimulaViewSprite.hs"
-  -- Get state:
   simulaView  <- atomically $ readTVar (gsvs ^. gsvsView)
   gss         <- atomically $ readTVar (gsvs ^. gsvsServer) -- ^. gssWlrSeat)
   wlrSeat     <- atomically $ readTVar (gss ^. gssWlrSeat)
@@ -420,46 +420,31 @@ processClickEvent gsvs evt clickPos = do
 
 _handle_map :: GFunc GodotSimulaViewSprite
 _handle_map self args = do
-  -- putStrLn "_handle_map"
-  case toList args of
-    [gsvsGV] ->  do
-      G.set_process self True
-      -- G.set_process_input self True -- We do this in Godotston but not in original Simula; deciding to not do it
-
-      -- Am mirroring godotston here, but conceptually it's unclear to me what
-      -- this is doing, and why it wouldn't just result in a _handle_map call
-      -- loop that never terminates.
-      emitSignal self "map" ([] :: [GodotSimulaViewSprite])
-      -- putStrLn "Called _handle_map. Should only see this once per surface launch." -- <- Test
-    _ -> putStrLn "Failed to get arguments in _handle_map"
-
+  putStrLn "_handle_map"
+  simulaView <- readTVarIO (self ^. gsvsView)
+  G.set_process self True
+  G.set_process_input self True -- We do this in Godotston but not in original Simula
+  emitSignal self "map" ([self] :: [GodotSimulaViewSprite])
+  atomically $ writeTVar (simulaView ^. svMapped) True
   toLowLevel VariantNil
 
 _handle_unmap :: GFunc GodotSimulaViewSprite
 _handle_unmap self args = do
   putStrLn "_handle_unmap"
-  case toList args of
-    [gsvsGV] ->  do
-      maybeGsvs <- variantToReg gsvsGV :: IO (Maybe GodotSimulaViewSprite)
-      case maybeGsvs of
-        Nothing -> putStrLn "Failed to cast gsvs in _handle_destroy!"
-        (Just gsvs) -> G.set_process gsvs False
-                      -- G.set_process_input gsvs False -- We do this in Godotston but not in original Simula; deciding to not do it
-
-      -- Am mirroring godotston here, but conceptually it's unclear to me what
-      -- this is doing, and why it wouldn't just result in a _handle_unmap call
-      -- loop that never terminates.
-      emitSignal self "unmap" ([] :: [GodotSimulaViewSprite])
-      -- putStrLn "Called _handle_unmap. Should only see this once per surface launch." -- <- Test
+  simulaView <- readTVarIO (self ^. gsvsView)
+  atomically $ writeTVar (simulaView ^. svMapped) False
+  G.set_process self False
+  emitSignal self "unmap" ([self] :: [GodotSimulaViewSprite])
   toLowLevel VariantNil
 
 -- Passes control entirely to updateSimulaViewSprite.
 _process :: GFunc GodotSimulaViewSprite
 _process self args = do
-  -- putStrLn "_process in SimulaViewSprite.hs"
   case toList args of
     [deltaGV] ->  do
-      updateSimulaViewSprite self
+      simulaView <- readTVarIO (self ^. gsvsView)
+      mapped <- atomically $ readTVar (simulaView ^. svMapped)
+      when mapped $ updateSimulaViewSprite self
 
   toLowLevel VariantNil
 
