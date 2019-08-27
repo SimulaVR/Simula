@@ -242,14 +242,10 @@ process self args = do
   if
     | not active -> G.set_visible self False
     | visible -> do
-      putStrLn "A"
       updateTouchpadState self
-      putStrLn "B"
       rescaleOrScroll self delta -- <- Updates SimulaController state
-      putStrLn "C"
       pointerWindow self >>= \case
         Just window -> do
-          putStrLn "D"
           G.set_visible (_gscLaser self) True
           pos <- G.get_collision_point $ _gscRayCast self
           processClickEvent window Motion pos
@@ -260,11 +256,9 @@ process self args = do
           -- wlrSeat <- getWlrSeatFromPath self
           -- G.pointer_clear_focus wlrSeat -- pointer_clear_focus :: GodotWlrSeat -> IO ()
 
-          putStrLn "F"
           G.set_visible (_gscLaser self) False
           return ()
     | otherwise -> do
-      putStrLn "G"
       cname <- G.get_controller_name self >>= fromLowLevel
       loadOpenVRControllerMesh cname >>= \case
         Just mesh -> G.set_mesh (_gscMeshInstance self) mesh
