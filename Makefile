@@ -35,6 +35,12 @@ wlroots:
 run: godot
 	cd addons/godot-haskell-plugin && make run ; cd -
 
+editor-run: godot
+	cd addons/godot-haskell-plugin && make editor-run ; cd -
+
+editor-run-gdb: godot
+	cd addons/godot-haskell-plugin && make editor-run-gdb ; cd -
+
 steam-run:
 	~/.steam/ubuntu12_32/steam-runtime/run.sh ./bin/godot
 

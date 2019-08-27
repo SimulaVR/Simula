@@ -141,7 +141,12 @@ updateSimulaViewSprite gsvs = do
           let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
           wlrSurface <- case wlrEitherSurface of
                                 Left wlrXdgSurface       -> G.get_wlr_surface wlrXdgSurface
-                                Right wlrXWaylandSurface -> G.get_wlr_surface wlrXWaylandSurface
+                                Right wlrXWaylandSurface -> do
+                                  -- TODO: Complete this experiment
+                                  -- children <- G.get_children wlrXWaylandSurface
+                                  -- size' <- Api.godot_array_size children
+                                  -- putStrLn $ "# of WlrXWayland Surfaces: " ++ (show size')
+                                  G.get_wlr_surface wlrXWaylandSurface
           parentWlrTexture <- G.get_texture wlrSurface
 
 
@@ -153,7 +158,9 @@ updateSimulaViewSprite gsvs = do
           -- G.set_maximized wlrXdgSurfaceToplevel True -- Doesn't seem to work
           rid <- G.get_rid parentWlrTexture
           visualServer <- getSingleton GodotVisualServer "VisualServer"
-          G.texture_set_flags visualServer rid 7 -- Enable mipmapping, antialiasing, etc.
+          -- Enable everything but mipmapping (since this causes old textures get to interpolated
+          -- with updated textures when far enough from the user).
+          G.texture_set_flags visualServer rid 6
           G.set_texture sprite3D parentWlrTexture
 
           -- Tell client surface it should start rendering the next frame
@@ -161,6 +168,8 @@ updateSimulaViewSprite gsvs = do
 
         setExtents :: GodotSimulaViewSprite -> IO ()
         setExtents gsvs = do
+          simulaView <- readTVarIO (gsvs ^. gsvsView)
+          let eitherSurface = simulaView ^. svWlrEitherSurface
           -- Get state
           sprite <- atomically $ readTVar (_gsvsSprite gsvs)
           aabb <- G.get_aabb sprite
@@ -169,6 +178,10 @@ updateSimulaViewSprite gsvs = do
 
           -- Compute new extents
           size' <- godot_vector3_operator_divide_scalar size 2
+          (V3 x y z)  <- fromLowLevel size'
+          -- size2d  <- toLowLevel (V2 x y) :: IO GodotVector2
+          -- size2d' <- toLowLevel (V2 500 500) :: IO GodotVector2
+          --G.set_size wlrXWaylandSurface size2d'
 
           -- Set extents
           G.set_extents shape size'
@@ -263,6 +276,9 @@ newGodotSimulaViewSprite gss simulaView = do
   G.add_child gsvs (safeCast godotSprite3D) True
   G.set_flip_h godotSprite3D True
 
+  -- HACK: Set transparency to False to ensure that textures never disappear
+  G.set_draw_flag godotSprite3D 0 False -- https://github.com/godotengine/godot/blob/89bcfa4b364e1edc8e175f766b50d145864eb159/scene/3d/sprite_3d.h#L44:7
+
   godotBoxShape <- unsafeInstance GodotBoxShape "BoxShape"
   ownerId <- G.create_shape_owner gsvs (safeCast gsvs)
   G.shape_owner_add_shape gsvs ownerId (safeCast godotBoxShape)
@@ -322,17 +338,17 @@ processClickEvent gsvs evt clickPos = do
   let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
   (godotWlrSurface, subSurfaceLocalCoords@(SubSurfaceLocalCoordinates (ssx, ssy))) <-
     case wlrEitherSurface of
-      Right godotWlrXWaylandSurface -> getXWaylandSubsurfaceAndCoords godotWlrXWaylandSurface surfaceLocalCoords
+      Right godotWlrXWaylandSurface -> do
+        getXWaylandSubsurfaceAndCoords godotWlrXWaylandSurface surfaceLocalCoords
       Left godotWlrXdgSurface -> getXdgSubsurfaceAndCoords godotWlrXdgSurface surfaceLocalCoords
   -- -- Send events
   case evt of
     Motion                -> do pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
                                 pointerNotifyMotion wlrSeat subSurfaceLocalCoords
-                                keyboardNotifyEnter wlrSeat godotWlrSurface -- TEMPORARY HACK; shouldn't have to call this every frame we're pointing at a surface
+                                keyboardNotifyEnter wlrSeat godotWlrSurface -- HACK: shouldn't have to call this every frame we're pointing at a surface
     Button pressed button ->    pointerNotifyButton wlrSeat evt
 
-  pointerNotifyFrame wlrSeat -- No matter what, send a frame event to the surface with pointer focus
-                              -- TODO: Is this necessary in VR?
+  pointerNotifyFrame wlrSeat
 
   where
     getSurfaceLocalCoordinates :: GodotVector3 -> IO (SurfaceLocalCoordinates)
@@ -357,6 +373,7 @@ processClickEvent gsvs evt clickPos = do
 
     -- | Takes a GodotWlrXdgSurface and returns the subsurface at point (which is likely the surface itself, or one of its popups).
     -- | TODO: This function just returns parent surface/coords. Fix!
+    -- | TODO: Use _xdg_surface_at*
     getXdgSubsurfaceAndCoords :: GodotWlrXdgSurface -> SurfaceLocalCoordinates -> IO (GodotWlrSurface, SubSurfaceLocalCoordinates)
     getXdgSubsurfaceAndCoords wlrXdgSurface (SurfaceLocalCoordinates (sx, sy)) = do
       -- BROKEN since G.surface_at is broken (which causes G.get_surface to be broken).
@@ -369,6 +386,7 @@ processClickEvent gsvs evt clickPos = do
       wlrSurfaceParent <- G.get_wlr_surface wlrXdgSurface            -- hack!
       return (wlrSurfaceParent, SubSurfaceLocalCoordinates (sx, sy)) -- hack!
 
+    -- | TODO: Use wlr_surface_surface_at
     getXWaylandSubsurfaceAndCoords :: GodotWlrXWaylandSurface -> SurfaceLocalCoordinates -> IO (GodotWlrSurface, SubSurfaceLocalCoordinates)
     getXWaylandSubsurfaceAndCoords wlrXWaylandSurface (SurfaceLocalCoordinates (sx, sy)) = do
       wlrSurfaceParent <- G.get_wlr_surface wlrXWaylandSurface

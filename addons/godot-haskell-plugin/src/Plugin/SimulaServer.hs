@@ -337,7 +337,11 @@ handle_map_surface gss args = do
        maybeGsvs <- variantToReg gsvsVariant :: IO (Maybe GodotSimulaViewSprite)
        case maybeGsvs of
          Nothing -> putStrLn "Failed to cast GodotSimulaViewSprite in handle_map_surface!"
-         Just gsvs -> do focus gsvs
+         Just gsvs -> do -- Delay adding the sprite to the scene graph until we know XCB intends for it to be mapped
+                         G.add_child ((safeCast gss) :: GodotNode )
+                                     ((safeCast gsvs) :: GodotObject)
+                                     True
+                         focus gsvs
                          simulaView <- atomically $ readTVar (gsvs ^. gsvsView)
                          atomically $ writeTVar (simulaView ^. svMapped) True
     _ -> putStrLn "Failed to get arguments in handle_map_surface"
@@ -398,12 +402,6 @@ _on_WlrXWayland_new_surface gss args = do
       connectGodotSignal wlrXWaylandSurface "destroy" gsvs "_handle_destroy" []
       connectGodotSignal wlrXWaylandSurface "map" gsvs "_handle_map" []
       connectGodotSignal wlrXWaylandSurface "unmap" gsvs "_handle_unmap" []
-
-
-      -- Add the gsvs as a child to the SimulaServer
-      G.add_child ((safeCast gss) :: GodotNode )
-                  ((safeCast gsvs) :: GodotObject)
-                  True
 
       toLowLevel VariantNil
 

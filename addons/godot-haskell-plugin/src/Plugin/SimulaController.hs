@@ -203,7 +203,11 @@ rescaleOrScroll ct delta = do
       Nothing -> putStrLn "Couldn't get wlrSeat!"
       _ -> G.pointer_notify_axis_continuous wlrSeat (diff ^. _x) (diff ^. _y)
   rescaleBy :: (GodotSpatial :< child) => V2 Float -> child -> IO ()
-  rescaleBy (V2 _ y) a =
+  rescaleBy (V2 _ y) a = do
+    -- maybeWindow <- pointerWindow ct
+    -- case maybeWindow of
+    --   Nothing -> putStrLn "Couldn't get a window!"
+    --   _ -> putStrLn $ "Rescaling window!"
     V3 1 1 1 ^* (1 + y * 0.5)
       & toLowLevel
       >>= G.scale_object_local (safeCast a :: GodotSpatial)
