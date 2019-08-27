@@ -281,15 +281,12 @@ getWlrSeatFromPath self = do
 physicsProcess :: GFunc GodotSimulaController
 physicsProcess self _ = do
   whenM (G.get_is_active self) $ do
-    putStrLn "H"
     isGripPressed <- isButtonPressed 2 self
     triggerPull <- G.get_joystick_axis self 2
     let levitateCond = isGripPressed -- && triggerPull > 0.01
     let moveCond = triggerPull > 0.2
 
-    putStrLn "I"
     tk <- readTVarIO (_gscTelekinesis self) >>= telekinesis levitateCond moveCond
-    putStrLn "J"
     atomically $ writeTVar (_gscTelekinesis self) tk
 
   retnil
