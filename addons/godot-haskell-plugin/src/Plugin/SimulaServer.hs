@@ -44,6 +44,7 @@ import           Control.Monad.STM
 import           Data.Maybe
 import           Data.List
 import           Data.Coerce
+-- import           Unsafe.Coerce
 import           Data.Either
 
 import           Foreign hiding (void)
@@ -341,11 +342,28 @@ handle_map_surface gss args = do
                          G.add_child ((safeCast gss) :: GodotNode )
                                      ((safeCast gsvs) :: GodotObject)
                                      True
+
+                         -- Transform sprite to location/orientation of the HMD
+                         arvrCamera <- getARVRCameraFromPath gss
+                         hmdGlobalTransform <- G.get_global_transform (arvrCamera)
+                         G.set_global_transform gsvs hmdGlobalTransform
+                         -- Push sprite back by 1 unit
+                         G.translate gsvs =<< toLowLevel (V3 0 0 (-1))
+                         -- Flip sprite by 180 degrees around y-axis 
+                         G.rotate_y gsvs 3.14159
+
                          focus gsvs
                          simulaView <- atomically $ readTVar (gsvs ^. gsvsView)
                          atomically $ writeTVar (simulaView ^. svMapped) True
     _ -> putStrLn "Failed to get arguments in handle_map_surface"
   toLowLevel VariantNil
+  where getARVRCameraFromPath :: GodotSimulaServer -> IO GodotARVRCamera
+        getARVRCameraFromPath self = do
+          let nodePathStr = "/root/Root/ARVROrigin/ARVRCamera"
+          nodePath <- (toLowLevel (pack nodePathStr))
+          gssNode  <- G.get_node ((safeCast self) :: GodotNode) nodePath
+          let arvrCamera = (coerce gssNode) :: GodotARVRCamera -- HACK: We use `coerce` instead of something more proper
+          return arvrCamera
 
 handle_unmap_surface :: GFunc GodotSimulaServer
 handle_unmap_surface gss args = do
