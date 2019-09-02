@@ -343,27 +343,38 @@ handle_map_surface gss args = do
                                      ((safeCast gsvs) :: GodotObject)
                                      True
 
-                         -- Transform sprite to location/orientation of the HMD
-                         arvrCamera <- getARVRCameraFromPath gss
-                         hmdGlobalTransform <- G.get_global_transform (arvrCamera)
-                         G.set_global_transform gsvs hmdGlobalTransform
-                         -- Push sprite back by 1 unit
-                         G.translate gsvs =<< toLowLevel (V3 0 0 (-1))
-                         -- Flip sprite by 180 degrees around y-axis 
-                         G.rotate_y gsvs 3.14159
+                         setInFrontOfHMD gsvs
 
                          focus gsvs
                          simulaView <- atomically $ readTVar (gsvs ^. gsvsView)
                          atomically $ writeTVar (simulaView ^. svMapped) True
     _ -> putStrLn "Failed to get arguments in handle_map_surface"
   toLowLevel VariantNil
-  where getARVRCameraFromPath :: GodotSimulaServer -> IO GodotARVRCamera
-        getARVRCameraFromPath self = do
+  where getTransform :: GodotSimulaServer -> IO GodotTransform
+        getTransform self = do
           let nodePathStr = "/root/Root/ARVROrigin/ARVRCamera"
           nodePath <- (toLowLevel (pack nodePathStr))
-          gssNode  <- G.get_node ((safeCast self) :: GodotNode) nodePath
-          let arvrCamera = (coerce gssNode) :: GodotARVRCamera -- HACK: We use `coerce` instead of something more proper
-          return arvrCamera
+          hasNode  <- G.has_node ((safeCast self) :: GodotNode) nodePath
+          transform <- case hasNode of
+                False -> do camera <- getViewportCamera self
+                            G.get_camera_transform camera
+                True ->  do gssNode  <- G.get_node ((safeCast self) :: GodotNode) nodePath
+                            let arvrCamera = (coerce gssNode) :: GodotARVRCamera -- HACK: We use `coerce` instead of something more proper
+                            G.get_global_transform (arvrCamera)
+          return transform
+        getViewportCamera :: GodotSimulaServer -> IO GodotCamera
+        getViewportCamera gss = do
+          viewport <- G.get_viewport gss :: IO GodotViewport
+          camera <- G.get_camera viewport :: IO GodotCamera
+          return camera
+        setInFrontOfHMD :: GodotSimulaViewSprite -> IO ()
+        setInFrontOfHMD gsvs = do
+          rotationAxisY <- toLowLevel (V3 0 1 0) :: IO GodotVector3
+          pushBackVector <- toLowLevel (V3 0 0 (-1)) :: IO GodotVector3 -- For some reason we also have to shift the vector 0.5 units to the right
+          hmdGlobalTransform <- getTransform gss
+          G.set_global_transform gsvs hmdGlobalTransform
+          G.translate_object_local gsvs pushBackVector
+          G.rotate_object_local gsvs rotationAxisY 3.14159 -- 180 degrees in radians
 
 handle_unmap_surface :: GFunc GodotSimulaServer
 handle_unmap_surface gss args = do
