@@ -60,9 +60,6 @@ instance HasBaseClass GodotSimula where
 
 ready :: GFunc GodotSimula
 ready self _ = do
-  -- putStrLn "ready in Simula.hs"
-  addSimulaServerNode
-
   -- OpenHMD is unfortunately not yet a working substitute for OpenVR
   -- https://github.com/SimulaVR/Simula/issues/72
   openVR >>= initVR (safeCast self) >>= \case
@@ -84,6 +81,8 @@ ready self _ = do
       return ()
 
     InitVRFailed  -> return ()
+
+  addSimulaServerNode
 
   retnil
  where
