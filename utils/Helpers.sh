@@ -93,9 +93,8 @@ installArchDependencies() {
 installWlrootsManually() {
     cd /tmp
     sudo rm -r wlroots
-    git clone https://github.com/swaywm/wlroots
+    git clone --branch simula https://github.com/SimulaVR/wlroots
     cd wlroots
-    git checkout 9e49ceb12985697fbfc0b2fa8f86143b29cc837b
     meson build
     ninja -C build
     sudo ninja -C build install
