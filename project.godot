@@ -15,12 +15,12 @@ _global_script_class_icons={
 
 [application]
 
-config/name="haskell-test"
+config/name="Simula"
 run/main_scene="res://addons/godot-haskell-plugin/demo/Demo.tscn"
 
 [debug]
 
-settings/stdout/print_fps=true
+settings/stdout/print_fps=false
 
 [display]
 

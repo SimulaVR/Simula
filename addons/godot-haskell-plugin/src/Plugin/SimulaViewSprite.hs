@@ -339,6 +339,7 @@ processClickEvent gsvs evt clickPos = do
   (godotWlrSurface, subSurfaceLocalCoords@(SubSurfaceLocalCoordinates (ssx, ssy))) <-
     case wlrEitherSurface of
       Right godotWlrXWaylandSurface -> do
+        G.set_activated godotWlrXWaylandSurface True
         getXWaylandSubsurfaceAndCoords godotWlrXWaylandSurface surfaceLocalCoords
       Left godotWlrXdgSurface -> getXdgSubsurfaceAndCoords godotWlrXdgSurface surfaceLocalCoords
   -- -- Send events
@@ -386,11 +387,13 @@ processClickEvent gsvs evt clickPos = do
       wlrSurfaceParent <- G.get_wlr_surface wlrXdgSurface            -- hack!
       return (wlrSurfaceParent, SubSurfaceLocalCoordinates (sx, sy)) -- hack!
 
-    -- | TODO: Use wlr_surface_surface_at
     getXWaylandSubsurfaceAndCoords :: GodotWlrXWaylandSurface -> SurfaceLocalCoordinates -> IO (GodotWlrSurface, SubSurfaceLocalCoordinates)
     getXWaylandSubsurfaceAndCoords wlrXWaylandSurface (SurfaceLocalCoordinates (sx, sy)) = do
-      wlrSurfaceParent <- G.get_wlr_surface wlrXWaylandSurface
-      return (wlrSurfaceParent, SubSurfaceLocalCoordinates (sx, sy)) -- hack!
+      wlrSurfaceAtResult <- G.surface_at wlrXWaylandSurface sx sy
+      subX <- G.get_sub_x wlrSurfaceAtResult
+      subY <- G.get_sub_y wlrSurfaceAtResult
+      wlrSurface' <- G.get_surface wlrSurfaceAtResult
+      return (wlrSurface', SubSurfaceLocalCoordinates (subX, subY))
 
     -- | Let wlroots know we have entered a new surface. We can safely call this
     -- | over and over (wlroots checks if we've called it already for this surface
