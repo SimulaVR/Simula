@@ -46,6 +46,9 @@ installUbuntuDependencies() {
                       epiphany \
                       sakura \
                       cabal-install
+                      wmctrl
+                      xdotool
+                      bash
                       # libegl-dev       # Not provided in disco dango
                       # libxcb-iccm4-dev # Not provided in disco dango
                       # steam-runtime    # Not provided in disco dango
@@ -319,4 +322,17 @@ updateResourceGodotHaskellGdwlroots() {
     mv ./dist/godot-haskell-3.1.0.0.tar.gz ../../../resources/godot-haskell-gdwlroots.tar.gz
 
     cd $ROOTSIMULADIR
+}
+
+ubuntuAltTabReset() {
+  gsettings reset org.gnome.desktop.wm.keybindings switch-applications
+  gsettings get org.gnome.desktop.wm.keybindings switch-applications
+
+  gsettings reset org.gnome.desktop.wm.keybindings switch-applications-backward
+  gsettings get org.gnome.desktop.wm.keybindings switch-applications-backward
+}
+
+ubuntuAltTabDisable() {
+  gsettings set org.gnome.desktop.wm.keybindings switch-applications "['']"
+  gsettings set org.gnome.desktop.wm.keybindings switch-applications-backward "['']"
 }

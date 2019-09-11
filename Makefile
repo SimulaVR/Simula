@@ -10,6 +10,19 @@ godot-update:
 godot-haskell-gdwlroots-update:
 	. ./utils/Helpers.sh && updateResourceGodotHaskellGdwlroots
 
+ubuntu-alt-tab-enable:
+	echo "Resetting alt-tab shortcuts to their defaults in Ubuntu"
+	# bash ./utils/UbuntuAltTabEnable.sh
+	. ./utils/Helpers.sh && ubuntuAltTabReset
+
+ubuntu-alt-tab-disable:
+	echo "Disabling alt-tab shortcuts in Ubuntu"
+	. ./utils/Helpers.sh && ubuntuAltTabDisable
+
+ubuntu-alt-tab-reset:
+	echo "Resetting alt-tab shortcuts to their defaults in Ubuntu"
+	. ./utils/Helpers.sh && ubuntuAltTabReset
+
 .PHONY: resources
 resources:
 	. ./utils/Helpers.sh && generateResourceTarballs
