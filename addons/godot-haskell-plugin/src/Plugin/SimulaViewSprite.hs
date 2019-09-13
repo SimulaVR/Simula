@@ -124,10 +124,9 @@ updateSimulaViewSprite gsvs = do
   -- Set extents
   setExtents gsvs
 
-  -- Move if needed
-  whenM (spriteShouldMove gsvs) $ do
-    atomically $ writeTVar (_gsvsShouldMove gsvs) False
-    moveToUnoccupied gsvs
+  -- whenM (spriteShouldMove gsvs) $ do
+  --   atomically $ writeTVar (_gsvsShouldMove gsvs) False
+  --   moveToUnoccupied gsvs
 
   where
         -- As the name makes clear, this function *only* draws the parent WlrSurface
@@ -347,7 +346,7 @@ processClickEvent gsvs evt clickPos = do
     Motion                -> do pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
                                 pointerNotifyMotion wlrSeat subSurfaceLocalCoords
                                 keyboardNotifyEnter wlrSeat godotWlrSurface -- HACK: shouldn't have to call this every frame we're pointing at a surface
-    Button pressed button ->    pointerNotifyButton wlrSeat evt
+    Button pressed button -> do pointerNotifyButton wlrSeat evt
 
   pointerNotifyFrame wlrSeat
 
