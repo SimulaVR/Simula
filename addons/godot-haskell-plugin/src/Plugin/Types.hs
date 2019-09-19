@@ -97,11 +97,17 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsSprite         :: TVar GodotSprite3D
   , _gsvsShape          :: TVar GodotBoxShape
   , _gsvsView           :: TVar SimulaView -- Contains Wlr data
-  , _gsvsViewport       :: TVar GodotViewport
+  , _gsvsRenderTarget   :: TVar GodotRenderTarget
   -- , _gsvsMapped         :: TVar Bool
   -- , gsvsGeometry     :: GodotRect2
   -- , gsvsWlrSeat      :: GodotWlrSeat
   -- , gsvsInputMode    :: TVar InteractiveMode
+  }
+
+data GodotRenderTarget = GodotRenderTarget
+  { _grtObj             :: GodotObject
+  , _grtViewSprite      :: TVar GodotSimulaViewSprite
+  , _grtViewport        :: TVar GodotViewport
   }
 
 data SimulaView = SimulaView
@@ -126,6 +132,7 @@ instance Ord SimulaView where
 --   | InteractiveResize
 
 makeLenses ''GodotSimulaViewSprite
+makeLenses ''GodotRenderTarget
 makeLenses ''SimulaView
 makeLenses ''GodotSimulaServer
 
@@ -276,3 +283,9 @@ getGSVSFromEitherSurface gss eitherSurface = do
     containsGodotWlrXWaylandSurface :: GodotWlrXWaylandSurface -> SimulaView -> GodotSimulaViewSprite -> Bool
     containsGodotWlrXWaylandSurface wlrXWaylandSurface simulaView _ = 
       ((simulaView ^. svWlrEitherSurface) == Right wlrXWaylandSurface)
+
+getWlrSurface :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO GodotWlrSurface
+getWlrSurface eitherSurface = do
+  case eitherSurface of
+    (Left wlrXdgSurface) -> G.get_wlr_surface wlrXdgSurface
+    (Right wlrXWaylandSurface) -> G.get_wlr_surface wlrXWaylandSurface

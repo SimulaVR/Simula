@@ -31,6 +31,7 @@ import           Godot.Gdnative.Internal.Api
 import qualified Godot.Methods               as G
 import qualified Godot.Gdnative.Internal.Api as Api
 
+import Plugin.RenderTarget
 import Plugin.Types
 import Data.Maybe
 import Data.Either
@@ -117,7 +118,9 @@ updateSimulaViewSprite gsvs = do
   -- putStrLn "updateSimulaViewSprite"
 
   -- Update sprite texture; doesn't yet include popups or other subsurfaces.
-  drawParentWlrSurfaceTextureOntoSprite gsvs
+  -- useViewportToDrawParentSurface gsvs
+  -- drawParentWlrSurfaceTextureOntoSprite gsvs
+  useRenderTargetToDrawParentSurface gsvs
     -- useViewportToDrawParentSurface gsvs -- Causes _draw() error
     -- drawSurfacesOnSprite gsvs
 
@@ -442,6 +445,12 @@ _handle_map :: GFunc GodotSimulaViewSprite
 _handle_map self args = do
   putStrLn "_handle_map"
   simulaView <- readTVarIO (self ^. gsvsView)
+
+  -- Attempt to start the grt's _draw loop
+  grt <- newGodotRenderTarget self
+  atomically $ writeTVar (self ^. gsvsRenderTarget) grt
+  G.set_process grt True
+
   G.set_process self True
   G.set_process_input self True -- We do this in Godotston but not in original Simula
   emitSignal self "map" ([self] :: [GodotSimulaViewSprite])
@@ -494,3 +503,4 @@ _handle_destroy self args = do
                             -- Api.godot_object_destroy (safeCast gsvs)
 
   toLowLevel VariantNil
+
