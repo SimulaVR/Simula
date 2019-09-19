@@ -121,6 +121,7 @@ useRenderTargetToDrawParentSurface gsvs  = do
   grt <- readTVarIO (gsvs ^. gsvsRenderTarget)
   viewport <- readTVarIO (grt ^. grtViewport)
   viewportTexture <- G.get_texture viewport
+  -- _draw grt undefined -- Causes exact same error: "ERROR: draw_texture: Drawing is only allowed inside NOTIFICATION_DRAW, _draw() function or 'draw' signal."
   G.set_texture sprite3D (safeCast viewportTexture)
   G.send_frame_done wlrSurface
   return ()
@@ -132,7 +133,7 @@ _process self args = do
   retnil
 
 _draw :: GFunc GodotRenderTarget
-_draw self args = do
+_draw self _ = do
   putStrLn "_draw"
   gsvs <- readTVarIO (self ^. grtViewSprite)
   sprite3D <- readTVarIO (gsvs ^. gsvsSprite)
