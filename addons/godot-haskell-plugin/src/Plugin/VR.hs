@@ -7,6 +7,7 @@ module Plugin.VR
   ) where
 
 import           Plugin.Imports
+import           Plugin.Types
 
 import qualified Godot.Methods as G
 

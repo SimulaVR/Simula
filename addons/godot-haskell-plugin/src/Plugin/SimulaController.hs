@@ -17,6 +17,7 @@ where
 
 import           Control.Concurrent.STM.TVar
 import           Control.Lens hiding (Context)
+import           Data.Maybe
 
 import qualified Data.Text                     as T
 import           Linear
@@ -28,13 +29,9 @@ import           Plugin.SimulaServer
 import           Plugin.Input.Telekinesis
 import           Plugin.Pointer
 
-import           Godot.Extra.Register
 import           Godot.Nativescript
 import qualified Godot.Gdnative.Internal.Api   as Api
 import qualified Godot.Methods                 as G
-
-import           Graphics.Wayland.WlRoots.Seat
-import           Graphics.Wayland.WlRoots.Input.Pointer
 
 import           Foreign ( deRefStablePtr
                          , castPtrToStablePtr
@@ -47,6 +44,8 @@ import           System.IO.Unsafe
 import           Data.Coerce
 import           Foreign
 import           Foreign.C
+
+import Godot.Api.Auto
 
 data GodotSimulaController = GodotSimulaController
   { _gscObj     :: GodotObject
@@ -64,34 +63,38 @@ makeLenses ''GodotSimulaController
 instance Eq GodotSimulaController where
   (==) = (==) `on` _gscObj
 
-instance GodotClass GodotSimulaController where
-  godotClassName = "SimulaController"
-
-instance ClassExport GodotSimulaController where
-  classInit obj = do
+instance NativeScript GodotSimulaController where
+  -- className = "SimulaController"
+  classInit arvrController = do
     rc <- unsafeInstance GodotRayCast "RayCast"
     G.set_cast_to rc =<< toLowLevel (V3 0 0 (negate 10))
     G.set_enabled rc True
-    G.add_child (GodotNode obj) (safeCast rc) True
+    -- G.add_child (GodotNode obj) (safeCast rc) True
+    -- G.add_child (safeCast arvrController) (safeCast rc) True
+    addChild arvrController rc
 
     ctMesh <- unsafeInstance GodotMeshInstance "MeshInstance"
     G.set_skeleton_path ctMesh =<< toLowLevel ".."
-    G.add_child (GodotNode obj) (safeCast ctMesh) True
+    -- G.add_child (GodotNode obj) (safeCast ctMesh) True
+    -- G.add_child (safeCast arvrController) (safeCast ctMesh) True
+    addChild arvrController ctMesh
 
     laser <- defaultPointer
-    G.add_child (GodotNode obj) (safeCast laser) True
+    -- G.add_child (GodotNode obj) (safeCast laser) True
+    -- G.add_child (safeCast arvrController) (safeCast laser) True
+    addChild arvrController laser
 
     let tf = TF (identity :: M33 Float) (V3 0 0 0)
-    tk <- newTVarIO $ initTk (GodotSpatial obj) rc tf
+    tk <- newTVarIO $ initTk (GodotSpatial (safeCast arvrController)) rc tf
 
     lsp <- newTVarIO 0
     diff <- newTVarIO 0
     curPos <- newTVarIO 0
 
-    G.set_visible (GodotSpatial obj) False
+    G.set_visible (GodotSpatial (safeCast arvrController)) False
 
     return $ GodotSimulaController
-      { _gscObj           = obj
+      { _gscObj           = (safeCast arvrController) 
       , _gscRayCast       = rc
       , _gscMeshInstance  = ctMesh
       , _gscLaser         = laser
@@ -101,10 +104,10 @@ instance ClassExport GodotSimulaController where
       , _gscCurrentPos    = curPos
       }
 
-  classExtends = "ARVRController"
+  -- classExtends = "ARVRController"
   classMethods =
-    [ GodotMethod NoRPC "_process" Plugin.SimulaController.process
-    , GodotMethod NoRPC "_physics_process" Plugin.SimulaController.physicsProcess
+    [ func NoRPC "_process" Plugin.SimulaController.process
+    , func NoRPC "_physics_process" Plugin.SimulaController.physicsProcess
     ]
   classSignals = []
 
@@ -151,7 +154,7 @@ pointerWindow gsc = do
   -- putStrLn "pointerWindow"
   isColliding <- G.is_colliding $ _gscRayCast gsc
   if isColliding
-    then G.get_collider (_gscRayCast gsc) >>= tryObjectCast @GodotSimulaViewSprite
+    then G.get_collider (_gscRayCast gsc) >>= asNativeScript -- tryObjectCast @GodotSimulaViewSprite
     else return Nothing
 
 updateTouchpadState :: GodotSimulaController -> IO ()
@@ -233,9 +236,9 @@ addSimulaController originNode nodeName ctID = do
 
   return ct
 
-process :: GFunc GodotSimulaController
-process self args = do
-  delta <- getArg' 0 args :: IO Float
+process :: GodotSimulaController -> [GodotVariant] -> IO ()
+process self [deltaGV] = do
+  delta <- fromGodotVariant deltaGV :: IO Float
   active <- G.get_is_active self
   visible <- G.is_visible self
 
@@ -265,7 +268,7 @@ process self args = do
         Nothing   -> godotPrint "Failed to set controller mesh."
       G.set_visible self True
 
-  toLowLevel VariantNil
+  return ()
 
 getWlrSeatFromPath :: GodotSimulaController -> IO GodotWlrSeat
 getWlrSeatFromPath self = do
@@ -273,12 +276,13 @@ getWlrSeatFromPath self = do
   let nodePathStr = "/root/Root/SimulaServer" -- I'm not 100% sure this is correct!
   nodePath <- (toLowLevel (pack nodePathStr))
   gssNode  <- G.get_node ((safeCast self) :: GodotNode) nodePath
-  gss      <- (fromNativeScript (safeCast gssNode)) :: IO GodotSimulaServer -- Recall we had trouble with this call in Simula.hs (see newNS''); it might actually work in this context, though.
+  maybeGSS      <- (asNativeScript (safeCast gssNode)) :: IO (Maybe GodotSimulaServer)
+  let gss = Data.Maybe.fromJust maybeGSS
   wlrSeat  <- readTVarIO (gss ^. gssWlrSeat)
 
   return wlrSeat
 
-physicsProcess :: GFunc GodotSimulaController
+physicsProcess :: GodotSimulaController -> [GodotVariant] -> IO ()
 physicsProcess self _ = do
   whenM (G.get_is_active self) $ do
     isGripPressed <- isButtonPressed 2 self
@@ -289,4 +293,4 @@ physicsProcess self _ = do
     tk <- readTVarIO (_gscTelekinesis self) >>= telekinesis levitateCond moveCond
     atomically $ writeTVar (_gscTelekinesis self) tk
 
-  retnil
+  return ()

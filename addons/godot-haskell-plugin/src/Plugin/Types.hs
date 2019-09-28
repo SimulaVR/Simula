@@ -20,11 +20,11 @@ import           Godot.Gdnative.Types
 import           Godot.Nativescript
 
 import           Plugin.Imports
-import           Godot.Extra.Register
 
 import qualified Godot.Methods               as G
 import           Godot.Gdnative.Types -- for Variant access
 import           Godot.Gdnative.Internal.Api as Api
+import           Godot.Nativescript as NativeScript
 
 import qualified Godot.Core.GodotImage       as Image
 import           Control.Lens                hiding (Context)
@@ -33,45 +33,73 @@ import           Foreign
 import           Foreign.C
 import           Foreign.Ptr
 import           Foreign.Marshal.Alloc
+
 import           Foreign.C.Types
 import qualified Language.C.Inline as C
-import           Debug.C as C
-import           Debug.Marshal
 
 import           System.IO.Unsafe
+import           Data.Monoid
+import           Data.List
+-- import           Data.Text as T
+import           Data.Text
 
-import           Graphics.Wayland.Internal.Server
-import           Graphics.Wayland.WlRoots.Surface
-import           Graphics.Wayland.Signal
-import           Graphics.Wayland.WlRoots.XdgShell
-import           Graphics.Wayland.WlRoots.Buffer
-import           Graphics.Wayland.Internal.SpliceServerTypes (Buffer(..))
-import           Graphics.Wayland.Server
-import           Graphics.Wayland.Internal.Server
-import           Graphics.Wayland.Internal.SpliceServerTypes
--- import           Graphics.Wayland.WlRoots.Compositor
-import           Graphics.Wayland.WlRoots.Output
-import           Graphics.Wayland.WlRoots.Surface
-import           Graphics.Wayland.WlRoots.Backend
-import           Graphics.Wayland.Signal
-import           Graphics.Wayland.WlRoots.Render
--- import           Graphics.Wayland.WlRoots.Render.Color
--- import           Graphics.Wayland.WlRoots.OutputLayout
-import           Graphics.Wayland.WlRoots.Input
-import           Graphics.Wayland.WlRoots.Seat
--- import           Graphics.Wayland.WlRoots.Cursor
--- import           Graphics.Wayland.WlRoots.XCursorManager
-import           Graphics.Wayland.WlRoots.XdgShell
-import           Graphics.Wayland.WlRoots.Input.Keyboard
--- import           Graphics.Wayland.WlRoots.Input.Pointer
--- import           Graphics.Wayland.WlRoots.Cursor
-import           Graphics.Wayland.WlRoots.Input.Buttons
+import Data.IORef
+
+-- import           Graphics.Wayland.Internal.Server
+-- import           Graphics.Wayland.WlRoots.Surface
+-- import           Graphics.Wayland.Signal
+-- import           Graphics.Wayland.WlRoots.XdgShell
+-- import           Graphics.Wayland.WlRoots.Buffer
+-- import           Graphics.Wayland.Internal.SpliceServerTypes (Buffer(..))
+-- import           Graphics.Wayland.Server
+-- import           Graphics.Wayland.Internal.Server
+-- import           Graphics.Wayland.Internal.SpliceServerTypes
+-- -- import           Graphics.Wayland.WlRoots.Compositor
+-- import           Graphics.Wayland.WlRoots.Output
+-- import           Graphics.Wayland.WlRoots.Surface
+-- import           Graphics.Wayland.WlRoots.Backend
+-- import           Graphics.Wayland.Signal
+-- import           Graphics.Wayland.WlRoots.Render
+-- -- import           Graphics.Wayland.WlRoots.Render.Color
+-- -- import           Graphics.Wayland.WlRoots.OutputLayout
+-- import           Graphics.Wayland.WlRoots.Input
+-- import           Graphics.Wayland.WlRoots.Seat
+-- -- import           Graphics.Wayland.WlRoots.Cursor
+-- -- import           Graphics.Wayland.WlRoots.XCursorManager
+-- import           Graphics.Wayland.WlRoots.XdgShell
+-- import           Graphics.Wayland.WlRoots.Input.Keyboard
+-- -- import           Graphics.Wayland.WlRoots.Input.Pointer
+-- -- import           Graphics.Wayland.WlRoots.Cursor
+-- import           Graphics.Wayland.WlRoots.Input.Buttons
 -- import           Graphics.Wayland.WlRoots.Box
 import qualified Data.Map.Strict as M
 
 import Data.UUID
 
-C.initializeSimulaCtxAndIncludes
+unfoldrM :: Monad m => (b -> m (Maybe (a, b))) -> b -> m [a]
+unfoldrM f b = f b >>= \case
+  Just (a, b') -> return . (a :) =<< unfoldrM f b'
+  _            -> return []
+
+
+-- This should ideally be `[Variant 'HaskellTy]`, but that would
+-- require `AsVariant` to handle both `LibType`s.
+type instance TypeOf 'HaskellTy GodotArray = [GodotVariant]
+instance GodotFFI GodotArray [GodotVariant] where
+  fromLowLevel vs = do
+    size <- fromIntegral <$> Api.godot_array_size vs
+    let maybeNext n v =
+          if n == (size - 1)
+          then Nothing
+          else Just (v, n + 1)
+    let variantAt n =
+          maybeNext n <$> (Api.godot_array_get vs n)
+    unfoldrM variantAt 0
+
+  toLowLevel vs = do
+    array <- Api.godot_array_new
+    mapM_ (Api.godot_array_append array) vs
+    return array
 
 -- We use TVar excessively since these datatypes must be retrieved from the
 -- scene graph (requiring IO)
@@ -152,24 +180,26 @@ connectGodotSignal sourceObj signalName methodObj methodName defaultArgs = do
   G.connect sourceObj' signalName' methodObj' methodName' defaultArgs' 0
 
 addChild :: (GodotNode :< parent)
-         => (GodotObject :< child)
+         => (GodotNode :< child)
          => parent
          -> child
          -> IO ()
 addChild parent child = do
+
+  -- instance Method "add_child" GodotNode (GodotNode -> Bool -> IO ())
   G.add_child ((safeCast parent) :: GodotNode )
-              ((safeCast child) :: GodotObject)
+              ((safeCast child) :: GodotNode)
               True -- Sets legible_unique_name flag to True
 
 
 removeChild :: (GodotNode :< parent)
-               => (GodotObject :< child)
+               => (GodotNode :< child)
                => parent
                -> child
                -> IO ()
 removeChild parent child = do
   G.remove_child ((safeCast parent) :: GodotNode )
-                 ((safeCast child) :: GodotObject)
+                 ((safeCast child) :: GodotNode)
 
 asGodotVariant :: (GodotObject :< godot_type) => godot_type -> IO (GodotVariant)
 asGodotVariant godotComplexObj = do
@@ -186,10 +216,10 @@ asGodotVariant godotComplexObj = do
 -- | functions *only* for (i) registered types that are (ii) instantiated with
 -- | classInit. If you try to use these functions with a registered type that
 -- | isn't instantiated with classInit, then it could break your program at run-time.
-regToVariant :: (GodotObject :< object) => (GodotClass object) => object -> IO (Variant 'GodotTy)
+regToVariant :: (GodotObject :< object) => (NativeScript object) => object -> IO (Variant 'GodotTy)
 regToVariant obj = return $ VariantObject (safeCast obj) :: IO (Variant 'GodotTy)
 
-variantToReg :: (GodotClass a, Typeable a) => GodotVariant -> IO (Maybe a)
+variantToReg :: (NativeScript a, Typeable a) => GodotVariant -> IO (Maybe a)
 variantToReg godotVariant = do
   -- How it's done in Simula.hs:
   -- godotVariantObj <- fromGodotVariant godotVariant :: IO GodotObject
@@ -198,14 +228,14 @@ variantToReg godotVariant = do
 
   godotVariant' <- fromLowLevel godotVariant
   ret <- case godotVariant' of
-              (VariantObject registeredTypeAsObj) -> tryObjectCast registeredTypeAsObj -- tryObjectCast should return Nothing when this object isn't registered
+              (VariantObject registeredTypeAsObj) -> asNativeScript registeredTypeAsObj -- tryObjectCast should return Nothing when this object isn't registered
               _ -> return Nothing
   return ret
 
 -- | Helper function to emit signals with registered arguments that inherit from
 -- | GodotObject (like, i.e., GodotSimulaViewSprite).
 emitSignal :: (GodotObject :< a)
-           => (GodotClass b, Typeable b, GodotObject :< b)
+           => (NativeScript b, Typeable b, GodotObject :< b)
            => a      -- Object emitting the signal
            -> String -- Signal name
            -> [b]    -- Arguments emitted (must be registered types that inherit from GodotObject like i.e. GodotSimulaViewSprite)
@@ -237,6 +267,13 @@ newNS'' constr clsName args url = do
         Just ns -> (G.new (ns :: GodotNativeScript) args :: IO GodotObject)
           >>= asClass constr clsName
         Nothing -> return Nothing
+
+-- G.load :: Godot_ResourceLoader -> (GodotString -> GodotString -> Bool -> IO GodotResource)
+-- G.asClass :: (GodotObject :< a, a :< b) => (GodotObject -> b) -> Text -> a -> IO (Maybe b)
+-- G.asClass = do constr (safeCast a)
+-- G.new :: GodotNativeScript -> ([Variant 'GodotTy] -> IO GodotObject)
+-- G.asClass
+-- GodotResource -> GodotNativeScript -> GodotObject -> Godot
 
 -- | Unsafe helper function to determine if a Godot type is null.
 isGodotTypeNull :: (Typeable a) => a -> IO ()
@@ -276,3 +313,110 @@ getGSVSFromEitherSurface gss eitherSurface = do
     containsGodotWlrXWaylandSurface :: GodotWlrXWaylandSurface -> SimulaView -> GodotSimulaViewSprite -> Bool
     containsGodotWlrXWaylandSurface wlrXWaylandSurface simulaView _ = 
       ((simulaView ^. svWlrEitherSurface) == Right wlrXWaylandSurface)
+
+
+{- Import godot-extra functions that godot-haskell still lacks. -}
+-- fromNativeScript :: GodotObject -> IO a
+-- fromNativeScript = Api.godot_nativescript_get_userdata
+--   >=> deRefStablePtr . castPtrToStablePtr
+
+newNS :: [Variant 'GodotTy] -> Text -> IO (Maybe GodotObject)
+newNS args url = do
+  -- putStrLn "newNS"
+  load GodotNativeScript "NativeScript" url >>= \case
+    Just ns -> Just <$> G.new (ns :: GodotNativeScript) args
+    Nothing -> return Nothing
+
+newNS' :: [Variant 'GodotTy] -> Text -> IO GodotObject
+newNS' args url = do
+  -- putStrLn $ "newNS'"
+  newNS args url >>= \case
+    Just ns -> return ns
+    -- Nothing -> error $ fold ["Could not instance class from ", url]
+    Nothing -> error $ "Could not instance class."
+
+instance' :: (GodotObject :< a) => (GodotObject -> a) -> Text -> IO (Maybe a)
+instance' constr className = do
+  -- putStrLn $ "instance'"
+  classDB <- getClassDB
+  vt      <- (G.instance' classDB =<< toLowLevel className) >>= fromLowLevel
+  case fromVariant vt :: Maybe GodotObject of
+    Just obj -> asClass constr className obj
+    Nothing  -> return Nothing
+
+unsafeInstance :: (GodotObject :< a) => (GodotObject -> a) -> Text -> IO a
+unsafeInstance constr className = instance' constr className >>= \case
+  Just a  -> return a
+  -- Nothing -> error $ "Could not instance " `mappend` className
+  Nothing -> error $ "Could not instance"
+
+asClass :: (GodotObject :< a, a :< b)
+        => (GodotObject -> b)
+        -> Text
+        -> a
+        -> IO (Maybe b)
+asClass constr clsName a = do
+  -- putStrLn "asClass1"
+  isClass' <- a `isClass` clsName
+  -- putStrLn $ "isClass': " ++ (show isClass')
+  -- putStrLn "asClass2"
+  return $ if isClass' then Just $ constr $ safeCast a else Nothing
+
+asClass' :: (GodotObject :< a, a :< b) => (GodotObject -> b) -> Text -> a -> IO b
+asClass' constr clsName a = asClass constr clsName a >>= \case
+  Just a' -> return a'
+  -- Nothing -> error $ "Could not cast to " `append` clsName
+  Nothing -> error $ "Could not cast"
+
+load :: (GodotResource :< a) => (GodotObject -> a) -> Text -> Text -> IO (Maybe a)
+load constr clsName url = do
+  -- putStrLn $ "load"
+  rl       <- getSingleton Godot_ResourceLoader "ResourceLoader"
+  url'     <- toLowLevel url
+  clsName' <- toLowLevel clsName
+  res      <- G.exists rl url' clsName' >>= \exists ->
+    if exists
+    then Just <$> G.load rl url' clsName' False
+    else return Nothing
+
+  res & \case
+    Just a -> asClass constr clsName a
+    Nothing -> return Nothing
+
+getClassDB :: IO Godot_ClassDB
+getClassDB = Api.godot_global_get_singleton & withCString (unpack "ClassDB")
+  >>= asClass' Godot_ClassDB "ClassDB"
+
+getSingleton :: (GodotObject :< b) => (GodotObject -> b) -> Text -> IO b
+getSingleton constr name = do
+  putStrLn $ "getSingleton"
+  engine <- getEngine
+  name' <- toLowLevel name
+  b <- G.has_singleton engine name'
+  if b
+    then do putStrLn "getSingleton1"
+            res <- G.get_singleton engine name'
+            putStrLn "getSingleton2"
+            asClass' constr name res
+    -- else error $ "No singleton named " `mappend` name
+    else error $ "No singleton."
+
+isClass :: GodotObject :< a => a -> Text -> IO Bool
+isClass obj clsName = do
+  -- putStrLn $ "isClass"
+  -- putStrLn $ "isClass1"
+  objClass <- G.get_class (GodotNode $ safeCast obj) >>= fromLowLevel
+  -- putStrLn $ "isClass2"
+  let clsName' =
+        if objClass /= "" && Data.Text.head objClass == '_'
+        -- then "_" `mappend` clsName
+        then "_" `Data.Text.append` clsName
+        else clsName
+  ((toLowLevel clsName') :: IO GodotString) >>= G.is_class ((safeCast obj) :: GodotObject)
+
+getEngine :: IO Godot_Engine
+getEngine = Api.godot_global_get_singleton & withCString (unpack "Engine")
+  >>= asClass' Godot_Engine "Engine"
+
+godotPrint :: Text -> IO ()
+godotPrint str = Api.godot_print =<< toLowLevel str

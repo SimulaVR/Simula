@@ -13,26 +13,21 @@ import qualified Godot.Gdnative.Internal.Api as Api
 import           Foreign
 import           Foreign.C
 
-import           Debug.C
-import           Debug.Marshal
-
 import           System.IO.Unsafe
 
 import           Plugin.Imports
 import           Plugin.Types
 
-import           Graphics.Wayland.Server
-import           Graphics.Wayland.Internal.Server
-import           Graphics.Wayland.Internal.SpliceServerTypes
-import           Graphics.Wayland.WlRoots.Input
-import           Graphics.Wayland.WlRoots.Input.Keyboard
-import           Graphics.Wayland.WlRoots.Seat
+-- import           Graphics.Wayland.Server
+-- import           Graphics.Wayland.Internal.Server
+-- import           Graphics.Wayland.Internal.SpliceServerTypes
+-- import           Graphics.Wayland.WlRoots.Input
+-- import           Graphics.Wayland.WlRoots.Input.Keyboard
+-- import           Graphics.Wayland.WlRoots.Seat
 
 import qualified Language.C.Inline as C
 import qualified Language.C.Inline.Context as C
 import qualified Language.C.Types as C
-
-initializeSimulaCtxAndIncludes
 
 -- i don't want to touch godot-haskell for proprietary changes
 

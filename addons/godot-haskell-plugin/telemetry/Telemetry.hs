@@ -26,10 +26,10 @@ import qualified Data.Map.Strict as M
 
 import Foreign
 
-import Debug.C
+-- import Debug.C
 import Plugin.SimulaViewSprite
 import Plugin.Types
-import Graphics.Wayland.WlRoots.Surface
+-- import Graphics.Wayland.WlRoots.Surface
 
 -- type SurfaceMap = M.Map (Ptr C'WlrSurface) GodotWlrootsSurfaceSprite -- inline-C version
 type SurfaceMap = M.Map SimulaView GodotSimulaViewSprite -- C2HS version

@@ -2,7 +2,7 @@
 {-# LANGUAGE TypeApplications    #-}
 module Plugin (registerClasses) where
 
-import           Godot.Extra.Register
+import           Godot.Nativescript
 
 import           Plugin.Simula
 import           Plugin.SimulaController

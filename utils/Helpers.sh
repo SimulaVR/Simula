@@ -171,11 +171,11 @@ generateResourceTarballs() {
         # 3.06-stable doesn't work (compilation issues)
         # 3.1 doesn't work (compilation issues)
         # TODO: Use godot 3.1
-    git clone --recursive https://github.com/SimulaVR/godot godot
+    git clone --branch "3.1-simula" --recursive https://github.com/SimulaVR/godot godot
     cd godot
-    git clone --branch gdwlroots --recursive https://github.com/SimulaVR/godot-haskell godot-haskell-gdwlroots
+    git clone --branch simula --recursive https://github.com/SimulaVR/godot-haskell godot-haskell-gdwlroots
     cd modules
-    git clone --branch xwayland --recursive https://github.com/SimulaVR/gdwlroots gdwlroots
+    git clone --branch "xwayland-3.1" --recursive https://github.com/SimulaVR/gdwlroots gdwlroots
     cd gdwlroots
     make all
 
@@ -234,7 +234,9 @@ generateGodotHaskellGdwlroots31() {
     cd ..
 
     # Get godot-haskell-gdwlroots
-    git clone --recursive --branch gdwlroots-3.1 https://github.com/SimulaVR/godot-haskell.git godot-haskell-gdwlroots
+    # git clone --recursive --branch gdwlroots-3.1 https://github.com/SimulaVR/godot-haskell.git godot-haskell-gdwlroots
+    git clone --branch simula --recursive https://github.com/SimulaVR/godot-haskell godot-haskell-gdwlroots
+
     cd godot-haskell-gdwlroots
 
     # Create and place godot-haskell-gdwlroots-3.1.0.0.tar.gz
@@ -304,7 +306,9 @@ updateResourceGodotHaskellGdwlroots() {
     sudo rm ./resources/godot-haskell-gdwlroots.tar.gz
     cd build/godot
     sudo rm -r godot-haskell-gdwlroots
-    git clone --branch gdwlroots --recursive https://github.com/SimulaVR/godot-haskell godot-haskell-gdwlroots
+    # git clone --branch gdwlroots --recursive https://github.com/SimulaVR/godot-haskell godot-haskell-gdwlroots
+    git clone --branch simula --recursive https://github.com/SimulaVR/godot-haskell godot-haskell-gdwlroots
+
     cd godot-haskell-gdwlroots
     rm api.json
     ../bin/godot.x11.tools.64 --gdnative-generate-json-api api.json

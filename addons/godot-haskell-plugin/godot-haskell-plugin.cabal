@@ -36,14 +36,13 @@ library
      hs-source-dirs: src, telemetry
   c-sources:
       cbits/flib.c
-      cbits/xdg-shell-protocol.c
-  include-dirs:
-      include
+      -- cbits/xdg-shell-protocol.c
+  -- include-dirs:
+  --     include
   build-depends:
       base >=4.12 && <5
     , lens
     , godot-haskell
-    , godot-extra
     , colour
     , linear
     , text
@@ -66,10 +65,10 @@ library
     , iso8601-time
     , raw-strings-qq
     , inline-c
-    , libinput
-    , hsroots
-    , hayland
-    , xkbcommon
+    -- , libinput
+    -- , hsroots
+    -- , hayland
+    -- , xkbcommon
   exposed-modules:
       Telemetry
       Plugin
@@ -84,8 +83,8 @@ library
       Plugin.SimulaController
       Plugin.Simula
       Plugin.VR
-      Debug.C
-      Debug.Marshal
+      -- Debug.C
+      -- Debug.Marshal
   default-language: Haskell2010
   default-extensions:
       FlexibleContexts
@@ -100,12 +99,12 @@ library
       FunctionalDependencies
   ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code 
  
-  pkgconfig-depends:
-      wlroots
-    , xkbcommon
-    , udev
-    , wayland-server
-    , libinput
+  -- pkgconfig-depends:
+  --     wlroots
+  --   , xkbcommon
+  --   , udev
+  --   , wayland-server
+  --   , libinput
 
 -- | After adding hsroots, we are forced to copy cabal fields for `library`
 -- down to `foreign-library godot-haskell-plugin` (unclear why).
@@ -132,15 +131,14 @@ foreign-library godot-haskell-plugin
     Plugin.SimulaController
     Plugin.Simula
     Plugin.VR
-    Debug.C
-    Debug.Marshal
+    -- Debug.C
+    -- Debug.Marshal
   other-modules: FLib
   ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code
   build-depends:
       base >=4.12 && <5
     , lens
     , godot-haskell
-    , godot-extra
     , colour
     , linear
     , text
@@ -163,10 +161,10 @@ foreign-library godot-haskell-plugin
     , iso8601-time
     , raw-strings-qq
     , inline-c
-    , libinput
-    , hsroots
-    , hayland
-    , xkbcommon
+    -- , libinput
+    -- , hsroots
+    -- , hayland
+    -- , xkbcommon
 
   default-extensions:
        FlexibleContexts
@@ -181,14 +179,14 @@ foreign-library godot-haskell-plugin
        FunctionalDependencies
   c-sources:
       cbits/flib.c
-      cbits/xdg-shell-protocol.c
-      cbits/wlr_godot_backend.c
-  include-dirs:
-      include
+      -- cbits/xdg-shell-protocol.c
+      -- cbits/wlr_godot_backend.c
+  -- include-dirs:
+  --     include
   default-language: Haskell2010
-  pkgconfig-depends:
-      wlroots
-    , xkbcommon
-    , udev
-    , wayland-server
-    , libinput
+  -- pkgconfig-depends:
+  --     wlroots
+  --   , xkbcommon
+  --   , udev
+  --   , wayland-server
+  --   , libinput

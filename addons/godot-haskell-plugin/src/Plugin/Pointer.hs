@@ -10,7 +10,7 @@ import           Plugin.Imports
 
 import qualified Godot.Methods                 as G
 import           Godot.Core.GodotSpatialMaterial
-
+import           Plugin.Types
 
 defaultPointer :: IO GodotMeshInstance
 defaultPointer = do

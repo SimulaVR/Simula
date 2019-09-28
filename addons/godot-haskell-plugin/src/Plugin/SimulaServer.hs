@@ -16,7 +16,6 @@ import           Plugin.Imports
 import qualified Godot.Gdnative.Internal.Api as Api
 import qualified Godot.Methods               as G
 import           Godot.Nativescript
-import           Godot.Extra.Register
 
 import qualified Data.Map.Strict as M
 
@@ -53,62 +52,25 @@ import           Foreign.Ptr
 import           Foreign.Marshal.Alloc
 import           Foreign.C.Types
 import qualified Language.C.Inline as C
-import           Debug.C as C
-import           Debug.Marshal
-
-import           Text.XkbCommon.Keysym
-import           Text.XkbCommon.KeyboardState
-import           Text.XkbCommon.InternalTypes
-import           Text.XkbCommon.Context
-import           Text.XkbCommon.Keymap
-
-import           Graphics.Wayland.Server
-import           Graphics.Wayland.Internal.Server
-import           Graphics.Wayland.Internal.SpliceServerTypes
-import           Graphics.Wayland.WlRoots.Compositor
-import           Graphics.Wayland.WlRoots.Output
-import           Graphics.Wayland.WlRoots.Surface
-import           Graphics.Wayland.WlRoots.Backend
-import           Graphics.Wayland.WlRoots.Backend.Headless
-import           Graphics.Wayland.Signal
-import           Graphics.Wayland.WlRoots.Render
-import           Graphics.Wayland.WlRoots.Render.Color
-import           Graphics.Wayland.WlRoots.OutputLayout
-import           Graphics.Wayland.WlRoots.Input
-import           Graphics.Wayland.WlRoots.Seat
-import           Graphics.Wayland.WlRoots.Cursor
-import           Graphics.Wayland.WlRoots.XCursorManager
-import           Graphics.Wayland.WlRoots.XdgShell
-import           Graphics.Wayland.WlRoots.Input.Keyboard
-import           Graphics.Wayland.WlRoots.Input.Pointer
-import           Graphics.Wayland.WlRoots.Cursor
-import           Graphics.Wayland.WlRoots.Input.Buttons
-import           Graphics.Wayland.WlRoots.Box
-import           Graphics.Wayland.WlRoots.Util
-import           Graphics.Wayland.WlRoots.DeviceManager
 
 import           System.Clock
 import           Control.Monad.Extra
 
-initializeSimulaCtxAndIncludes
+instance NativeScript GodotSimulaServer where
+  -- className = "SimulaServer"
+  classInit spatial = initGodotSimulaServer (safeCast spatial)
 
-instance GodotClass GodotSimulaServer where
-  godotClassName = "SimulaServer"
-
-instance ClassExport GodotSimulaServer where
-  classInit obj  = initGodotSimulaServer obj
-
-  classExtends = "Spatial"
+  -- classExtends = "Spatial"
   classMethods =
-    [ GodotMethod NoRPC "_ready" Plugin.SimulaServer.ready
-    -- , GodotMethod NoRPC "_input" Plugin.SimulaServer.input -- replaced by _on_wlr_* handlers
-    , GodotMethod NoRPC "_on_WaylandDisplay_ready"    Plugin.SimulaServer._on_WaylandDisplay_ready
-    , GodotMethod NoRPC "_on_WlrXdgShell_new_surface" Plugin.SimulaServer._on_WlrXdgShell_new_surface
-    , GodotMethod NoRPC "handle_map_surface" Plugin.SimulaServer.handle_map_surface
-    , GodotMethod NoRPC "handle_unmap_surface" Plugin.SimulaServer.handle_unmap_surface
-    , GodotMethod NoRPC "_on_wlr_key" Plugin.SimulaServer._on_wlr_key
-    , GodotMethod NoRPC "_on_wlr_modifiers" Plugin.SimulaServer._on_wlr_modifiers
-    , GodotMethod NoRPC "_on_WlrXWayland_new_surface" Plugin.SimulaServer._on_WlrXWayland_new_surface
+    [ func NoRPC "_ready" Plugin.SimulaServer.ready
+    -- , func NoRPC "_input" Plugin.SimulaServer.input -- replaced by _on_wlr_* handlers
+    , func NoRPC "_on_WaylandDisplay_ready"    Plugin.SimulaServer._on_WaylandDisplay_ready
+    , func NoRPC "_on_WlrXdgShell_new_surface" Plugin.SimulaServer._on_WlrXdgShell_new_surface
+    , func NoRPC "handle_map_surface" Plugin.SimulaServer.handle_map_surface
+    , func NoRPC "handle_unmap_surface" Plugin.SimulaServer.handle_unmap_surface
+    , func NoRPC "_on_wlr_key" Plugin.SimulaServer._on_wlr_key
+    , func NoRPC "_on_wlr_modifiers" Plugin.SimulaServer._on_wlr_modifiers
+    , func NoRPC "_on_WlrXWayland_new_surface" Plugin.SimulaServer._on_WlrXWayland_new_surface
     ]
 
   classSignals = []
@@ -117,7 +79,7 @@ instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
   super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
 
-ready :: GFunc GodotSimulaServer
+ready :: GodotSimulaServer -> [GodotVariant] -> IO ()
 ready gss _ = do
   -- putStrLn "ready in SimulaServer.hs"
   -- Set state / start compositor
@@ -157,8 +119,7 @@ ready gss _ = do
 
   -- Start telemetry
   startTelemetry (gss ^. gssViews)
-
-  toLowLevel VariantNil
+  return ()
 
 -- | Populate the GodotSimulaServer's TVar's with Wlr types; connect some Wlr methods
 -- | to their signals. This implicitly starts the compositor.
@@ -173,7 +134,7 @@ addWlrChildren gss = do
   atomically $ writeTVar (_gssWaylandDisplay gss) waylandDisplay
   connectGodotSignal waylandDisplay "ready" gss "_on_WaylandDisplay_ready" [] -- [connection signal="ready" from="WaylandDisplay" to="." method="_on_WaylandDisplay_ready"]
   G.set_name waylandDisplay =<< toLowLevel "WaylandDisplay"
-  G.add_child gss ((safeCast waylandDisplay) :: GodotObject) True -- Triggers "ready" signal, calls "_on_WaylandDisplay_ready", and starts the compositor
+  G.add_child gss ((safeCast waylandDisplay) :: GodotNode) True -- Triggers "ready" signal, calls "_on_WaylandDisplay_ready", and starts the compositor
 
   -- We omit having ViewportBounds children
 
@@ -181,47 +142,47 @@ addWlrChildren gss = do
   wlrDataDeviceManager <- unsafeInstance GodotWlrDataDeviceManager "WlrDataDeviceManager"
   atomically $ writeTVar (_gssWlrDataDeviceManager gss) wlrDataDeviceManager
   G.set_name wlrDataDeviceManager =<< toLowLevel "WlrDataDeviceManager"
-  G.add_child waylandDisplay ((safeCast wlrDataDeviceManager) :: GodotObject) True
+  G.add_child ((safeCast waylandDisplay) :: GodotNode) ((safeCast wlrDataDeviceManager) :: GodotNode) True
 
   wlrBackend <- unsafeInstance GodotWlrBackend "WlrBackend"
   atomically $ writeTVar (_gssWlrBackend gss) wlrBackend
   G.set_name wlrBackend =<< toLowLevel "WlrBackend"
-  G.add_child waylandDisplay ((safeCast wlrBackend) :: GodotObject) True
+  G.add_child waylandDisplay ((safeCast wlrBackend) :: GodotNode) True
 
   wlrXdgShell <- unsafeInstance GodotWlrXdgShell "WlrXdgShell"
   connectGodotSignal wlrXdgShell "new_surface" gss "_on_WlrXdgShell_new_surface" [] -- [connection signal="new_surface" from="WaylandDisplay/WlrXdgShell" to="." method="_on_WlrXdgShell_new_surface"]
   atomically $ writeTVar (_gssWlrXdgShell gss) wlrXdgShell
   G.set_name wlrXdgShell =<< toLowLevel "WlrXdgShell"
-  G.add_child waylandDisplay ((safeCast wlrXdgShell) :: GodotObject) True
+  G.add_child waylandDisplay ((safeCast wlrXdgShell) :: GodotNode) True
 
   wlrXWayland <- unsafeInstance GodotWlrXWayland "WlrXWayland"
   -- Don't start XWayland until `ready`
   -- connectGodotSignal wlrXWayland "new_surface" gss "_on_WlrXWayland_new_surface" [] -- [connection signal="new_surface" from="WaylandDisplay/WlrXWayland" to="." method="_on_WlrXWayland_new_surface"]
   atomically $ writeTVar (_gssWlrXWayland gss) wlrXWayland
   G.set_name wlrXWayland =<< toLowLevel "WlrXWayland"
-  G.add_child waylandDisplay ((safeCast wlrXWayland) :: GodotObject) True
+  G.add_child waylandDisplay ((safeCast wlrXWayland) :: GodotNode) True
 
   wlrSeat <- unsafeInstance GodotWlrSeat "WlrSeat"
   G.set_capabilities wlrSeat 3
   atomically $ writeTVar (_gssWlrSeat gss) wlrSeat
   G.set_name wlrSeat =<< toLowLevel "WlrSeat"
-  G.add_child waylandDisplay ((safeCast wlrSeat) :: GodotObject) True
+  G.add_child waylandDisplay ((safeCast wlrSeat) :: GodotNode) True
 
   wlrKeyboard <- unsafeInstance GodotWlrKeyboard "WlrKeyboard"
   atomically $ writeTVar (_gssWlrKeyboard gss) wlrKeyboard
   G.set_name wlrKeyboard =<< toLowLevel "WlrKeyboard"
-  G.add_child waylandDisplay ((safeCast wlrKeyboard) :: GodotObject) True
+  G.add_child waylandDisplay ((safeCast wlrKeyboard) :: GodotNode) True
 
   -- Children of WlrBackend
   wlrOutput <- unsafeInstance GodotWlrOutput "WlrOutput"
   atomically $ writeTVar (_gssWlrOutput gss) wlrOutput
   G.set_name wlrOutput =<< toLowLevel "WlrOutput"
-  G.add_child wlrBackend ((safeCast wlrOutput) :: GodotObject) True
+  G.add_child wlrBackend ((safeCast wlrOutput) :: GodotNode) True
 
   wlrCompositor <- unsafeInstance GodotWlrCompositor "WlrCompositor"
   atomically $ writeTVar (_gssWlrCompositor gss) wlrCompositor
   G.set_name wlrCompositor =<< toLowLevel "WlrCompositor"
-  G.add_child wlrBackend ((safeCast wlrCompositor) :: GodotObject) True
+  G.add_child wlrBackend ((safeCast wlrCompositor) :: GodotNode) True
 
   return ()
   where setWaylandSocket :: GodotWaylandDisplay -> String -> IO ()
@@ -269,52 +230,50 @@ initGodotSimulaServer obj = do
 --   ret  <- (fromNativeScript (safeCast gssNode)) :: IO a
 --   return ret
 
-_on_WaylandDisplay_ready :: GFunc GodotSimulaServer
-_on_WaylandDisplay_ready gss vecOfGodotVariant = do
+_on_WaylandDisplay_ready :: GodotSimulaServer -> [GodotVariant] -> IO ()
+_on_WaylandDisplay_ready gss _ = do
   -- putStrLn "_on_WaylandDisplay_ready"
   --waylandDisplay <- getSimulaServerNodeFromPath gss "WaylandDisplay"
   waylandDisplay <- atomically $ readTVar (_gssWaylandDisplay gss)
   G.run waylandDisplay
-  toLowLevel VariantNil
+  return ()
 
-_on_WlrXdgShell_new_surface :: GFunc GodotSimulaServer
-_on_WlrXdgShell_new_surface gss args = do
-  -- putStrLn "_on_WlrXdgShell_new_surface"
-  case toList args of
-    [wlrXdgSurfaceVariant] -> do
-      wlrXdgSurface <- fromGodotVariant wlrXdgSurfaceVariant :: IO GodotWlrXdgSurface -- Not sure if godot-haskell provides this for us
-      roleInt <- G.get_role wlrXdgSurface
-      case roleInt of
-          0 -> toLowLevel VariantNil -- XDG_SURFACE_ROLE_NONE
-          2 -> toLowLevel VariantNil -- XDG_SURFACE_ROLE_POPUP
-          1 -> do                    -- XDG_SURFACE_ROLE_TOPLEVEL
-                  simulaView <- newSimulaView gss wlrXdgSurface
-                  gsvs <- newGodotSimulaViewSprite gss simulaView
+_on_WlrXdgShell_new_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
+_on_WlrXdgShell_new_surface gss [wlrXdgSurfaceVariant] = do
+  wlrXdgSurface <- fromGodotVariant wlrXdgSurfaceVariant :: IO GodotWlrXdgSurface -- Not sure if godot-haskell provides this for us
+  roleInt <- G.get_role wlrXdgSurface
+  case roleInt of
+      0 -> return () -- XDG_SURFACE_ROLE_NONE
+      2 -> return () -- XDG_SURFACE_ROLE_POPUP
+      1 -> do                    -- XDG_SURFACE_ROLE_TOPLEVEL
+              simulaView <- newSimulaView gss wlrXdgSurface
+              gsvs <- newGodotSimulaViewSprite gss simulaView
 
-                  -- Mutate the server with our updated state
-                  atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
+              -- Mutate the server with our updated state
+              atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
 
-                  --surface.connect("map", self, "handle_map_surface")
-                  connectGodotSignal gsvs "map" gss "handle_map_surface" []
-                  --surface.connect("unmap", self, "handle_unmap_surface")
-                  connectGodotSignal gsvs "unmap" gss "handle_unmap_surface" []
+              --surface.connect("map", self, "handle_map_surface")
+              connectGodotSignal gsvs "map" gss "handle_map_surface" []
+              --surface.connect("unmap", self, "handle_unmap_surface")
+              connectGodotSignal gsvs "unmap" gss "handle_unmap_surface" []
 
-                  -- _xdg_surface_set logic from godotston:
-                  -- xdg_surface.connect("destroy", self, "_handle_destroy"):
-                  connectGodotSignal wlrXdgSurface "destroy" gsvs "_handle_destroy" []
-                  -- xdg_surface.connect("map", self, "_handle_map"):
-                  connectGodotSignal wlrXdgSurface "map" gsvs "_handle_map" []
-                  -- xdg_surface.connect("unmap", self, "_handle_unmap"):
-                  connectGodotSignal wlrXdgSurface "unmap" gsvs "_handle_unmap" []
+              -- _xdg_surface_set logic from godotston:
+              -- xdg_surface.connect("destroy", self, "_handle_destroy"):
+              connectGodotSignal wlrXdgSurface "destroy" gsvs "_handle_destroy" []
+              -- xdg_surface.connect("map", self, "_handle_map"):
+              connectGodotSignal wlrXdgSurface "map" gsvs "_handle_map" []
+              -- xdg_surface.connect("unmap", self, "_handle_unmap"):
+              connectGodotSignal wlrXdgSurface "unmap" gsvs "_handle_unmap" []
 
-                  -- Add the gsvs as a child to the SimulaServer
-                  G.add_child ((safeCast gss) :: GodotNode )
-                              ((safeCast gsvs) :: GodotObject)
-                              True
+              -- Add the gsvs as a child to the SimulaServer
+              G.add_child ((safeCast gss) :: GodotNode )
+                          ((safeCast gsvs) :: GodotNode)
+                          True
 
-                  -- Handles 2D window movement across a viewport; not needed:
-                  -- toplevel.connect("request_move", self, "_handle_request_move")
-                  toLowLevel VariantNil
+              -- Handles 2D window movement across a viewport; not needed:
+              -- toplevel.connect("request_move", self, "_handle_request_move")
+              return ()
+
 
    where newSimulaView :: GodotSimulaServer -> GodotWlrXdgSurface -> IO (SimulaView)
          newSimulaView gss wlrXdgSurface = do
@@ -330,33 +289,31 @@ _on_WlrXdgShell_new_surface gss args = do
               , _gsvsUUID           = gsvsUUID' :: Maybe UUID
               }
 
-handle_map_surface :: GFunc GodotSimulaServer
-handle_map_surface gss args = do
-  putStrLn "handle_map_surface"
-  case toList args of
-    [gsvsVariant] -> do -- Unlike in Godotston, we assume this function gives us a GodotSimulaViewSprite
-       maybeGsvs <- variantToReg gsvsVariant :: IO (Maybe GodotSimulaViewSprite)
-       case maybeGsvs of
-         Nothing -> putStrLn "Failed to cast GodotSimulaViewSprite in handle_map_surface!"
-         Just gsvs -> do -- Delay adding the sprite to the scene graph until we know XCB intends for it to be mapped
-                         G.add_child ((safeCast gss) :: GodotNode )
-                                     ((safeCast gsvs) :: GodotObject)
-                                     True
+handle_map_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
+handle_map_surface gss [gsvsVariant] = do -- Unlike in Godotston, we assume this function gives us a GodotSimulaViewSprite
+  maybeGsvs <- variantToReg gsvsVariant :: IO (Maybe GodotSimulaViewSprite)
+  case maybeGsvs of
+    Nothing -> putStrLn "Failed to cast GodotSimulaViewSprite in handle_map_surface!"
+    Just gsvs -> do -- Delay adding the sprite to the scene graph until we know XCB intends for it to be mapped
+                    G.add_child ((safeCast gss) :: GodotNode )
+                                ((safeCast gsvs) :: GodotNode)
+                                True
 
-                         setInFrontOfHMD gsvs
+                    setInFrontOfHMD gsvs
 
-                         focus gsvs
-                         simulaView <- atomically $ readTVar (gsvs ^. gsvsView)
-                         atomically $ writeTVar (simulaView ^. svMapped) True
-    _ -> putStrLn "Failed to get arguments in handle_map_surface"
-  toLowLevel VariantNil
+                    focus gsvs
+                    simulaView <- atomically $ readTVar (gsvs ^. gsvsView)
+                    atomically $ writeTVar (simulaView ^. svMapped) True
+  return ()
   where getTransform :: GodotSimulaServer -> IO GodotTransform
         getTransform self = do
           let nodePathStr = "/root/Root/ARVROrigin/ARVRCamera"
           nodePath <- (toLowLevel (pack nodePathStr))
           hasNode  <- G.has_node ((safeCast self) :: GodotNode) nodePath
           transform <- case hasNode of
-                False -> do camera <- getViewportCamera self
+                False -> do putStrLn "A"
+                            camera <- getViewportCamera self
+                            putStrLn "B"
                             G.get_camera_transform camera
                 True ->  do gssNode  <- G.get_node ((safeCast self) :: GodotNode) nodePath
                             let arvrCamera = (coerce gssNode) :: GodotARVRCamera -- HACK: We use `coerce` instead of something more proper
@@ -376,64 +333,50 @@ handle_map_surface gss args = do
           G.translate_object_local gsvs pushBackVector
           G.rotate_object_local gsvs rotationAxisY 3.14159 -- 180 degrees in radians
 
-handle_unmap_surface :: GFunc GodotSimulaServer
-handle_unmap_surface gss args = do
-  -- putStrLn "handle_unmap_surface"
-  case toList args of
-    [gsvsVariant] -> do -- Unlike in Godotston, we assume this function gives us a GodotSimulaViewSprite
-       maybeGsvs <- variantToReg gsvsVariant :: IO (Maybe GodotSimulaViewSprite)
-       case maybeGsvs of
-         Nothing -> putStrLn "Failed to cast GodotSimulaViewSprite!"
-         Just gsvs -> do simulaView <- atomically $ readTVar (gsvs ^. gsvsView)
-                         atomically $ writeTVar (simulaView ^. svMapped) False
-                         removeChild gss gsvs
-                         -- Deletion should be handled elsewhere.
-       toLowLevel VariantNil
+handle_unmap_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
+handle_unmap_surface gss [gsvsVariant] = do
+  maybeGsvs <- variantToReg gsvsVariant :: IO (Maybe GodotSimulaViewSprite)
+  case maybeGsvs of
+    Nothing -> putStrLn "Failed to cast GodotSimulaViewSprite!"
+    Just gsvs -> do simulaView <- atomically $ readTVar (gsvs ^. gsvsView)
+                    atomically $ writeTVar (simulaView ^. svMapped) False
+                    removeChild gss gsvs
+                    -- Deletion should be handled elsewhere.
+  return ()
 
-_on_wlr_key :: GFunc GodotSimulaServer
-_on_wlr_key gss args = do
+_on_wlr_key :: GodotSimulaServer -> [GodotVariant] -> IO ()
+_on_wlr_key gss [keyboardGVar, eventGVar] = do
   -- putStrLn "_on_wlr_key"
-  case toList args of
-    [keyboardGVar, eventGVar] -> do
-      -- putStrLn "G.keyboard_notify_key"
-      wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
-      G.keyboard_notify_key wlrSeat eventGVar
+  wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+  G.keyboard_notify_key wlrSeat eventGVar
+  return ()
 
-      toLowLevel VariantNil
+_on_wlr_modifiers :: GodotSimulaServer -> [GodotVariant] -> IO ()
+_on_wlr_modifiers gss [keyboardGVar] = do
+  -- putStrLn "G.keyboard_notify_modifiers"
+  wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+  G.keyboard_notify_modifiers wlrSeat
+  return ()
 
-_on_wlr_modifiers :: GFunc GodotSimulaServer
-_on_wlr_modifiers gss args = do
-  -- putStrLn "_on_wlr_modifiers"
-  case toList args of
-    [keyboardGVar] -> do
-      -- putStrLn "G.keyboard_notify_modifiers"
-      wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
-      G.keyboard_notify_modifiers wlrSeat
+_on_WlrXWayland_new_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
+_on_WlrXWayland_new_surface gss [wlrXWaylandSurfaceVariant] = do
+  putStrLn "begin _on_WlrXWaylandSurface_new_surface"
+  wlrXWaylandSurface <- fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface
 
-      toLowLevel VariantNil
-
-_on_WlrXWayland_new_surface :: GFunc GodotSimulaServer
-_on_WlrXWayland_new_surface gss args = do
-  putStrLn "_on_WlrXWayland_new_surface"
-  case toList args of
-    [wlrXWaylandSurfaceVariant] -> do
-      wlrXWaylandSurface <- fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface
-
-      simulaView <- newSimulaView gss wlrXWaylandSurface
-      gsvs <- newGodotSimulaViewSprite gss simulaView
-      -- Mutate the server with our updated state
-      atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
+  simulaView <- newSimulaView gss wlrXWaylandSurface
+  gsvs <- newGodotSimulaViewSprite gss simulaView
+  -- Mutate the server with our updated state
+  atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
 
 
-      connectGodotSignal gsvs "map" gss "handle_map_surface" []
-      connectGodotSignal gsvs "unmap" gss "handle_unmap_surface" []
+  connectGodotSignal gsvs "map" gss "handle_map_surface" []
+  connectGodotSignal gsvs "unmap" gss "handle_unmap_surface" []
 
-      connectGodotSignal wlrXWaylandSurface "destroy" gsvs "_handle_destroy" []
-      connectGodotSignal wlrXWaylandSurface "map" gsvs "_handle_map" []
-      connectGodotSignal wlrXWaylandSurface "unmap" gsvs "_handle_unmap" []
-
-      toLowLevel VariantNil
-
+  connectGodotSignal wlrXWaylandSurface "destroy" gsvs "_handle_destroy" []
+  connectGodotSignal wlrXWaylandSurface "map" gsvs "_handle_map" []
+  connectGodotSignal wlrXWaylandSurface "unmap" gsvs "_handle_unmap" []
+  putStrLn "end _on_WlrXWaylandSurface_new_surface"
+  return ()
   where newSimulaView :: GodotSimulaServer -> GodotWlrXWaylandSurface -> IO (SimulaView)
         newSimulaView gss wlrXWaylandSurface = do
          let gss' = gss :: GodotSimulaServer

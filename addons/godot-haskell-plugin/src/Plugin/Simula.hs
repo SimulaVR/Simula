@@ -7,6 +7,7 @@
 module Plugin.Simula (GodotSimula(..)) where
 
 import           Plugin.Imports
+import           Data.Maybe
 
 import           Plugin.Input
 import           Plugin.Input.Grab
@@ -16,7 +17,6 @@ import           Plugin.VR
 import           Plugin.Types
 
 import           Godot.Core.GodotGlobalConstants
-import           Godot.Extra.Register
 import           Godot.Nativescript
 import qualified Godot.Gdnative.Internal.Api   as Api
 import qualified Godot.Methods                 as G
@@ -38,18 +38,16 @@ data GodotSimula = GodotSimula
   , _sGrabState :: TVar GrabState
   }
 
-instance GodotClass GodotSimula where
-  godotClassName = "Simula"
-
-instance ClassExport GodotSimula where
-  classInit obj  = GodotSimula obj
+instance NativeScript GodotSimula where
+  -- className = "Simula"
+  classInit node  = GodotSimula (safeCast node)
     <$> newTVarIO NoGrab
 
-  classExtends = "Node"
+  -- classExtends = "Node"
   classMethods =
-    [ GodotMethod NoRPC "_ready" Plugin.Simula.ready
-    , GodotMethod NoRPC "_process" Plugin.Simula.process
-    , GodotMethod NoRPC "on_button_signal" Plugin.Simula.on_button_signal
+    [ func NoRPC "_ready" Plugin.Simula.ready
+    , func NoRPC "_process" Plugin.Simula.process
+    , func NoRPC "on_button_signal" Plugin.Simula.on_button_signal
     ]
   classSignals = []
 
@@ -58,7 +56,7 @@ instance HasBaseClass GodotSimula where
   super (GodotSimula obj _) = GodotNode obj
 
 
-ready :: GFunc GodotSimula
+ready :: GodotSimula -> [GodotVariant] -> IO ()
 ready self _ = do
   -- OpenHMD is unfortunately not yet a working substitute for OpenVR
   -- https://github.com/SimulaVR/Simula/issues/72
@@ -84,7 +82,7 @@ ready self _ = do
 
   addSimulaServerNode
 
-  retnil
+  return ()
  where
   -- Helper function for black texture debugging.
   --   From the internet:
@@ -135,7 +133,8 @@ ready self _ = do
       & newNS'' GodotSpatial "Spatial" []
 
     G.set_name gss =<< toLowLevel "SimulaServer"
-    G.add_child self (asObj gss) True
+    --G.add_child self (asObj gss) True
+    G.add_child self ((safeCast gss) :: GodotNode)  True
     -- G.print_tree ((safeCast gss) :: GodotNode) -- Print tree for debugging
     -- addDummySprite3D gss -- Test
     return ()
@@ -161,18 +160,17 @@ ready self _ = do
     return ()
 
 
-on_button_signal :: GFunc GodotSimula
-on_button_signal self args = do
+on_button_signal :: GodotSimula -> [GodotVariant] -> IO ()
+on_button_signal self [buttonVar, controllerVar, pressedVar] = do
   -- putStrLn "on_button_signal in Simula.hs"
-  case toList args of
-    [buttonVar, controllerVar, pressedVar] -> do
-      button <- fromGodotVariant buttonVar
-      controllerObj <- fromGodotVariant controllerVar
-      Just controller <- tryObjectCast controllerObj
-      pressed <- fromGodotVariant pressedVar
-      onButton self controller button pressed
-    _ -> return ()
-  toLowLevel VariantNil
+  button <- fromGodotVariant buttonVar
+  controllerObj <- fromGodotVariant controllerVar
+  maybeController <- asNativeScript controllerObj -- tryObjectCast controllerObj
+  let controller = Data.Maybe.fromJust maybeController
+  --Just controller <- asNativeScript controllerObj -- tryObjectCast controllerObj
+  pressed <- fromGodotVariant pressedVar
+  onButton self controller button pressed
+  return ()
 
 
 onButton :: GodotSimula -> GodotSimulaController -> Int -> Bool -> IO ()
@@ -187,10 +185,11 @@ onButton self gsc button pressed = do
 
     _ -> do
       let rc = _gscRayCast gsc
-      whenM (G.is_colliding rc) $
-        G.get_collider rc
-          >>= tryObjectCast @GodotSimulaViewSprite
-          >>= maybe (return ()) (onSpriteInput rc)
+      whenM (G.is_colliding rc) $ do
+        maybeSprite <- G.get_collider rc >>= asNativeScript :: IO (Maybe GodotSimulaViewSprite) --fromNativeScript
+        -- let sprite = Data.Maybe.fromJust maybeSprite
+        maybe (return ()) (onSpriteInput rc) maybeSprite
+          -- >>= maybe (return ()) (onSpriteInput rc)
  where
   gst = _sGrabState self
   onSpriteInput rc sprite =
@@ -205,7 +204,7 @@ onButton self gsc button pressed = do
       _                  -> const $ return ()
 
 
-process :: GFunc GodotSimula
+process :: GodotSimula -> [GodotVariant] -> IO ()
 process self _ = do
   -- putStrLn "process in Simula.hs"
   let gst = _sGrabState self
@@ -213,4 +212,4 @@ process self _ = do
     >>= handleState
     >>= atomically . writeTVar gst
 
-  toLowLevel VariantNil
+  return ()

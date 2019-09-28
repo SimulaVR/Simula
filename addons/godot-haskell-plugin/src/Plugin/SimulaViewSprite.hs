@@ -11,8 +11,7 @@
 module Plugin.SimulaViewSprite where
 
 import Control.Exception
-
-import Debug.C
+import Data.Proxy
 
 import Data.Colour
 import Data.Colour.SRGB.Linear
@@ -24,12 +23,12 @@ import Unsafe.Coerce
 import           Linear
 import           Plugin.Imports
 
-import           Godot.Extra.Register
 import           Godot.Core.GodotGlobalConstants
 import qualified Godot.Core.GodotRigidBody   as RigidBody
 import           Godot.Gdnative.Internal.Api
 import qualified Godot.Methods               as G
 import qualified Godot.Gdnative.Internal.Api as Api
+import           Godot.Nativescript
 
 import Plugin.Types
 import Data.Maybe
@@ -42,63 +41,59 @@ import           Foreign.Ptr
 import           Foreign.Marshal.Alloc
 import           Foreign.C.Types
 import qualified Language.C.Inline as C
-import           Debug.C as C
-import           Debug.Marshal
 
 import           Control.Lens                hiding (Context)
 
 import Data.Typeable
 
-import           Graphics.Wayland.Server
-import           Graphics.Wayland.Internal.Server
-import           Graphics.Wayland.Internal.SpliceServerTypes
--- import           Graphics.Wayland.WlRoots.Compositor
-import           Graphics.Wayland.WlRoots.Output
-import           Graphics.Wayland.WlRoots.Surface
-import           Graphics.Wayland.WlRoots.Backend
-import           Graphics.Wayland.Signal
-import           Graphics.Wayland.WlRoots.Render
--- import           Graphics.Wayland.WlRoots.Render.Color
--- import           Graphics.Wayland.WlRoots.OutputLayout
-import           Graphics.Wayland.WlRoots.Input
-import           Graphics.Wayland.WlRoots.Seat
--- import           Graphics.Wayland.WlRoots.Cursor
--- import           Graphics.Wayland.WlRoots.XCursorManager
-import           Graphics.Wayland.WlRoots.XdgShell
-import           Graphics.Wayland.WlRoots.Input.Keyboard
--- import           Graphics.Wayland.WlRoots.Input.Pointer
--- import           Graphics.Wayland.WlRoots.Cursor
-import           Graphics.Wayland.WlRoots.Input.Buttons
+-- import           Graphics.Wayland.Server
+-- import           Graphics.Wayland.Internal.Server
+-- import           Graphics.Wayland.Internal.SpliceServerTypes
+-- -- import           Graphics.Wayland.WlRoots.Compositor
+-- import           Graphics.Wayland.WlRoots.Output
+-- import           Graphics.Wayland.WlRoots.Surface
+-- import           Graphics.Wayland.WlRoots.Backend
+-- import           Graphics.Wayland.Signal
+-- import           Graphics.Wayland.WlRoots.Render
+-- -- import           Graphics.Wayland.WlRoots.Render.Color
+-- -- import           Graphics.Wayland.WlRoots.OutputLayout
+-- import           Graphics.Wayland.WlRoots.Input
+-- import           Graphics.Wayland.WlRoots.Seat
+-- -- import           Graphics.Wayland.WlRoots.Cursor
+-- -- import           Graphics.Wayland.WlRoots.XCursorManager
+-- import           Graphics.Wayland.WlRoots.XdgShell
+-- import           Graphics.Wayland.WlRoots.Input.Keyboard
+-- -- import           Graphics.Wayland.WlRoots.Input.Pointer
+-- -- import           Graphics.Wayland.WlRoots.Cursor
+-- import           Graphics.Wayland.WlRoots.Input.Buttons
 -- import           Graphics.Wayland.WlRoots.Box
 import qualified Data.Map.Strict as M
-
-C.initializeSimulaCtxAndIncludes
 
 instance Eq GodotSimulaViewSprite where
   (==) = (==) `on` _gsvsObj
 
-instance GodotClass GodotSimulaViewSprite where
-  godotClassName = "SimulaViewSprite"
-
-instance ClassExport GodotSimulaViewSprite where
+instance NativeScript GodotSimulaViewSprite where
+  className = "SimulaViewSprite"
   classInit obj =
-    GodotSimulaViewSprite obj
-                  <$> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
-                  <*> atomically (newTVar True)
-                  <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
-                  <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
-                  <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
-                  <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
-                  -- <*> atomically (newTVar False)
-  classExtends = "RigidBody"
+    do putStrLn "SimulaViewSprite Constructor called"
+       -- putStrLn $ "show $ Proxy @(BaseClass a): " ++ (show $ Proxy @(BaseClass GodotSimulaViewSprite))
+       GodotSimulaViewSprite (safeCast obj)
+                      <$> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
+                      <*> atomically (newTVar True)
+                      <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
+                      <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
+                      <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
+                      <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
+                      -- <*> atomically (newTVar False)
+  -- classExtends = "RigidBody"
   classMethods =
-    [ GodotMethod NoRPC "_input_event" inputEvent
-    , GodotMethod NoRPC "_ready" ready
+    [ func NoRPC "_input_event" inputEvent
+    , func NoRPC "_ready" ready
 
-    , GodotMethod NoRPC "_handle_destroy" _handle_destroy -- Connected in SimulaServer.hs
-    , GodotMethod NoRPC "_handle_map" _handle_map         -- Connected in SimulaServer.hs
-    , GodotMethod NoRPC "_handle_unmap" _handle_unmap     -- Connected in SimulaServer.hs
-    , GodotMethod NoRPC "_process" Plugin.SimulaViewSprite._process
+    , func NoRPC "_handle_destroy" _handle_destroy -- Connected in SimulaServer.hs
+    , func NoRPC "_handle_map" _handle_map         -- Connected in SimulaServer.hs
+    , func NoRPC "_process" Plugin.SimulaViewSprite._process
+    , func NoRPC "_handle_unmap" _handle_unmap     -- Connected in SimulaServer.hs
     ]
 
   -- Test:
@@ -225,23 +220,19 @@ updateSimulaViewSprite gsvs = do
 
           G.translate gsvs =<< toLowLevel newPos
 
-ready :: GFunc GodotSimulaViewSprite
+ready :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 ready self _ = do
   -- putStrLn "ready in SimulaViewSprite.hs"
   G.set_mode self RigidBody.MODE_KINEMATIC
-  toLowLevel VariantNil
+  return ()
 
-inputEvent :: GFunc GodotSimulaViewSprite
-inputEvent self args = do
-  -- putStrLn "inputEvent in SimulaViewSprite.hs"
-  case toList args of
-    [_cam, evObj, clickPosObj, _clickNormal, _shapeIdx] ->  do
-      ev <- fromGodotVariant evObj
-      clickPos <- fromGodotVariant clickPosObj
-      processInputEvent self ev clickPos
-      godot_object_destroy ev
-    _ -> putStrLn "expected 5 arguments in _input_event"
-  toLowLevel VariantNil
+inputEvent :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
+inputEvent self [_cam, evObj, clickPosObj, _clickNormal, _shapeIdx] = do
+  ev <- fromGodotVariant evObj
+  clickPos <- fromGodotVariant clickPosObj
+  processInputEvent self ev clickPos
+  godot_object_destroy ev
+  return ()
 
 -- Needs more descriptive type constructor
 data InputEventType
@@ -259,17 +250,53 @@ processInputEvent gsvs ev clickPos = do
     pressed <- G.is_pressed ev'
     button <- G.get_button_index ev'
     processClickEvent gsvs (Button pressed button) clickPos
+    return ()
 
 -- | This function used in `_on_WlrXdgShell_new_surface` (where we have access
 -- | to GodotSimulaServer + GodotWlrXdgSurface).
 newGodotSimulaViewSprite :: GodotSimulaServer -> SimulaView -> IO (GodotSimulaViewSprite)
 newGodotSimulaViewSprite gss simulaView = do
   -- putStrLn "newGodotSimulaViewSprite"
-  gsvs <- "res://addons/godot-haskell-plugin/SimulaViewSprite.gdns"
-    & newNS' []
-    >>= godot_nativescript_get_userdata
-    >>= deRefStablePtr . castPtrToStablePtr :: IO GodotSimulaViewSprite -- w/_gsvsObj populated + mempty TVars
+  -- putStrLn "A"
+  -- rl       <- getSingleton Godot_ResourceLoader "ResourceLoader" -- godot-extra function
+  -- putStrLn "A1"
+  -- url'     <- toLowLevel "res://addons/godot-haskell-plugin/SimulaViewSprite.gdns"
+  -- clsName' <- toLowLevel "SimulaViewSprite"
+  -- res <- G.load rl url' clsName' False :: IO GodotResource
+  -- putStrLn "A2"
+  -- maybeNS <- asClass GodotNativeScript "NativeScript" res :: IO (Maybe GodotNativeScript)
+  -- putStrLn "A3"
+  -- let ns = Data.Maybe.fromJust maybeNS
+  -- putStrLn "A4"
+  -- gsvsObj <- G.new ns []
+  -- putStrLn "A5"
+  -- maybeGSVS <- asNativeScript gsvsObj :: IO (Maybe GodotSimulaViewSprite)
+  -- putStrLn "A6"
+  -- let gsvs = Data.Maybe.fromJust maybeGSVS
+  -- putStrLn "A7"
 
+  -- G.load :: Godot_ResourceLoader -> (GodotString -> GodotString -> Bool -> IO GodotResource)
+  -- G.asClass :: (GodotObject :< a, a :< b) => (GodotObject -> b) -> Text -> a -> IO (Maybe b)
+  -- G.asClass = do constr (safeCast a)
+  -- G.new :: GodotNativeScript -> ([Variant 'GodotTy] -> IO GodotObject)
+  -- G.asClass
+  -- GodotResource -> GodotNativeScript -> GodotObject -> Godot
+ 
+  gsvsObj <- "res://addons/godot-haskell-plugin/SimulaViewSprite.gdns"
+    & newNS' [] :: IO GodotObject
+  maybeGSVS <- asNativeScript gsvsObj :: IO (Maybe GodotSimulaViewSprite)
+  let gsvs = Data.Maybe.fromJust maybeGSVS
+
+  -- gsvsRB <- "res://addons/godot-haskell-plugin/SimulaViewSprite.gdns"
+  --     & newNS'' GodotRigidBody "RigidBody" []
+  putStrLn "AA"
+  -- maybeGSVS <- asNativeScript (safeCast gsvsRB)
+  -- let gsvs = Data.Maybe.fromJust maybeGSVS
+
+    -- >>= godot_nativescript_get_userdata
+    -- >>= deRefStablePtr . castPtrToStablePtr :: IO GodotSimulaViewSprite -- w/_gsvsObj populated + mempty TVars
+
+  putStrLn "B"
   godotSprite3D <- unsafeInstance GodotSprite3D "Sprite3D"
   G.set_pixel_size godotSprite3D 0.001
   G.add_child gsvs (safeCast godotSprite3D) True
@@ -278,7 +305,9 @@ newGodotSimulaViewSprite gss simulaView = do
   -- HACK: Set transparency to False to ensure that textures never disappear
   G.set_draw_flag godotSprite3D 0 False -- https://github.com/godotengine/godot/blob/89bcfa4b364e1edc8e175f766b50d145864eb159/scene/3d/sprite_3d.h#L44:7
 
+  putStrLn "C"
   godotBoxShape <- unsafeInstance GodotBoxShape "BoxShape"
+  putStrLn "D"
   ownerId <- G.create_shape_owner gsvs (safeCast gsvs)
   G.shape_owner_add_shape gsvs ownerId (safeCast godotBoxShape)
 
@@ -297,6 +326,7 @@ newGodotSimulaViewSprite gss simulaView = do
 
 --  updateSimulaViewSprite gsvs -- Now we update everything
 
+  putStrLn "E"
   return gsvs
 
 focus :: GodotSimulaViewSprite -> IO ()
@@ -438,7 +468,7 @@ processClickEvent gsvs evt clickPos = do
     pointerNotifyFrame wlrSeat = do
       G.pointer_notify_frame wlrSeat
 
-_handle_map :: GFunc GodotSimulaViewSprite
+_handle_map :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 _handle_map self args = do
   putStrLn "_handle_map"
   simulaView <- readTVarIO (self ^. gsvsView)
@@ -446,27 +476,24 @@ _handle_map self args = do
   G.set_process_input self True -- We do this in Godotston but not in original Simula
   emitSignal self "map" ([self] :: [GodotSimulaViewSprite])
   atomically $ writeTVar (simulaView ^. svMapped) True
-  toLowLevel VariantNil
+  return ()
 
-_handle_unmap :: GFunc GodotSimulaViewSprite
+_handle_unmap :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 _handle_unmap self args = do
   putStrLn "_handle_unmap"
   simulaView <- readTVarIO (self ^. gsvsView)
   atomically $ writeTVar (simulaView ^. svMapped) False
   G.set_process self False
   emitSignal self "unmap" ([self] :: [GodotSimulaViewSprite])
-  toLowLevel VariantNil
+  return ()
 
 -- Passes control entirely to updateSimulaViewSprite.
-_process :: GFunc GodotSimulaViewSprite
-_process self args = do
-  case toList args of
-    [deltaGV] ->  do
-      simulaView <- readTVarIO (self ^. gsvsView)
-      mapped <- atomically $ readTVar (simulaView ^. svMapped)
-      when mapped $ updateSimulaViewSprite self
-
-  toLowLevel VariantNil
+_process :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
+_process self _ = do
+  simulaView <- readTVarIO (self ^. gsvsView)
+  mapped <- atomically $ readTVar (simulaView ^. svMapped)
+  when mapped $ updateSimulaViewSprite self
+  return ()
 
 
 -- The original Simula didn't have a destroy handler at the Godot level.
@@ -474,23 +501,20 @@ _process self args = do
 -- 2. Do Godot objects get deleted eventually anyway, even if we don't call queue_free?
 -- 3. I'm assuming that `registerClass` passes a destructor for
 --    GodotSimulaViewSprite that calls to `queue_free` can use.
-_handle_destroy :: GFunc GodotSimulaViewSprite
-_handle_destroy self args = do
-  -- putStrLn "_handle_destroy"
-  case toList args of
-    [gsvsGV] ->  do
-      -- Get state
-      maybeGsvs <- variantToReg gsvsGV :: IO (Maybe GodotSimulaViewSprite)
-      case maybeGsvs of
-        Nothing -> putStrLn "Failed to cast gsvs in _handle_destroy!"
-        (Just gsvs) -> do simulaView <- readTVarIO (gsvs ^. gsvsView)
-                          gss <- readTVarIO (gsvs ^. gsvsServer)
+_handle_destroy :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
+_handle_destroy self [gsvsGV] = do
+  -- Get state
+  maybeGsvs <- variantToReg gsvsGV :: IO (Maybe GodotSimulaViewSprite)
+  case maybeGsvs of
+    Nothing -> putStrLn "Failed to cast gsvs in _handle_destroy!"
+    (Just gsvs) -> do simulaView <- readTVarIO (gsvs ^. gsvsView)
+                      gss <- readTVarIO (gsvs ^. gsvsServer)
 
-                          -- Destroy
-                          G.queue_free gsvs -- Queue the `gsvs` for destruction
-                          G.set_process gsvs False -- Remove the `simulaView ↦ gsvs` mapping from the gss
-                          atomically $ modifyTVar' (gss ^. gssViews) (M.delete simulaView)
-                            -- Old method of gsvs deletion from Simula; bring back if we face leakage issues:
-                            -- Api.godot_object_destroy (safeCast gsvs)
+                      -- Destroy
+                      G.queue_free gsvs -- Queue the `gsvs` for destruction
+                      G.set_process gsvs False -- Remove the `simulaView ↦ gsvs` mapping from the gss
+                      atomically $ modifyTVar' (gss ^. gssViews) (M.delete simulaView)
+                        -- Old method of gsvs deletion from Simula; bring back if we face leakage issues:
+                        -- Api.godot_object_destroy (safeCast gsvs)
 
-  toLowLevel VariantNil
+  return ()

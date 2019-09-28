@@ -5,7 +5,7 @@ import qualified Godot.Methods                 as G
 import qualified Godot.Core.GodotRigidBody     as RigidBody
 import           Plugin.Imports
 import           Control.Monad                            ( when )
-
+import           Plugin.Types
 
 data Telekinesis = Telekinesis
   { _tkController    :: GodotSpatial

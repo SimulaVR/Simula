@@ -31,7 +31,8 @@ import           Godot.Gdnative.Types             as G hiding (AsVariant,
                                                         TypeOf)
 import           Godot.Internal.Dispatch          as G
 
-import           Godot.Extra                      as P
+-- import           Godot
+import           Godot.Nativescript
 
 import System.Clock as P
 import Control.Monad.Extra as P (when, whenM)
