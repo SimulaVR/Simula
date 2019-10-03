@@ -49,27 +49,6 @@ import           Control.Lens                hiding (Context)
 
 import Data.Typeable
 
-import           Graphics.Wayland.Server
-import           Graphics.Wayland.Internal.Server
-import           Graphics.Wayland.Internal.SpliceServerTypes
--- import           Graphics.Wayland.WlRoots.Compositor
-import           Graphics.Wayland.WlRoots.Output
-import           Graphics.Wayland.WlRoots.Surface
-import           Graphics.Wayland.WlRoots.Backend
-import           Graphics.Wayland.Signal
-import           Graphics.Wayland.WlRoots.Render
--- import           Graphics.Wayland.WlRoots.Render.Color
--- import           Graphics.Wayland.WlRoots.OutputLayout
-import           Graphics.Wayland.WlRoots.Input
-import           Graphics.Wayland.WlRoots.Seat
--- import           Graphics.Wayland.WlRoots.Cursor
--- import           Graphics.Wayland.WlRoots.XCursorManager
-import           Graphics.Wayland.WlRoots.XdgShell
-import           Graphics.Wayland.WlRoots.Input.Keyboard
--- import           Graphics.Wayland.WlRoots.Input.Pointer
--- import           Graphics.Wayland.WlRoots.Cursor
-import           Graphics.Wayland.WlRoots.Input.Buttons
--- import           Graphics.Wayland.WlRoots.Box
 import qualified Data.Map.Strict as M
 
 C.initializeSimulaCtxAndIncludes
@@ -305,6 +284,9 @@ focus gsvs = do
   gss         <- atomically $ readTVar (gsvs ^. gsvsServer) -- ^. gssWlrSeat)
   wlrSeat     <- atomically $ readTVar (gss ^. gssWlrSeat)
   let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
+
+  atomically $ writeTVar (gss ^. gssKeyboardFocusedSprite) (Just gsvs)
+
   case wlrEitherSurface of
     Left wlrXdgSurface -> do wlrSurface  <- G.get_wlr_surface wlrXdgSurface
                              wlrSurface' <- asGodotVariant wlrSurface
@@ -312,11 +294,15 @@ focus gsvs = do
                              isGodotTypeNull wlrSurface
                              G.set_activated toplevel True
                              G.keyboard_notify_enter wlrSeat wlrSurface'
+                             pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
+                             pointerNotifyFrame wlrSeat
     Right wlrXWaylandSurface -> do wlrSurface  <- G.get_wlr_surface wlrXWaylandSurface
                                    wlrSurface' <- asGodotVariant wlrSurface
                                    isGodotTypeNull wlrSurface
                                    G.set_activated wlrXWaylandSurface True
                                    G.keyboard_notify_enter wlrSeat wlrSurface'
+                                   pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
+                                   pointerNotifyFrame wlrSeat
 
 -- | This function isn't called unless a surface is being pointed at (by VR
 -- | controllers or a mouse in pancake mode).
@@ -345,8 +331,8 @@ processClickEvent gsvs evt clickPos = do
   case evt of
     Motion                -> do pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
                                 pointerNotifyMotion wlrSeat subSurfaceLocalCoords
-                                keyboardNotifyEnter wlrSeat godotWlrSurface -- HACK: shouldn't have to call this every frame we're pointing at a surface
-    Button pressed button -> do pointerNotifyButton wlrSeat evt
+    Button pressed button -> do focus gsvs
+                                pointerNotifyButton wlrSeat evt
 
   pointerNotifyFrame wlrSeat
 
@@ -394,17 +380,6 @@ processClickEvent gsvs evt clickPos = do
       wlrSurface' <- G.get_surface wlrSurfaceAtResult
       return (wlrSurface', SubSurfaceLocalCoordinates (subX, subY))
 
-    -- | Let wlroots know we have entered a new surface. We can safely call this
-    -- | over and over (wlroots checks if we've called it already for this surface
-    -- | and, if so, returns early.
-    pointerNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> SubSurfaceLocalCoordinates -> IO ()
-    pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (ssx, ssy)) = do
-      let maybeWlrSurfaceGV = (fromVariant ((toVariant wlrSurface) :: Variant 'GodotTy) :: Maybe GodotVariant)
-      case maybeWlrSurfaceGV of
-          Nothing -> putStrLn "Failed to convert GodotWlrSurface to GodotVariant!"
-          Just wlrSurfaceGV -> do G.pointer_notify_enter wlrSeat wlrSurfaceGV ssx ssy -- Causing a crash
-                                  -- putStrLn $ "G.point_notify_enter: " ++ "(" ++ (show ssx) ++ ", " ++ (show ssy) ++ ")"
-
     keyboardNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> IO ()
     keyboardNotifyEnter wlrSeat wlrSurface = do
       let maybeWlrSurfaceGV = (fromVariant ((toVariant wlrSurface) :: Variant 'GodotTy) :: Maybe GodotVariant)
@@ -431,12 +406,23 @@ processClickEvent gsvs evt clickPos = do
               -- putStrLn $ "G.pointer_notify_button: pressed/buttonIndex" ++ (show pressed) ++ "/" ++ (show buttonIndex)
               return ()
 
-    -- | Sends a frame event to the surface with pointer focus (apparently
-    -- | useful in particular for axis events); unclear if this is needed in VR but we
-    -- | use it regardless.
-    pointerNotifyFrame :: GodotWlrSeat -> IO ()
-    pointerNotifyFrame wlrSeat = do
-      G.pointer_notify_frame wlrSeat
+-- | Sends a frame event to the surface with pointer focus (apparently
+-- | useful in particular for axis events); unclear if this is needed in VR but we
+-- | use it regardless.
+pointerNotifyFrame :: GodotWlrSeat -> IO ()
+pointerNotifyFrame wlrSeat = do
+  G.pointer_notify_frame wlrSeat
+
+-- | Let wlroots know we have entered a new surface. We can safely call this
+-- | over and over (wlroots checks if we've called it already for this surface
+-- | and, if so, returns early.
+pointerNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> SubSurfaceLocalCoordinates -> IO ()
+pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (ssx, ssy)) = do
+  let maybeWlrSurfaceGV = (fromVariant ((toVariant wlrSurface) :: Variant 'GodotTy) :: Maybe GodotVariant)
+  case maybeWlrSurfaceGV of
+      Nothing -> putStrLn "Failed to convert GodotWlrSurface to GodotVariant!"
+      Just wlrSurfaceGV -> do G.pointer_notify_enter wlrSeat wlrSurfaceGV ssx ssy -- Causing a crash
+                              -- putStrLn $ "G.point_notify_enter: " ++ "(" ++ (show ssx) ++ ", " ++ (show ssy) ++ ")"
 
 _handle_map :: GFunc GodotSimulaViewSprite
 _handle_map self args = do

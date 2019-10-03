@@ -115,7 +115,7 @@ instance ClassExport GodotSimulaServer where
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
 
 ready :: GFunc GodotSimulaServer
 ready gss _ = do
@@ -244,6 +244,7 @@ initGodotSimulaServer obj = do
   gssWlrDataDeviceManager' <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar GodotWlrDataDeviceManager)
   gssWlrKeyboard'          <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar GodotWlrKeyboard)
   gssViews'                <- newTVarIO M.empty                                          :: IO (TVar (M.Map SimulaView GodotSimulaViewSprite))
+  gssKeyboardFocusedSprite' <- newTVarIO Nothing :: IO (TVar (Maybe GodotSimulaViewSprite))
 
   let gss = GodotSimulaServer {
     _gssObj                  = obj                      :: GodotObject
@@ -257,6 +258,7 @@ initGodotSimulaServer obj = do
   , _gssWlrDataDeviceManager = gssWlrDataDeviceManager' :: TVar GodotWlrDataDeviceManager
   , _gssWlrKeyboard          = gssWlrKeyboard'          :: TVar GodotWlrKeyboard
   , _gssViews                = gssViews'                :: TVar (M.Map SimulaView GodotSimulaViewSprite)
+  , _gssKeyboardFocusedSprite = gssKeyboardFocusedSprite' :: TVar (Maybe GodotSimulaViewSprite)
   }
 
   return gss
@@ -392,10 +394,13 @@ handle_unmap_surface gss args = do
 
 _on_wlr_key :: GFunc GodotSimulaServer
 _on_wlr_key gss args = do
-  -- putStrLn "_on_wlr_key"
   case toList args of
     [keyboardGVar, eventGVar] -> do
-      -- putStrLn "G.keyboard_notify_key"
+      maybeGSVSFocused <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
+      case maybeGSVSFocused of
+        Nothing -> return ()
+        (Just gsvsFocused) -> do
+          focus gsvsFocused
       wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
       G.keyboard_notify_key wlrSeat eventGVar
 
@@ -403,10 +408,13 @@ _on_wlr_key gss args = do
 
 _on_wlr_modifiers :: GFunc GodotSimulaServer
 _on_wlr_modifiers gss args = do
-  -- putStrLn "_on_wlr_modifiers"
   case toList args of
     [keyboardGVar] -> do
-      -- putStrLn "G.keyboard_notify_modifiers"
+      maybeGSVSFocused <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
+      case maybeGSVSFocused of
+        Nothing -> return ()
+        (Just gsvsFocused) -> do
+          focus gsvsFocused
       wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
       G.keyboard_notify_modifiers wlrSeat
 

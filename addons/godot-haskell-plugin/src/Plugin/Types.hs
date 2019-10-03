@@ -87,6 +87,7 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssWlrDataDeviceManager :: TVar GodotWlrDataDeviceManager
   , _gssWlrKeyboard          :: TVar GodotWlrKeyboard -- "
   , _gssViews                :: TVar (M.Map SimulaView GodotSimulaViewSprite)
+  , _gssKeyboardFocusedSprite :: TVar (Maybe GodotSimulaViewSprite) -- <- Here
   }
 
 -- Wish there was a more elegant way to jam values into these fields at classInit
@@ -276,3 +277,19 @@ getGSVSFromEitherSurface gss eitherSurface = do
     containsGodotWlrXWaylandSurface :: GodotWlrXWaylandSurface -> SimulaView -> GodotSimulaViewSprite -> Bool
     containsGodotWlrXWaylandSurface wlrXWaylandSurface simulaView _ = 
       ((simulaView ^. svWlrEitherSurface) == Right wlrXWaylandSurface)
+
+printGSVS :: GodotSimulaViewSprite -> IO ()
+printGSVS gsvs = do
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  let maybeID = (simulaView ^. gsvsUUID)
+  case maybeID of
+     Nothing -> putStrLn "Couldn't get GSVS ID"
+     (Just id) -> putStrLn $ "gsvs id: " ++ (show id)
+
+getWlrSurface :: GodotSimulaViewSprite -> IO (GodotWlrSurface)
+getWlrSurface gsvs = do
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  let eitherSurface = simulaView ^. svWlrEitherSurface
+  case eitherSurface of
+    Left xdgSurface -> G.get_wlr_surface xdgSurface
+    Right xwaylandSurface -> G.get_wlr_surface xwaylandSurface
