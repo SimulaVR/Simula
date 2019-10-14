@@ -56,6 +56,8 @@ import qualified Language.C.Inline as C
 import           Debug.C as C
 import           Debug.Marshal
 
+import           Plugin.SimulaCanvasItem
+
 import           Text.XkbCommon.Keysym
 import           Text.XkbCommon.KeyboardState
 import           Text.XkbCommon.InternalTypes
@@ -343,6 +345,20 @@ handle_map_surface gss args = do
                                      ((safeCast gsvs) :: GodotObject)
                                      True
 
+                         -- Add gsci to scene graph so that its _draw gets called every frame
+                         gsci <- newGodotSimulaCanvasItem gsvs
+                         atomically $ writeTVar (gsvs ^. gsvsSimulaCanvasItem) gsci
+                         G.set_process gsci True
+  
+                         viewport <- readTVarIO (gsci ^. gsciViewport)
+                         addChild gsvs viewport
+                         addChild viewport gsci
+
+                         -- Set the position of the texture relative to the Viewport/render target
+                         let gsciObjAsNode = (coerce (gsci ^. gsciObject)) :: GodotNode2D
+                         pos2D <- toLowLevel (V2 0 0) :: IO GodotVector2
+                         -- G.set_position gsciObjAsNode pos2D
+
                          setInFrontOfHMD gsvs
 
                          focus gsvs
@@ -414,7 +430,7 @@ _on_wlr_modifiers gss args = do
 
 _on_WlrXWayland_new_surface :: GFunc GodotSimulaServer
 _on_WlrXWayland_new_surface gss args = do
-  putStrLn "_on_WlrXWayland_new_surface"
+  -- putStrLn "_on_WlrXWayland_new_surface"
   case toList args of
     [wlrXWaylandSurfaceVariant] -> do
       wlrXWaylandSurface <- fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface

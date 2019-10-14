@@ -31,7 +31,7 @@ import           Godot.Gdnative.Internal.Api
 import qualified Godot.Methods               as G
 import qualified Godot.Gdnative.Internal.Api as Api
 
-import Plugin.RenderTarget
+import Plugin.SimulaCanvasItem
 import Plugin.Types
 import Data.Maybe
 import Data.Either
@@ -120,7 +120,7 @@ updateSimulaViewSprite gsvs = do
   -- Update sprite texture; doesn't yet include popups or other subsurfaces.
   -- useViewportToDrawParentSurface gsvs
   -- drawParentWlrSurfaceTextureOntoSprite gsvs
-  useRenderTargetToDrawParentSurface gsvs
+  useSimulaCanvasItemToDrawSubsurfaces gsvs
     -- useViewportToDrawParentSurface gsvs -- Causes _draw() error
     -- drawSurfacesOnSprite gsvs
 
@@ -159,10 +159,14 @@ updateSimulaViewSprite gsvs = do
           -- wlrXdgSurfaceToplevel <- G.get_xdg_toplevel wlrXdgSurface
           -- G.set_maximized wlrXdgSurfaceToplevel True -- Doesn't seem to work
           rid <- G.get_rid parentWlrTexture
+          -- rid_canvas <- G.get_canvas self
+          -- rid_canvas_item <- G.get_canvas self
           visualServer <- getSingleton GodotVisualServer "VisualServer"
           -- Enable everything but mipmapping (since this causes old textures get to interpolated
           -- with updated textures when far enough from the user).
           G.texture_set_flags visualServer rid 6
+          -- G.texture_set_flags visualServer rid_canvas 6
+          -- G.texture_set_flags visualServer rid_canvas_item 6
           G.set_texture sprite3D parentWlrTexture
 
           -- Tell client surface it should start rendering the next frame
@@ -350,6 +354,7 @@ processClickEvent gsvs evt clickPos = do
                                 pointerNotifyMotion wlrSeat subSurfaceLocalCoords
                                 keyboardNotifyEnter wlrSeat godotWlrSurface -- HACK: shouldn't have to call this every frame we're pointing at a surface
     Button pressed button -> do pointerNotifyButton wlrSeat evt
+                                focus gsvs
 
   pointerNotifyFrame wlrSeat
 
@@ -445,11 +450,6 @@ _handle_map :: GFunc GodotSimulaViewSprite
 _handle_map self args = do
   putStrLn "_handle_map"
   simulaView <- readTVarIO (self ^. gsvsView)
-
-  -- Attempt to start the grt's _draw loop
-  grt <- newGodotRenderTarget self
-  atomically $ writeTVar (self ^. gsvsRenderTarget) grt
-  G.set_process grt True
 
   G.set_process self True
   G.set_process_input self True -- We do this in Godotston but not in original Simula

@@ -77,7 +77,7 @@ library
       Plugin.Pointer
       Plugin.Types
       Plugin.SimulaViewSprite
-      Plugin.RenderTarget
+      Plugin.SimulaCanvasItem
       Plugin.Input
       Plugin.Input.Grab
       Plugin.Input.Telekinesis
@@ -126,7 +126,7 @@ foreign-library godot-haskell-plugin
     Plugin.Pointer
     Plugin.Types
     Plugin.SimulaViewSprite
-    Plugin.RenderTarget
+    Plugin.SimulaCanvasItem
     Plugin.Input
     Plugin.Input.Grab
     Plugin.Input.Telekinesis

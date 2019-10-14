@@ -4,6 +4,6 @@
 
 [resource]
 
-class_name = "RenderTarget"
+class_name = "SimulaCanvasItem"
 library = ExtResource( 1 )
 _sections_unfolded = [ "Resource" ]

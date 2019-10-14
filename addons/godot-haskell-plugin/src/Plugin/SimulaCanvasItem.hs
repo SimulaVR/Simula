@@ -7,7 +7,7 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE DataKinds #-}
 
-module Plugin.RenderTarget where
+module Plugin.SimulaCanvasItem where
 
 import Control.Exception
 
@@ -44,56 +44,43 @@ import Data.Typeable
 
 import qualified Data.Map.Strict as M
 
-instance Eq GodotRenderTarget where
-  (==) = (==) `on` _grtObj
+instance Eq GodotSimulaCanvasItem where
+  (==) = (==) `on` _gsciObject
 
-instance GodotClass GodotRenderTarget where
-  godotClassName = "RenderTarget"
+instance GodotClass GodotSimulaCanvasItem where
+  godotClassName = "SimulaCanvasItem"
 
-instance ClassExport GodotRenderTarget where
-  classInit obj =
-    GodotRenderTarget obj
-                  <$> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
-                  <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
-  classExtends = "RigidBody2D"
+instance ClassExport GodotSimulaCanvasItem where
+  classInit obj = do
+    GodotSimulaCanvasItem obj
+                  <$> atomically (newTVar (error "Failed to initialize GodotSimulaCanvasItem."))
+                  <*> atomically (newTVar (error "Failed to initialize GodotSimulaCanvasItem."))
+  classExtends = "Node2D" -- "RigidBody2D" -- "CanvasItem"
   classMethods =
     [
-      GodotMethod NoRPC "_process" Plugin.RenderTarget._process
-    , GodotMethod NoRPC "_draw" Plugin.RenderTarget._draw
+      GodotMethod NoRPC "_process" Plugin.SimulaCanvasItem._process
+    , GodotMethod NoRPC "_draw" Plugin.SimulaCanvasItem._draw
     ]
 
-instance HasBaseClass GodotRenderTarget where
-  type BaseClass GodotRenderTarget = GodotRigidBody2D
-  super (GodotRenderTarget obj _ _ ) = GodotRigidBody2D obj
+instance HasBaseClass GodotSimulaCanvasItem where
+  type BaseClass GodotSimulaCanvasItem = GodotCanvasItem
+  super (GodotSimulaCanvasItem obj _ _ ) = GodotCanvasItem obj
 
-newGodotRenderTarget :: GodotSimulaViewSprite -> IO (GodotRenderTarget)
-newGodotRenderTarget gsvs = do
-  -- putStrLn "newGodotSimulaViewSprite"
-  putStrLn "A"
-
-  grt <- "res://addons/godot-haskell-plugin/RenderTarget.gdns"
+newGodotSimulaCanvasItem :: GodotSimulaViewSprite -> IO (GodotSimulaCanvasItem)
+newGodotSimulaCanvasItem gsvs = do
+  gsci <- "res://addons/godot-haskell-plugin/SimulaCanvasItem.gdns"
     & newNS' []
     >>= godot_nativescript_get_userdata
-    >>= deRefStablePtr . castPtrToStablePtr :: IO GodotRenderTarget -- w/_grtObj populated + mempty TVars
+    >>= deRefStablePtr . castPtrToStablePtr :: IO GodotSimulaCanvasItem
 
-  -- grt <- "res://addons/godot-haskell-plugin/RenderTarget.gdns"
-  --   & newNS'' GodotRenderTarget "RenderTarget" []
-  
-  
-  -- grt <- "res://addons/godot-haskell-plugin/RenderTarget.gdns"
-  --         & newNS' []
-  --         <&> GodotRenderTarget
-
-  putStrLn "B"
   viewport <- initializeRenderTarget gsvs
-  putStrLn "C"
-  atomically $ writeTVar (_grtViewSprite grt) gsvs
-  atomically $ writeTVar (_grtViewport grt) viewport
+  atomically $ writeTVar (_gsciGSVS gsci) gsvs
+  atomically $ writeTVar (_gsciViewport gsci) viewport
   -- G.set_process grt False
 
-  return grt
+  return gsci
 
-getCoordinatesFromCenter :: GodotWlrSurface -> CInt -> CInt -> IO GodotVector2
+getCoordinatesFromCenter :: GodotWlrSurface -> Int -> Int -> IO GodotVector2
 getCoordinatesFromCenter wlrSurface sx sy = do
   -- putStrLn "getCoordinatesFromCenter"
   (bufferWidth', bufferHeight')    <- getBufferDimensions wlrSurface
@@ -104,66 +91,113 @@ getCoordinatesFromCenter wlrSurface sx sy = do
   -- NOTE: In godotston fromCenterY is isn't negative, but since we set
   -- `G.render_target_v_flip viewport True` we can set this
   -- appropriately
-  -- NOTE: We above assume that
-  --    G.render_target_v_flip viewport True
-  -- has been set.
   let v2 = (V2 fromCenterX fromCenterY) :: V2 Float
   gv2 <- toLowLevel v2 :: IO GodotVector2
   return gv2
 
-useRenderTargetToDrawParentSurface :: GodotSimulaViewSprite -> IO ()
-useRenderTargetToDrawParentSurface gsvs  = do
-  putStrLn "useRenderTargetToDrawParentSurface"
+useSimulaCanvasItemToDrawSubsurfaces :: GodotSimulaViewSprite -> IO ()
+useSimulaCanvasItemToDrawSubsurfaces gsvs  = do
+  -- putStrLn "useSimulaCanvasItemToDrawParentSurface"
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
   wlrSurface <- getWlrSurface eitherSurface
   sprite3D <- readTVarIO (gsvs ^. gsvsSprite)
-  grt <- readTVarIO (gsvs ^. gsvsRenderTarget)
-  viewport <- readTVarIO (grt ^. grtViewport)
+  gsci <- readTVarIO (gsvs ^. gsvsSimulaCanvasItem)
+  viewport <- readTVarIO (gsci ^. gsciViewport)
   viewportTexture <- G.get_texture viewport
-  -- _draw grt undefined -- Causes exact same error: "ERROR: draw_texture: Drawing is only allowed inside NOTIFICATION_DRAW, _draw() function or 'draw' signal."
+
+  rid <- G.get_rid viewportTexture
+  visualServer <- getSingleton GodotVisualServer "VisualServer"
+  G.texture_set_flags visualServer rid 7 -- Set to 6 if you see gradient issues
   G.set_texture sprite3D (safeCast viewportTexture)
+
   G.send_frame_done wlrSurface
+
   return ()
 
-_process :: GFunc GodotRenderTarget
+_process :: GFunc GodotSimulaCanvasItem
 _process self args = do
-  putStrLn "_process"
+  -- putStrLn "_process"
   G.update self
   retnil
 
-_draw :: GFunc GodotRenderTarget
+
+improveTextureQuality :: GodotTexture -> IO ()
+improveTextureQuality texture = do
+  if ((unsafeCoerce texture) /= nullPtr)
+    then do rid <- G.get_rid texture
+            -- rid_canvas <- G.get_canvas self
+            -- rid_canvas_item <- G.get_canvas self
+            visualServer <- getSingleton GodotVisualServer "VisualServer"
+            G.texture_set_flags visualServer rid 7
+            -- G.texture_set_flags visualServer rid_canvas 6
+            -- G.texture_set_flags visualServer rid_canvas_item 6
+  else return ()
+
+_draw :: GFunc GodotSimulaCanvasItem
 _draw self _ = do
-  putStrLn "_draw"
-  gsvs <- readTVarIO (self ^. grtViewSprite)
+  -- putStrLn "_draw"
+  gsvs <- readTVarIO (self ^. gsciGSVS)
   sprite3D <- readTVarIO (gsvs ^. gsvsSprite)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
+  children <- case eitherSurface of
+    Left wlrXdgSurface -> return []
+    Right wlrXWaylandSurface -> do
+      -- putStrLn "# Parent Properties"
+      G.print_xwayland_surface_properties wlrXWaylandSurface
+      arrayOfChildren <- G.get_children wlrXWaylandSurface :: IO GodotArray
+      numChildren <- Api.godot_array_size arrayOfChildren
+      -- putStrLn $ "Number of children (from Haskell): " ++ (show numChildren) -- Alternates between correct value and 0, just like in C++
+      -- arrayOfChildrenGV <- (if numChildren /= 0 then fromLowLevel arrayOfChildren else return [])
+      --arrayOfChildrenGV <- fromLowLevel arrayOfChildren :: IO [GodotVariant] --
+      arrayOfChildrenGV <- fromLowLevel' arrayOfChildren
+      children <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrXWaylandSurface]
+      return children
   wlrSurface <- getWlrSurface eitherSurface
   parentWlrTexture <- G.get_texture wlrSurface
 
-  -- Draw texture on Viewport; get its texture; set it to Sprite3D's texture; call G.send_frame_done
   let isNull = ((unsafeCoerce parentWlrTexture) == nullPtr)
   case isNull of
         True -> putStrLn "Texture is null!"
-        False -> do -- renderTarget <- initializeRenderTarget gsvs     -- Dumb, but we reset the renderTarget every frame to make sure the dimensions aren't (0,0)
-                    -- atomically $ writeTVar (_gsvsViewport gsvs) renderTarget -- "
-                    
-                    -- Get state
-                    -- let zero = (V2 0 0) :: V2 Float
-                    -- gv2 <- toLowLevel zero :: IO GodotVector2
-                    -- return zero
-                    renderPosition <- getCoordinatesFromCenter wlrSurface 0 0 -- Surface coordinates are relative to the size of the GodotWlrXdgSurface; We draw at the top left.
-
+        False -> do renderPosition <- toLowLevel (V2 0 0) :: IO GodotVector2
                     textureToDraw <- G.get_texture wlrSurface :: IO GodotTexture
-                    grt <- readTVarIO (gsvs ^. gsvsRenderTarget)
-                    viewport <- readTVarIO (grt ^. grtViewport)
+                    gsci <- readTVarIO (gsvs ^. gsvsSimulaCanvasItem)
 
-                      -- Send draw command
                     godotColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1) :: IO GodotColor
-                    -- let nullTexture = Data.Maybe.fromJust ((fromVariant VariantNil) :: Maybe GodotTexture) :: GodotTexture
-                    G.draw_texture ((unsafeCoerce viewport) :: GodotCanvasItem) textureToDraw renderPosition godotColor (coerce nullPtr) -- nullTexture
+                    G.draw_texture gsci textureToDraw renderPosition godotColor (coerce nullPtr)
+
+                    -- Improve texture quality
+                    improveTextureQuality parentWlrTexture
+                    mapM drawChild children
+                    return ()
+                    -- G.draw_texture gsci textureToDraw renderPosition2 godotColor (coerce nullPtr) -- nullTexture
   retnil
+  where
+    -- Fixes a the bug from godot-haskell/godot-extra's `instance GodotFFI GodotArray [GodotVariant]`
+    fromLowLevel' vs = do
+      size <- fromIntegral <$> Api.godot_array_size vs
+      forM [0..size-1] $ Api.godot_array_get vs
+    drawChild :: GodotWlrXWaylandSurface -> IO ()
+    drawChild wlrXWaylandSurface = do
+           -- putStrLn "## Child Properties"
+           G.print_xwayland_surface_properties wlrXWaylandSurface
+           surface <- G.get_wlr_surface wlrXWaylandSurface
+           -- let isNull = ((unsafeCoerce subsurfaceTexture) == nullPtr)
+           let isNull = ((unsafeCoerce surface) == nullPtr)
+           case isNull of
+                 True -> putStrLn "Child texture is null!"
+                 False -> do subsurfaceTexture <- G.get_texture surface :: IO GodotTexture
+                             improveTextureQuality subsurfaceTexture
+
+                             x <- G.get_x wlrXWaylandSurface
+                             y <- G.get_y wlrXWaylandSurface
+
+                             subsurfaceRenderPosition <- toLowLevel (V2 (fromIntegral x) (fromIntegral y)) :: IO GodotVector2
+                             -- subsurfaceRenderPosition' <- getCoordinatesFromCenter surface x y
+                             godotColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1) :: IO GodotColor
+                             G.draw_texture self subsurfaceTexture subsurfaceRenderPosition godotColor (coerce nullPtr)
+           return ()
 
 initializeRenderTarget :: GodotSimulaViewSprite -> IO (GodotViewport)
 initializeRenderTarget gsvs = do
@@ -193,7 +227,7 @@ initializeRenderTarget gsvs = do
   --   CLEAR_MODE_ALWAYS = 0
   --   CLEAR_MODE_NEVER = 1
   -- 
-  G.set_clear_mode renderTarget 0
+  G.set_clear_mode renderTarget 1
 
   -- "By default, re-rendering of the Viewport happens when the Viewport’s
   -- ViewportTexture has been drawn in a frame. If visible, it will be rendered;

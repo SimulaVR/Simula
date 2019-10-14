@@ -97,18 +97,18 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsSprite         :: TVar GodotSprite3D
   , _gsvsShape          :: TVar GodotBoxShape
   , _gsvsView           :: TVar SimulaView -- Contains Wlr data
-  , _gsvsRenderTarget   :: TVar GodotRenderTarget
+  , _gsvsSimulaCanvasItem     :: TVar GodotSimulaCanvasItem
   -- , _gsvsMapped         :: TVar Bool
   -- , gsvsGeometry     :: GodotRect2
   -- , gsvsWlrSeat      :: GodotWlrSeat
   -- , gsvsInputMode    :: TVar InteractiveMode
   }
 
-data GodotRenderTarget = GodotRenderTarget
-  { _grtObj             :: GodotObject
-  , _grtViewSprite      :: TVar GodotSimulaViewSprite
-  , _grtViewport        :: TVar GodotViewport
-  }
+data GodotSimulaCanvasItem = GodotSimulaCanvasItem {
+     _gsciObject :: GodotObject -- Meant to extend/be casted as GodotCanvasItem
+   , _gsciGSVS :: TVar GodotSimulaViewSprite
+   , _gsciViewport :: TVar GodotViewport
+ }
 
 data SimulaView = SimulaView
   { _svServer                  :: GodotSimulaServer -- Can obtain WlrSeat
@@ -132,7 +132,7 @@ instance Ord SimulaView where
 --   | InteractiveResize
 
 makeLenses ''GodotSimulaViewSprite
-makeLenses ''GodotRenderTarget
+makeLenses ''GodotSimulaCanvasItem
 makeLenses ''SimulaView
 makeLenses ''GodotSimulaServer
 
@@ -289,3 +289,23 @@ getWlrSurface eitherSurface = do
   case eitherSurface of
     (Left wlrXdgSurface) -> G.get_wlr_surface wlrXdgSurface
     (Right wlrXWaylandSurface) -> G.get_wlr_surface wlrXWaylandSurface
+
+
+-- This is the instance imported from godot-extra.
+-- It has a bug in it.
+-- type instance TypeOf 'HaskellTy GodotArray = [GodotVariant]
+-- instance GodotFFI GodotArray [GodotVariant] where
+--   fromLowLevel vs = do
+--     size <- fromIntegral <$> Api.godot_array_size vs
+--     let maybeNext n v =
+--           if n == (size - 1)
+--           then Nothing
+--           else Just (v, n + 1)
+--     let variantAt n =
+--           maybeNext n <$> (Api.godot_array_get vs n)
+--     unfoldrM variantAt 0
+
+--   toLowLevel vs = do
+--     array <- Api.godot_array_new
+--     mapM_ (Api.godot_array_append array) vs
+--     return array
