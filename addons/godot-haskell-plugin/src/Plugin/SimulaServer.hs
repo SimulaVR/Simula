@@ -56,6 +56,8 @@ import qualified Language.C.Inline as C
 import           Debug.C as C
 import           Debug.Marshal
 
+import           Plugin.SimulaCanvasItem
+
 import           Text.XkbCommon.Keysym
 import           Text.XkbCommon.KeyboardState
 import           Text.XkbCommon.InternalTypes
@@ -334,7 +336,7 @@ _on_WlrXdgShell_new_surface gss args = do
 
 handle_map_surface :: GFunc GodotSimulaServer
 handle_map_surface gss args = do
-  putStrLn "handle_map_surface"
+  -- putStrLn "handle_map_surface"
   case toList args of
     [gsvsVariant] -> do -- Unlike in Godotston, we assume this function gives us a GodotSimulaViewSprite
        maybeGsvs <- variantToReg gsvsVariant :: IO (Maybe GodotSimulaViewSprite)
@@ -344,6 +346,20 @@ handle_map_surface gss args = do
                          G.add_child ((safeCast gss) :: GodotNode )
                                      ((safeCast gsvs) :: GodotObject)
                                      True
+
+                         -- Add gsci to scene graph so that its _draw gets called every frame
+                         gsci <- newGodotSimulaCanvasItem gsvs
+                         atomically $ writeTVar (gsvs ^. gsvsSimulaCanvasItem) gsci
+                         G.set_process gsci True
+  
+                         viewport <- readTVarIO (gsci ^. gsciViewport)
+                         addChild gsvs viewport
+                         addChild viewport gsci
+
+                         -- Set the position of the texture relative to the Viewport/render target
+                         let gsciObjAsNode = (coerce (gsci ^. gsciObject)) :: GodotNode2D
+                         pos2D <- toLowLevel (V2 0 0) :: IO GodotVector2
+                         -- G.set_position gsciObjAsNode pos2D
 
                          setInFrontOfHMD gsvs
 
@@ -422,7 +438,7 @@ _on_wlr_modifiers gss args = do
 
 _on_WlrXWayland_new_surface :: GFunc GodotSimulaServer
 _on_WlrXWayland_new_surface gss args = do
-  putStrLn "_on_WlrXWayland_new_surface"
+  -- putStrLn "_on_WlrXWayland_new_surface"
   case toList args of
     [wlrXWaylandSurfaceVariant] -> do
       wlrXWaylandSurface <- fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface
