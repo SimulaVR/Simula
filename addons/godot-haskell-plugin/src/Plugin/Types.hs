@@ -294,7 +294,6 @@ deriving instance Eq GodotWlrXWaylandSurface
 getGSVSFromEitherSurface :: GodotSimulaServer -> Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO (Maybe GodotSimulaViewSprite)
 getGSVSFromEitherSurface gss eitherSurface = do
   viewMap <- atomically $ readTVar (_gssViews gss) -- (M.Map SimulaView GodotSimulaViewSprite)
-  
   case eitherSurface of
     (Left wlrXdgSurface) -> do
       -- let gsvsList = filter (containsGodotWlrXdgSurface wlrXdgSurface) $ M.keys viewMap
@@ -316,28 +315,20 @@ getGSVSFromEitherSurface gss eitherSurface = do
 
 
 {- Import godot-extra functions that godot-haskell still lacks. -}
--- fromNativeScript :: GodotObject -> IO a
--- fromNativeScript = Api.godot_nativescript_get_userdata
---   >=> deRefStablePtr . castPtrToStablePtr
-
 newNS :: [Variant 'GodotTy] -> Text -> IO (Maybe GodotObject)
 newNS args url = do
-  -- putStrLn "newNS"
   load GodotNativeScript "NativeScript" url >>= \case
     Just ns -> Just <$> G.new (ns :: GodotNativeScript) args
     Nothing -> return Nothing
 
 newNS' :: [Variant 'GodotTy] -> Text -> IO GodotObject
 newNS' args url = do
-  -- putStrLn $ "newNS'"
   newNS args url >>= \case
     Just ns -> return ns
-    -- Nothing -> error $ fold ["Could not instance class from ", url]
-    Nothing -> error $ "Could not instance class."
+    Nothing -> error $ "Could not instance class from " ++ (Data.Text.unpack url)
 
 instance' :: (GodotObject :< a) => (GodotObject -> a) -> Text -> IO (Maybe a)
 instance' constr className = do
-  -- putStrLn $ "instance'"
   classDB <- getClassDB
   vt      <- (G.instance' classDB =<< toLowLevel className) >>= fromLowLevel
   case fromVariant vt :: Maybe GodotObject of
@@ -347,8 +338,7 @@ instance' constr className = do
 unsafeInstance :: (GodotObject :< a) => (GodotObject -> a) -> Text -> IO a
 unsafeInstance constr className = instance' constr className >>= \case
   Just a  -> return a
-  -- Nothing -> error $ "Could not instance " `mappend` className
-  Nothing -> error $ "Could not instance"
+  Nothing -> error $ "Could not instance " ++ (Data.Text.unpack className)
 
 asClass :: (GodotObject :< a, a :< b)
         => (GodotObject -> b)
@@ -356,21 +346,16 @@ asClass :: (GodotObject :< a, a :< b)
         -> a
         -> IO (Maybe b)
 asClass constr clsName a = do
-  -- putStrLn "asClass1"
   isClass' <- a `isClass` clsName
-  -- putStrLn $ "isClass': " ++ (show isClass')
-  -- putStrLn "asClass2"
   return $ if isClass' then Just $ constr $ safeCast a else Nothing
 
 asClass' :: (GodotObject :< a, a :< b) => (GodotObject -> b) -> Text -> a -> IO b
 asClass' constr clsName a = asClass constr clsName a >>= \case
   Just a' -> return a'
-  -- Nothing -> error $ "Could not cast to " `append` clsName
-  Nothing -> error $ "Could not cast"
+  Nothing -> error $ "Could not cast to " ++ (Data.Text.unpack clsName)
 
 load :: (GodotResource :< a) => (GodotObject -> a) -> Text -> Text -> IO (Maybe a)
 load constr clsName url = do
-  -- putStrLn $ "load"
   rl       <- getSingleton Godot_ResourceLoader "ResourceLoader"
   url'     <- toLowLevel url
   clsName' <- toLowLevel clsName
@@ -389,27 +374,18 @@ getClassDB = Api.godot_global_get_singleton & withCString (unpack "ClassDB")
 
 getSingleton :: (GodotObject :< b) => (GodotObject -> b) -> Text -> IO b
 getSingleton constr name = do
-  putStrLn $ "getSingleton"
   engine <- getEngine
   name' <- toLowLevel name
   b <- G.has_singleton engine name'
   if b
-    then do putStrLn "getSingleton1"
-            res <- G.get_singleton engine name'
-            putStrLn "getSingleton2"
-            asClass' constr name res
-    -- else error $ "No singleton named " `mappend` name
-    else error $ "No singleton."
+    then G.get_singleton engine name' >>= asClass' constr name
+    else error $ "No singleton named " ++ (Data.Text.unpack name)
 
 isClass :: GodotObject :< a => a -> Text -> IO Bool
 isClass obj clsName = do
-  -- putStrLn $ "isClass"
-  -- putStrLn $ "isClass1"
   objClass <- G.get_class (GodotNode $ safeCast obj) >>= fromLowLevel
-  -- putStrLn $ "isClass2"
   let clsName' =
         if objClass /= "" && Data.Text.head objClass == '_'
-        -- then "_" `mappend` clsName
         then "_" `Data.Text.append` clsName
         else clsName
   ((toLowLevel clsName') :: IO GodotString) >>= G.is_class ((safeCast obj) :: GodotObject)

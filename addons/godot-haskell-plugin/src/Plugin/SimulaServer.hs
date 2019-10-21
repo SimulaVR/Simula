@@ -311,9 +311,7 @@ handle_map_surface gss [gsvsVariant] = do -- Unlike in Godotston, we assume this
           nodePath <- (toLowLevel (pack nodePathStr))
           hasNode  <- G.has_node ((safeCast self) :: GodotNode) nodePath
           transform <- case hasNode of
-                False -> do putStrLn "A"
-                            camera <- getViewportCamera self
-                            putStrLn "B"
+                False -> do camera <- getViewportCamera self
                             G.get_camera_transform camera
                 True ->  do gssNode  <- G.get_node ((safeCast self) :: GodotNode) nodePath
                             let arvrCamera = (coerce gssNode) :: GodotARVRCamera -- HACK: We use `coerce` instead of something more proper

@@ -256,47 +256,11 @@ processInputEvent gsvs ev clickPos = do
 -- | to GodotSimulaServer + GodotWlrXdgSurface).
 newGodotSimulaViewSprite :: GodotSimulaServer -> SimulaView -> IO (GodotSimulaViewSprite)
 newGodotSimulaViewSprite gss simulaView = do
-  -- putStrLn "newGodotSimulaViewSprite"
-  -- putStrLn "A"
-  -- rl       <- getSingleton Godot_ResourceLoader "ResourceLoader" -- godot-extra function
-  -- putStrLn "A1"
-  -- url'     <- toLowLevel "res://addons/godot-haskell-plugin/SimulaViewSprite.gdns"
-  -- clsName' <- toLowLevel "SimulaViewSprite"
-  -- res <- G.load rl url' clsName' False :: IO GodotResource
-  -- putStrLn "A2"
-  -- maybeNS <- asClass GodotNativeScript "NativeScript" res :: IO (Maybe GodotNativeScript)
-  -- putStrLn "A3"
-  -- let ns = Data.Maybe.fromJust maybeNS
-  -- putStrLn "A4"
-  -- gsvsObj <- G.new ns []
-  -- putStrLn "A5"
-  -- maybeGSVS <- asNativeScript gsvsObj :: IO (Maybe GodotSimulaViewSprite)
-  -- putStrLn "A6"
-  -- let gsvs = Data.Maybe.fromJust maybeGSVS
-  -- putStrLn "A7"
-
-  -- G.load :: Godot_ResourceLoader -> (GodotString -> GodotString -> Bool -> IO GodotResource)
-  -- G.asClass :: (GodotObject :< a, a :< b) => (GodotObject -> b) -> Text -> a -> IO (Maybe b)
-  -- G.asClass = do constr (safeCast a)
-  -- G.new :: GodotNativeScript -> ([Variant 'GodotTy] -> IO GodotObject)
-  -- G.asClass
-  -- GodotResource -> GodotNativeScript -> GodotObject -> Godot
- 
   gsvsObj <- "res://addons/godot-haskell-plugin/SimulaViewSprite.gdns"
     & newNS' [] :: IO GodotObject
   maybeGSVS <- asNativeScript gsvsObj :: IO (Maybe GodotSimulaViewSprite)
   let gsvs = Data.Maybe.fromJust maybeGSVS
 
-  -- gsvsRB <- "res://addons/godot-haskell-plugin/SimulaViewSprite.gdns"
-  --     & newNS'' GodotRigidBody "RigidBody" []
-  putStrLn "AA"
-  -- maybeGSVS <- asNativeScript (safeCast gsvsRB)
-  -- let gsvs = Data.Maybe.fromJust maybeGSVS
-
-    -- >>= godot_nativescript_get_userdata
-    -- >>= deRefStablePtr . castPtrToStablePtr :: IO GodotSimulaViewSprite -- w/_gsvsObj populated + mempty TVars
-
-  putStrLn "B"
   godotSprite3D <- unsafeInstance GodotSprite3D "Sprite3D"
   G.set_pixel_size godotSprite3D 0.001
   G.add_child gsvs (safeCast godotSprite3D) True
@@ -305,9 +269,7 @@ newGodotSimulaViewSprite gss simulaView = do
   -- HACK: Set transparency to False to ensure that textures never disappear
   G.set_draw_flag godotSprite3D 0 False -- https://github.com/godotengine/godot/blob/89bcfa4b364e1edc8e175f766b50d145864eb159/scene/3d/sprite_3d.h#L44:7
 
-  putStrLn "C"
   godotBoxShape <- unsafeInstance GodotBoxShape "BoxShape"
-  putStrLn "D"
   ownerId <- G.create_shape_owner gsvs (safeCast gsvs)
   G.shape_owner_add_shape gsvs ownerId (safeCast godotBoxShape)
 
@@ -326,7 +288,6 @@ newGodotSimulaViewSprite gss simulaView = do
 
 --  updateSimulaViewSprite gsvs -- Now we update everything
 
-  putStrLn "E"
   return gsvs
 
 focus :: GodotSimulaViewSprite -> IO ()
