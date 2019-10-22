@@ -76,6 +76,7 @@ library
       Plugin.Pointer
       Plugin.Types
       Plugin.SimulaViewSprite
+      Plugin.SimulaCanvasItem
       Plugin.Input
       Plugin.Input.Grab
       Plugin.Input.Telekinesis
@@ -97,7 +98,7 @@ library
       TypeOperators
       MultiParamTypeClasses
       FunctionalDependencies
-  ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code 
+  ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code 
  
   -- pkgconfig-depends:
   --     wlroots
@@ -124,6 +125,7 @@ foreign-library godot-haskell-plugin
     Plugin.Pointer
     Plugin.Types
     Plugin.SimulaViewSprite
+    Plugin.SimulaCanvasItem
     Plugin.Input
     Plugin.Input.Grab
     Plugin.Input.Telekinesis
@@ -134,7 +136,7 @@ foreign-library godot-haskell-plugin
     -- Debug.C
     -- Debug.Marshal
   other-modules: FLib
-  ghc-options: -Wall -fwarn-tabs -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code
+  ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code
   build-depends:
       base >=4.12 && <5
     , lens

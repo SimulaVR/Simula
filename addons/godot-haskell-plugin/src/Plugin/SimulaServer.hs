@@ -53,6 +53,8 @@ import           Foreign.Marshal.Alloc
 import           Foreign.C.Types
 import qualified Language.C.Inline as C
 
+import           Plugin.SimulaCanvasItem
+
 import           System.Clock
 import           Control.Monad.Extra
 
@@ -77,7 +79,7 @@ instance NativeScript GodotSimulaServer where
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
 
 ready :: GodotSimulaServer -> [GodotVariant] -> IO ()
 ready gss _ = do
@@ -205,6 +207,7 @@ initGodotSimulaServer obj = do
   gssWlrDataDeviceManager' <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar GodotWlrDataDeviceManager)
   gssWlrKeyboard'          <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar GodotWlrKeyboard)
   gssViews'                <- newTVarIO M.empty                                          :: IO (TVar (M.Map SimulaView GodotSimulaViewSprite))
+  gssKeyboardFocusedSprite' <- newTVarIO Nothing :: IO (TVar (Maybe GodotSimulaViewSprite))
 
   let gss = GodotSimulaServer {
     _gssObj                  = obj                      :: GodotObject
@@ -218,6 +221,7 @@ initGodotSimulaServer obj = do
   , _gssWlrDataDeviceManager = gssWlrDataDeviceManager' :: TVar GodotWlrDataDeviceManager
   , _gssWlrKeyboard          = gssWlrKeyboard'          :: TVar GodotWlrKeyboard
   , _gssViews                = gssViews'                :: TVar (M.Map SimulaView GodotSimulaViewSprite)
+  , _gssKeyboardFocusedSprite = gssKeyboardFocusedSprite' :: TVar (Maybe GodotSimulaViewSprite)
   }
 
   return gss
@@ -290,7 +294,7 @@ _on_WlrXdgShell_new_surface gss [wlrXdgSurfaceVariant] = do
               }
 
 handle_map_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
-handle_map_surface gss [gsvsVariant] = do -- Unlike in Godotston, we assume this function gives us a GodotSimulaViewSprite
+handle_map_surface gss [gsvsVariant] = do
   maybeGsvs <- variantToReg gsvsVariant :: IO (Maybe GodotSimulaViewSprite)
   case maybeGsvs of
     Nothing -> putStrLn "Failed to cast GodotSimulaViewSprite in handle_map_surface!"
@@ -298,6 +302,20 @@ handle_map_surface gss [gsvsVariant] = do -- Unlike in Godotston, we assume this
                     G.add_child ((safeCast gss) :: GodotNode )
                                 ((safeCast gsvs) :: GodotNode)
                                 True
+
+                    -- Add gsci to scene graph so that its _draw gets called every frame
+                    gsci <- newGodotSimulaCanvasItem gsvs
+                    atomically $ writeTVar (gsvs ^. gsvsSimulaCanvasItem) gsci
+                    G.set_process gsci True
+
+                    viewport <- readTVarIO (gsci ^. gsciViewport)
+                    addChild gsvs viewport
+                    addChild viewport gsci
+
+                    -- Set the position of the texture relative to the Viewport/render target
+                    let gsciObjAsNode = (coerce (gsci ^. gsciObject)) :: GodotNode2D
+                    pos2D <- toLowLevel (V2 0 0) :: IO GodotVector2
+                    -- G.set_position gsciObjAsNode pos2D
 
                     setInFrontOfHMD gsvs
 
@@ -344,36 +362,39 @@ handle_unmap_surface gss [gsvsVariant] = do
 
 _on_wlr_key :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_wlr_key gss [keyboardGVar, eventGVar] = do
-  -- putStrLn "_on_wlr_key"
+  maybeGSVSFocused <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
+  case maybeGSVSFocused of
+    Nothing -> return ()
+    (Just gsvsFocused) -> do
+      focus gsvsFocused
   wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
   G.keyboard_notify_key wlrSeat eventGVar
   return ()
 
 _on_wlr_modifiers :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_wlr_modifiers gss [keyboardGVar] = do
-  -- putStrLn "G.keyboard_notify_modifiers"
+  maybeGSVSFocused <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
+  case maybeGSVSFocused of
+    Nothing -> return ()
+    (Just gsvsFocused) -> do
+      focus gsvsFocused
   wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
   G.keyboard_notify_modifiers wlrSeat
   return ()
 
 _on_WlrXWayland_new_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_WlrXWayland_new_surface gss [wlrXWaylandSurfaceVariant] = do
-  putStrLn "begin _on_WlrXWaylandSurface_new_surface"
   wlrXWaylandSurface <- fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface
-
   simulaView <- newSimulaView gss wlrXWaylandSurface
   gsvs <- newGodotSimulaViewSprite gss simulaView
-  -- Mutate the server with our updated state
-  atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
 
+  atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
 
   connectGodotSignal gsvs "map" gss "handle_map_surface" []
   connectGodotSignal gsvs "unmap" gss "handle_unmap_surface" []
-
   connectGodotSignal wlrXWaylandSurface "destroy" gsvs "_handle_destroy" []
   connectGodotSignal wlrXWaylandSurface "map" gsvs "_handle_map" []
   connectGodotSignal wlrXWaylandSurface "unmap" gsvs "_handle_unmap" []
-  putStrLn "end _on_WlrXWaylandSurface_new_surface"
   return ()
   where newSimulaView :: GodotSimulaServer -> GodotWlrXWaylandSurface -> IO (SimulaView)
         newSimulaView gss wlrXWaylandSurface = do

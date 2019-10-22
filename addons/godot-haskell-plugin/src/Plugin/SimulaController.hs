@@ -127,18 +127,13 @@ loadOpenVRControllerMesh name = do
   nameStr :: GodotString <- toLowLevel $ T.dropEnd 2 name
   ret <- G.call msh loadModelStr [toVariant nameStr] >>= fromGodotVariant
   if ret
-    then do putStrLn "1"
-            return $ Just $ safeCast msh
-    else do
-      putStrLn "2"
-      genericControllerStr :: GodotString <- toLowLevel "generic_controller"
-      ret' <- G.call msh loadModelStr [toVariant genericControllerStr]
-        >>= fromGodotVariant
-      if ret'
-        then do putStrLn "3"
-                return $ Just $ safeCast msh
-        else do putStrLn "4"
-                return Nothing
+    then do return $ Just $ safeCast msh
+    else do genericControllerStr :: GodotString <- toLowLevel "generic_controller"
+            ret' <- G.call msh loadModelStr [toVariant genericControllerStr]
+              >>= fromGodotVariant
+            if ret'
+              then do return $ Just $ safeCast msh
+              else do return Nothing
 
 -- Because the ARVRController member method is_button_pressed returns Int, not Bool
 isButtonPressed :: Int -> GodotSimulaController -> IO Bool

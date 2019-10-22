@@ -53,7 +53,7 @@ Simula is in alpha phase, and can be difficult to get working on many setups. Fo
 
 - *Left-clicking.* Use (7) gently (you don't have to go all the way down to click).
 
-- *Right-clicking.* Not yet implemented.
+- *Right-clicking.* Use (1).
 
 - *Scrolling.* Scroll up and down via (2).
 

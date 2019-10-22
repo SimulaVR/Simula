@@ -30,6 +30,7 @@ import qualified Godot.Methods               as G
 import qualified Godot.Gdnative.Internal.Api as Api
 import           Godot.Nativescript
 
+import Plugin.SimulaCanvasItem
 import Plugin.Types
 import Data.Maybe
 import Data.Either
@@ -46,27 +47,6 @@ import           Control.Lens                hiding (Context)
 
 import Data.Typeable
 
--- import           Graphics.Wayland.Server
--- import           Graphics.Wayland.Internal.Server
--- import           Graphics.Wayland.Internal.SpliceServerTypes
--- -- import           Graphics.Wayland.WlRoots.Compositor
--- import           Graphics.Wayland.WlRoots.Output
--- import           Graphics.Wayland.WlRoots.Surface
--- import           Graphics.Wayland.WlRoots.Backend
--- import           Graphics.Wayland.Signal
--- import           Graphics.Wayland.WlRoots.Render
--- -- import           Graphics.Wayland.WlRoots.Render.Color
--- -- import           Graphics.Wayland.WlRoots.OutputLayout
--- import           Graphics.Wayland.WlRoots.Input
--- import           Graphics.Wayland.WlRoots.Seat
--- -- import           Graphics.Wayland.WlRoots.Cursor
--- -- import           Graphics.Wayland.WlRoots.XCursorManager
--- import           Graphics.Wayland.WlRoots.XdgShell
--- import           Graphics.Wayland.WlRoots.Input.Keyboard
--- -- import           Graphics.Wayland.WlRoots.Input.Pointer
--- -- import           Graphics.Wayland.WlRoots.Cursor
--- import           Graphics.Wayland.WlRoots.Input.Buttons
--- import           Graphics.Wayland.WlRoots.Box
 import qualified Data.Map.Strict as M
 
 instance Eq GodotSimulaViewSprite where
@@ -112,7 +92,12 @@ updateSimulaViewSprite gsvs = do
   -- putStrLn "updateSimulaViewSprite"
 
   -- Update sprite texture; doesn't yet include popups or other subsurfaces.
-  drawParentWlrSurfaceTextureOntoSprite gsvs
+  -- useViewportToDrawParentSurface gsvs
+  -- drawParentWlrSurfaceTextureOntoSprite gsvs
+
+  adjustDimensions gsvs 768 768
+
+  useSimulaCanvasItemToDrawSubsurfaces gsvs
     -- useViewportToDrawParentSurface gsvs -- Causes _draw() error
     -- drawSurfacesOnSprite gsvs
 
@@ -123,7 +108,32 @@ updateSimulaViewSprite gsvs = do
   --   atomically $ writeTVar (_gsvsShouldMove gsvs) False
   --   moveToUnoccupied gsvs
 
-  where
+  where adjustDimensions :: GodotSimulaViewSprite -> Int -> Int -> IO ()
+        adjustDimensions gsvs w h = do
+          gsci <- readTVarIO (gsvs ^. gsvsSimulaCanvasItem)
+          renderTarget <- readTVarIO (gsci ^. gsciViewport)
+          simulaView <- readTVarIO (gsvs ^. gsvsView)
+          let eitherSurface = (simulaView ^. svWlrEitherSurface)
+          wlrSurface <- getWlrSurface eitherSurface
+          dimensions@(originalWidth, originalHeight) <- getBufferDimensions wlrSurface
+          role <- case eitherSurface of
+            Left wlrXdgSurface -> toLowLevel "" :: IO GodotString
+            Right wlrXWaylandSurface -> G.get_role wlrXWaylandSurface
+
+          let d'@(w',h') = if (originalWidth > 450 || originalHeight > 450)
+                then (w,h)
+                else (originalWidth, originalHeight)
+
+          v <- toLowLevel (V2 (fromIntegral w') (fromIntegral h'))
+
+          case eitherSurface of
+            Left wlrXdgSurface -> return ()-- G.set_size wlrXdgSurface v
+            Right wlrXWaylandSurface -> do G.set_size wlrXWaylandSurface v
+                                           G.set_maximized wlrXWaylandSurface True
+
+          pixelDimensionsOfWlrSurface <- toGodotVector2 d'
+          G.set_size renderTarget pixelDimensionsOfWlrSurface
+
         -- As the name makes clear, this function *only* draws the parent WlrSurface
         -- onto a GodotSimulaViewSprite's Sprite3D field. It doesn't include popups or
         -- any other subsurfaces. This is a temporary hack that needs fixed.
@@ -151,10 +161,14 @@ updateSimulaViewSprite gsvs = do
           -- wlrXdgSurfaceToplevel <- G.get_xdg_toplevel wlrXdgSurface
           -- G.set_maximized wlrXdgSurfaceToplevel True -- Doesn't seem to work
           rid <- G.get_rid parentWlrTexture
+          -- rid_canvas <- G.get_canvas self
+          -- rid_canvas_item <- G.get_canvas self
           visualServer <- getSingleton GodotVisualServer "VisualServer"
           -- Enable everything but mipmapping (since this causes old textures get to interpolated
           -- with updated textures when far enough from the user).
           G.texture_set_flags visualServer rid 6
+          -- G.texture_set_flags visualServer rid_canvas 6
+          -- G.texture_set_flags visualServer rid_canvas_item 6
           G.set_texture sprite3D parentWlrTexture
 
           -- Tell client surface it should start rendering the next frame
@@ -296,18 +310,25 @@ focus gsvs = do
   gss         <- atomically $ readTVar (gsvs ^. gsvsServer) -- ^. gssWlrSeat)
   wlrSeat     <- atomically $ readTVar (gss ^. gssWlrSeat)
   let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
+
+  atomically $ writeTVar (gss ^. gssKeyboardFocusedSprite) (Just gsvs)
+
   case wlrEitherSurface of
     Left wlrXdgSurface -> do wlrSurface  <- G.get_wlr_surface wlrXdgSurface
                              wlrSurface' <- asGodotVariant wlrSurface
                              toplevel    <- G.get_xdg_toplevel wlrXdgSurface :: IO GodotWlrXdgToplevel
-                             isGodotTypeNull wlrSurface
+                             -- isGodotTypeNull wlrSurface
                              G.set_activated toplevel True
                              G.keyboard_notify_enter wlrSeat wlrSurface'
+                             pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
+                             pointerNotifyFrame wlrSeat
     Right wlrXWaylandSurface -> do wlrSurface  <- G.get_wlr_surface wlrXWaylandSurface
                                    wlrSurface' <- asGodotVariant wlrSurface
-                                   isGodotTypeNull wlrSurface
+                                   -- isGodotTypeNull wlrSurface
                                    G.set_activated wlrXWaylandSurface True
                                    G.keyboard_notify_enter wlrSeat wlrSurface'
+                                   pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
+                                   pointerNotifyFrame wlrSeat
 
 -- | This function isn't called unless a surface is being pointed at (by VR
 -- | controllers or a mouse in pancake mode).
@@ -336,8 +357,8 @@ processClickEvent gsvs evt clickPos = do
   case evt of
     Motion                -> do pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
                                 pointerNotifyMotion wlrSeat subSurfaceLocalCoords
-                                keyboardNotifyEnter wlrSeat godotWlrSurface -- HACK: shouldn't have to call this every frame we're pointing at a surface
-    Button pressed button -> do pointerNotifyButton wlrSeat evt
+    Button pressed button -> do focus gsvs
+                                pointerNotifyButton wlrSeat evt
 
   pointerNotifyFrame wlrSeat
 
@@ -385,17 +406,6 @@ processClickEvent gsvs evt clickPos = do
       wlrSurface' <- G.get_surface wlrSurfaceAtResult
       return (wlrSurface', SubSurfaceLocalCoordinates (subX, subY))
 
-    -- | Let wlroots know we have entered a new surface. We can safely call this
-    -- | over and over (wlroots checks if we've called it already for this surface
-    -- | and, if so, returns early.
-    pointerNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> SubSurfaceLocalCoordinates -> IO ()
-    pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (ssx, ssy)) = do
-      let maybeWlrSurfaceGV = (fromVariant ((toVariant wlrSurface) :: Variant 'GodotTy) :: Maybe GodotVariant)
-      case maybeWlrSurfaceGV of
-          Nothing -> putStrLn "Failed to convert GodotWlrSurface to GodotVariant!"
-          Just wlrSurfaceGV -> do G.pointer_notify_enter wlrSeat wlrSurfaceGV ssx ssy -- Causing a crash
-                                  -- putStrLn $ "G.point_notify_enter: " ++ "(" ++ (show ssx) ++ ", " ++ (show ssy) ++ ")"
-
     keyboardNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> IO ()
     keyboardNotifyEnter wlrSeat wlrSurface = do
       let maybeWlrSurfaceGV = (fromVariant ((toVariant wlrSurface) :: Variant 'GodotTy) :: Maybe GodotVariant)
@@ -422,17 +432,29 @@ processClickEvent gsvs evt clickPos = do
               -- putStrLn $ "G.pointer_notify_button: pressed/buttonIndex" ++ (show pressed) ++ "/" ++ (show buttonIndex)
               return ()
 
-    -- | Sends a frame event to the surface with pointer focus (apparently
-    -- | useful in particular for axis events); unclear if this is needed in VR but we
-    -- | use it regardless.
-    pointerNotifyFrame :: GodotWlrSeat -> IO ()
-    pointerNotifyFrame wlrSeat = do
-      G.pointer_notify_frame wlrSeat
+-- | Sends a frame event to the surface with pointer focus (apparently
+-- | useful in particular for axis events); unclear if this is needed in VR but we
+-- | use it regardless.
+pointerNotifyFrame :: GodotWlrSeat -> IO ()
+pointerNotifyFrame wlrSeat = do
+  G.pointer_notify_frame wlrSeat
+
+-- | Let wlroots know we have entered a new surface. We can safely call this
+-- | over and over (wlroots checks if we've called it already for this surface
+-- | and, if so, returns early.
+pointerNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> SubSurfaceLocalCoordinates -> IO ()
+pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (ssx, ssy)) = do
+  let maybeWlrSurfaceGV = (fromVariant ((toVariant wlrSurface) :: Variant 'GodotTy) :: Maybe GodotVariant)
+  case maybeWlrSurfaceGV of
+      Nothing -> putStrLn "Failed to convert GodotWlrSurface to GodotVariant!"
+      Just wlrSurfaceGV -> do G.pointer_notify_enter wlrSeat wlrSurfaceGV ssx ssy -- Causing a crash
+                              -- putStrLn $ "G.point_notify_enter: " ++ "(" ++ (show ssx) ++ ", " ++ (show ssy) ++ ")"
 
 _handle_map :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 _handle_map self args = do
-  putStrLn "_handle_map"
+  -- putStrLn "_handle_map"
   simulaView <- readTVarIO (self ^. gsvsView)
+
   G.set_process self True
   G.set_process_input self True -- We do this in Godotston but not in original Simula
   emitSignal self "map" ([self] :: [GodotSimulaViewSprite])
@@ -441,7 +463,7 @@ _handle_map self args = do
 
 _handle_unmap :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 _handle_unmap self args = do
-  putStrLn "_handle_unmap"
+  -- putStrLn "_handle_unmap"
   simulaView <- readTVarIO (self ^. gsvsView)
   atomically $ writeTVar (simulaView ^. svMapped) False
   G.set_process self False
