@@ -79,7 +79,7 @@ instance NativeScript GodotSimulaServer where
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
 
 ready :: GodotSimulaServer -> [GodotVariant] -> IO ()
 ready gss _ = do
@@ -115,7 +115,7 @@ ready gss _ = do
   newDisplay <- getEnv "DISPLAY"
   putStr "New DISPLAY="
   putStrLn newDisplay
-  setEnv "DISPLAY" oldDisplay  
+  setEnv "DISPLAY" oldDisplay
 
   connectGodotSignal wlrXWayland "new_surface" gss "_on_WlrXWayland_new_surface" []
 
@@ -208,6 +208,8 @@ initGodotSimulaServer obj = do
   gssWlrKeyboard'          <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar GodotWlrKeyboard)
   gssViews'                <- newTVarIO M.empty                                          :: IO (TVar (M.Map SimulaView GodotSimulaViewSprite))
   gssKeyboardFocusedSprite' <- newTVarIO Nothing :: IO (TVar (Maybe GodotSimulaViewSprite))
+  visualServer <- getSingleton GodotVisualServer "VisualServer"
+  visualServer' <- newTVarIO visualServer
 
   let gss = GodotSimulaServer {
     _gssObj                  = obj                      :: GodotObject
@@ -222,6 +224,7 @@ initGodotSimulaServer obj = do
   , _gssWlrKeyboard          = gssWlrKeyboard'          :: TVar GodotWlrKeyboard
   , _gssViews                = gssViews'                :: TVar (M.Map SimulaView GodotSimulaViewSprite)
   , _gssKeyboardFocusedSprite = gssKeyboardFocusedSprite' :: TVar (Maybe GodotSimulaViewSprite)
+  , _gssVisualServer = visualServer' :: TVar GodotVisualServer
   }
 
   return gss
@@ -311,11 +314,6 @@ handle_map_surface gss [gsvsVariant] = do
                     viewport <- readTVarIO (gsci ^. gsciViewport)
                     addChild gsvs viewport
                     addChild viewport gsci
-
-                    -- Set the position of the texture relative to the Viewport/render target
-                    let gsciObjAsNode = (coerce (gsci ^. gsciObject)) :: GodotNode2D
-                    pos2D <- toLowLevel (V2 0 0) :: IO GodotVector2
-                    -- G.set_position gsciObjAsNode pos2D
 
                     setInFrontOfHMD gsvs
 

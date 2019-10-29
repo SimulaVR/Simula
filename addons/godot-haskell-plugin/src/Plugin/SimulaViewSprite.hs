@@ -116,9 +116,9 @@ updateSimulaViewSprite gsvs = do
           let eitherSurface = (simulaView ^. svWlrEitherSurface)
           wlrSurface <- getWlrSurface eitherSurface
           dimensions@(originalWidth, originalHeight) <- getBufferDimensions wlrSurface
-          role <- case eitherSurface of
-            Left wlrXdgSurface -> toLowLevel "" :: IO GodotString
-            Right wlrXWaylandSurface -> G.get_role wlrXWaylandSurface
+          -- role <- case eitherSurface of
+          --   Left wlrXdgSurface -> toLowLevel "" :: IO GodotString
+          --   Right wlrXWaylandSurface -> G.get_role wlrXWaylandSurface
 
           let d'@(w',h') = if (originalWidth > 450 || originalHeight > 450)
                 then (w,h)
@@ -400,11 +400,15 @@ processClickEvent gsvs evt clickPos = do
 
     getXWaylandSubsurfaceAndCoords :: GodotWlrXWaylandSurface -> SurfaceLocalCoordinates -> IO (GodotWlrSurface, SubSurfaceLocalCoordinates)
     getXWaylandSubsurfaceAndCoords wlrXWaylandSurface (SurfaceLocalCoordinates (sx, sy)) = do
-      wlrSurfaceAtResult <- G.surface_at wlrXWaylandSurface sx sy
-      subX <- G.get_sub_x wlrSurfaceAtResult
-      subY <- G.get_sub_y wlrSurfaceAtResult
-      wlrSurface' <- G.get_surface wlrSurfaceAtResult
-      return (wlrSurface', SubSurfaceLocalCoordinates (subX, subY))
+      -- wlrSurfaceAtResult <- G.surface_at wlrXWaylandSurface sx sy
+      ret@(wlrSurface', SubSurfaceLocalCoordinates (subX, subY)) <- withGodot
+        (G.surface_at wlrXWaylandSurface sx sy)
+        G.delete_surface_at_result
+        (\wlrSurfaceAtResult -> do subX <- G.get_sub_x wlrSurfaceAtResult
+                                   subY <- G.get_sub_y wlrSurfaceAtResult
+                                   wlrSurface' <- G.get_surface wlrSurfaceAtResult
+                                   return (wlrSurface', SubSurfaceLocalCoordinates (subX, subY)))
+      return ret
 
     keyboardNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> IO ()
     keyboardNotifyEnter wlrSeat wlrSurface = do
@@ -485,19 +489,20 @@ _process self _ = do
 -- 3. I'm assuming that `registerClass` passes a destructor for
 --    GodotSimulaViewSprite that calls to `queue_free` can use.
 _handle_destroy :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
-_handle_destroy self [gsvsGV] = do
-  -- Get state
-  maybeGsvs <- variantToReg gsvsGV :: IO (Maybe GodotSimulaViewSprite)
-  case maybeGsvs of
-    Nothing -> putStrLn "Failed to cast gsvs in _handle_destroy!"
-    (Just gsvs) -> do simulaView <- readTVarIO (gsvs ^. gsvsView)
-                      gss <- readTVarIO (gsvs ^. gsvsServer)
+_handle_destroy gsvs [gsvsGV] = do
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  let eitherSurface = (simulaView ^. svWlrEitherSurface)
+  gss <- readTVarIO (gsvs ^. gsvsServer)
 
-                      -- Destroy
-                      G.queue_free gsvs -- Queue the `gsvs` for destruction
-                      G.set_process gsvs False -- Remove the `simulaView ↦ gsvs` mapping from the gss
-                      atomically $ modifyTVar' (gss ^. gssViews) (M.delete simulaView)
-                        -- Old method of gsvs deletion from Simula; bring back if we face leakage issues:
-                        -- Api.godot_object_destroy (safeCast gsvs)
+  -- Destroy
+  G.queue_free gsvs -- Queue the `gsvs` for destruction
+  G.set_process gsvs False -- Remove the `simulaView ↦ gsvs` mapping from the gss
+  atomically $ modifyTVar' (gss ^. gssViews) (M.delete simulaView)
+    -- Old method of gsvs deletion from Simula; bring back if we face leakage issues:
+    -- Api.godot_object_destroy (safeCast gsvs)
+  deleteSurface eitherSurface
 
-  return ()
+  where deleteSurface eitherSurface = do
+          case eitherSurface of
+            (Left xdgSurface) -> return ()
+            (Right xwaylandSurface) -> G.delete_wlr_xwayland_surface xwaylandSurface

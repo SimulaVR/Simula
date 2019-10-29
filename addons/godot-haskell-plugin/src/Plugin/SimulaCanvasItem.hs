@@ -103,9 +103,11 @@ useSimulaCanvasItemToDrawSubsurfaces gsvs  = do
   viewport <- readTVarIO (gsci ^. gsciViewport)
   viewportTexture <- G.get_texture viewport
 
-  rid <- G.get_rid viewportTexture
-  visualServer <- getSingleton GodotVisualServer "VisualServer"
-  G.texture_set_flags visualServer rid 7 -- Set to 6 if you see gradient issues
+  -- rid <- G.get_rid viewportTexture
+  -- visualServer <- getSingleton GodotVisualServer "VisualServer"
+  -- G.texture_set_flags visualServer rid 7 -- Set to 6 if you see gradient issues
+  -- improveTextureQuality gsvs viewportTexture
+
   G.set_texture sprite3D (safeCast viewportTexture)
 
   G.send_frame_done wlrSurface
@@ -117,22 +119,25 @@ _process self args = do
   G.update self
   return ()
 
-
-improveTextureQuality :: GodotTexture -> IO ()
-improveTextureQuality texture = do
+improveTextureQuality :: GodotSimulaViewSprite -> GodotTexture -> IO ()
+improveTextureQuality gsvs texture = do
   if ((unsafeCoerce texture) /= nullPtr)
-    then do rid <- G.get_rid texture
+    then do visualServer <- getVisualServer gsvs
+            rid <- G.get_rid texture
             -- rid_canvas <- G.get_canvas self
             -- rid_canvas_item <- G.get_canvas self
-            visualServer <- getSingleton GodotVisualServer "VisualServer"
+            -- visualServer <- getSingleton GodotVisualServer "VisualServer" :: IO GodotVisualServer
             G.texture_set_flags visualServer rid 7
             -- G.texture_set_flags visualServer rid_canvas 6
             -- G.texture_set_flags visualServer rid_canvas_item 6
   else return ()
+  where getVisualServer gsvs = do
+          gss <- readTVarIO (gsvs ^. gsvsServer)
+          visualServer <- readTVarIO (gss ^. gssVisualServer)
+          return visualServer
 
 _draw :: GodotSimulaCanvasItem -> [GodotVariant] -> IO ()
 _draw self _ = do
-  -- putStrLn "_draw"
   gsvs <- readTVarIO (self ^. gsciGSVS)
   sprite3D <- readTVarIO (gsvs ^. gsvsSprite)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
@@ -144,9 +149,6 @@ _draw self _ = do
       -- G.print_xwayland_surface_properties wlrXWaylandSurface
       arrayOfChildren <- G.get_children wlrXWaylandSurface :: IO GodotArray
       numChildren <- Api.godot_array_size arrayOfChildren
-      -- putStrLn $ "Number of children (from Haskell): " ++ (show numChildren) -- Alternates between correct value and 0, just like in C++
-      -- arrayOfChildrenGV <- (if numChildren /= 0 then fromLowLevel arrayOfChildren else return [])
-      --arrayOfChildrenGV <- fromLowLevel arrayOfChildren :: IO [GodotVariant] --
       arrayOfChildrenGV <- fromLowLevel' arrayOfChildren
       children <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrXWaylandSurface]
       return children
@@ -159,14 +161,10 @@ _draw self _ = do
         False -> do renderPosition <- toLowLevel (V2 0 0) :: IO GodotVector2
                     textureToDraw <- G.get_texture wlrSurface :: IO GodotTexture
                     gsci <- readTVarIO (gsvs ^. gsvsSimulaCanvasItem)
-
                     godotColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1) :: IO GodotColor
-
-                    -- Improve texture quality
-                    improveTextureQuality parentWlrTexture
-                    G.draw_texture gsci textureToDraw renderPosition godotColor (coerce nullPtr)
-
-                    mapM drawChild children
+                    improveTextureQuality gsvs parentWlrTexture
+                    G.draw_texture gsci parentWlrTexture renderPosition godotColor (coerce nullPtr)
+                    mapM (drawChild gsvs) children
                     return ()
                     -- G.draw_texture gsci textureToDraw renderPosition2 godotColor (coerce nullPtr) -- nullTexture
   return ()
@@ -175,21 +173,18 @@ _draw self _ = do
     fromLowLevel' vs = do
       size <- fromIntegral <$> Api.godot_array_size vs
       forM [0..size-1] $ Api.godot_array_get vs
-    drawChild :: GodotWlrXWaylandSurface -> IO ()
-    drawChild wlrXWaylandSurface = do
+    drawChild :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> IO ()
+    drawChild gsvs wlrXWaylandSurface = do
            -- putStrLn "## Child Properties"
            -- G.print_xwayland_surface_properties wlrXWaylandSurface
            surface <- G.get_wlr_surface wlrXWaylandSurface
-           -- let isNull = ((unsafeCoerce subsurfaceTexture) == nullPtr)
            let isNull = ((unsafeCoerce surface) == nullPtr)
            case isNull of
-                 True -> putStrLn "Child texture is null!"
+                 True -> return () -- We hit this path nearly every other frame.
                  False -> do subsurfaceTexture <- G.get_texture surface :: IO GodotTexture
-                             improveTextureQuality subsurfaceTexture
-
+                             improveTextureQuality gsvs subsurfaceTexture
                              x <- G.get_x wlrXWaylandSurface
                              y <- G.get_y wlrXWaylandSurface
-
                              subsurfaceRenderPosition <- toLowLevel (V2 (fromIntegral x) (fromIntegral y)) :: IO GodotVector2
                              -- subsurfaceRenderPosition' <- getCoordinatesFromCenter surface x y
                              godotColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1) :: IO GodotColor
@@ -259,11 +254,18 @@ initializeRenderTarget gsvs = do
 
 getBufferDimensions :: GodotWlrSurface -> IO (Int, Int)
 getBufferDimensions wlrSurface = do
-  wlrSurfaceState <- G.get_current_state wlrSurface -- isNull: False
-  bufferWidth <- G.get_buffer_width wlrSurfaceState
-  bufferHeight <- G.get_buffer_height wlrSurfaceState
-  width <- G.get_width wlrSurfaceState
-  height <-G.get_height wlrSurfaceState
-  -- putStrLn $ "getBufferDimensions (buffer width/height): (" ++ (show bufferWidth) ++ "," ++ (show bufferHeight) ++ ")"
-  -- putStrLn $ "getBufferDimensions (width/height): (" ++ (show width) ++ "," ++ (show height) ++ ")"
-  return (bufferWidth, bufferHeight) -- G.set_size expects "the width and height of viewport" according to Godot documentation
+  dims@(bufferWidth, bufferHeight) <- withCurrentState $ getBufferDimensions'
+  return dims
+  where withCurrentState :: (GodotWlrSurfaceState -> IO b) -> IO b
+        withCurrentState stateAction = do
+          wlrSurfaceState <- G.alloc_current_state wlrSurface
+          ret             <- stateAction wlrSurfaceState
+          G.delete_state wlrSurfaceState
+          return ret
+        getBufferDimensions' :: GodotWlrSurfaceState -> IO (Int, Int)
+        getBufferDimensions' wlrSurfaceState = do
+          bufferWidth <- G.get_buffer_width wlrSurfaceState
+          bufferHeight <- G.get_buffer_height wlrSurfaceState
+          -- width <- G.get_width wlrSurfaceState
+          -- height <-G.get_height wlrSurfaceState
+          return (bufferWidth, bufferHeight)

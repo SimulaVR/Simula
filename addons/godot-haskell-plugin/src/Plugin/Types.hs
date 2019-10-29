@@ -116,6 +116,7 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssWlrKeyboard          :: TVar GodotWlrKeyboard -- "
   , _gssViews                :: TVar (M.Map SimulaView GodotSimulaViewSprite)
   , _gssKeyboardFocusedSprite :: TVar (Maybe GodotSimulaViewSprite) -- <- Here
+  , _gssVisualServer         :: TVar GodotVisualServer
   }
 
 -- Wish there was a more elegant way to jam values into these fields at classInit
@@ -379,6 +380,7 @@ getClassDB :: IO Godot_ClassDB
 getClassDB = Api.godot_global_get_singleton & withCString (unpack "ClassDB")
   >>= asClass' Godot_ClassDB "ClassDB"
 
+-- Leaks
 getSingleton :: (GodotObject :< b) => (GodotObject -> b) -> Text -> IO b
 getSingleton constr name = do
   engine <- getEngine
@@ -397,6 +399,7 @@ isClass obj clsName = do
         else clsName
   ((toLowLevel clsName') :: IO GodotString) >>= G.is_class ((safeCast obj) :: GodotObject)
 
+-- Leaks
 getEngine :: IO Godot_Engine
 getEngine = Api.godot_global_get_singleton & withCString (unpack "Engine")
   >>= asClass' Godot_Engine "Engine"
@@ -444,3 +447,14 @@ toGodotVector2 (width, height) = do
   let v2 = (V2 (fromIntegral width) (fromIntegral height))
   gv2 <- toLowLevel v2 :: IO (GodotVector2)
   return gv2
+
+-- | Helper to stay memory safe when allocating/destructing gdwlroots types.
+withGodot :: (IO godot_alloc)
+          -> (godot_alloc -> IO ())
+          -> (godot_alloc-> IO a)
+          -> IO a
+withGodot allocatedType' destr action  = do
+  allocatedType <- allocatedType'
+  ret <- action allocatedType
+  destr allocatedType
+  return ret
