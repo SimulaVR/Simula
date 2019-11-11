@@ -3,6 +3,9 @@
 importer="texture"
 type="StreamTexture"
 path="res://.import/GitterBadge.png-91472e9ea9a8e4adbac070bee634ad92.stex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
