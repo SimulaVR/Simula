@@ -494,6 +494,15 @@ _handle_destroy gsvs [gsvsGV] = do
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
   gss <- readTVarIO (gsvs ^. gsvsServer)
 
+  -- Ensure that we de-focus the gsvs if it is active
+  maybeGSVSFocused <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
+  case maybeGSVSFocused of
+    Nothing -> return ()
+    (Just gsvsFocused) -> do
+      simulaViewFocused <- readTVarIO (gsvsFocused ^. gsvsView)
+      if (simulaViewFocused == simulaView) then (atomically $ writeTVar (gss ^. gssKeyboardFocusedSprite) Nothing)
+                                          else (return ())
+
   -- Destroy
   G.queue_free gsvs -- Queue the `gsvs` for destruction
   G.set_process gsvs False -- Remove the `simulaView ↦ gsvs` mapping from the gss

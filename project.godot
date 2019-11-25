@@ -18,10 +18,6 @@ _global_script_class_icons={
 config/name="Simula"
 run/main_scene="res://addons/godot-haskell-plugin/demo/Demo.tscn"
 
-[debug]
-
-settings/stdout/print_fps=false
-
 [display]
 
 window/vsync/use_vsync=false
