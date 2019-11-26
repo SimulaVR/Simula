@@ -282,10 +282,9 @@ physicsProcess self _ = do
   whenM (G.get_is_active self) $ do
     isGripPressed <- isButtonPressed 2 self
     triggerPull <- G.get_joystick_axis self 2
-    let levitateCond = isGripPressed -- && triggerPull > 0.01
-    let moveCond = triggerPull > 0.2
+    let levitateCond = isGripPressed
 
-    tk <- readTVarIO (_gscTelekinesis self) >>= telekinesis levitateCond moveCond
+    tk <- readTVarIO (_gscTelekinesis self) >>= telekinesis levitateCond True
     atomically $ writeTVar (_gscTelekinesis self) tk
 
   return ()

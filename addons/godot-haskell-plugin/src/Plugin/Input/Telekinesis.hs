@@ -141,11 +141,8 @@ telekinesis isLev isMove tk = do
     >>= \case
           Just ct -> do
             isActive    <- G.get_is_active ct
-            triggerPull <- if isActive
-              then G.get_joystick_axis ct 2
-              else return 0
             tk' <- if isLev
-              then tryGrab (_tkRayCast tk) tk >>= manipulate isMove triggerPull
+              then tryGrab (_tkRayCast tk) tk >>= manipulate isMove 1
               else letGo tk
 
             {-G.set_rumble ct (_tkRumble tk')-}
@@ -162,3 +159,4 @@ telekinesis isLev isMove tk = do
           (return tk')
           (flip grab tk')
         else return tk'
+  
