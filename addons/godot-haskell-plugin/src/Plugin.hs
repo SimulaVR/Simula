@@ -9,6 +9,7 @@ import           Plugin.SimulaController
 import           Plugin.SimulaServer
 import           Plugin.SimulaViewSprite
 import           Plugin.Types
+import           Plugin.PancakeCamera
 
 
 registerClasses :: GdnativeHandle -> IO ()
@@ -19,3 +20,4 @@ registerClasses desc = do
   reg $ classInit @GodotSimulaServer
   reg $ classInit @GodotSimulaViewSprite
   reg $ classInit @GodotSimulaCanvasItem
+  reg $ classInit @GodotPancakeCamera

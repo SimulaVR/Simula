@@ -57,8 +57,6 @@ initVR node vri =
  where
   initSuccess :: IO VRInitResult
   initSuccess = do
-    G.get_viewport node >>= (`G.set_use_arvr` True)
-    -- G.get_viewport node >>= (`G.set_hdr` False) -- Not needed with GLES2 renderer
     getSingleton Godot_OS "OS" >>= (`G.set_use_vsync` False) -- Vsync must be disabled or we're limited to 60fps
     getSingleton Godot_Engine "Engine" >>= (`G.set_target_fps` 90) -- Boost FPS to 90 without vsync
 

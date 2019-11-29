@@ -15,6 +15,7 @@ import           Plugin.SimulaController
 import           Plugin.SimulaViewSprite
 import           Plugin.VR
 import           Plugin.Types
+import           Plugin.PancakeCamera
 
 import           Godot.Core.GodotGlobalConstants
 import           Godot.Nativescript
@@ -62,9 +63,18 @@ ready self _ = do
   -- https://github.com/SimulaVR/Simula/issues/72
   openVR >>= initVR (safeCast self) >>= \case
     InitVRSuccess -> do
-      -- Add the VR origin node
+      vrViewport <- unsafeInstance GodotViewport "Viewport"
+
+      G.set_name vrViewport =<< toLowLevel "VRViewport"
+      G.set_update_mode vrViewport 3 -- UPDATE_ALWAYS
+      G.set_use_arvr vrViewport True
+      vrViewportSize <- toLowLevel (V2 100 100) :: IO GodotVector2 -- Godot requires us to set a default size
+      G.set_size vrViewport vrViewportSize
+
+      G.add_child self (safeCast vrViewport) True
+
       orig <- unsafeInstance GodotARVROrigin "ARVROrigin"
-      G.add_child self (safeCast orig) True
+      G.add_child vrViewport (safeCast orig) True
 
       -- Add the HMD as a child of the origin node
       hmd <- unsafeInstance GodotARVRCamera "ARVRCamera"
@@ -81,6 +91,13 @@ ready self _ = do
     InitVRFailed  -> return ()
 
   addSimulaServerNode
+
+  gpcObj <- "res://addons/godot-haskell-plugin/PancakeCamera.gdns"
+    & newNS' [] :: IO GodotObject
+  maybeGPC <- asNativeScript gpcObj :: IO (Maybe GodotPancakeCamera)
+  let gpc = Data.Maybe.fromJust maybeGPC
+  G.set_current gpc True
+  G.add_child self (safeCast gpc) True
 
   return ()
  where

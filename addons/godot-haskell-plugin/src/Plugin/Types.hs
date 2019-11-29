@@ -148,6 +148,10 @@ data SimulaView = SimulaView
   , _gsvsUUID                  :: Maybe UUID
   }
 
+data GodotPancakeCamera = GodotPancakeCamera {
+    _gpcObject     :: GodotObject
+  }
+
 instance Eq SimulaView where
   (==) sv1 sv2 = (_gsvsUUID sv1) == (_gsvsUUID sv2)
 
@@ -165,6 +169,7 @@ makeLenses ''GodotSimulaViewSprite
 makeLenses ''GodotSimulaCanvasItem
 makeLenses ''SimulaView
 makeLenses ''GodotSimulaServer
+makeLenses ''GodotPancakeCamera
 
 data SurfaceLocalCoordinates    = SurfaceLocalCoordinates (Float, Float)
 data SubSurfaceLocalCoordinates = SubSurfaceLocalCoordinates (Float, Float)

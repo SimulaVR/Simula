@@ -323,7 +323,7 @@ handle_map_surface gss [gsvsVariant] = do
   return ()
   where getTransform :: GodotSimulaServer -> IO GodotTransform
         getTransform self = do
-          let nodePathStr = "/root/Root/ARVROrigin/ARVRCamera"
+          let nodePathStr = "/root/Root/VRViewport/ARVROrigin/ARVRCamera"
           nodePath <- (toLowLevel (pack nodePathStr))
           hasNode  <- G.has_node ((safeCast self) :: GodotNode) nodePath
           transform <- case hasNode of

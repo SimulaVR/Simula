@@ -73,6 +73,7 @@ library
       Telemetry
       Plugin
       Plugin.Imports
+      Plugin.PancakeCamera
       Plugin.Pointer
       Plugin.Types
       Plugin.SimulaViewSprite
@@ -122,6 +123,7 @@ foreign-library godot-haskell-plugin
     Telemetry
     Plugin
     Plugin.Imports
+    Plugin.PancakeCamera
     Plugin.Pointer
     Plugin.Types
     Plugin.SimulaViewSprite
