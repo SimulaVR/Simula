@@ -323,12 +323,16 @@ focus gsvs = do
                              pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
                              pointerNotifyFrame wlrSeat
     Right wlrXWaylandSurface -> do wlrSurface  <- G.get_wlr_surface wlrXWaylandSurface
-                                   wlrSurface' <- asGodotVariant wlrSurface
-                                   -- isGodotTypeNull wlrSurface
-                                   G.set_activated wlrXWaylandSurface True
-                                   G.keyboard_notify_enter wlrSeat wlrSurface'
-                                   pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
-                                   pointerNotifyFrame wlrSeat
+                                   let isNull = ((unsafeCoerce wlrSurface) == nullPtr)
+                                   case isNull of
+                                     True -> return ()
+                                     False -> do
+                                      wlrSurface' <- asGodotVariant wlrSurface
+                                      -- isGodotTypeNull wlrSurface
+                                      G.set_activated wlrXWaylandSurface True
+                                      G.keyboard_notify_enter wlrSeat wlrSurface'
+                                      pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
+                                      pointerNotifyFrame wlrSeat
 
 -- | This function isn't called unless a surface is being pointed at (by VR
 -- | controllers or a mouse in pancake mode).
@@ -416,6 +420,7 @@ processClickEvent gsvs evt clickPos = do
       case maybeWlrSurfaceGV of
           Nothing -> putStrLn "Failed to convert GodotWlrSurface to GodotVariant!"
           Just wlrSurfaceGV -> do G.keyboard_notify_enter wlrSeat wlrSurfaceGV
+                                  Api.godot_variant_destroy wlrSurfaceGV
 
     -- | This function conspiciously lacks a GodotWlrSurface argument, but doesn't
     -- | need one since the GodotWlrSeat keeps internal track of what the currently
@@ -448,11 +453,15 @@ pointerNotifyFrame wlrSeat = do
 -- | and, if so, returns early.
 pointerNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> SubSurfaceLocalCoordinates -> IO ()
 pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (ssx, ssy)) = do
-  let maybeWlrSurfaceGV = (fromVariant ((toVariant wlrSurface) :: Variant 'GodotTy) :: Maybe GodotVariant)
-  case maybeWlrSurfaceGV of
-      Nothing -> putStrLn "Failed to convert GodotWlrSurface to GodotVariant!"
-      Just wlrSurfaceGV -> do G.pointer_notify_enter wlrSeat wlrSurfaceGV ssx ssy -- Causing a crash
-                              -- putStrLn $ "G.point_notify_enter: " ++ "(" ++ (show ssx) ++ ", " ++ (show ssy) ++ ")"
+  let isNull = ((unsafeCoerce wlrSurface) == nullPtr)
+  case isNull of
+    True -> putStrLn "wlrSurface is NULL!"
+    False -> do
+      let maybeWlrSurfaceGV = (fromVariant ((toVariant wlrSurface) :: Variant 'GodotTy) :: Maybe GodotVariant)
+      case maybeWlrSurfaceGV of
+          Nothing -> putStrLn "Failed to convert GodotWlrSurface to GodotVariant!"
+          Just wlrSurfaceGV -> do G.pointer_notify_enter wlrSeat wlrSurfaceGV ssx ssy
+                                  Api.godot_variant_destroy wlrSurfaceGV
 
 _handle_map :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 _handle_map self args = do

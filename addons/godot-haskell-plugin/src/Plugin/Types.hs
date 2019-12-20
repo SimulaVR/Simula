@@ -115,7 +115,7 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssWlrDataDeviceManager :: TVar GodotWlrDataDeviceManager
   , _gssWlrKeyboard          :: TVar GodotWlrKeyboard -- "
   , _gssViews                :: TVar (M.Map SimulaView GodotSimulaViewSprite)
-  , _gssKeyboardFocusedSprite :: TVar (Maybe GodotSimulaViewSprite) -- <- Here
+  , _gssKeyboardFocusedSprite :: TVar (Maybe GodotSimulaViewSprite)
   , _gssVisualServer         :: TVar GodotVisualServer
   }
 
@@ -415,10 +415,42 @@ godotPrint str = Api.godot_print =<< toLowLevel str
 printGSVS :: GodotSimulaViewSprite -> IO ()
 printGSVS gsvs = do
   simulaView <- readTVarIO (gsvs ^. gsvsView)
+  let eitherSurface = (simulaView ^. svWlrEitherSurface)
   let maybeID = (simulaView ^. gsvsUUID)
-  case maybeID of
-     Nothing -> putStrLn "Couldn't get GSVS ID"
-     (Just id) -> putStrLn $ "gsvs id: " ++ (show id)
+  case (eitherSurface, maybeID) of
+    (Right wlrXWaylandSurface, Just id) -> do -- Print parent mems
+                                              wlrSurface <- getWlrSurface eitherSurface
+                                              let isNull = ((unsafeCoerce wlrSurface) == nullPtr)
+                                              case isNull of
+                                                True -> return ()
+                                                False -> do
+                                                  memCounterXWaylandSurface <- G.get_mem_counter wlrXWaylandSurface
+                                                  memCounterSurface <- G.get_mem_counter wlrSurface
+                                                  putStrLn $ "gsvs id: " ++ (show id) ++ " parent mems: (" ++ (show memCounterXWaylandSurface) ++ ", " ++ (show memCounterSurface) ++ ")"
+
+                                                  -- Print children mems
+                                                  arrayOfChildren <- G.get_children wlrXWaylandSurface :: IO GodotArray
+                                                  numChildren <- Api.godot_array_size arrayOfChildren
+                                                  arrayOfChildrenGV <- fromLowLevel' arrayOfChildren
+                                                  children <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrXWaylandSurface]
+                                                  mapM printChildMem children
+                                                  return ()
+    _ -> return ()
+
+  where printChildMem :: GodotWlrXWaylandSurface -> IO ()
+        printChildMem wlrXWaylandSurfaceChild = do
+          wlrSurfaceChild <- G.get_wlr_surface wlrXWaylandSurfaceChild
+          let isNull = ((unsafeCoerce wlrSurfaceChild) == nullPtr)
+          case isNull of
+            True -> return ()
+            False -> do memCounterXWaylandSurfaceChild <- G.get_mem_counter wlrXWaylandSurfaceChild
+                        memCounterSurfaceChild <- G.get_mem_counter wlrSurfaceChild
+                        putStrLn $ "wlrXWaylandSurface Mem: " ++ show (memCounterXWaylandSurfaceChild)
+                        putStrLn $ "wlrSurface Mem: " ++ show (memCounterSurfaceChild)
+        fromLowLevel' vs = do
+          size <- fromIntegral <$> Api.godot_array_size vs
+          forM [0..size-1] $ Api.godot_array_get vs
+
 
 getWlrSurface :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO GodotWlrSurface
 getWlrSurface eitherSurface = do
