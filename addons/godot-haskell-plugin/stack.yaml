@@ -1,4 +1,4 @@
-resolver: nightly-2019-01-15
+resolver: nightly-2019-12-27
 
 packages:
 - .
@@ -20,7 +20,16 @@ extra-deps:
 - git: https://github.com/SimulaVR/cpphs
   commit: 07946d7d768f385dc86c3f3f6872983c08245e26
 
-require-stack-version: ">=1.7.1 && <1.11"
+require-stack-version: ">=1.7.1"
+
+extra-path:
+- /home/george/ghc/_build/stage1/bin
+
+system-ghc: true
+skip-ghc-check: true
+
+ghc-options:
+  "$everything": -fPIC -fexternal-dynamic-refs
 
 nix:
   enable: false

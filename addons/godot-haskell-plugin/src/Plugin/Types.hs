@@ -115,7 +115,7 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssWlrDataDeviceManager :: TVar GodotWlrDataDeviceManager
   , _gssWlrKeyboard          :: TVar GodotWlrKeyboard -- "
   , _gssViews                :: TVar (M.Map SimulaView GodotSimulaViewSprite)
-  , _gssKeyboardFocusedSprite :: TVar (Maybe GodotSimulaViewSprite)
+  , _gssKeyboardFocusedSprite :: TVar (Maybe GodotSimulaViewSprite) -- <- Here
   , _gssVisualServer         :: TVar GodotVisualServer
   }
 
@@ -215,15 +215,15 @@ removeChild parent child = do
   G.remove_child ((safeCast parent) :: GodotNode )
                  ((safeCast child) :: GodotNode)
 
-asGodotVariant :: (GodotObject :< godot_type) => godot_type -> IO (GodotVariant)
-asGodotVariant godotComplexObj = do
+--asGodotVariant :: (GodotObject :< godot_type) => godot_type -> IO (GodotVariant)
+--asGodotVariant godotComplexObj = do
   -- Original method:
   -- godotVariant <- toLowLevel (VariantObject (safeCast godotComplexObj)) :: IO GodotVariant
 
   -- More idiomatic method:
-  godotVariant2 <- (toLowLevel (toVariant ((safeCast godotComplexObj) :: GodotObject))) :: IO GodotVariant
+--  godotVariant2 <- (toLowLevel (toVariant ((safeCast godotComplexObj) :: GodotObject))) :: IO GodotVariant
 
-  return godotVariant2
+--  return godotVariant2
 
 -- | These helper functions can be used to jam Haskell types into emit_signal, and
 -- | then retrieve them in their corresponding signal handlers. Use these
@@ -415,42 +415,10 @@ godotPrint str = Api.godot_print =<< toLowLevel str
 printGSVS :: GodotSimulaViewSprite -> IO ()
 printGSVS gsvs = do
   simulaView <- readTVarIO (gsvs ^. gsvsView)
-  let eitherSurface = (simulaView ^. svWlrEitherSurface)
   let maybeID = (simulaView ^. gsvsUUID)
-  case (eitherSurface, maybeID) of
-    (Right wlrXWaylandSurface, Just id) -> do -- Print parent mems
-                                              wlrSurface <- getWlrSurface eitherSurface
-                                              let isNull = ((unsafeCoerce wlrSurface) == nullPtr)
-                                              case isNull of
-                                                True -> return ()
-                                                False -> do
-                                                  memCounterXWaylandSurface <- G.get_mem_counter wlrXWaylandSurface
-                                                  memCounterSurface <- G.get_mem_counter wlrSurface
-                                                  putStrLn $ "gsvs id: " ++ (show id) ++ " parent mems: (" ++ (show memCounterXWaylandSurface) ++ ", " ++ (show memCounterSurface) ++ ")"
-
-                                                  -- Print children mems
-                                                  arrayOfChildren <- G.get_children wlrXWaylandSurface :: IO GodotArray
-                                                  numChildren <- Api.godot_array_size arrayOfChildren
-                                                  arrayOfChildrenGV <- fromLowLevel' arrayOfChildren
-                                                  children <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrXWaylandSurface]
-                                                  mapM printChildMem children
-                                                  return ()
-    _ -> return ()
-
-  where printChildMem :: GodotWlrXWaylandSurface -> IO ()
-        printChildMem wlrXWaylandSurfaceChild = do
-          wlrSurfaceChild <- G.get_wlr_surface wlrXWaylandSurfaceChild
-          let isNull = ((unsafeCoerce wlrSurfaceChild) == nullPtr)
-          case isNull of
-            True -> return ()
-            False -> do memCounterXWaylandSurfaceChild <- G.get_mem_counter wlrXWaylandSurfaceChild
-                        memCounterSurfaceChild <- G.get_mem_counter wlrSurfaceChild
-                        putStrLn $ "wlrXWaylandSurface Mem: " ++ show (memCounterXWaylandSurfaceChild)
-                        putStrLn $ "wlrSurface Mem: " ++ show (memCounterSurfaceChild)
-        fromLowLevel' vs = do
-          size <- fromIntegral <$> Api.godot_array_size vs
-          forM [0..size-1] $ Api.godot_array_get vs
-
+  case maybeID of
+     Nothing -> putStrLn "Couldn't get GSVS ID"
+     (Just id) -> putStrLn $ "gsvs id: " ++ (show id)
 
 getWlrSurface :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO GodotWlrSurface
 getWlrSurface eitherSurface = do

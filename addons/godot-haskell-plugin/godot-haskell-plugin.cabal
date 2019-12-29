@@ -99,7 +99,7 @@ library
       TypeOperators
       MultiParamTypeClasses
       FunctionalDependencies
-  ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code 
+  ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code
  
   -- pkgconfig-depends:
   --     wlroots
@@ -138,7 +138,7 @@ foreign-library godot-haskell-plugin
     -- Debug.C
     -- Debug.Marshal
   other-modules: FLib
-  ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code
+  ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code -static
   build-depends:
       base >=4.12 && <5
     , lens

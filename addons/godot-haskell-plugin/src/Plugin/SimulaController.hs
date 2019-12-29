@@ -267,13 +267,13 @@ process self [deltaGV] = do
 
 getWlrSeatFromPath :: GodotSimulaController -> IO GodotWlrSeat
 getWlrSeatFromPath self = do
-  let nodePathStr = "/root/Root/SimulaServer"
+  -- putStrLn "getWlrSeatFromPath"
+  let nodePathStr = "/root/Root/SimulaServer" -- I'm not 100% sure this is correct!
   nodePath <- (toLowLevel (pack nodePathStr))
   gssNode  <- G.get_node ((safeCast self) :: GodotNode) nodePath
   maybeGSS      <- (asNativeScript (safeCast gssNode)) :: IO (Maybe GodotSimulaServer)
   let gss = Data.Maybe.fromJust maybeGSS
   wlrSeat  <- readTVarIO (gss ^. gssWlrSeat)
-  Api.godot_node_path_destroy nodePath
 
   return wlrSeat
 

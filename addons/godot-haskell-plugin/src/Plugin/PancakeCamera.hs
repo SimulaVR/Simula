@@ -80,12 +80,10 @@ _process gpc args = do
           hasNode  <- G.has_node ((safeCast gpc) :: GodotNode) nodePath
           maybeTransform <- case hasNode of
                 False -> do
-                  putStrLn $ "Failed to get ARVRCamera transform for GodotPancakeCamera!"
                   return Nothing
                 True ->  do arvrCameraNode  <- G.get_node ((safeCast gpc) :: GodotNode) nodePath
                             let arvrCamera = (coerce arvrCameraNode) :: GodotARVRCamera -- HACK: We use `coerce` instead of something more proper
                             transform <- G.get_global_transform (arvrCamera)
                             return (Just transform)
-          Api.godot_node_path_destroy nodePath
           return maybeTransform
 

@@ -315,24 +315,20 @@ focus gsvs = do
 
   case wlrEitherSurface of
     Left wlrXdgSurface -> do wlrSurface  <- G.get_wlr_surface wlrXdgSurface
-                             wlrSurface' <- asGodotVariant wlrSurface
+                             G.reference wlrSurface
                              toplevel    <- G.get_xdg_toplevel wlrXdgSurface :: IO GodotWlrXdgToplevel
                              -- isGodotTypeNull wlrSurface
                              G.set_activated toplevel True
-                             G.keyboard_notify_enter wlrSeat wlrSurface'
+                             G.keyboard_notify_enter wlrSeat wlrSurface
                              pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
                              pointerNotifyFrame wlrSeat
     Right wlrXWaylandSurface -> do wlrSurface  <- G.get_wlr_surface wlrXWaylandSurface
-                                   let isNull = ((unsafeCoerce wlrSurface) == nullPtr)
-                                   case isNull of
-                                     True -> return ()
-                                     False -> do
-                                      wlrSurface' <- asGodotVariant wlrSurface
-                                      -- isGodotTypeNull wlrSurface
-                                      G.set_activated wlrXWaylandSurface True
-                                      G.keyboard_notify_enter wlrSeat wlrSurface'
-                                      pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
-                                      pointerNotifyFrame wlrSeat
+                                   G.reference wlrSurface
+                                   -- isGodotTypeNull wlrSurface
+                                   G.set_activated wlrXWaylandSurface True
+                                   G.keyboard_notify_enter wlrSeat wlrSurface
+                                   pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
+                                   pointerNotifyFrame wlrSeat
 
 -- | This function isn't called unless a surface is being pointed at (by VR
 -- | controllers or a mouse in pancake mode).
@@ -400,6 +396,7 @@ processClickEvent gsvs evt clickPos = do
       -- let ssCoordinates    = SubSurfaceLocalCoordinates (ssx, ssy)
       -- return (wlrSurfaceSubSurface, ssCoordinates)
       wlrSurfaceParent <- G.get_wlr_surface wlrXdgSurface            -- hack!
+      G.reference wlrSurfaceParent
       return (wlrSurfaceParent, SubSurfaceLocalCoordinates (sx, sy)) -- hack!
 
     getXWaylandSubsurfaceAndCoords :: GodotWlrXWaylandSurface -> SurfaceLocalCoordinates -> IO (GodotWlrSurface, SubSurfaceLocalCoordinates)
@@ -416,11 +413,7 @@ processClickEvent gsvs evt clickPos = do
 
     keyboardNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> IO ()
     keyboardNotifyEnter wlrSeat wlrSurface = do
-      let maybeWlrSurfaceGV = (fromVariant ((toVariant wlrSurface) :: Variant 'GodotTy) :: Maybe GodotVariant)
-      case maybeWlrSurfaceGV of
-          Nothing -> putStrLn "Failed to convert GodotWlrSurface to GodotVariant!"
-          Just wlrSurfaceGV -> do G.keyboard_notify_enter wlrSeat wlrSurfaceGV
-                                  Api.godot_variant_destroy wlrSurfaceGV
+      G.keyboard_notify_enter wlrSeat wlrSurface
 
     -- | This function conspiciously lacks a GodotWlrSurface argument, but doesn't
     -- | need one since the GodotWlrSeat keeps internal track of what the currently
@@ -436,8 +429,7 @@ processClickEvent gsvs evt clickPos = do
           Motion -> return ()
           Button pressed buttonIndex -> pointerNotifyButton' pressed buttonIndex
       where pointerNotifyButton' pressed buttonIndex = do
-              buttonIndexVariant <- toLowLevel (VariantInt buttonIndex) :: IO GodotVariant
-              G.pointer_notify_button wlrSeat buttonIndexVariant pressed
+              G.pointer_notify_button wlrSeat (fromIntegral buttonIndex) pressed
               -- putStrLn $ "G.pointer_notify_button: pressed/buttonIndex" ++ (show pressed) ++ "/" ++ (show buttonIndex)
               return ()
 
@@ -453,15 +445,7 @@ pointerNotifyFrame wlrSeat = do
 -- | and, if so, returns early.
 pointerNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> SubSurfaceLocalCoordinates -> IO ()
 pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (ssx, ssy)) = do
-  let isNull = ((unsafeCoerce wlrSurface) == nullPtr)
-  case isNull of
-    True -> putStrLn "wlrSurface is NULL!"
-    False -> do
-      let maybeWlrSurfaceGV = (fromVariant ((toVariant wlrSurface) :: Variant 'GodotTy) :: Maybe GodotVariant)
-      case maybeWlrSurfaceGV of
-          Nothing -> putStrLn "Failed to convert GodotWlrSurface to GodotVariant!"
-          Just wlrSurfaceGV -> do G.pointer_notify_enter wlrSeat wlrSurfaceGV ssx ssy
-                                  Api.godot_variant_destroy wlrSurfaceGV
+  G.pointer_notify_enter wlrSeat wlrSurface ssx ssy -- Causing a crash
 
 _handle_map :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 _handle_map self args = do

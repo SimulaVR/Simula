@@ -90,10 +90,9 @@ ready gss _ = do
   -- Get state
   wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
   wlrKeyboard <- readTVarIO (gss ^. gssWlrKeyboard)
-  wlrKeyboardGV <- asGodotVariant wlrKeyboard
 
   -- Set state
-  G.set_keyboard wlrSeat wlrKeyboardGV
+  G.set_keyboard wlrSeat (safeCast wlrKeyboard)
 
   -- Connect signals
   connectGodotSignal wlrKeyboard "key" gss "_on_wlr_key" []
@@ -101,16 +100,14 @@ ready gss _ = do
     -- Omission: We omit connecting "size_changed" with "_on_viewport_change"
 
   -- wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
-  wlrSeatGV <- asGodotVariant wlrSeat
   wlrCompositor <- readTVarIO (gss ^. gssWlrCompositor)
-  wlrCompositorGV <- asGodotVariant wlrCompositor
   wlrXWayland <- readTVarIO (gss ^. gssWlrXWayland)
 
 
   oldDisplay <- getEnv "DISPLAY"  
 
   -- We wait till here to start XWayland so we can feed it a seat + compositor
-  G.start_xwayland wlrXWayland wlrCompositorGV wlrSeatGV
+  G.start_xwayland wlrXWayland (safeCast wlrCompositor) (safeCast wlrSeat)
 
   newDisplay <- getEnv "DISPLAY"
   putStr "New DISPLAY="
@@ -302,6 +299,8 @@ handle_map_surface gss [gsvsVariant] = do
   case maybeGsvs of
     Nothing -> putStrLn "Failed to cast GodotSimulaViewSprite in handle_map_surface!"
     Just gsvs -> do -- Delay adding the sprite to the scene graph until we know XCB intends for it to be mapped
+                    putStr "Mapping surface "
+                    print (safeCast @GodotObject gsvs)
                     G.add_child ((safeCast gss) :: GodotNode )
                                 ((safeCast gsvs) :: GodotNode)
                                 True
@@ -318,6 +317,7 @@ handle_map_surface gss [gsvsVariant] = do
                     setInFrontOfHMD gsvs
 
                     focus gsvs
+                    
                     simulaView <- atomically $ readTVar (gsvs ^. gsvsView)
                     atomically $ writeTVar (simulaView ^. svMapped) True
   return ()
@@ -366,7 +366,7 @@ _on_wlr_key gss [keyboardGVar, eventGVar] = do
     (Just gsvsFocused) -> do
       focus gsvsFocused
   wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
-  G.keyboard_notify_key wlrSeat eventGVar
+  G.keyboard_notify_key wlrSeat =<< fromGodotVariant eventGVar
   return ()
 
 _on_wlr_modifiers :: GodotSimulaServer -> [GodotVariant] -> IO ()
