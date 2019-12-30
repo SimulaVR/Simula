@@ -151,6 +151,7 @@ _draw self _ = do
       numChildren <- Api.godot_array_size arrayOfChildren
       arrayOfChildrenGV <- fromLowLevel' arrayOfChildren
       children <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrXWaylandSurface]
+      Api.godot_array_destroy arrayOfChildren
       return children
   wlrSurface <- getWlrSurface eitherSurface
   parentWlrTexture <- G.get_texture wlrSurface

@@ -463,3 +463,7 @@ withGodot allocatedType' destr action  = do
   ret <- action allocatedType
   destr allocatedType
   return ret
+
+destroyMaybe :: GodotReference -> IO ()
+destroyMaybe ref =
+  whenM (G.unreference @GodotReference ref) (Api.godot_object_destroy $ safeCast ref)

@@ -165,6 +165,7 @@ generateResourceTarballs() {
 
     mkdir -p build
     cd ./build
+    read -p "About to delete ./build/godot! If you are developing in that folder, press C-c to cancel script. Otherwise, press any key."
     sudo rm -r godot
 
     # Get ./godot + ./godot/modules/gdwlroots + ./godot/godot-haskell-gdwlroots

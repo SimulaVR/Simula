@@ -85,5 +85,6 @@ _process gpc args = do
                             let arvrCamera = (coerce arvrCameraNode) :: GodotARVRCamera -- HACK: We use `coerce` instead of something more proper
                             transform <- G.get_global_transform (arvrCamera)
                             return (Just transform)
+          Api.godot_node_path_destroy nodePath
           return maybeTransform
 

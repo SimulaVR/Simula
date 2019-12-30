@@ -332,6 +332,7 @@ handle_map_surface gss [gsvsVariant] = do
                 True ->  do gssNode  <- G.get_node ((safeCast self) :: GodotNode) nodePath
                             let arvrCamera = (coerce gssNode) :: GodotARVRCamera -- HACK: We use `coerce` instead of something more proper
                             G.get_global_transform (arvrCamera)
+          Api.godot_node_path_destroy nodePath
           return transform
         getViewportCamera :: GodotSimulaServer -> IO GodotCamera
         getViewportCamera gss = do
@@ -366,7 +367,9 @@ _on_wlr_key gss [keyboardGVar, eventGVar] = do
     (Just gsvsFocused) -> do
       focus gsvsFocused
   wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
-  G.keyboard_notify_key wlrSeat =<< fromGodotVariant eventGVar
+  event <- fromGodotVariant eventGVar
+  G.reference event
+  G.keyboard_notify_key wlrSeat event
   return ()
 
 _on_wlr_modifiers :: GodotSimulaServer -> [GodotVariant] -> IO ()
@@ -383,6 +386,7 @@ _on_wlr_modifiers gss [keyboardGVar] = do
 _on_WlrXWayland_new_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_WlrXWayland_new_surface gss [wlrXWaylandSurfaceVariant] = do
   wlrXWaylandSurface <- fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface
+  G.reference wlrXWaylandSurface
   simulaView <- newSimulaView gss wlrXWaylandSurface
   gsvs <- newGodotSimulaViewSprite gss simulaView
 

@@ -271,6 +271,7 @@ getWlrSeatFromPath self = do
   let nodePathStr = "/root/Root/SimulaServer" -- I'm not 100% sure this is correct!
   nodePath <- (toLowLevel (pack nodePathStr))
   gssNode  <- G.get_node ((safeCast self) :: GodotNode) nodePath
+  Api.godot_node_path_destroy nodePath
   maybeGSS      <- (asNativeScript (safeCast gssNode)) :: IO (Maybe GodotSimulaServer)
   let gss = Data.Maybe.fromJust maybeGSS
   wlrSeat  <- readTVarIO (gss ^. gssWlrSeat)

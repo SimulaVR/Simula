@@ -404,8 +404,9 @@ processClickEvent gsvs evt clickPos = do
       -- wlrSurfaceAtResult <- G.surface_at wlrXWaylandSurface sx sy
       ret@(wlrSurface', SubSurfaceLocalCoordinates (subX, subY)) <- withGodot
         (G.surface_at wlrXWaylandSurface sx sy)
-        G.delete_surface_at_result
-        (\wlrSurfaceAtResult -> do subX <- G.get_sub_x wlrSurfaceAtResult
+        (destroyMaybe . safeCast)
+        (\wlrSurfaceAtResult -> do G.reference wlrSurfaceAtResult
+                                   subX <- G.get_sub_x wlrSurfaceAtResult
                                    subY <- G.get_sub_y wlrSurfaceAtResult
                                    wlrSurface' <- G.get_surface wlrSurfaceAtResult
                                    return (wlrSurface', SubSurfaceLocalCoordinates (subX, subY)))
@@ -501,10 +502,11 @@ _handle_destroy gsvs [gsvsGV] = do
   G.set_process gsvs False -- Remove the `simulaView ↦ gsvs` mapping from the gss
   atomically $ modifyTVar' (gss ^. gssViews) (M.delete simulaView)
     -- Old method of gsvs deletion from Simula; bring back if we face leakage issues:
-    -- Api.godot_object_destroy (safeCast gsvs)
+  -- Api.godot_object_destroy (safeCast gsvs)
   deleteSurface eitherSurface
 
-  where deleteSurface eitherSurface = do
-          case eitherSurface of
-            (Left xdgSurface) -> return ()
-            (Right xwaylandSurface) -> G.delete_wlr_xwayland_surface xwaylandSurface
+  where 
+    deleteSurface eitherSurface = 
+      case eitherSurface of
+        (Left xdgSurface) -> destroyMaybe (safeCast xdgSurface)
+        (Right xwaylandSurface) -> destroyMaybe (safeCast xwaylandSurface)
