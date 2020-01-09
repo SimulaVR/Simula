@@ -10,9 +10,11 @@
 
 module Plugin.SimulaServer where
 
+import           Data.Bits
 import           Linear
 import           Plugin.Imports
 
+import Godot.Core.GodotVisualServer          as G
 import qualified Godot.Gdnative.Internal.Api as Api
 import qualified Godot.Methods               as G
 import           Godot.Nativescript
@@ -43,7 +45,7 @@ import           Control.Monad.STM
 import           Data.Maybe
 import           Data.List
 import           Data.Coerce
--- import           Unsafe.Coerce
+import           Unsafe.Coerce
 import           Data.Either
 
 import           Foreign hiding (void)
@@ -58,6 +60,9 @@ import           Plugin.SimulaCanvasItem
 import           System.Clock
 import           Control.Monad.Extra
 
+import Godot.Core.GodotGlobalConstants as G
+import Godot.Core.GodotInput as G
+
 instance NativeScript GodotSimulaServer where
   -- className = "SimulaServer"
   classInit spatial = initGodotSimulaServer (safeCast spatial)
@@ -65,6 +70,7 @@ instance NativeScript GodotSimulaServer where
   -- classExtends = "Spatial"
   classMethods =
     [ func NoRPC "_ready" Plugin.SimulaServer.ready
+    , func NoRPC "_input" Plugin.SimulaServer._input
     -- , func NoRPC "_input" Plugin.SimulaServer.input -- replaced by _on_wlr_* handlers
     , func NoRPC "_on_WaylandDisplay_ready"    Plugin.SimulaServer._on_WaylandDisplay_ready
     , func NoRPC "_on_WlrXdgShell_new_surface" Plugin.SimulaServer._on_WlrXdgShell_new_surface
@@ -73,13 +79,11 @@ instance NativeScript GodotSimulaServer where
     , func NoRPC "_on_wlr_key" Plugin.SimulaServer._on_wlr_key
     , func NoRPC "_on_wlr_modifiers" Plugin.SimulaServer._on_wlr_modifiers
     , func NoRPC "_on_WlrXWayland_new_surface" Plugin.SimulaServer._on_WlrXWayland_new_surface
+    , func NoRPC "_physics_process" Plugin.SimulaServer.physicsProcess
+    , func NoRPC "_on_simula_shortcut" Plugin.SimulaServer._on_simula_shortcut
     ]
 
   classSignals = []
-
-instance HasBaseClass GodotSimulaServer where
-  type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
 
 ready :: GodotSimulaServer -> [GodotVariant] -> IO ()
 ready gss _ = do
@@ -97,6 +101,7 @@ ready gss _ = do
   -- Connect signals
   connectGodotSignal wlrKeyboard "key" gss "_on_wlr_key" []
   connectGodotSignal wlrKeyboard "modifiers" gss "_on_wlr_modifiers" []
+  connectGodotSignal wlrKeyboard "shortcut" gss "_on_simula_shortcut" []
     -- Omission: We omit connecting "size_changed" with "_on_viewport_change"
 
   -- wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
@@ -113,11 +118,20 @@ ready gss _ = do
   putStr "New DISPLAY="
   putStrLn newDisplay
   setEnv "DISPLAY" oldDisplay
+  if (newDisplay /= oldDisplay)
+    then atomically $ writeTVar (gss ^. gssXWaylandDisplay) (Just newDisplay)
+    else atomically $ writeTVar (gss ^. gssXWaylandDisplay) Nothing
 
   connectGodotSignal wlrXWayland "new_surface" gss "_on_WlrXWayland_new_surface" []
 
   -- Start telemetry
   startTelemetry (gss ^. gssViews)
+
+  viewport <- G.get_viewport gss :: IO GodotViewport
+  connectGodotSignal viewport "input_event" gss "_mouse_input" []
+
+  getSingleton GodotInput "Input" >>= \inp -> G.set_mouse_mode inp G.MOUSE_MODE_CAPTURED
+
   return ()
 
 -- | Populate the GodotSimulaServer's TVar's with Wlr types; connect some Wlr methods
@@ -183,6 +197,9 @@ addWlrChildren gss = do
   G.set_name wlrCompositor =<< toLowLevel "WlrCompositor"
   G.add_child wlrBackend ((safeCast wlrCompositor) :: GodotNode) True
 
+  rc <- readTVarIO (gss ^. gssHMDRayCast)
+  addChild gss rc
+
   return ()
   where setWaylandSocket :: GodotWaylandDisplay -> String -> IO ()
         setWaylandSocket waylandDisplay socketName = do
@@ -207,24 +224,49 @@ initGodotSimulaServer obj = do
   gssKeyboardFocusedSprite' <- newTVarIO Nothing :: IO (TVar (Maybe GodotSimulaViewSprite))
   visualServer <- getSingleton GodotVisualServer "VisualServer"
   visualServer' <- newTVarIO visualServer
+  gssActiveCursorGSVS' <- newTVarIO Nothing
+
+  maybeCursorTexture <- getTextureFromURL "res://cursor.png"
+  gssCursorTexture' <- newTVarIO maybeCursorTexture
+
+  rc <- unsafeInstance GodotRayCast "RayCast"
+  G.set_cast_to rc =<< toLowLevel (V3 0 0 (negate 10))
+  G.set_enabled rc True
+  gssHMDRayCast' <- newTVarIO rc
+
+  gssKeyboardGrabbedSprite' <- newTVarIO Nothing
+  gssXWaylandDisplay'       <- newTVarIO Nothing
 
   let gss = GodotSimulaServer {
-    _gssObj                  = obj                      :: GodotObject
-  , _gssWaylandDisplay       = gssWaylandDisplay'       :: TVar GodotWaylandDisplay
-  , _gssWlrBackend           = gssWlrBackend'           :: TVar GodotWlrBackend
-  , _gssWlrOutput            = gssWlrOutput'            :: TVar GodotWlrOutput
-  , _gssWlrCompositor        = gssWlrCompositor'        :: TVar GodotWlrCompositor
-  , _gssWlrXdgShell          = gssWlrXdgShell'          :: TVar GodotWlrXdgShell
-  , _gssWlrXWayland          = gssWlrXWayland'          :: TVar GodotWlrXWayland
-  , _gssWlrSeat              = gssWlrSeat'              :: TVar GodotWlrSeat
-  , _gssWlrDataDeviceManager = gssWlrDataDeviceManager' :: TVar GodotWlrDataDeviceManager
-  , _gssWlrKeyboard          = gssWlrKeyboard'          :: TVar GodotWlrKeyboard
-  , _gssViews                = gssViews'                :: TVar (M.Map SimulaView GodotSimulaViewSprite)
+    _gssObj                   = obj                       :: GodotObject
+  , _gssWaylandDisplay        = gssWaylandDisplay'        :: TVar GodotWaylandDisplay
+  , _gssWlrBackend            = gssWlrBackend'            :: TVar GodotWlrBackend
+  , _gssWlrOutput             = gssWlrOutput'             :: TVar GodotWlrOutput
+  , _gssWlrCompositor         = gssWlrCompositor'         :: TVar GodotWlrCompositor
+  , _gssWlrXdgShell           = gssWlrXdgShell'           :: TVar GodotWlrXdgShell
+  , _gssWlrXWayland           = gssWlrXWayland'           :: TVar GodotWlrXWayland
+  , _gssWlrSeat               = gssWlrSeat'               :: TVar GodotWlrSeat
+  , _gssWlrDataDeviceManager  = gssWlrDataDeviceManager'  :: TVar GodotWlrDataDeviceManager
+  , _gssWlrKeyboard           = gssWlrKeyboard'           :: TVar GodotWlrKeyboard
+  , _gssViews                 = gssViews'                 :: TVar (M.Map SimulaView GodotSimulaViewSprite)
   , _gssKeyboardFocusedSprite = gssKeyboardFocusedSprite' :: TVar (Maybe GodotSimulaViewSprite)
-  , _gssVisualServer = visualServer' :: TVar GodotVisualServer
+  , _gssVisualServer          = visualServer'             :: TVar GodotVisualServer
+  , _gssActiveCursorGSVS      = gssActiveCursorGSVS'      :: TVar (Maybe GodotSimulaViewSprite)
+  , _gssCursorTexture         = gssCursorTexture'         :: TVar (Maybe GodotTexture)
+  , _gssHMDRayCast            = gssHMDRayCast'            :: TVar GodotRayCast
+  , _gssKeyboardGrabbedSprite = gssKeyboardGrabbedSprite' :: TVar (Maybe (GodotSimulaViewSprite, Float))
+  , _gssXWaylandDisplay       = gssXWaylandDisplay'       :: TVar (Maybe String)
   }
 
   return gss
+  where getTextureFromURL :: String -> IO (Maybe GodotTexture)
+        getTextureFromURL urlStr = do
+          godotImage <- unsafeInstance GodotImage "Image" :: IO GodotImage
+          godotImageTexture <- unsafeInstance GodotImageTexture "ImageTexture"
+          pngUrl <- toLowLevel (pack urlStr) :: IO GodotString
+          exitCode <- G.load godotImage pngUrl
+          G.create_from_image godotImageTexture godotImage G.TEXTURE_FLAGS_DEFAULT
+          if (unsafeCoerce godotImageTexture == nullPtr) then (return Nothing) else (return (Just (safeCast godotImageTexture)))
 
 -- Don't think we should need this. Delete after a while.
 -- getSimulaServerNodeFromPath :: GodotSimulaServer -> String -> IO a
@@ -314,39 +356,13 @@ handle_map_surface gss [gsvsVariant] = do
                     addChild gsvs viewport
                     addChild viewport gsci
 
-                    setInFrontOfHMD gsvs
+                    setInFrontOfUser gsvs (-1)
 
                     focus gsvs
-                    
+
                     simulaView <- atomically $ readTVar (gsvs ^. gsvsView)
                     atomically $ writeTVar (simulaView ^. svMapped) True
   return ()
-  where getTransform :: GodotSimulaServer -> IO GodotTransform
-        getTransform self = do
-          let nodePathStr = "/root/Root/VRViewport/ARVROrigin/ARVRCamera"
-          nodePath <- (toLowLevel (pack nodePathStr))
-          hasNode  <- G.has_node ((safeCast self) :: GodotNode) nodePath
-          transform <- case hasNode of
-                False -> do camera <- getViewportCamera self
-                            G.get_camera_transform camera
-                True ->  do gssNode  <- G.get_node ((safeCast self) :: GodotNode) nodePath
-                            let arvrCamera = (coerce gssNode) :: GodotARVRCamera -- HACK: We use `coerce` instead of something more proper
-                            G.get_global_transform (arvrCamera)
-          Api.godot_node_path_destroy nodePath
-          return transform
-        getViewportCamera :: GodotSimulaServer -> IO GodotCamera
-        getViewportCamera gss = do
-          viewport <- G.get_viewport gss :: IO GodotViewport
-          camera <- G.get_camera viewport :: IO GodotCamera
-          return camera
-        setInFrontOfHMD :: GodotSimulaViewSprite -> IO ()
-        setInFrontOfHMD gsvs = do
-          rotationAxisY <- toLowLevel (V3 0 1 0) :: IO GodotVector3
-          pushBackVector <- toLowLevel (V3 0 0 (-1)) :: IO GodotVector3 -- For some reason we also have to shift the vector 0.5 units to the right
-          hmdGlobalTransform <- getTransform gss
-          G.set_global_transform gsvs hmdGlobalTransform
-          G.translate_object_local gsvs pushBackVector
-          G.rotate_object_local gsvs rotationAxisY 3.14159 -- 180 degrees in radians
 
 handle_unmap_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
 handle_unmap_surface gss [gsvsVariant] = do
@@ -411,3 +427,159 @@ _on_WlrXWayland_new_surface gss [wlrXWaylandSurfaceVariant] = do
              , _svWlrEitherSurface = (Right wlrXWaylandSurface) :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface
              , _gsvsUUID           = gsvsUUID' :: Maybe UUID
              }
+
+-- Find the cursor-active gsvs, convert relative godot mouse movement to new
+-- mouse coordinates, and pass off to processClickEvent or pointer_notify_axis
+_input :: GodotSimulaServer -> [GodotVariant] -> IO ()
+_input gss [eventGV] = do
+  event <- fromGodotVariant eventGV :: IO GodotInputEventMouseMotion
+  maybeActiveGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
+
+  whenM (event `isClass` "InputEventMouseMotion") $ do
+     mouseRelativeGV2 <- G.get_relative event :: IO GodotVector2
+     mouseRelative@(V2 dx dy) <- fromLowLevel mouseRelativeGV2
+     case maybeActiveGSVS of
+         Nothing -> putStrLn "movement: No cursor focused surface!"
+         (Just gsvs) -> do updateCursorStateRelative gsvs dx dy
+                           sendWlrootsMotion gsvs
+  whenM (event `isClass` "InputEventMouseButton") $ do
+    let event' = GodotInputEventMouseButton (coerce event)
+    pressed <- G.is_pressed event'
+    button <- G.get_button_index event'
+    wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+    case (maybeActiveGSVS, button) of
+         (Just gsvs, G.BUTTON_WHEEL_UP) -> G.pointer_notify_axis_continuous wlrSeat 0 (0.5)
+         (Just gsvs, G.BUTTON_WHEEL_DOWN) -> G.pointer_notify_axis_continuous wlrSeat 0 (-0.5)
+         (Just gsvs, _) -> do activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+                              processClickEvent' gsvs (Button pressed button) activeGSVSCursorPos
+         (Nothing, _) -> putStrLn "Button: No cursor focused surface!"
+
+updateCursorStateRelative :: GodotSimulaViewSprite -> Float -> Float -> IO ()
+updateCursorStateRelative gsvs dx dy = do
+    activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+    gsci <- readTVarIO (gsvs ^. gsvsSimulaCanvasItem)
+    textureViewport <- readTVarIO (gsci ^. gsciViewport)
+    tvGV2 <- G.get_size textureViewport
+    (V2 mx my) <- fromLowLevel tvGV2
+
+    let sx' = if ((sx + dx) < mx) then (sx + dx) else mx
+    let sx'' = if (sx' > 0) then sx' else 0
+    let sy' = if ((sy + dy) < my) then (sy + dy) else my
+    let sy'' = if (sy' > 0) then sy' else 0
+    atomically $ writeTVar (gsvs ^. gsvsCursorCoordinates) (SurfaceLocalCoordinates (sx'', sy''))
+
+updateCursorStateAbsolute :: GodotSimulaViewSprite -> Float -> Float -> IO ()
+updateCursorStateAbsolute gsvs sx sy = do
+    gsci <- readTVarIO (gsvs ^. gsvsSimulaCanvasItem)
+    textureViewport <- readTVarIO (gsci ^. gsciViewport)
+    tvGV2 <- G.get_size textureViewport
+    (V2 mx my) <- fromLowLevel tvGV2
+
+    let sx' = if (sx < mx) then sx else mx
+    let sx'' = if (sx' > 0) then sx' else 0
+    let sy' = if (sy < my) then sy else my
+    let sy'' = if (sy' > 0) then sy' else 0
+    atomically $ writeTVar (gsvs ^. gsvsCursorCoordinates) (SurfaceLocalCoordinates (sx'', sy''))
+
+sendWlrootsMotion :: GodotSimulaViewSprite -> IO ()
+sendWlrootsMotion gsvs = do
+    activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+    processClickEvent' gsvs Motion activeGSVSCursorPos
+
+getHMDLookAtSprite :: GodotSimulaServer -> IO (Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates))
+getHMDLookAtSprite gss = do
+  rc <- readTVarIO (gss ^.  gssHMDRayCast)
+  hmdGlobalTransform <- getARVRCameraOrPancakeCameraTransform gss
+  G.set_global_transform rc hmdGlobalTransform
+
+  isColliding <- G.is_colliding rc
+  maybeSprite <- if isColliding then G.get_collider rc >>= asNativeScript :: IO (Maybe GodotSimulaViewSprite) else (return Nothing)
+  ret <- case maybeSprite of
+            Nothing -> return Nothing
+            Just gsvs -> do gv3 <- G.get_collision_point rc :: IO GodotVector3
+                            surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)) <- getSurfaceLocalCoordinates gsvs gv3
+                            return $ Just (gsvs, surfaceLocalCoords)
+  return ret
+
+physicsProcess :: GodotSimulaServer -> [GodotVariant] -> IO ()
+physicsProcess gss _ = do
+  arvrCameraTransform <- getARVRCameraOrPancakeCameraTransform gss
+
+  maybeKeyboardGrabbedGSVS <- readTVarIO (gss ^. gssKeyboardGrabbedSprite)
+  maybeLookAtGSVS <- getHMDLookAtSprite gss
+
+  case (maybeKeyboardGrabbedGSVS, maybeLookAtGSVS) of
+    (Just (gsvs, dist), _) -> do setInFrontOfUser gsvs dist
+                                 orientSpriteTowardsGaze gsvs
+    (Nothing, Just (gsvs, surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)))) -> do -- putStrLn $ "Looking at sprite: " ++ (show sx) ++ ", " ++ (show sy)
+                                                                                        orientSpriteTowardsGaze gsvs
+                                                                                        focus gsvs
+    _ -> return ()
+
+  return ()
+
+appLaunch :: GodotSimulaServer -> String -> IO ()
+appLaunch gss appStr = do
+  -- We shouldn't need to set WAYLAND_DISPLAY, but do need to set Xwayland DISPLAY
+  maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
+  case maybeXwaylandDisplay of
+    Nothing -> putStrLn "No DISPLAY found!"
+    (Just xwaylandDisplay) -> do createProcess (shell appStr) { env = Just [("DISPLAY", xwaylandDisplay)] }
+                                 return ()
+  return ()
+
+terminalLaunch :: GodotSimulaServer -> IO ()
+terminalLaunch gss = appLaunch gss "xfce4-terminal"
+
+-- Master routing function for keyboard-mouse-window manipulation. Guaranteed to
+-- only be called if Simula's MOD key is pressed (currently set to `SUPER_L` or
+-- `SUPER_R`) TODO: Feed this through a Simula config file to allow user shortcut
+-- customization.
+_on_simula_shortcut :: GodotSimulaServer -> [GodotVariant] -> IO ()
+_on_simula_shortcut gss [godotScanCodeGVar, isPressedGVar] = do
+  maybeHMDLookAtSprite <- getHMDLookAtSprite gss
+
+  godotScanCode <- fromGodotVariant godotScanCodeGVar :: IO Int -- FULL scancode, including SUPER keys
+  isPressed <- fromGodotVariant isPressedGVar :: IO Bool
+  let keycode = godotScanCode .&. G.KEY_CODE_MASK
+
+  case (maybeHMDLookAtSprite, keycode, isPressed) of
+      (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_APOSTROPHE, True) -> do
+        updateCursorStateAbsolute gsvs sx sy
+        sendWlrootsMotion gsvs
+      (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_SEMICOLON, True) -> do
+        updateCursorStateAbsolute gsvs sx sy
+        sendWlrootsMotion gsvs
+      (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_ENTER, True) -> do
+        updateCursorStateAbsolute gsvs sx sy
+        sendWlrootsMotion gsvs
+        processClickEvent' gsvs (Button True 1) coords -- BUTTON_LEFT = 1
+      (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_ENTER, False) -> do
+        processClickEvent' gsvs (Button False 1) coords -- BUTTON_LEFT = 1
+      (_, G.KEY_SUPER_L, True) -> do
+        terminalLaunch gss
+      (_, G.KEY_SUPER_R, True) -> do
+        terminalLaunch gss
+      (_, G.KEY_SLASH, True) -> do
+        terminalLaunch gss
+      (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_ALT, True) -> do
+        keyboardGrabInitiate gsvs
+      (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_ALT, False) -> do
+        keyboardGrabLetGo gsvs
+      (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_0, True) -> do
+        orientSpriteTowardsGaze gsvs
+      (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_BRACKETLEFT, True) -> do
+        moveSpriteAlongObjectZAxis gsvs (-0.1)
+      (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_BRACKETRIGHT, True) -> do
+        moveSpriteAlongObjectZAxis gsvs 0.1
+      (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_COMMA, True) -> do
+        moveSpriteAlongObjectZAxis gsvs (-0.1)
+      (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_PERIOD, True) -> do
+        moveSpriteAlongObjectZAxis gsvs 0.1
+      (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_BACKSPACE, True) -> do
+        simulaView <- readTVarIO (gsvs ^. gsvsView)
+        let eitherSurface = (simulaView ^. svWlrEitherSurface)
+        case eitherSurface of
+          (Left wlrXdgSurface) -> return ()
+          (Right wlrXWaylandSurface) -> G.terminate wlrXWaylandSurface
+      _ -> putStrLn "Unrecognized shortcut!"

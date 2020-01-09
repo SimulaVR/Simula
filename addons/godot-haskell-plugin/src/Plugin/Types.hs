@@ -81,6 +81,8 @@ unfoldrM f b = f b >>= \case
   Just (a, b') -> return . (a :) =<< unfoldrM f b'
   _            -> return []
 
+data SurfaceLocalCoordinates    = SurfaceLocalCoordinates (Float, Float)
+data SubSurfaceLocalCoordinates = SubSurfaceLocalCoordinates (Float, Float)
 
 -- This should ideally be `[Variant 'HaskellTy]`, but that would
 -- require `AsVariant` to handle both `LibType`s.
@@ -104,41 +106,60 @@ instance GodotFFI GodotArray [GodotVariant] where
 -- We use TVar excessively since these datatypes must be retrieved from the
 -- scene graph (requiring IO)
 data GodotSimulaServer = GodotSimulaServer
-  { _gssObj                  :: GodotObject
-  , _gssWaylandDisplay       :: TVar GodotWaylandDisplay
+  { _gssObj                   :: GodotObject
+  , _gssWaylandDisplay        :: TVar GodotWaylandDisplay
   , _gssWlrBackend            :: TVar GodotWlrBackend
-  , _gssWlrOutput            :: TVar GodotWlrOutput
-  , _gssWlrCompositor        :: TVar GodotWlrCompositor
-  , _gssWlrXdgShell          :: TVar GodotWlrXdgShell
-  , _gssWlrXWayland          :: TVar GodotWlrXWayland
-  , _gssWlrSeat              :: TVar GodotWlrSeat -- Probably make this a TVar since you have to find the node for this in the scene graph.
-  , _gssWlrDataDeviceManager :: TVar GodotWlrDataDeviceManager
-  , _gssWlrKeyboard          :: TVar GodotWlrKeyboard -- "
-  , _gssViews                :: TVar (M.Map SimulaView GodotSimulaViewSprite)
+  , _gssWlrOutput             :: TVar GodotWlrOutput
+  , _gssWlrCompositor         :: TVar GodotWlrCompositor
+  , _gssWlrXdgShell           :: TVar GodotWlrXdgShell
+  , _gssWlrXWayland           :: TVar GodotWlrXWayland
+  , _gssWlrSeat               :: TVar GodotWlrSeat -- Probably make this a TVar since you have to find the node for this in the scene graph.
+  , _gssWlrDataDeviceManager  :: TVar GodotWlrDataDeviceManager
+  , _gssWlrKeyboard           :: TVar GodotWlrKeyboard -- "
+  , _gssViews                 :: TVar (M.Map SimulaView GodotSimulaViewSprite)
   , _gssKeyboardFocusedSprite :: TVar (Maybe GodotSimulaViewSprite) -- <- Here
-  , _gssVisualServer         :: TVar GodotVisualServer
+  , _gssVisualServer          :: TVar GodotVisualServer
+  , _gssActiveCursorGSVS      :: TVar (Maybe GodotSimulaViewSprite)
+  , _gssCursorTexture         :: TVar (Maybe GodotTexture)
+  , _gssHMDRayCast            :: TVar (GodotRayCast)
+  , _gssKeyboardGrabbedSprite :: TVar (Maybe (GodotSimulaViewSprite, Float)) -- We encode both the gsvs and its original distance from the user
+  , _gssXWaylandDisplay       :: TVar (Maybe String) -- For appLaunch
   }
+
+instance HasBaseClass GodotSimulaServer where
+  type BaseClass GodotSimulaServer = GodotSpatial
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
 
 -- Wish there was a more elegant way to jam values into these fields at classInit
 data GodotSimulaViewSprite = GodotSimulaViewSprite
-  { _gsvsObj            :: GodotObject
-  , _gsvsServer         :: TVar GodotSimulaServer    -- Contains the WlrSeat
-  , _gsvsShouldMove     :: TVar Bool
-  , _gsvsSprite         :: TVar GodotSprite3D
-  , _gsvsShape          :: TVar GodotBoxShape
-  , _gsvsView           :: TVar SimulaView -- Contains Wlr data
-  , _gsvsSimulaCanvasItem     :: TVar GodotSimulaCanvasItem
+  { _gsvsObj               :: GodotObject
+  , _gsvsServer            :: TVar GodotSimulaServer    -- Contains the WlrSeat
+  , _gsvsShouldMove        :: TVar Bool
+  , _gsvsSprite            :: TVar GodotSprite3D
+  , _gsvsShape             :: TVar GodotBoxShape
+  , _gsvsView              :: TVar SimulaView -- Contains Wlr data
+  , _gsvsSimulaCanvasItem  :: TVar GodotSimulaCanvasItem
+  , _gsvsCursorCoordinates :: TVar SurfaceLocalCoordinates
   -- , _gsvsMapped         :: TVar Bool
-  -- , gsvsGeometry     :: GodotRect2
-  -- , gsvsWlrSeat      :: GodotWlrSeat
-  -- , gsvsInputMode    :: TVar InteractiveMode
+  -- , gsvsGeometry        :: GodotRect2
+  -- , gsvsWlrSeat         :: GodotWlrSeat
+  -- , gsvsInputMode       :: TVar InteractiveMode
   }
+
+instance HasBaseClass GodotSimulaViewSprite where
+  type BaseClass GodotSimulaViewSprite = GodotRigidBody
+  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _) = GodotRigidBody obj
+
 
 data GodotSimulaCanvasItem = GodotSimulaCanvasItem {
      _gsciObject :: GodotObject -- Meant to extend/be casted as GodotCanvasItem
    , _gsciGSVS :: TVar GodotSimulaViewSprite
    , _gsciViewport :: TVar GodotViewport
  }
+
+instance HasBaseClass GodotSimulaCanvasItem where
+  type BaseClass GodotSimulaCanvasItem = GodotNode2D
+  super (GodotSimulaCanvasItem obj _ _ ) = GodotNode2D obj
 
 data SimulaView = SimulaView
   { _svServer                  :: GodotSimulaServer -- Can obtain WlrSeat
@@ -170,9 +191,6 @@ makeLenses ''GodotSimulaCanvasItem
 makeLenses ''SimulaView
 makeLenses ''GodotSimulaServer
 makeLenses ''GodotPancakeCamera
-
-data SurfaceLocalCoordinates    = SurfaceLocalCoordinates (Float, Float)
-data SubSurfaceLocalCoordinates = SubSurfaceLocalCoordinates (Float, Float)
 
 -- Godot helper functions (should eventually be exported to godot-extra).
 
@@ -467,3 +485,42 @@ withGodot allocatedType' destr action  = do
 destroyMaybe :: GodotReference -> IO ()
 destroyMaybe ref =
   whenM (G.unreference @GodotReference ref) (Api.godot_object_destroy $ safeCast ref)
+
+getSurfaceLocalCoordinates :: GodotSimulaViewSprite -> GodotVector3 -> IO (SurfaceLocalCoordinates)
+getSurfaceLocalCoordinates gsvs clickPos = do
+  lpos <- G.to_local gsvs clickPos >>= fromLowLevel
+  sprite <- atomically $ readTVar (_gsvsSprite gsvs)
+  aabb <- G.get_aabb sprite
+  size <- godot_aabb_get_size aabb >>= fromLowLevel
+  let topleftPos =
+        V2 (size ^. _x / 2 - lpos ^. _x) (size ^. _y / 2 - lpos ^. _y)
+  let scaledPos = liftI2 (/) topleftPos (size ^. _xy)
+  rect <- G.get_item_rect sprite
+  recSize <- godot_rect2_get_size rect >>= fromLowLevel
+  let coords = liftI2 (*) recSize scaledPos
+  -- coords = surface coordinates in pixel with (0,0) at top left
+  let sx = fromIntegral $ truncate (1 * coords ^. _x) -- 256 was old factor
+      sy = fromIntegral $ truncate (1 * coords ^. _y) -- 256 was old factor
+  clickPos' <- fromLowLevel clickPos
+  -- putStrLn $ "getSurfaceLocalCoordinates clickPos: " ++ (show clickPos')
+  -- putStrLn $ "getSurfaceLocalCoordinates (sx, sy):" ++ "(" ++ (show sx) ++ ", " ++ (show sy) ++ ")"
+  return (SurfaceLocalCoordinates (sx, sy))
+
+getARVRCameraOrPancakeCameraTransform :: GodotSimulaServer -> IO GodotTransform
+getARVRCameraOrPancakeCameraTransform gss = do
+  let nodePathStr = "/root/Root/VRViewport/ARVROrigin/ARVRCamera"
+  nodePath <- (toLowLevel (pack nodePathStr)) :: IO GodotNodePath
+  hasNode  <- G.has_node gss (nodePath :: GodotNodePath)
+  transform <- case hasNode of
+        False -> do camera <- getViewportCamera gss
+                    G.get_camera_transform camera
+        True ->  do gssNode  <- G.get_node ((safeCast gss) :: GodotNode) nodePath
+                    let arvrCamera = (coerce gssNode) :: GodotARVRCamera -- HACK: We use `coerce` instead of something more proper
+                    G.get_global_transform (arvrCamera)
+  Api.godot_node_path_destroy nodePath
+  return transform
+  where getViewportCamera :: GodotSimulaServer -> IO GodotCamera
+        getViewportCamera gss = do
+          viewport <- G.get_viewport gss :: IO GodotViewport
+          camera <- G.get_camera viewport :: IO GodotCamera
+          return camera

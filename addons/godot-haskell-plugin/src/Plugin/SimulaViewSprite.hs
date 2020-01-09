@@ -23,11 +23,12 @@ import Unsafe.Coerce
 import           Linear
 import           Plugin.Imports
 
+import           Godot.Core.GodotVisualServer as G
 import           Godot.Core.GodotGlobalConstants
-import qualified Godot.Core.GodotRigidBody   as RigidBody
+import qualified Godot.Core.GodotRigidBody    as RigidBody
 import           Godot.Gdnative.Internal.Api
-import qualified Godot.Methods               as G
-import qualified Godot.Gdnative.Internal.Api as Api
+import qualified Godot.Methods                as G
+import qualified Godot.Gdnative.Internal.Api  as Api
 import           Godot.Nativescript
 
 import Plugin.SimulaCanvasItem
@@ -64,6 +65,7 @@ instance NativeScript GodotSimulaViewSprite where
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
+                      <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       -- <*> atomically (newTVar False)
   -- classExtends = "RigidBody"
   classMethods =
@@ -80,10 +82,6 @@ instance NativeScript GodotSimulaViewSprite where
   classSignals = [ signal "map" [("gsvs", GodotVariantTypeObject)]
                  , signal "unmap" [("gsvs", GodotVariantTypeObject)]
                  ]
-
-instance HasBaseClass GodotSimulaViewSprite where
-  type BaseClass GodotSimulaViewSprite = GodotRigidBody
-  super (GodotSimulaViewSprite obj _ _ _ _ _ _) = GodotRigidBody obj
 
 -- | Updates the GodotSimulaViewSprite state (including updating its texture).
 -- | Intended to be called every frame.
@@ -166,7 +164,7 @@ updateSimulaViewSprite gsvs = do
           visualServer <- getSingleton GodotVisualServer "VisualServer"
           -- Enable everything but mipmapping (since this causes old textures get to interpolated
           -- with updated textures when far enough from the user).
-          G.texture_set_flags visualServer rid 6
+          G.texture_set_flags visualServer rid G.TEXTURE_FLAGS_DEFAULT
           -- G.texture_set_flags visualServer rid_canvas 6
           -- G.texture_set_flags visualServer rid_canvas_item 6
           G.set_texture sprite3D parentWlrTexture
@@ -293,6 +291,7 @@ newGodotSimulaViewSprite gss simulaView = do
   atomically $ writeTVar (_gsvsSprite    gsvs) godotSprite3D -- :: TVar GodotSprite3D
   atomically $ writeTVar (_gsvsShape     gsvs) godotBoxShape -- :: TVar GodotBoxShape
   atomically $ writeTVar (_gsvsView      gsvs) simulaView    -- :: TVar SimulaView
+  atomically $ writeTVar (_gsvsCursorCoordinates gsvs) (SurfaceLocalCoordinates (0,0))
 
   -- Initialize and load render target into _gsvsViewport field
     -- let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
@@ -312,6 +311,7 @@ focus gsvs = do
   let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
 
   atomically $ writeTVar (gss ^. gssKeyboardFocusedSprite) (Just gsvs)
+  atomically $ writeTVar (gss ^. gssActiveCursorGSVS) (Just gsvs)
 
   case wlrEitherSurface of
     Left wlrXdgSurface -> do wlrSurface  <- G.get_wlr_surface wlrXdgSurface
@@ -323,29 +323,36 @@ focus gsvs = do
                              pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
                              pointerNotifyFrame wlrSeat
     Right wlrXWaylandSurface -> do wlrSurface  <- G.get_wlr_surface wlrXWaylandSurface
-                                   G.reference wlrSurface
-                                   -- isGodotTypeNull wlrSurface
-                                   G.set_activated wlrXWaylandSurface True
-                                   G.keyboard_notify_enter wlrSeat wlrSurface
-                                   pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
-                                   pointerNotifyFrame wlrSeat
+                                   case (((unsafeCoerce wlrXWaylandSurface) == nullPtr), ((unsafeCoerce wlrSurface) == nullPtr)) of
+                                     (False, False) -> do G.reference wlrSurface
+                                                          -- isGodotTypeNull wlrSurface
+                                                          G.set_activated wlrXWaylandSurface True
+                                                          G.keyboard_notify_enter wlrSeat wlrSurface
+                                                          pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
+                                                          pointerNotifyFrame wlrSeat
+                                     _ -> putStrLn $ "Unable to focus on sprite!"
 
 -- | This function isn't called unless a surface is being pointed at (by VR
 -- | controllers or a mouse in pancake mode).
--- |
--- | TODO: Change this horifically named function.
 processClickEvent :: GodotSimulaViewSprite
                   -> InputEventType
                   -> GodotVector3
                   -> IO ()
 processClickEvent gsvs evt clickPos = do
+  surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)) <- getSurfaceLocalCoordinates gsvs clickPos
+  processClickEvent' gsvs evt surfaceLocalCoords
+
+processClickEvent' :: GodotSimulaViewSprite
+                  -> InputEventType
+                  -> SurfaceLocalCoordinates
+                  -> IO ()
+processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)) = do
   -- putStrLn "processClickEvent"
   -- Get state
   gss        <- readTVarIO (gsvs ^. gsvsServer)
   wlrSeat    <- readTVarIO (gss ^. gssWlrSeat)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
 
-  surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)) <- getSurfaceLocalCoordinates clickPos
   let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
   (godotWlrSurface, subSurfaceLocalCoords@(SubSurfaceLocalCoordinates (ssx, ssy))) <-
     case wlrEitherSurface of
@@ -362,77 +369,57 @@ processClickEvent gsvs evt clickPos = do
 
   pointerNotifyFrame wlrSeat
 
-  where
-    getSurfaceLocalCoordinates :: GodotVector3 -> IO (SurfaceLocalCoordinates)
-    getSurfaceLocalCoordinates clickPos = do
-      lpos <- G.to_local gsvs clickPos >>= fromLowLevel
-      sprite <- atomically $ readTVar (_gsvsSprite gsvs)
-      aabb <- G.get_aabb sprite
-      size <- godot_aabb_get_size aabb >>= fromLowLevel
-      let topleftPos =
-            V2 (size ^. _x / 2 - lpos ^. _x) (size ^. _y / 2 - lpos ^. _y)
-      let scaledPos = liftI2 (/) topleftPos (size ^. _xy)
-      rect <- G.get_item_rect sprite
-      recSize <- godot_rect2_get_size rect >>= fromLowLevel
-      let coords = liftI2 (*) recSize scaledPos
-      -- coords = surface coordinates in pixel with (0,0) at top left
-      let sx = fromIntegral $ truncate (1 * coords ^. _x) -- 256 was old factor
-          sy = fromIntegral $ truncate (1 * coords ^. _y) -- 256 was old factor
-      clickPos' <- fromLowLevel clickPos
-      -- putStrLn $ "getSurfaceLocalCoordinates clickPos: " ++ (show clickPos')
-      -- putStrLn $ "getSurfaceLocalCoordinates (sx, sy):" ++ "(" ++ (show sx) ++ ", " ++ (show sy) ++ ")"
-      return (SurfaceLocalCoordinates (sx, sy))
 
-    -- | Takes a GodotWlrXdgSurface and returns the subsurface at point (which is likely the surface itself, or one of its popups).
-    -- | TODO: This function just returns parent surface/coords. Fix!
-    -- | TODO: Use _xdg_surface_at*
-    getXdgSubsurfaceAndCoords :: GodotWlrXdgSurface -> SurfaceLocalCoordinates -> IO (GodotWlrSurface, SubSurfaceLocalCoordinates)
-    getXdgSubsurfaceAndCoords wlrXdgSurface (SurfaceLocalCoordinates (sx, sy)) = do
-      -- BROKEN since G.surface_at is broken (which causes G.get_surface to be broken).
-      -- wlrSurfaceAtResult   <- G.surface_at  wlrXdgSurface sx sy -- Not NULL itself, but the wlr_surface within this data structure is NULL due to ~wlr_xdg_surface_surface_at(wlr_xdg_surface, ..)~ being NULL (but not because wlr_xdg_surface is NULL).
-      -- wlrSurfaceSubSurface <- G.get_surface wlrSurfaceAtResult
-      -- ssx                  <- G.get_sub_x wlrSurfaceAtResult
-      -- ssy                  <- G.get_sub_y wlrSurfaceAtResult
-      -- let ssCoordinates    = SubSurfaceLocalCoordinates (ssx, ssy)
-      -- return (wlrSurfaceSubSurface, ssCoordinates)
-      wlrSurfaceParent <- G.get_wlr_surface wlrXdgSurface            -- hack!
-      G.reference wlrSurfaceParent
-      return (wlrSurfaceParent, SubSurfaceLocalCoordinates (sx, sy)) -- hack!
+-- | Takes a GodotWlrXdgSurface and returns the subsurface at point (which is likely the surface itself, or one of its popups).
+-- | TODO: This function just returns parent surface/coords. Fix!
+-- | TODO: Use _xdg_surface_at*
+getXdgSubsurfaceAndCoords :: GodotWlrXdgSurface -> SurfaceLocalCoordinates -> IO (GodotWlrSurface, SubSurfaceLocalCoordinates)
+getXdgSubsurfaceAndCoords wlrXdgSurface (SurfaceLocalCoordinates (sx, sy)) = do
+  -- BROKEN since G.surface_at is broken (which causes G.get_surface to be broken).
+  -- wlrSurfaceAtResult   <- G.surface_at  wlrXdgSurface sx sy -- Not NULL itself, but the wlr_surface within this data structure is NULL due to ~wlr_xdg_surface_surface_at(wlr_xdg_surface, ..)~ being NULL (but not because wlr_xdg_surface is NULL).
+  -- wlrSurfaceSubSurface <- G.get_surface wlrSurfaceAtResult
+  -- ssx                  <- G.get_sub_x wlrSurfaceAtResult
+  -- ssy                  <- G.get_sub_y wlrSurfaceAtResult
+  -- let ssCoordinates    = SubSurfaceLocalCoordinates (ssx, ssy)
+  -- return (wlrSurfaceSubSurface, ssCoordinates)
+  wlrSurfaceParent <- G.get_wlr_surface wlrXdgSurface            -- hack!
+  G.reference wlrSurfaceParent
+  return (wlrSurfaceParent, SubSurfaceLocalCoordinates (sx, sy)) -- hack!
 
-    getXWaylandSubsurfaceAndCoords :: GodotWlrXWaylandSurface -> SurfaceLocalCoordinates -> IO (GodotWlrSurface, SubSurfaceLocalCoordinates)
-    getXWaylandSubsurfaceAndCoords wlrXWaylandSurface (SurfaceLocalCoordinates (sx, sy)) = do
-      -- wlrSurfaceAtResult <- G.surface_at wlrXWaylandSurface sx sy
-      ret@(wlrSurface', SubSurfaceLocalCoordinates (subX, subY)) <- withGodot
-        (G.surface_at wlrXWaylandSurface sx sy)
-        (destroyMaybe . safeCast)
-        (\wlrSurfaceAtResult -> do G.reference wlrSurfaceAtResult
-                                   subX <- G.get_sub_x wlrSurfaceAtResult
-                                   subY <- G.get_sub_y wlrSurfaceAtResult
-                                   wlrSurface' <- G.get_surface wlrSurfaceAtResult
-                                   return (wlrSurface', SubSurfaceLocalCoordinates (subX, subY)))
-      return ret
+getXWaylandSubsurfaceAndCoords :: GodotWlrXWaylandSurface -> SurfaceLocalCoordinates -> IO (GodotWlrSurface, SubSurfaceLocalCoordinates)
+getXWaylandSubsurfaceAndCoords wlrXWaylandSurface (SurfaceLocalCoordinates (sx, sy)) = do
+  -- wlrSurfaceAtResult <- G.surface_at wlrXWaylandSurface sx sy
+  ret@(wlrSurface', SubSurfaceLocalCoordinates (subX, subY)) <- withGodot
+    (G.surface_at wlrXWaylandSurface sx sy)
+    (destroyMaybe . safeCast)
+    (\wlrSurfaceAtResult -> do G.reference wlrSurfaceAtResult
+                               subX <- G.get_sub_x wlrSurfaceAtResult
+                               subY <- G.get_sub_y wlrSurfaceAtResult
+                               wlrSurface' <- G.get_surface wlrSurfaceAtResult
+                               return (wlrSurface', SubSurfaceLocalCoordinates (subX, subY)))
+  return ret
 
-    keyboardNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> IO ()
-    keyboardNotifyEnter wlrSeat wlrSurface = do
-      G.keyboard_notify_enter wlrSeat wlrSurface
+keyboardNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> IO ()
+keyboardNotifyEnter wlrSeat wlrSurface = do
+  G.keyboard_notify_enter wlrSeat wlrSurface
 
-    -- | This function conspiciously lacks a GodotWlrSurface argument, but doesn't
-    -- | need one since the GodotWlrSeat keeps internal track of what the currently
-    -- | active surface is.
-    pointerNotifyMotion :: GodotWlrSeat -> SubSurfaceLocalCoordinates -> IO ()
-    pointerNotifyMotion wlrSeat (SubSurfaceLocalCoordinates (ssx, ssy)) = do
-      G.pointer_notify_motion wlrSeat ssx ssy
-      -- putStrLn $ "G.point_notify_motion: " ++ "(" ++ (show ssx) ++ ", " ++ (show ssy) ++ ")"
+-- | This function conspiciously lacks a GodotWlrSurface argument, but doesn't
+-- | need one since the GodotWlrSeat keeps internal track of what the currently
+-- | active surface is.
+pointerNotifyMotion :: GodotWlrSeat -> SubSurfaceLocalCoordinates -> IO ()
+pointerNotifyMotion wlrSeat (SubSurfaceLocalCoordinates (ssx, ssy)) = do
+  G.pointer_notify_motion wlrSeat ssx ssy
+  -- putStrLn $ "G.point_notify_motion: " ++ "(" ++ (show ssx) ++ ", " ++ (show ssy) ++ ")"
 
-    pointerNotifyButton :: GodotWlrSeat -> InputEventType -> IO ()
-    pointerNotifyButton wlrSeat inputEventType = do
-      case inputEventType of
-          Motion -> return ()
-          Button pressed buttonIndex -> pointerNotifyButton' pressed buttonIndex
-      where pointerNotifyButton' pressed buttonIndex = do
-              G.pointer_notify_button wlrSeat (fromIntegral buttonIndex) pressed
-              -- putStrLn $ "G.pointer_notify_button: pressed/buttonIndex" ++ (show pressed) ++ "/" ++ (show buttonIndex)
-              return ()
+pointerNotifyButton :: GodotWlrSeat -> InputEventType -> IO ()
+pointerNotifyButton wlrSeat inputEventType = do
+  case inputEventType of
+      Motion -> return ()
+      Button pressed buttonIndex -> pointerNotifyButton' pressed buttonIndex
+  where pointerNotifyButton' pressed buttonIndex = do
+          G.pointer_notify_button wlrSeat (fromIntegral buttonIndex) pressed
+          -- putStrLn $ "G.pointer_notify_button: pressed/buttonIndex" ++ (show pressed) ++ "/" ++ (show buttonIndex)
+          return ()
 
 -- | Sends a frame event to the surface with pointer focus (apparently
 -- | useful in particular for axis events); unclear if this is needed in VR but we
@@ -461,9 +448,19 @@ _handle_map self args = do
 
 _handle_unmap :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 _handle_unmap self args = do
-  -- putStrLn "_handle_unmap"
   simulaView <- readTVarIO (self ^. gsvsView)
   atomically $ writeTVar (simulaView ^. svMapped) False
+
+-- Ensure that we de-focus the gsvs if it is active
+  gss <- readTVarIO (self ^. gsvsServer)
+  maybeGSVSFocused <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
+  case maybeGSVSFocused of
+    Nothing -> return ()
+    (Just gsvsFocused) -> do
+      simulaViewFocused <- readTVarIO (gsvsFocused ^. gsvsView)
+      if (simulaViewFocused == simulaView) then (atomically $ writeTVar (gss ^. gssKeyboardFocusedSprite) Nothing)
+                                          else (return ())
+
   G.set_process self False
   emitSignal self "unmap" ([self] :: [GodotSimulaViewSprite])
   return ()
@@ -488,15 +485,6 @@ _handle_destroy gsvs [gsvsGV] = do
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
   gss <- readTVarIO (gsvs ^. gsvsServer)
 
-  -- Ensure that we de-focus the gsvs if it is active
-  maybeGSVSFocused <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
-  case maybeGSVSFocused of
-    Nothing -> return ()
-    (Just gsvsFocused) -> do
-      simulaViewFocused <- readTVarIO (gsvsFocused ^. gsvsView)
-      if (simulaViewFocused == simulaView) then (atomically $ writeTVar (gss ^. gssKeyboardFocusedSprite) Nothing)
-                                          else (return ())
-
   -- Destroy
   G.queue_free gsvs -- Queue the `gsvs` for destruction
   G.set_process gsvs False -- Remove the `simulaView ↦ gsvs` mapping from the gss
@@ -510,3 +498,59 @@ _handle_destroy gsvs [gsvsGV] = do
       case eitherSurface of
         (Left xdgSurface) -> destroyMaybe (safeCast xdgSurface)
         (Right xwaylandSurface) -> destroyMaybe (safeCast xwaylandSurface)
+
+orientSpriteTowardsGaze :: GodotSimulaViewSprite -> IO ()
+orientSpriteTowardsGaze gsvs = do 
+  gss <- readTVarIO (gsvs ^. gsvsServer)
+  upV3 <- toLowLevel (V3 0 1 0) :: IO GodotVector3
+  rotationAxisY <- toLowLevel (V3 0 1 0) :: IO GodotVector3
+  targetV3 <- getARVRCameraOrPancakeCameraTransform gss >>= Api.godot_transform_get_origin -- void look_at ( Vector3 target, Vector3 up )
+  G.look_at gsvs targetV3 upV3                      -- The negative z-axis of the gsvs looks at HMD
+  -- G.rotate_object_local gsvs rotationAxisY 3.14159  -- The positive z-axis of the gsvs looks at HMD
+
+  
+-- | Push the gsvs by `dist` units along its object-local z-axis. Negative values of `dist`
+-- | push the gsvs away from the user; positive values of `dist` push the gsvs
+-- | towards the user.
+moveSpriteAlongObjectZAxis :: GodotSimulaViewSprite -> Float -> IO ()
+moveSpriteAlongObjectZAxis gsvs dist = do
+  orientSpriteTowardsGaze gsvs
+  pushBackVector <- toLowLevel (V3 0 0 dist) :: IO GodotVector3 -- For some reason we also have to shift the vector 0.5 units to the right
+  G.translate_object_local gsvs pushBackVector
+  return ()
+
+-- Sets gssKeyboardGrabbedSprite to `Just (gsvs, dist)`
+keyboardGrabInitiate :: GodotSimulaViewSprite -> IO ()
+keyboardGrabInitiate gsvs = do
+  gss <- readTVarIO $ (gsvs ^. gsvsServer)
+
+  -- Compute dist
+  orientSpriteTowardsGaze gsvs
+  posGSVS <- (G.get_global_transform gsvs) >>= Api.godot_transform_get_origin
+  hmdTransform <- getARVRCameraOrPancakeCameraTransform gss
+  posHMD  <- Api.godot_transform_get_origin hmdTransform
+  dist <- realToFrac <$> Api.godot_vector3_distance_to posGSVS posHMD
+  -- Load state
+  atomically $ writeTVar (gss ^. gssKeyboardGrabbedSprite) (Just (gsvs, (-dist)))
+
+  return ()
+
+-- Sets gssKeyboardGrabbedSprite to `Nothing`
+keyboardGrabLetGo :: GodotSimulaViewSprite -> IO ()
+keyboardGrabLetGo gsvs = do
+  gss <- readTVarIO $ (gsvs ^. gsvsServer)
+
+  -- Release state
+  atomically $ writeTVar (gss ^. gssKeyboardGrabbedSprite) Nothing
+  return ()
+
+
+setInFrontOfUser :: GodotSimulaViewSprite -> Float -> IO ()
+setInFrontOfUser gsvs zAxisDist = do
+  gss <- readTVarIO (gsvs ^. gsvsServer)
+  rotationAxisY <- toLowLevel (V3 0 1 0) :: IO GodotVector3
+  pushBackVector <- toLowLevel (V3 0 0 zAxisDist) :: IO GodotVector3 -- For some reason we also have to shift the vector 0.5 units to the right
+  hmdGlobalTransform <- getARVRCameraOrPancakeCameraTransform gss
+  G.set_global_transform gsvs hmdGlobalTransform
+  G.translate_object_local gsvs pushBackVector
+  G.rotate_object_local gsvs rotationAxisY 3.14159 -- 180 degrees in radians

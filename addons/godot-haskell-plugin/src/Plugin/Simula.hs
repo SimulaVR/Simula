@@ -17,7 +17,8 @@ import           Plugin.VR
 import           Plugin.Types
 import           Plugin.PancakeCamera
 
-import           Godot.Core.GodotGlobalConstants
+import           Godot.Core.GodotVisualServer as G
+import           Godot.Core.GodotGlobalConstants as G
 import           Godot.Nativescript
 import qualified Godot.Gdnative.Internal.Api   as Api
 import qualified Godot.Methods                 as G
@@ -117,8 +118,7 @@ ready self _ = do
     pngUrl <- toLowLevel (pack urlStr) :: IO GodotString
     exitCode <- G.load godotImageTexture pngUrl -- load :: GodotImageTexture -> GodotString -> IO Int
     -- Load image into texture
-    G.create_from_image godotImageTexture godotImage 7 -- uses FLAGS_DEFAULT = 7
-
+    G.create_from_image godotImageTexture godotImage G.TEXTURE_FLAGS_DEFAULT
     return (safeCast godotImageTexture) -- NOTE: This [probably] leaks godotImage?
 
   -- Another helper function for black texture debugging (that uses
@@ -211,8 +211,8 @@ onButton self gsc button pressed = do
   gst = _sGrabState self
   onSpriteInput rc sprite =
     G.get_collision_point rc >>= case button of
-      OVR_Button_Trigger -> processClickEvent sprite (Button pressed BUTTON_LEFT)
-      OVR_Button_AppMenu -> processClickEvent sprite (Button pressed BUTTON_RIGHT)
+      OVR_Button_Trigger -> processClickEvent sprite (Button pressed G.BUTTON_LEFT)
+      OVR_Button_AppMenu -> processClickEvent sprite (Button pressed G.BUTTON_RIGHT)
       OVR_Button_Grip    -> const $
         readTVarIO gst
           >>= processGrabEvent gsc (Just sprite) pressed

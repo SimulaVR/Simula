@@ -341,3 +341,7 @@ ubuntuAltTabDisable() {
   gsettings set org.gnome.desktop.wm.keybindings switch-applications "['']"
   gsettings set org.gnome.desktop.wm.keybindings switch-applications-backward "['']"
 }
+
+disableUbuntuSuperKey() {
+  gsettings set org.gnome.mutter overlay-key ''
+}

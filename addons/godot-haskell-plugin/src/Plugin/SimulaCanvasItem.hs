@@ -28,6 +28,8 @@ import           Godot.Nativescript
 import qualified Godot.Methods               as G
 import qualified Godot.Gdnative.Internal.Api as Api
 
+import Godot.Core.GodotVisualServer as G
+
 import Plugin.Types
 import Data.Maybe
 import Data.Either
@@ -58,10 +60,6 @@ instance NativeScript GodotSimulaCanvasItem where
       func NoRPC "_process" Plugin.SimulaCanvasItem._process
     , func NoRPC "_draw" Plugin.SimulaCanvasItem._draw
     ]
-
-instance HasBaseClass GodotSimulaCanvasItem where
-  type BaseClass GodotSimulaCanvasItem = GodotNode2D
-  super (GodotSimulaCanvasItem obj _ _ ) = GodotNode2D obj
 
 newGodotSimulaCanvasItem :: GodotSimulaViewSprite -> IO (GodotSimulaCanvasItem)
 newGodotSimulaCanvasItem gsvs = do
@@ -105,7 +103,7 @@ useSimulaCanvasItemToDrawSubsurfaces gsvs  = do
 
   -- rid <- G.get_rid viewportTexture
   -- visualServer <- getSingleton GodotVisualServer "VisualServer"
-  -- G.texture_set_flags visualServer rid 7 -- Set to 6 if you see gradient issues
+  -- G.texture_set_flags visualServer rid G.TEXTURE_FLAGS_DEFAULT -- Set to 6 if you see gradient issues
   -- improveTextureQuality gsvs viewportTexture
 
   G.set_texture sprite3D (safeCast viewportTexture)
@@ -124,10 +122,12 @@ improveTextureQuality gsvs texture = do
   if ((unsafeCoerce texture) /= nullPtr)
     then do visualServer <- getVisualServer gsvs
             rid <- G.get_rid texture
+            G.texture_set_flags visualServer rid G.TEXTURE_FLAGS_DEFAULT
+            return ()
+
             -- rid_canvas <- G.get_canvas self
             -- rid_canvas_item <- G.get_canvas self
             -- visualServer <- getSingleton GodotVisualServer "VisualServer" :: IO GodotVisualServer
-            G.texture_set_flags visualServer rid 7
             -- G.texture_set_flags visualServer rid_canvas 6
             -- G.texture_set_flags visualServer rid_canvas_item 6
   else return ()
@@ -166,6 +166,7 @@ _draw self _ = do
                     improveTextureQuality gsvs parentWlrTexture
                     G.draw_texture gsci parentWlrTexture renderPosition godotColor (coerce nullPtr)
                     mapM (drawChild gsvs) children
+                    drawCursor gsvs
                     return ()
                     -- G.draw_texture gsci textureToDraw renderPosition2 godotColor (coerce nullPtr) -- nullTexture
   return ()
@@ -191,6 +192,16 @@ _draw self _ = do
                              godotColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1) :: IO GodotColor
                              G.draw_texture self subsurfaceTexture subsurfaceRenderPosition godotColor (coerce nullPtr)
            return ()
+    drawCursor :: GodotSimulaViewSprite -> IO ()
+    drawCursor gsvs = do
+      activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+      gss <- readTVarIO (gsvs ^. gsvsServer)
+      maybeCursorTexture <- readTVarIO (gss ^. gssCursorTexture)
+      case maybeCursorTexture of
+        Nothing -> putStrLn "No cursor texture!"
+        Just cursorTexture -> do cursorRenderPosition <- toLowLevel (V2 sx sy) :: IO GodotVector2
+                                 godotColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1) :: IO GodotColor
+                                 G.draw_texture self cursorTexture cursorRenderPosition godotColor (coerce nullPtr)
 
 initializeRenderTarget :: GodotSimulaViewSprite -> IO (GodotViewport)
 initializeRenderTarget gsvs = do
