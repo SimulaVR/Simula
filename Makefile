@@ -1,7 +1,7 @@
 all: resources godot
 	cd addons/godot-haskell-plugin && make ; cd -
 
-godot:
+godot: wlroots
 	. ./utils/Helpers.sh && ensureGodotBinaryExists
 
 godot-update:
@@ -43,7 +43,7 @@ stack:
 	. ./utils/Helpers.sh && upgradeStack
 
 wlroots:
-	. ./utils/Helpers.sh && installWlrootsManually
+	. ./utils/Helpers.sh && installWlrootsInBuildFolder
 
 run: godot
 	cd addons/godot-haskell-plugin && make run ; cd -

@@ -92,15 +92,21 @@ installArchDependencies() {
   upgradeStack
 }
 
-# Warning: subverts package managers!
-installWlrootsManually() {
-    cd /tmp
-    sudo rm -r wlroots
-    git clone --branch simula https://github.com/SimulaVR/wlroots
-    cd wlroots
-    meson build
-    ninja -C build
-    sudo ninja -C build install
+installWlrootsInBuildFolder() {
+    mkdir -p ./build
+    cd ./build
+
+    if [ -d wlroots ]; then
+        echo "wlroots already built"
+    else
+        git clone --branch simula https://github.com/SimulaVR/wlroots
+        cd wlroots
+        meson --default-library static --buildtype release  build
+        ninja -C build
+        cd ..
+    fi
+
+    cd ..
 }
 
 # Only works on Ubuntu (or Debian based distros) and Arch
@@ -169,11 +175,11 @@ generateResourceTarballs() {
         # 3.06-stable doesn't work (compilation issues)
         # 3.1 doesn't work (compilation issues)
         # TODO: Use godot 3.1
-    git clone --branch "3.1-simula" --recursive https://github.com/SimulaVR/godot godot
+    git clone --branch "3.2-simula" --recursive https://github.com/SimulaVR/godot godot
     cd godot
     git clone --branch simula --recursive https://github.com/SimulaVR/godot-haskell godot-haskell-gdwlroots
     cd modules
-    git clone --branch "xwayland-3.1" --recursive https://github.com/SimulaVR/gdwlroots gdwlroots
+    git clone --branch "xwayland-3.2" --recursive https://github.com/SimulaVR/gdwlroots gdwlroots
     cd gdwlroots
     make all
 
@@ -205,44 +211,6 @@ generateResourceTarballs() {
 
     cd $ROOTSIMULADIR
   fi
-}
-
-
-# This will be useful when we switch to godot 3.1
-generateGodotHaskellGdwlroots31() {
-    local ROOTSIMULADIR=$(pwd)
-
-    cd ./addons/godot-haskell-plugin
-
-    # Remove old files from last time this command ran
-    sudo rm -r godot
-    sudo rm ./godot-haskell-gdwlroots-3.1.0.0.tar.gz
-    sudo rm ./godot-3.1-gdwlroots.tar.gz
-
-    # Get Godot source code
-    wget -O godot-3.1-gdwlroots.tar.gz "https://github.com/lboklin/godot/archive/3.1-gdwlroots.tar.gz"
-    tar -xvf godot-3.1-gdwlroots.tar.gz
-    mv godot-3.1-gdwlroots godot
-
-    # Put Godot binary inside new source code
-    cd godot
-    mkdir bin
-    cd bin
-    wget -O godot.x11.opt.tools.64 "https://github.com/lboklin/godot/releases/download/3.1-gdwlroots/godot.x11.opt.tools.64"
-    cd ..
-
-    # Get godot-haskell-gdwlroots
-    # git clone --recursive --branch gdwlroots-3.1 https://github.com/SimulaVR/godot-haskell.git godot-haskell-gdwlroots
-    git clone --branch simula --recursive https://github.com/SimulaVR/godot-haskell godot-haskell-gdwlroots
-
-    cd godot-haskell-gdwlroots
-
-    # Create and place godot-haskell-gdwlroots-3.1.0.0.tar.gz
-    cabal sdist
-    mv ./dist/godot-haskell-3.1.0.0.tar.gz ../../godot-haskell-gdwlroots-3.1.0.0.tar.gz
-    cd ../..
-
-    cd $ROOTSIMULADIR
 }
 
 ask() {
