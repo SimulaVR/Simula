@@ -122,7 +122,7 @@ improveTextureQuality gsvs texture = do
   if ((unsafeCoerce texture) /= nullPtr)
     then do visualServer <- getVisualServer gsvs
             rid <- G.get_rid texture
-            G.texture_set_flags visualServer rid G.TEXTURE_FLAGS_DEFAULT
+ --         G.texture_set_flags visualServer rid 15
             return ()
 
             -- rid_canvas <- G.get_canvas self

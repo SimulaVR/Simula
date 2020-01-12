@@ -93,7 +93,7 @@ updateSimulaViewSprite gsvs = do
   -- useViewportToDrawParentSurface gsvs
   -- drawParentWlrSurfaceTextureOntoSprite gsvs
 
-  adjustDimensions gsvs 768 768
+  adjustDimensions gsvs 4096 4096
 
   useSimulaCanvasItemToDrawSubsurfaces gsvs
     -- useViewportToDrawParentSurface gsvs -- Causes _draw() error
@@ -164,7 +164,7 @@ updateSimulaViewSprite gsvs = do
           visualServer <- getSingleton GodotVisualServer "VisualServer"
           -- Enable everything but mipmapping (since this causes old textures get to interpolated
           -- with updated textures when far enough from the user).
-          G.texture_set_flags visualServer rid G.TEXTURE_FLAGS_DEFAULT
+ --         G.texture_set_flags visualServer rid 15
           -- G.texture_set_flags visualServer rid_canvas 6
           -- G.texture_set_flags visualServer rid_canvas_item 6
           G.set_texture sprite3D parentWlrTexture
