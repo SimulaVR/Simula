@@ -139,10 +139,7 @@ upgradeStack() {
 ensureGodotBinaryExists() {
     mkdir -p ./bin
     rm ./bin/godot
-    cd resources
-    tar -xvf godot.tar.gz godot.x11.tools.64
-    mv ./godot.x11.tools.64 ../bin/godot
-    cd -
+    cp ./build/godot/bin/godot.x11.tools.64 ./bin/godot
     chmod +x ./bin/godot
 }
 

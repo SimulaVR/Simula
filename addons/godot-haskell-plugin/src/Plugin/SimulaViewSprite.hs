@@ -319,15 +319,16 @@ focus gsvs = do
                              toplevel    <- G.get_xdg_toplevel wlrXdgSurface :: IO GodotWlrXdgToplevel
                              -- isGodotTypeNull wlrSurface
                              G.set_activated toplevel True
-                             G.keyboard_notify_enter wlrSeat wlrSurface
+                             -- G.keyboard_notify_enter wlrSeat wlrSurface
                              pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
                              pointerNotifyFrame wlrSeat
     Right wlrXWaylandSurface -> do wlrSurface  <- G.get_wlr_surface wlrXWaylandSurface
                                    case (((unsafeCoerce wlrXWaylandSurface) == nullPtr), ((unsafeCoerce wlrSurface) == nullPtr)) of
                                      (False, False) -> do G.reference wlrSurface
+                                                          return ()
                                                           -- isGodotTypeNull wlrSurface
                                                           G.set_activated wlrXWaylandSurface True
-                                                          G.keyboard_notify_enter wlrSeat wlrSurface
+                                                          -- G.keyboard_notify_enter wlrSeat wlrSurface
                                                           pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
                                                           pointerNotifyFrame wlrSeat
                                      _ -> putStrLn $ "Unable to focus on sprite!"
@@ -365,6 +366,7 @@ processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)
     Motion                -> do pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
                                 pointerNotifyMotion wlrSeat subSurfaceLocalCoords
     Button pressed button -> do focus gsvs
+                                G.keyboard_notify_enter wlrSeat godotWlrSurface
                                 pointerNotifyButton wlrSeat evt
 
   pointerNotifyFrame wlrSeat
@@ -437,7 +439,6 @@ pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (ssx, ssy)) = 
 
 _handle_map :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 _handle_map self args = do
-  -- putStrLn "_handle_map"
   simulaView <- readTVarIO (self ^. gsvsView)
 
   G.set_process self True
@@ -543,7 +544,6 @@ keyboardGrabLetGo gsvs = do
   -- Release state
   atomically $ writeTVar (gss ^. gssKeyboardGrabbedSprite) Nothing
   return ()
-
 
 setInFrontOfUser :: GodotSimulaViewSprite -> Float -> IO ()
 setInFrontOfUser gsvs zAxisDist = do

@@ -10,6 +10,8 @@
 
 module Plugin.SimulaServer where
 
+import Control.Concurrent
+import System.Posix.Process
 import           Data.Bits
 import           Linear
 import           Plugin.Imports
@@ -87,6 +89,9 @@ instance NativeScript GodotSimulaServer where
 
 ready :: GodotSimulaServer -> [GodotVariant] -> IO ()
 ready gss _ = do
+  -- Delete log file
+  readProcess "rm" ["/home/george/Simula/log.txt"] []
+
   -- putStrLn "ready in SimulaServer.hs"
   -- Set state / start compositor
   addWlrChildren gss
@@ -131,6 +136,12 @@ ready gss _ = do
   connectGodotSignal viewport "input_event" gss "_mouse_input" []
 
   getSingleton GodotInput "Input" >>= \inp -> G.set_mouse_mode inp G.MOUSE_MODE_CAPTURED
+  pid <- getProcessID
+
+  createProcess (shell "wmctrl -a Simula") { env = Just [("DISPLAY", oldDisplay)] }
+
+  appendFile "log.txt" "Starting logs..\n"
+  appLaunch gss "xrdb -merge .Xdefaults; firefox & sleep 5; xfce4-terminal"
 
   return ()
 
@@ -356,9 +367,9 @@ handle_map_surface gss [gsvsVariant] = do
                     addChild gsvs viewport
                     addChild viewport gsci
 
-                    setInFrontOfUser gsvs (-1)
+                    setInFrontOfUser gsvs (-2)
 
-                    focus gsvs
+                    focus gsvs -- We're relying on this to add references to wlrSurface :/
 
                     simulaView <- atomically $ readTVar (gsvs ^. gsvsView)
                     atomically $ writeTVar (simulaView ^. svMapped) True
@@ -377,11 +388,12 @@ handle_unmap_surface gss [gsvsVariant] = do
 
 _on_wlr_key :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_wlr_key gss [keyboardGVar, eventGVar] = do
-  maybeGSVSFocused <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
-  case maybeGSVSFocused of
-    Nothing -> return ()
-    (Just gsvsFocused) -> do
-      focus gsvsFocused
+  -- maybeGSVSFocused <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
+  -- case maybeGSVSFocused of
+  --   Nothing -> return ()
+  --   (Just gsvsFocused) -> do
+  --     logGSVS "gsvsFocused before key press: " gsvsFocused
+  --     focus gsvsFocused
   wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
   event <- fromGodotVariant eventGVar
   G.reference event
@@ -390,11 +402,11 @@ _on_wlr_key gss [keyboardGVar, eventGVar] = do
 
 _on_wlr_modifiers :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_wlr_modifiers gss [keyboardGVar] = do
-  maybeGSVSFocused <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
-  case maybeGSVSFocused of
-    Nothing -> return ()
-    (Just gsvsFocused) -> do
-      focus gsvsFocused
+  -- maybeGSVSFocused <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
+  -- case maybeGSVSFocused of
+  --   Nothing -> return ()
+  --   (Just gsvsFocused) -> do
+  --     focus gsvsFocused
   wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
   G.keyboard_notify_modifiers wlrSeat
   return ()

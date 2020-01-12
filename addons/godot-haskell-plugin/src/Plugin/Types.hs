@@ -524,3 +524,21 @@ getARVRCameraOrPancakeCameraTransform gss = do
           viewport <- G.get_viewport gss :: IO GodotViewport
           camera <- G.get_camera viewport :: IO GodotCamera
           return camera
+
+showGSVS :: GodotSimulaViewSprite -> IO String
+showGSVS gsvs = do
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  let maybeUUID = (simulaView ^. gsvsUUID)
+  let ret = case maybeUUID of
+                  Nothing -> "(GSVS: Nothing)"
+                  Just uuid -> "(GSVS: " ++ (show uuid) ++ ")"
+  return ret
+
+logGSVS :: String -> GodotSimulaViewSprite-> IO ()
+logGSVS string gsvs = do
+  showGsvs <- showGSVS gsvs
+  appendFile "log.txt" $ string ++ (showGsvs) ++ "\n"
+
+logStr :: String -> IO ()
+logStr string = do
+  appendFile "log.txt" $ string ++ "\n"
