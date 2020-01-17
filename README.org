@@ -43,8 +43,8 @@ Windows become "active" once you look at them. Active windows receive typing eve
 | ~Super + 0~          | Scale window to larger size                                             |
 | ~Super + -~          | Increase window resolution ("zoom out")                                 |
 | ~Super + =~          | Increase window resolution ("zoom in")                                  |
-| ~Super + C~          | Move window towards you                                                 |
-| ~Super + P~          | Move window away from you                                               |
+| ~Super + Comma~      | Move window towards you                                                 |
+| ~Super + Period~     | Move window away from you                                               |
 | ~Super + Backspace~  | Kill surface being looked at                                            |
 | ~Super + k~          | Quick launch firefox                                                    |
 | ~Super + g~          | Quick launch google-chrome                                              |
