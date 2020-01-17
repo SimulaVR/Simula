@@ -1,18 +1,72 @@
 [[file:./doc/TEMP_LOGO.png]]
 
-Simula is a 3D window manager for Linux that runs on top of [[https://godotengine.org/][Godot]].
+Simula is a VR window manager for Linux that runs on top of [[https://godotengine.org/][Godot]].
 
 # [[https://d.tube/#!/v/sudoreboot/t026ny0m][file:./doc/SimulaDesktop.png]]
-[[https://i.imgur.com/zNTYTiG.png]]
+# [[https://i.imgur.com/zNTYTiG.png]]
 
-# *Video:* [[https://d.tube/#!/v/sudoreboot/t026ny0m][See here.]]
+[[http://www.youtube.com/watch?v=FWLuwG91HnI][http://img.youtube.com/vi/FWLuwG91HnI/0.jpg]]
 
-*Mission:* Facilitate a Linux future for VR & AR Desktop. In the short-run, this means allowing people to run 2D Linux apps with current generation headsets. In the long-run, this means allowing people to run Linux in standalone AR & VR HMDs. Currently, Simula is only compatible with the HTC Vive and HTC Vive Pro.
+*Video:* [[http://www.youtube.com/watch?v=FWLuwG91HnI][Demonstration.]]
+
+*Compatibility:* Currently, Simula is only compatible with SteamVR headsets (e.g. HTC Vive, HTC Vive Pro, & Valve Index).
+
+*Mission:* Facilitate a Linux future for VR & AR Desktop. In the short-run, this means allowing people to run 2D Linux apps with current generation headsets. In the long-run, this means allowing people to run Linux in standalone AR & VR HMDs.
 
 *Origins:* Simula is a reimplementation fork of [[https://github.com/evil0sheep/motorcar][motorcar]]. To read about motorcar, see /[[https://github.com/evil0sheep/MastersThesis/blob/master/thesis.pdf?raw=true][Toward General Purpose 3D User Interfaces: Extending Windowing Systems to Three Dimensions]]/
 
 * Installation
 
+We keep a bleeding edge version of Simula synced to the following tarball:
+
+#+BEGIN_SRC shell
+wget -c https://www.wolframcloud.com/obj/george.w.singer/SimulaBleedingEdge.tar.gz -O - | tar -xz
+cd ./Simula
+./bin/godot # launches Simula (requires SteamVR to be running)
+#+END_SRC
+
+For installtion troubleshooting, [[https://gitter.im/SimulaVR/Simula][just ask us directly]].
+
+* Usage
+** Mouse & Keyboard
+
+Windows become "active" once you look at them. Active windows receive typing events from the keyboard, and cursor events from mouse movement.  In addition, the following window-manipulation shortcuts are hard-coded into Simula (we're going to make this customizable in the near future):
+
+| *Key binding.*       | *Action*                                                                |
+|----------------------+-------------------------------------------------------------------------|
+| ~Super + /~          | Quick launch terminal (~terminator~)                                    |
+| ~Super + Apostrophe~ | Send window cursor to gaze point (hold down to make cursor follow gaze) |
+| ~Super + E~          | Left click surface cursor at gaze point                                 |
+| ~Super + Alt~        | Grab surface for movement (release to let go)                           |
+| ~Super + f~          | Orient window towards user gaze                                         |
+| ~Super + 9~          | Scale window to smaller size                                            |
+| ~Super + 0~          | Scale window to larger size                                             |
+| ~Super + -~          | Increase window resolution ("zoom out")                                 |
+| ~Super + =~          | Increase window resolution ("zoom in")                                  |
+| ~Super + C~          | Move window towards you                                                 |
+| ~Super + P~          | Move window away from you                                               |
+| ~Super + Backspace~  | Kill surface being looked at                                            |
+| ~Super + k~          | Quick launch firefox                                                    |
+| ~Super + g~          | Quick launch google-chrome                                              |
+
+** VR Controllers
+
+ [[https://www.evetech.co.za/repository/ProductImages/htc-vive-controller-730px-v1.jpg]]
+
+ - *Left-clicking.* Use (7) gently (you don't have to go all the way down to click).
+
+ - *Right-clicking.* Use (1).
+
+ - *Scrolling.* Scroll up and down via (2).
+
+ - *Text dragging.* Hold (7) down and drag.
+
+ - *Window manipulation.* Point at a window and, while holding (8), move your controller around. The windows should "levitate" in the direction of your movement.
+
+ - *Window rescaling.* Point at a window, hold (8) down, and then scroll up and down on (2).
+
+* COMMENT Installation
+  
 [[https://gitter.im/SimulaVR/Simula][file:./doc/GitterBadge.png]]
 
 Simula is in alpha phase, and can be difficult to get working on many setups. For help with installation, please visit our [[https://gitter.im/SimulaVR/Simula][chat room]]. Note that Simula has only been tested on Ubuntu 19.04 (Disco Dingo), but the instructions below should in principle work on (i) older versions of Ubuntu and/or other distros that use ~apt~ (i.e., Debian) or (ii) Arch Linux (or distros that use ~pacman~).
@@ -47,23 +101,7 @@ Simula is in alpha phase, and can be difficult to get working on many setups. Fo
   WAYLAND_DISPLAY=simula-0 epiphany # Wayland-based web browser
   #+end_src
 
-* Using Simula
-
-[[https://www.evetech.co.za/repository/ProductImages/htc-vive-controller-730px-v1.jpg]]
-
-- *Left-clicking.* Use (7) gently (you don't have to go all the way down to click).
-
-- *Right-clicking.* Use (1).
-
-- *Scrolling.* Scroll up and down via (2).
-
-- *Text dragging.* Hold (7) down and drag.
-
-- *Window manipulation.* Point at a window and, while holding (7) + (8), move your controller around. The windows should "levitate" in the direction of your movement.
-
-- *Window resizing.* Point at a window, hold (8) down, and then scroll up and down on (2).
-
-* Troubleshooting
+* COMMENT Troubleshooting
 
 Any errors can be immediately helped with in [[https://gitter.im/SimulaVR/Simula][Simula's chatroom]]. Here are some helpers though:
 
@@ -88,7 +126,7 @@ Any errors can be immediately helped with in [[https://gitter.im/SimulaVR/Simula
 
 4. *Unable to launch a particular app.* Many Linux apps don't work right now in Simula (technically: any app that doesn't implement the XDG Wayland protocol). We're working on fixing this ASAP so that all Linux apps are compatible with Simula. This should be done by end of month (June 2019).
 
-* Contributing
+* COMMENT Contributing
 
 We're looking for open-source contributors. If you're interested in using Haskell to bring VR and Linux together, drop by our [[https://gitter.im/SimulaVR/Simula][chat room]], or email georgewsinger@gmail.com.
 
