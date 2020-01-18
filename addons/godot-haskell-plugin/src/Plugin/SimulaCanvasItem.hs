@@ -59,6 +59,7 @@ instance NativeScript GodotSimulaCanvasItem where
     [
       func NoRPC "_process" Plugin.SimulaCanvasItem._process
     , func NoRPC "_draw" Plugin.SimulaCanvasItem._draw
+    , func NoRPC "_ready" Plugin.SimulaCanvasItem._ready
     ]
 
 newGodotSimulaCanvasItem :: GodotSimulaViewSprite -> IO (GodotSimulaCanvasItem)
@@ -69,11 +70,22 @@ newGodotSimulaCanvasItem gsvs = do
     >>= deRefStablePtr . castPtrToStablePtr :: IO GodotSimulaCanvasItem
 
   viewport <- initializeRenderTarget gsvs
+
   atomically $ writeTVar (_gsciGSVS gsci) gsvs
   atomically $ writeTVar (_gsciViewport gsci) viewport
   -- G.set_process grt False
 
   return gsci
+
+
+_ready :: GodotSimulaCanvasItem -> [GodotVariant] -> IO ()
+_ready self _ = do
+  shm <- load GodotShaderMaterial "ShaderMaterial" "res://addons/godot-haskell-plugin/TextShader2D.tres"
+  case shm of
+    Just shm -> G.set_material self (safeCast shm)
+    Nothing -> putStrLn "Failed to load shader"
+  return ()
+
 
 getCoordinatesFromCenter :: GodotWlrSurface -> Int -> Int -> IO GodotVector2
 getCoordinatesFromCenter wlrSurface sx sy = do

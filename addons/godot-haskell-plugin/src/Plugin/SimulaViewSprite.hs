@@ -276,14 +276,25 @@ newGodotSimulaViewSprite gss simulaView = do
   godotSprite3D <- unsafeInstance GodotSprite3D "Sprite3D"
   G.set_pixel_size godotSprite3D 0.001
   G.add_child gsvs (safeCast godotSprite3D) True
-  G.set_flip_h godotSprite3D True
+
+  shm <- load GodotShaderMaterial "ShaderMaterial" "res://addons/godot-haskell-plugin/TextShader.tres"
+  case shm of
+    Just shm -> G.set_material_override godotSprite3D (safeCast shm)
+    Nothing -> error "couldn't fetch shader, hard failing for debug purposes"
 
   -- HACK: Set transparency to False to ensure that textures never disappear
-  G.set_draw_flag godotSprite3D 0 False -- https://github.com/godotengine/godot/blob/89bcfa4b364e1edc8e175f766b50d145864eb159/scene/3d/sprite_3d.h#L44:7
+  -- G.set_draw_flag godotSprite3D 0 False -- https://github.com/godotengine/godot/blob/89bcfa4b364e1edc8e175f766b50d145864eb159/scene/3d/sprite_3d.h#L44:7
 
   godotBoxShape <- unsafeInstance GodotBoxShape "BoxShape"
   ownerId <- G.create_shape_owner gsvs (safeCast gsvs)
   G.shape_owner_add_shape gsvs ownerId (safeCast godotBoxShape)
+
+  -- simulaView <- readTVarIO (gsvs ^. gsvsView)
+  -- let eitherSurface = (simulaView ^. svWlrEitherSurface)
+  -- wlrSurface <- getWlrSurface eitherSurface
+  -- dimensions@(originalWidth, originalHeight) <- getBufferDimensions wlrSurface
+  --  atomically $ writeTVar (gsvs ^. gsvsTargetSize) (SpriteDimensions (originalWidth, originalHeight))
+  atomically $ writeTVar (gsvs ^. gsvsTargetSize) (SpriteDimensions (800, 800))
 
   -- atomically $ writeTVar (_gsvsObj       gss) gsObj'      -- :: GodotObject (filled in classInit)
   atomically $ writeTVar (_gsvsServer    gsvs) gss           -- :: TVar GodotSimulaServer

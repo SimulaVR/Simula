@@ -141,7 +141,7 @@ ready gss _ = do
   createProcess (shell "wmctrl -a Simula") { env = Just [("DISPLAY", oldDisplay)] }
 
   appendFile "log.txt" "Starting logs..\n"
-  appLaunch gss "xrdb -merge .Xdefaults; firefox & sleep 5; xfce4-terminal"
+  appLaunch gss "xrdb -merge .Xdefaults"
 
   return ()
 
