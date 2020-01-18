@@ -121,28 +121,6 @@ ready self _ = do
     G.create_from_image godotImageTexture godotImage G.TEXTURE_FLAGS_DEFAULT
     return (safeCast godotImageTexture) -- NOTE: This [probably] leaks godotImage?
 
-  -- Another helper function for black texture debugging (that uses
-  -- getTextureFromURL).
-  addDummySprite3D gss = do
-    godotSprite3D <- unsafeInstance GodotSprite3D "Sprite3D"
-    G.set_pixel_size godotSprite3D 0.001
-    -- G.add_child gsvs (safeCast godotSprite3D) True
-    G.set_flip_h godotSprite3D True
-
-    G.set_name godotSprite3D =<< toLowLevel "DummySprite3D"
-    addChild gss godotSprite3D -- Add as child to SimulaServer
-    -- G.set_opacity ((safeCast godotSprite3D) GodotSpriteBase3D) (1 :: Float) -- Added from editor
-    G.set_opacity godotSprite3D 1.0
-
-    sampleTexture <- getTextureFromURL "res://twitter.png"
-    G.set_texture godotSprite3D sampleTexture
-    G.set_visible godotSprite3D True
-
-    -- G.translate godotSprite3D =<< toLowLevel (V3 1 1 1)
-
-    -- Print to console to verify we see a "DummySprite3D" in scenegraph
-    G.print_tree ((safeCast gss) :: GodotNode)
-    return ()
 
   addSimulaServerNode :: IO ()
   addSimulaServerNode = do

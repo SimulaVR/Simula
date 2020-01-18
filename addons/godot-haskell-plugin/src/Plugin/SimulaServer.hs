@@ -248,6 +248,8 @@ initGodotSimulaServer obj = do
   gssKeyboardGrabbedSprite' <- newTVarIO Nothing
   gssXWaylandDisplay'       <- newTVarIO Nothing
 
+  gssOriginalEnv' <- getEnvironment
+
   let gss = GodotSimulaServer {
     _gssObj                   = obj                       :: GodotObject
   , _gssWaylandDisplay        = gssWaylandDisplay'        :: TVar GodotWaylandDisplay
@@ -267,6 +269,7 @@ initGodotSimulaServer obj = do
   , _gssHMDRayCast            = gssHMDRayCast'            :: TVar GodotRayCast
   , _gssKeyboardGrabbedSprite = gssKeyboardGrabbedSprite' :: TVar (Maybe (GodotSimulaViewSprite, Float))
   , _gssXWaylandDisplay       = gssXWaylandDisplay'       :: TVar (Maybe String)
+  , _gssOriginalEnv           = gssOriginalEnv'           :: [(String, String)]
   }
 
   return gss
@@ -369,6 +372,8 @@ handle_map_surface gss [gsvsVariant] = do
 
                     setInFrontOfUser gsvs (-2)
 
+                    V3 1 1 1 ^* (1 + 1 * 1) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
+
                     focus gsvs -- We're relying on this to add references to wlrSurface :/
 
                     simulaView <- atomically $ readTVar (gsvs ^. gsvsView)
@@ -460,8 +465,8 @@ _input gss [eventGV] = do
     button <- G.get_button_index event'
     wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
     case (maybeActiveGSVS, button) of
-         (Just gsvs, G.BUTTON_WHEEL_UP) -> G.pointer_notify_axis_continuous wlrSeat 0 (0.5)
-         (Just gsvs, G.BUTTON_WHEEL_DOWN) -> G.pointer_notify_axis_continuous wlrSeat 0 (-0.5)
+         (Just gsvs, G.BUTTON_WHEEL_UP) -> G.pointer_notify_axis_continuous wlrSeat 0 (0.05)
+         (Just gsvs, G.BUTTON_WHEEL_DOWN) -> G.pointer_notify_axis_continuous wlrSeat 0 (-0.05)
          (Just gsvs, _) -> do activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
                               processClickEvent' gsvs (Button pressed button) activeGSVSCursorPos
          (Nothing, _) -> putStrLn "Button: No cursor focused surface!"
@@ -524,24 +529,38 @@ physicsProcess gss _ = do
     (Just (gsvs, dist), _) -> do setInFrontOfUser gsvs dist
                                  orientSpriteTowardsGaze gsvs
     (Nothing, Just (gsvs, surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)))) -> do -- putStrLn $ "Looking at sprite: " ++ (show sx) ++ ", " ++ (show sy)
-                                                                                        orientSpriteTowardsGaze gsvs
+                                                                                        -- orientSpriteTowardsGaze gsvs
                                                                                         focus gsvs
     _ -> return ()
 
   return ()
 
+-- Run shell command with DISPLAY set to its original (typically :1).
+shellCmd1 :: GodotSimulaServer -> String -> IO ()
+shellCmd1 gss appStr = do
+  let originalEnv = (gss ^. gssOriginalEnv)
+  createProcess (shell appStr) { env = Just originalEnv }
+  return ()
+
+-- Run shell command with DISPLAY set to our XWayland server value (typically
+-- :2)
 appLaunch :: GodotSimulaServer -> String -> IO ()
 appLaunch gss appStr = do
   -- We shouldn't need to set WAYLAND_DISPLAY, but do need to set Xwayland DISPLAY
+  let originalEnv = (gss ^. gssOriginalEnv)
   maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
   case maybeXwaylandDisplay of
     Nothing -> putStrLn "No DISPLAY found!"
-    (Just xwaylandDisplay) -> do createProcess (shell appStr) { env = Just [("DISPLAY", xwaylandDisplay)] }
-                                 return ()
+    (Just xwaylandDisplay) -> do
+      let envMap = M.fromList originalEnv
+      let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
+      let envListWithDisplay = M.toList envMapWithDisplay
+      createProcess (shell appStr) { env = Just envListWithDisplay }
+      return ()
   return ()
 
 terminalLaunch :: GodotSimulaServer -> IO ()
-terminalLaunch gss = appLaunch gss "xfce4-terminal"
+terminalLaunch gss = appLaunch gss "terminator"
 
 -- Master routing function for keyboard-mouse-window manipulation. Guaranteed to
 -- only be called if Simula's MOD key is pressed (currently set to `SUPER_L` or
@@ -574,16 +593,30 @@ _on_simula_shortcut gss [godotScanCodeGVar, isPressedGVar] = do
         terminalLaunch gss
       (_, G.KEY_SLASH, True) -> do
         terminalLaunch gss
+      (_, G.KEY_K, True) -> do
+        appLaunch gss "firefox -new-window"
+      (_, G.KEY_G, True) -> do
+        appLaunch gss "google-chrome-stable --new-window google.com"
+      (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_F, True) -> do
+        orientSpriteTowardsGaze gsvs
       (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_ALT, True) -> do
         keyboardGrabInitiate gsvs
       (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_ALT, False) -> do
         keyboardGrabLetGo gsvs
-      (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_0, True) -> do
-        orientSpriteTowardsGaze gsvs
+      -- (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_0, True) -> do
+      --   orientSpriteTowardsGaze gsvs
       (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_BRACKETLEFT, True) -> do
         moveSpriteAlongObjectZAxis gsvs (-0.1)
       (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_BRACKETRIGHT, True) -> do
         moveSpriteAlongObjectZAxis gsvs 0.1
+      (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_9, True) -> do
+        V3 1 1 1 ^* (1 + 1 * (-0.1)) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
+      (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_0, True) -> do
+        V3 1 1 1 ^* (1 + 1 * 0.1) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
+      (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_EQUAL, True) -> do
+        resizeGSVS gsvs (-50)
+      (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_MINUS, True) -> do
+        resizeGSVS gsvs 50
       (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_COMMA, True) -> do
         moveSpriteAlongObjectZAxis gsvs (-0.1)
       (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_PERIOD, True) -> do

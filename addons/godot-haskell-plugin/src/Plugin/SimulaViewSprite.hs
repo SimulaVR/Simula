@@ -66,6 +66,7 @@ instance NativeScript GodotSimulaViewSprite where
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
+                      <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       -- <*> atomically (newTVar False)
   -- classExtends = "RigidBody"
   classMethods =
@@ -93,7 +94,7 @@ updateSimulaViewSprite gsvs = do
   -- useViewportToDrawParentSurface gsvs
   -- drawParentWlrSurfaceTextureOntoSprite gsvs
 
-  adjustDimensions gsvs 4096 4096
+  adjustTargetDimensions gsvs -- 1600 1600 -- 2048 2048
 
   useSimulaCanvasItemToDrawSubsurfaces gsvs
     -- useViewportToDrawParentSurface gsvs -- Causes _draw() error
@@ -106,32 +107,7 @@ updateSimulaViewSprite gsvs = do
   --   atomically $ writeTVar (_gsvsShouldMove gsvs) False
   --   moveToUnoccupied gsvs
 
-  where adjustDimensions :: GodotSimulaViewSprite -> Int -> Int -> IO ()
-        adjustDimensions gsvs w h = do
-          gsci <- readTVarIO (gsvs ^. gsvsSimulaCanvasItem)
-          renderTarget <- readTVarIO (gsci ^. gsciViewport)
-          simulaView <- readTVarIO (gsvs ^. gsvsView)
-          let eitherSurface = (simulaView ^. svWlrEitherSurface)
-          wlrSurface <- getWlrSurface eitherSurface
-          dimensions@(originalWidth, originalHeight) <- getBufferDimensions wlrSurface
-          -- role <- case eitherSurface of
-          --   Left wlrXdgSurface -> toLowLevel "" :: IO GodotString
-          --   Right wlrXWaylandSurface -> G.get_role wlrXWaylandSurface
-
-          let d'@(w',h') = if (originalWidth > 450 || originalHeight > 450)
-                then (w,h)
-                else (originalWidth, originalHeight)
-
-          v <- toLowLevel (V2 (fromIntegral w') (fromIntegral h'))
-
-          case eitherSurface of
-            Left wlrXdgSurface -> return ()-- G.set_size wlrXdgSurface v
-            Right wlrXWaylandSurface -> do G.set_size wlrXWaylandSurface v
-                                           G.set_maximized wlrXWaylandSurface True
-
-          pixelDimensionsOfWlrSurface <- toGodotVector2 d'
-          G.set_size renderTarget pixelDimensionsOfWlrSurface
-
+  where
         -- As the name makes clear, this function *only* draws the parent WlrSurface
         -- onto a GodotSimulaViewSprite's Sprite3D field. It doesn't include popups or
         -- any other subsurfaces. This is a temporary hack that needs fixed.
@@ -231,6 +207,35 @@ updateSimulaViewSprite gsvs = do
                 else V3 (maxX + sizeX/2) 0 0
 
           G.translate gsvs =<< toLowLevel newPos
+
+-- Adjust gsvs wlr_surface dimensions *and* render target dimensions to the
+-- gsvsTargetSize every frame.
+adjustTargetDimensions :: GodotSimulaViewSprite -> IO ()
+adjustTargetDimensions gsvs = do
+  targetDims@(SpriteDimensions (w, h)) <- readTVarIO (gsvs ^. gsvsTargetSize)
+
+  gsci <- readTVarIO (gsvs ^. gsvsSimulaCanvasItem)
+  renderTarget <- readTVarIO (gsci ^. gsciViewport)
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  let eitherSurface = (simulaView ^. svWlrEitherSurface)
+  wlrSurface <- getWlrSurface eitherSurface
+  dimensions@(originalWidth, originalHeight) <- getBufferDimensions wlrSurface
+
+  -- Try to avoid forcing small popups to be large squares.
+  let d'@(w',h') = if (originalWidth > 450 || originalHeight > 450)
+        then (w,h)
+        else (originalWidth, originalHeight)
+
+  v <- toLowLevel (V2 (fromIntegral w') (fromIntegral h'))
+
+  -- Set buffer dimensions to new target size
+  case eitherSurface of
+    Left wlrXdgSurface -> return () -- TODO: Fix xdg functionality
+    Right wlrXWaylandSurface -> do G.set_size wlrXWaylandSurface v
+
+  -- Set our corresponding render target to match our new target size
+  pixelDimensionsOfWlrSurface <- toGodotVector2 d'
+  G.set_size renderTarget pixelDimensionsOfWlrSurface
 
 ready :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 ready self _ = do
@@ -339,7 +344,7 @@ focus gsvs = do
                                                           return ()
                                                           -- isGodotTypeNull wlrSurface
                                                           G.set_activated wlrXWaylandSurface True
-                                                          -- G.keyboard_notify_enter wlrSeat wlrSurface
+                                                          G.keyboard_notify_enter wlrSeat wlrSurface
                                                           pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
                                                           pointerNotifyFrame wlrSeat
                                      _ -> putStrLn $ "Unable to focus on sprite!"
@@ -518,6 +523,7 @@ orientSpriteTowardsGaze gsvs = do
   rotationAxisY <- toLowLevel (V3 0 1 0) :: IO GodotVector3
   targetV3 <- getARVRCameraOrPancakeCameraTransform gss >>= Api.godot_transform_get_origin -- void look_at ( Vector3 target, Vector3 up )
   G.look_at gsvs targetV3 upV3                      -- The negative z-axis of the gsvs looks at HMD
+  return ()
   -- G.rotate_object_local gsvs rotationAxisY 3.14159  -- The positive z-axis of the gsvs looks at HMD
 
   
@@ -558,6 +564,7 @@ keyboardGrabLetGo gsvs = do
 
 setInFrontOfUser :: GodotSimulaViewSprite -> Float -> IO ()
 setInFrontOfUser gsvs zAxisDist = do
+  gsvsScale <- G.get_scale (safeCast gsvs :: GodotSpatial)
   gss <- readTVarIO (gsvs ^. gsvsServer)
   rotationAxisY <- toLowLevel (V3 0 1 0) :: IO GodotVector3
   pushBackVector <- toLowLevel (V3 0 0 zAxisDist) :: IO GodotVector3 -- For some reason we also have to shift the vector 0.5 units to the right
@@ -565,3 +572,13 @@ setInFrontOfUser gsvs zAxisDist = do
   G.set_global_transform gsvs hmdGlobalTransform
   G.translate_object_local gsvs pushBackVector
   G.rotate_object_local gsvs rotationAxisY 3.14159 -- 180 degrees in radians
+  G.scale_object_local (safeCast gsvs :: GodotSpatial) gsvsScale
+
+-- We only pass one Int right now since we are augmenting by (n, n) for some (n, n)
+-- ∈ (ℤ x ℤ), relying on the assumption that gsvs are forced to be squares
+-- right now.
+resizeGSVS :: GodotSimulaViewSprite -> Int -> IO ()
+resizeGSVS gsvs boost = do
+  oldTargetDims@(SpriteDimensions (w, h)) <- readTVarIO (gsvs ^. gsvsTargetSize)
+  let newTargetDims = SpriteDimensions ((w + boost), (h + boost))
+  atomically $ writeTVar (gsvs ^. gsvsTargetSize) newTargetDims

@@ -45,33 +45,6 @@ import           Data.Text
 
 import Data.IORef
 
--- import           Graphics.Wayland.Internal.Server
--- import           Graphics.Wayland.WlRoots.Surface
--- import           Graphics.Wayland.Signal
--- import           Graphics.Wayland.WlRoots.XdgShell
--- import           Graphics.Wayland.WlRoots.Buffer
--- import           Graphics.Wayland.Internal.SpliceServerTypes (Buffer(..))
--- import           Graphics.Wayland.Server
--- import           Graphics.Wayland.Internal.Server
--- import           Graphics.Wayland.Internal.SpliceServerTypes
--- -- import           Graphics.Wayland.WlRoots.Compositor
--- import           Graphics.Wayland.WlRoots.Output
--- import           Graphics.Wayland.WlRoots.Surface
--- import           Graphics.Wayland.WlRoots.Backend
--- import           Graphics.Wayland.Signal
--- import           Graphics.Wayland.WlRoots.Render
--- -- import           Graphics.Wayland.WlRoots.Render.Color
--- -- import           Graphics.Wayland.WlRoots.OutputLayout
--- import           Graphics.Wayland.WlRoots.Input
--- import           Graphics.Wayland.WlRoots.Seat
--- -- import           Graphics.Wayland.WlRoots.Cursor
--- -- import           Graphics.Wayland.WlRoots.XCursorManager
--- import           Graphics.Wayland.WlRoots.XdgShell
--- import           Graphics.Wayland.WlRoots.Input.Keyboard
--- -- import           Graphics.Wayland.WlRoots.Input.Pointer
--- -- import           Graphics.Wayland.WlRoots.Cursor
--- import           Graphics.Wayland.WlRoots.Input.Buttons
--- import           Graphics.Wayland.WlRoots.Box
 import qualified Data.Map.Strict as M
 
 import Data.UUID
@@ -83,6 +56,7 @@ unfoldrM f b = f b >>= \case
 
 data SurfaceLocalCoordinates    = SurfaceLocalCoordinates (Float, Float)
 data SubSurfaceLocalCoordinates = SubSurfaceLocalCoordinates (Float, Float)
+data SpriteDimensions      = SpriteDimensions (Int, Int)
 
 -- This should ideally be `[Variant 'HaskellTy]`, but that would
 -- require `AsVariant` to handle both `LibType`s.
@@ -124,11 +98,12 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssHMDRayCast            :: TVar (GodotRayCast)
   , _gssKeyboardGrabbedSprite :: TVar (Maybe (GodotSimulaViewSprite, Float)) -- We encode both the gsvs and its original distance from the user
   , _gssXWaylandDisplay       :: TVar (Maybe String) -- For appLaunch
+  , _gssOriginalEnv           :: [(String, String)]
   }
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
 
 -- Wish there was a more elegant way to jam values into these fields at classInit
 data GodotSimulaViewSprite = GodotSimulaViewSprite
@@ -140,6 +115,7 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsView              :: TVar SimulaView -- Contains Wlr data
   , _gsvsSimulaCanvasItem  :: TVar GodotSimulaCanvasItem
   , _gsvsCursorCoordinates :: TVar SurfaceLocalCoordinates
+  , _gsvsTargetSize        :: TVar SpriteDimensions
   -- , _gsvsMapped         :: TVar Bool
   -- , gsvsGeometry        :: GodotRect2
   -- , gsvsWlrSeat         :: GodotWlrSeat
@@ -148,7 +124,7 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
 
 instance HasBaseClass GodotSimulaViewSprite where
   type BaseClass GodotSimulaViewSprite = GodotRigidBody
-  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _) = GodotRigidBody obj
+  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _) = GodotRigidBody obj
 
 
 data GodotSimulaCanvasItem = GodotSimulaCanvasItem {
