@@ -28,7 +28,7 @@ cd ./Simula
 For installtion troubleshooting, [[https://gitter.im/SimulaVR/Simula][just ask us directly]].
 
 * Usage
-** Mouse & Keyboard
+** Mouse & Keyboard Controls
 
 Windows become "active" once you look at them. Active windows receive typing events from the keyboard, and cursor events from mouse movement.  In addition, the following window-manipulation shortcuts are hard-coded into Simula (we're going to make this customizable in the near future):
 
@@ -36,7 +36,7 @@ Windows become "active" once you look at them. Active windows receive typing eve
 |----------------------+-------------------------------------------------------------------------|
 | ~Super + /~          | Quick launch terminal (~terminator~)                                    |
 | ~Super + Apostrophe~ | Send window cursor to gaze point (hold down to make cursor follow gaze) |
-| ~Super + E~          | Left click surface cursor at gaze point                                 |
+| ~Super + Enter~      | Left click surface cursor at gaze point                                 |
 | ~Super + Alt~        | Grab surface for movement (release to let go)                           |
 | ~Super + f~          | Orient window towards user gaze                                         |
 | ~Super + 9~          | Scale window to smaller size                                            |
@@ -48,6 +48,7 @@ Windows become "active" once you look at them. Active windows receive typing eve
 | ~Super + Backspace~  | Kill surface being looked at                                            |
 | ~Super + k~          | Quick launch firefox                                                    |
 | ~Super + g~          | Quick launch google-chrome                                              |
+| ~Super + w~          | Launch headset webcam view (requires ~ffplay~).                         |
 
 ** VR Controllers
 
@@ -64,6 +65,24 @@ Windows become "active" once you look at them. Active windows receive typing eve
  - *Window manipulation.* Point at a window and, while holding (8), move your controller around. The windows should "levitate" in the direction of your movement.
 
  - *Window rescaling.* Point at a window, hold (8) down, and then scroll up and down on (2).
+
+** Mouse & Keyboard View
+
+[[https://www.youtube.com/watch?v=D5c3Hfp8Hcw][https://www.wolframcloud.com/obj/george.w.singer/1063512563850488463045946458923996976334308262441.png]]
+
+Simula has a headset [[https://www.youtube.com/watch?v=D5c3Hfp8Hcw][webcam view]] (binded presently to ~Super + w~) that allows you to see your mouse and keyboard from VR.
+ 
+** Recovering Simula Apps
+
+Apps launched in Simula persist across sessions via an [[https://xpra.org/][xpra]] server running on ~DISPLAY=:13~. This means that if Simula exits (perhaps by a sudden crash), all you need to do to recover your apps is to relaunch Simula.
+
+If instead you'd like to access your apps from outside Simula, run
+
+#+BEGIN_SRC shell
+xpra attach :13
+#+END_SRC
+
+and they will appear on your current ~DISPLAY~. Running ~xpra stop~ (or just ~pkill xpra~) is a quick way to kill all apps associated with your Simula session(s).
 
 * COMMENT Installation
   
