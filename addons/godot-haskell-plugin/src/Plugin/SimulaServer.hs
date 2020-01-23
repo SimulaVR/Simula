@@ -12,6 +12,11 @@ module Plugin.SimulaServer where
 
 import Control.Concurrent
 import System.Posix.Process
+import System.Process
+import System.Process.Internals
+import System.Posix.Types
+import System.Posix.Signals
+import System.Directory
 import           Data.Bits
 import           Linear
 import           Plugin.Imports
@@ -90,7 +95,8 @@ instance NativeScript GodotSimulaServer where
 ready :: GodotSimulaServer -> [GodotVariant] -> IO ()
 ready gss _ = do
   -- Delete log file
-  readProcess "rm" ["/home/george/Simula/log.txt"] []
+  readProcess "touch" ["./log.txt"] []
+  readProcess "rm" ["./log.txt"] []
 
   -- putStrLn "ready in SimulaServer.hs"
   -- Set state / start compositor
@@ -138,12 +144,11 @@ ready gss _ = do
   getSingleton GodotInput "Input" >>= \inp -> G.set_mouse_mode inp G.MOUSE_MODE_CAPTURED
   pid <- getProcessID
 
+  createProcess (shell "xrdb -merge .Xdefaults") { env = Just [("DISPLAY", newDisplay)] }
   createProcess (shell "wmctrl -a Simula") { env = Just [("DISPLAY", oldDisplay)] }
 
   appendFile "log.txt" "Starting logs..\n"
-  appLaunch gss "xrdb -merge .Xdefaults"
-
-  return ()
+  launchXpra gss
 
 -- | Populate the GodotSimulaServer's TVar's with Wlr types; connect some Wlr methods
 -- | to their signals. This implicitly starts the compositor.
@@ -544,8 +549,8 @@ shellCmd1 gss appStr = do
 
 -- Run shell command with DISPLAY set to our XWayland server value (typically
 -- :2)
-appLaunch :: GodotSimulaServer -> String -> IO ()
-appLaunch gss appStr = do
+appLaunch :: GodotSimulaServer -> String -> [String] -> IO ()
+appLaunch gss appStr args = do
   -- We shouldn't need to set WAYLAND_DISPLAY, but do need to set Xwayland DISPLAY
   let originalEnv = (gss ^. gssOriginalEnv)
   maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
@@ -553,14 +558,15 @@ appLaunch gss appStr = do
     Nothing -> putStrLn "No DISPLAY found!"
     (Just xwaylandDisplay) -> do
       let envMap = M.fromList originalEnv
-      let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
+      -- let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
+      let envMapWithDisplay = M.insert "DISPLAY" ":13" envMap
       let envListWithDisplay = M.toList envMapWithDisplay
-      createProcess (shell appStr) { env = Just envListWithDisplay }
+      createSessionLeader appStr args (Just envListWithDisplay)
       return ()
   return ()
 
 terminalLaunch :: GodotSimulaServer -> IO ()
-terminalLaunch gss = appLaunch gss "terminator"
+terminalLaunch gss = appLaunch gss "terminator" []
 
 -- Master routing function for keyboard-mouse-window manipulation. Guaranteed to
 -- only be called if Simula's MOD key is pressed (currently set to `SUPER_L` or
@@ -591,12 +597,18 @@ _on_simula_shortcut gss [godotScanCodeGVar, isPressedGVar] = do
         terminalLaunch gss
       (_, G.KEY_SUPER_R, True) -> do
         terminalLaunch gss
+      (_, G.KEY_X, True) -> do
+        launchXpra gss
       (_, G.KEY_SLASH, True) -> do
         terminalLaunch gss
       (_, G.KEY_K, True) -> do
-        appLaunch gss "firefox -new-window"
+        appLaunch gss "firefox" ["-new-window"]
       (_, G.KEY_G, True) -> do
-        appLaunch gss "google-chrome-stable --new-window google.com"
+        appLaunch gss "google-chrome-stable" ["--new-window google.com"]
+      (_, G.KEY_W, True) -> do
+        launchHMDWebCam gss
+        -- appLaunch gss "ffplay" ["/dev/video2"]
+        -- appLaunch gss "cheese" ["--fullscreen", "-d", "HTC Vive"]
       (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_F, True) -> do
         orientSpriteTowardsGaze gsvs
       (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), G.KEY_ALT, True) -> do
@@ -628,3 +640,55 @@ _on_simula_shortcut gss [godotScanCodeGVar, isPressedGVar] = do
           (Left wlrXdgSurface) -> return ()
           (Right wlrXWaylandSurface) -> G.terminate wlrXWaylandSurface
       _ -> putStrLn "Unrecognized shortcut!"
+
+launchXpra :: GodotSimulaServer -> IO ()
+launchXpra gss = do
+  let originalEnv = (gss ^. gssOriginalEnv)
+  maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
+  case maybeXwaylandDisplay of
+    Nothing -> putStrLn "No DISPLAY found!"
+    (Just xwaylandDisplay) -> do
+      let envMap = M.fromList originalEnv
+      let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
+      let envListWithDisplay = M.toList envMapWithDisplay
+
+      output <- readProcess "xpra" ["list"] []
+      let isXpraAlreadyLive = isInfixOf ":13" output
+      case isXpraAlreadyLive of
+        False -> do createSessionLeader "xpra" ["start", ":13"] (Just envListWithDisplay)
+                    waitForXpraRecursively
+        True -> do putStrLn "xpra is already running!"
+      createSessionLeader "xpra" ["attach", ":13"] (Just envListWithDisplay)
+      return ()
+      where waitForXpraRecursively = do
+              output <- readProcess "xpra" ["list"] []
+              let isXpraAlreadyLive = isInfixOf ":13" output
+              case isXpraAlreadyLive of
+                False -> do putStrLn $ "Waiting for xpra server.."
+                            waitForXpraRecursively
+                True -> do putStrLn "xpra server found!"
+
+createSessionLeader :: FilePath -> [String] -> Maybe [(String, String)] -> IO (ProcessID, ProcessGroupID)
+createSessionLeader exe args env = do
+  pid <- forkProcess $ do
+    createSession
+    executeFile exe True args env
+  pgid <- getProcessGroupIDOf pid
+  return (pid, pgid)
+
+createProcessWithGroup :: ProcessGroupID -> FilePath -> [String] -> Maybe [(String, String)] -> IO ProcessID
+createProcessWithGroup pgid exe args env =
+   forkProcess $ do
+    joinProcessGroup pgid
+    executeFile exe True args env
+
+launchHMDWebCam :: GodotSimulaServer -> IO ()
+launchHMDWebCam gss = do
+  maybePath <- getHMDWebCamPath
+  case maybePath of
+    Nothing -> putStrLn "Cannot find HMD web cam!"
+    Just path  -> appLaunch gss "ffplay" ["-loglevel", "quiet", "-f", "v4l2", path]
+    where getHMDWebCamPath :: IO (Maybe FilePath)
+          getHMDWebCamPath = (listToMaybe . map ("/dev/v4l-by-id/" ++) . sort . filter viveOrValve) <$> listDirectory "/dev/v4l/by-id"
+          viveOrValve :: String -> Bool
+          viveOrValve str = any (`isInfixOf` str) ["Vive", "Valve"]

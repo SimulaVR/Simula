@@ -106,7 +106,6 @@ updateSimulaViewSprite gsvs = do
   -- whenM (spriteShouldMove gsvs) $ do
   --   atomically $ writeTVar (_gsvsShouldMove gsvs) False
   --   moveToUnoccupied gsvs
-
   where
         -- As the name makes clear, this function *only* draws the parent WlrSurface
         -- onto a GodotSimulaViewSprite's Sprite3D field. It doesn't include popups or

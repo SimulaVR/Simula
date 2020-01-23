@@ -144,7 +144,7 @@ upgradeStack() {
 
 ensureGodotBinaryExists() {
     mkdir -p ./bin
-    rm ./bin/godot
+    sudo rm ./bin/godot
     cp ./build/godot/bin/godot.x11.tools.64 ./bin/godot
     chmod +x ./bin/godot
 }

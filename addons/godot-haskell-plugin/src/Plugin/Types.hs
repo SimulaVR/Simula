@@ -48,6 +48,10 @@ import Data.IORef
 import qualified Data.Map.Strict as M
 
 import Data.UUID
+import System.Process
+import System.Process.Internals
+import System.Posix.Types
+
 
 unfoldrM :: Monad m => (b -> m (Maybe (a, b))) -> b -> m [a]
 unfoldrM f b = f b >>= \case
@@ -518,3 +522,11 @@ logGSVS string gsvs = do
 logStr :: String -> IO ()
 logStr string = do
   appendFile "log.txt" $ string ++ "\n"
+
+-- | returns Just pid or Nothing if process has already exited
+getPid :: ProcessHandle -> IO (Maybe ProcessID)
+getPid ph = withProcessHandle ph go
+  where
+    go ph_ = case ph_ of
+               OpenHandle x   -> return $ Just x
+               ClosedHandle _ -> return Nothing
