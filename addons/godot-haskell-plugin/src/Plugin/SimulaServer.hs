@@ -638,7 +638,7 @@ _on_simula_shortcut gss [godotScanCodeGVar, isPressedGVar] = do
         let eitherSurface = (simulaView ^. svWlrEitherSurface)
         case eitherSurface of
           (Left wlrXdgSurface) -> return ()
-          (Right wlrXWaylandSurface) -> G.terminate wlrXWaylandSurface
+          (Right wlrXWaylandSurface) -> G.send_close wlrXWaylandSurface
       _ -> putStrLn "Unrecognized shortcut!"
 
 launchXpra :: GodotSimulaServer -> IO ()

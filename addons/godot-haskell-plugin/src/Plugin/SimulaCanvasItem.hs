@@ -28,6 +28,8 @@ import           Godot.Nativescript
 import qualified Godot.Methods               as G
 import qualified Godot.Gdnative.Internal.Api as Api
 
+import Godot.Core.GodotViewport as G
+
 import Godot.Core.GodotVisualServer as G
 
 import Plugin.Types
@@ -243,7 +245,7 @@ initializeRenderTarget gsvs = do
   --   CLEAR_MODE_ALWAYS = 0
   --   CLEAR_MODE_NEVER = 1
   -- 
-  G.set_clear_mode renderTarget 1
+  G.set_clear_mode renderTarget G.CLEAR_MODE_NEVER
 
   -- "By default, re-rendering of the Viewport happens when the Viewport’s
   -- ViewportTexture has been drawn in a frame. If visible, it will be rendered;
@@ -256,10 +258,15 @@ initializeRenderTarget gsvs = do
   -- UPDATE_ONCE = 1 — Update the render target once, then switch to UPDATE_DISABLED.
   -- UPDATE_WHEN_VISIBLE = 2 — Update the render target only when it is visible. This is the default value.
   -- UPDATE_ALWAYS = 3 — Always update the render target. 
-  G.set_update_mode renderTarget 3
+  G.set_update_mode renderTarget G.UPDATE_ALWAYS
 
   -- "Note that due to the way OpenGL works, the resulting ViewportTexture is flipped vertically. You can use Image.flip_y on the result of Texture.get_data to flip it back[or you can also use set_vflip]:" -- Godot documentation
   G.set_vflip renderTarget True -- In tutorials this is set as True, but no reference to it in Godotston; will set to True for now
+
+  -- G.set_usage renderTarget 0
+  -- G.set_hdr renderTarget False
+  -- G.set_keep_3d_linear renderTarget False
+  G.set_transparent_background renderTarget True
 
   -- We could alternatively set the size of the renderTarget via set_size_override [and set_size_override_stretch]
   dimensions@(width, height) <- getBufferDimensions wlrSurface

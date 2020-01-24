@@ -342,7 +342,7 @@ focus gsvs = do
                                      (False, False) -> do G.reference wlrSurface
                                                           return ()
                                                           -- isGodotTypeNull wlrSurface
-                                                          G.set_activated wlrXWaylandSurface True
+                                                          safeSetActivated gsvs True -- G.set_activated wlrXWaylandSurface True
                                                           G.keyboard_notify_enter wlrSeat wlrSurface
                                                           pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
                                                           pointerNotifyFrame wlrSeat
@@ -369,22 +369,25 @@ processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)
   wlrSeat    <- readTVarIO (gss ^. gssWlrSeat)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
 
-  let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
-  (godotWlrSurface, subSurfaceLocalCoords@(SubSurfaceLocalCoordinates (ssx, ssy))) <-
-    case wlrEitherSurface of
-      Right godotWlrXWaylandSurface -> do
-        G.set_activated godotWlrXWaylandSurface True
-        getXWaylandSubsurfaceAndCoords godotWlrXWaylandSurface surfaceLocalCoords
-      Left godotWlrXdgSurface -> getXdgSubsurfaceAndCoords godotWlrXdgSurface surfaceLocalCoords
-  -- -- Send events
-  case evt of
-    Motion                -> do pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
-                                pointerNotifyMotion wlrSeat subSurfaceLocalCoords
-    Button pressed button -> do focus gsvs
-                                G.keyboard_notify_enter wlrSeat godotWlrSurface
-                                pointerNotifyButton wlrSeat evt
+  isMapped <- readTVarIO $ (simulaView ^. svMapped)
+  case isMapped of
+    False -> return () -- putStrLn "Surface isn't mapped!"
+    True -> do let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
+               (godotWlrSurface, subSurfaceLocalCoords@(SubSurfaceLocalCoordinates (ssx, ssy))) <-
+                 case wlrEitherSurface of
+                   Right godotWlrXWaylandSurface -> do
+                     safeSetActivated gsvs True -- G.set_activated godotWlrXWaylandSurface True
+                     getXWaylandSubsurfaceAndCoords godotWlrXWaylandSurface surfaceLocalCoords
+                   Left godotWlrXdgSurface -> getXdgSubsurfaceAndCoords godotWlrXdgSurface surfaceLocalCoords
+               -- -- Send events
+               case evt of
+                 Motion                -> do pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
+                                             pointerNotifyMotion wlrSeat subSurfaceLocalCoords
+                 Button pressed button -> do focus gsvs
+                                             G.keyboard_notify_enter wlrSeat godotWlrSurface
+                                             pointerNotifyButton wlrSeat evt
 
-  pointerNotifyFrame wlrSeat
+               pointerNotifyFrame wlrSeat
 
 
 -- | Takes a GodotWlrXdgSurface and returns the subsurface at point (which is likely the surface itself, or one of its popups).
@@ -581,3 +584,23 @@ resizeGSVS gsvs boost = do
   oldTargetDims@(SpriteDimensions (w, h)) <- readTVarIO (gsvs ^. gsvsTargetSize)
   let newTargetDims = SpriteDimensions ((w + boost), (h + boost))
   atomically $ writeTVar (gsvs ^. gsvsTargetSize) newTargetDims
+
+safeSetActivated :: GodotSimulaViewSprite -> Bool -> IO ()
+safeSetActivated gsvs active = do
+  simulaView <- readTVarIO $ (gsvs ^. gsvsView)
+  let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
+  isMapped <- readTVarIO $ (simulaView ^. svMapped)
+  case (isMapped, wlrEitherSurface) of
+    (True, Right wlrXWaylandSurface) -> G.set_activated wlrXWaylandSurface True
+    _ -> putStrLn "Can't set_activate!"
+
+safeSurfaceAt :: GodotSimulaViewSprite -> Float -> Float -> IO (Maybe GodotWlrSurfaceAtResult)
+safeSurfaceAt gsvs sx sy = do
+  simulaView <- readTVarIO $ (gsvs ^. gsvsView)
+  let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
+  isMapped <- readTVarIO $ (simulaView ^. svMapped)
+  ret <- case (isMapped, wlrEitherSurface) of
+            (True, Right wlrXWaylandSurface) -> do surfaceAtRes <- G.surface_at wlrXWaylandSurface sx sy :: IO GodotWlrSurfaceAtResult
+                                                   return (Just surfaceAtRes)
+            _ -> return Nothing
+  return ret

@@ -45,9 +45,9 @@ installUbuntuDependencies() {
                       libwlroots-dev \
                       epiphany \
                       sakura \
-                      cabal-install
-                      wmctrl
-                      xdotool
+                      cabal-install \
+                      wmctrl \
+                      xdotool \
                       bash
                       # libegl-dev       # Not provided in disco dango
                       # libxcb-iccm4-dev # Not provided in disco dango
