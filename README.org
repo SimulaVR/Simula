@@ -17,15 +17,26 @@ Simula is a VR window manager for Linux that runs on top of [[https://godotengin
 
 * Installation
 
-We keep a bleeding edge version of Simula synced to the following tarball:
+Simula requires ~xpra~, ~xrdb~, ~wmctrl~, and ~terminator~. We keep a bleeding edge ~AppImage~ of Simula synced to a tarball, which can be used as follows:
 
-#+BEGIN_SRC shell
-wget -c https://www.wolframcloud.com/obj/george.w.singer/SimulaBleedingEdge.tar.gz -O - | tar -xz
+#+BEGIN_SRC
+wget -c https://www.wolframcloud.com/obj/george.w.singer/SimulaAppImage.tar.gz -O - | tar -xz
 cd ./Simula
-./bin/godot # launches Simula (requires SteamVR to be running)
+chmod +x ./bin/godot.AppImage
+./bin/godot.AppImage --path $PWD # launches Simula (requires SteamVR to be running)
 #+END_SRC
 
-For installtion troubleshooting, [[https://gitter.im/SimulaVR/Simula][just ask us directly]].
+** COMMENT Bleeding Edge Binary
+
+ We keep a bleeding edge version of Simula synced to the following tarball:
+
+ #+BEGIN_SRC shell
+ wget -c https://www.wolframcloud.com/obj/george.w.singer/SimulaBleedingEdge.tar.gz -O - | tar -xz
+ cd ./Simula
+ ./bin/godot # launches Simula (requires SteamVR to be running)
+ #+END_SRC
+
+ For installtion troubleshooting, [[https://gitter.im/SimulaVR/Simula][just ask us directly]].
 
 * Usage
 ** Mouse & Keyboard Controls

@@ -185,7 +185,7 @@ generateResourceTarballs() {
 
     # Compile godot (w/ godot/modules/gdwlrots)
     cd ../..
-    scons platform=x11 target=debug -j 8
+    scons use_static_cpp=yes platform=x11 target=debug -j 8
 
     # Tarball godot and place in resources folder
     cd bin
@@ -256,7 +256,7 @@ updateResourceGodot() {
 
     sudo rm ./resources/godot.tar.gz
     cd ./build/godot
-    scons platform=x11 target=debug -j 8
+    scons use_static_cpp=yes platform=x11 target=debug -j 8
 
     # Tarball godot and place in resources folder
     cd bin

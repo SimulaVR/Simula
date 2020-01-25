@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Simula
+GenericName=Simula
+Comment=VR Compositor
+Exec=godot
+Icon=godot
+Terminal=false
+Categories=Game;
