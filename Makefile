@@ -1,7 +1,7 @@
 all: resources godot
 	cd addons/godot-haskell-plugin && make ; cd -
 
-godot: wlroots
+godot:
 	. ./utils/Helpers.sh && ensureGodotBinaryExists
 
 godot-update:
