@@ -310,3 +310,79 @@ ubuntuAltTabDisable() {
 disableUbuntuSuperKey() {
   gsettings set org.gnome.mutter overlay-key ''
 }
+
+# Warning: installs to system!
+compileWlroots() {
+    cd ./submodules/wlroots
+
+    meson build
+    sudo ninja -C build
+    sudo ninja -C build install
+
+    cd -
+}
+
+# Requires a Godot launch to generate api.json
+compileGodot() {
+    cd ./submodules/godot
+
+    cd ./modules/gdwlroots
+    make all
+    cd ../..
+
+    scons platform=x11 target=debug -j 8
+
+    if [ -e ./bin/godot.x11.tools.64 ]; then
+        ./bin/godot.x11.tools.64 --gdnative-generate-json-api api.json
+    fi
+
+    cd ../..
+}
+
+compileGodotHaskell() {
+    cd ./submodules/godot-haskell
+
+    cd classgen
+    if [ -e ../../godot/api.json ]; then
+        stack build
+        stack exec godot-haskell-classgen ../../godot/api.json
+        cd ..
+        cp -r src src.bak
+        rsync -a classgen/src/ src/
+    fi
+
+    cd ../..
+}
+
+compileGodotHaskellPlugin() {
+    cd ./addons/godot-haskell-plugin
+    stack build
+    cd -
+}
+
+switchToNix() {
+    cd ./addons/godot-haskell-plugin
+    rm libgodot-haskell-plugin.so
+    ln -s ../../result/bin/libgodot-haskell-plugin.so libgodot-haskell-plugin.so
+    cd -
+}
+
+switchToLocal() {
+    cd ./addons/godot-haskell-plugin
+    rm libgodot-haskell-plugin.so
+    ln -s $(stack path --local-install-root)/lib/libgodot-haskell-plugin.so libgodot-haskell-plugin.so
+    cd -
+
+    mkdir -p ./result/bin
+    cd ./result/bin
+
+    sudo rm ./terminator
+    sudo rm ./xpra
+    sudo rm ./xrdb
+    sudo rm ./wmctrl
+    sudo ln -s $(which terminator) terminator
+    sudo ln -s $(which xpra) xpra
+    sudo ln -s $(which xrdb) xrdb
+    sudo ln -s $(which wmctrl) wmctrl
+    cd -
+}

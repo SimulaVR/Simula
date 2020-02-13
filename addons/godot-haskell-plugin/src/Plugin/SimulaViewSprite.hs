@@ -321,7 +321,7 @@ newGodotSimulaViewSprite gss simulaView = do
 focus :: GodotSimulaViewSprite -> IO ()
 focus gsvs = do
   simulaView  <- atomically $ readTVar (gsvs ^. gsvsView)
-  gss         <- atomically $ readTVar (gsvs ^. gsvsServer) -- ^. gssWlrSeat)
+  gss         <- atomically $ readTVar (gsvs ^. gsvsServer)
   wlrSeat     <- atomically $ readTVar (gss ^. gssWlrSeat)
   let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
 

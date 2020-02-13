@@ -1,3 +1,15 @@
 [submodule "godot_headers"]
 	path = godot_headers
 	url = https://github.com/GodotNativeTools/godot_headers.git
+[submodule "submodules/wlroots"]
+	path = submodules/wlroots
+	url = https://github.com/SimulaVR/wlroots
+	branch = simula
+[submodule "submodules/godot"]
+	path = submodules/godot
+	url = https://github.com/SimulaVR/godot
+	branch = 3.2-simula
+[submodule "submodules/godot-haskell"]
+	path = submodules/godot-haskell
+	url = https://github.com/SimulaVR/godot-haskell
+	branch = simula

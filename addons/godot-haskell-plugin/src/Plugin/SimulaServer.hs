@@ -144,8 +144,12 @@ ready gss _ = do
   getSingleton GodotInput "Input" >>= \inp -> G.set_mouse_mode inp G.MOUSE_MODE_CAPTURED
   pid <- getProcessID
 
-  createProcess (shell "xrdb -merge .Xdefaults") { env = Just [("DISPLAY", newDisplay)] }
-  createProcess (shell "wmctrl -a Simula") { env = Just [("DISPLAY", oldDisplay)] }
+  createProcess (shell "./result/bin/xrdb -merge .Xdefaults") { env = Just [("DISPLAY", newDisplay)] }
+
+  windows <- readCreateProcess (shell "./result/bin/wmctrl -lp") ""
+  let rightWindows = filter (\line -> isInfixOf (show pid) line) (lines windows)
+  let simulaWindow = (head . words . head) rightWindows
+  createProcess ((shell $ "./result/bin/wmctrl -ia " ++ simulaWindow) { env = Just [("DISPLAY", oldDisplay)] })
 
   appendFile "log.txt" "Starting logs..\n"
   launchXpra gss
@@ -652,16 +656,17 @@ launchXpra gss = do
       let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
       let envListWithDisplay = M.toList envMapWithDisplay
 
-      output <- readProcess "xpra" ["list"] []
+      output <- readCreateProcess (shell "./result/bin/xpra list") ""
       let isXpraAlreadyLive = isInfixOf ":13" output
       case isXpraAlreadyLive of
-        False -> do createSessionLeader "xpra" ["start", ":13"] (Just envListWithDisplay)
+        False -> do createSessionLeader "./result/bin/xpra" ["--fake-xinerama=no", "start", ":13"] (Just envListWithDisplay)
                     waitForXpraRecursively
         True -> do putStrLn "xpra is already running!"
-      createSessionLeader "xpra" ["attach", ":13"] (Just envListWithDisplay)
+      createSessionLeader "./result/bin/xpra" ["attach", ":13"] (Just envListWithDisplay)
       return ()
       where waitForXpraRecursively = do
-              output <- readProcess "xpra" ["list"] []
+              output <- readCreateProcess (shell "./result/bin/xpra list") ""
+              putStrLn $ "Output is: " ++ output
               let isXpraAlreadyLive = isInfixOf ":13" output
               case isXpraAlreadyLive of
                 False -> do putStrLn $ "Waiting for xpra server.."
