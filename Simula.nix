@@ -1,6 +1,6 @@
 { stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, terminator, xrdb, wmctrl, SDL2, vulkan-loader, lib, driverCheck ? "" }:
 let
-    godot = callPackage ./submodules/godot/godot.nix { };
+    godot = callPackage ./submodules/godot/godot.nix { driverCheck = driverCheck; };
     godot-api = "${godot}/bin/api.json";
     godot-haskell = haskellPackages.callPackage ./submodules/godot-haskell/default.nix { api-json = godot-api; };
     godot-haskell-plugin = haskellPackages.callPackage ./addons/godot-haskell-plugin/godot-haskell-plugin.nix { };
@@ -25,7 +25,7 @@ let
       ln -s ${xpra}/bin/xpra $out/bin/xpra
       ln -s ${xrdb}/bin/xrdb $out/bin/xrdb
       ln -s ${wmctrl}/bin/wmctrl $out/bin/wmctrl
-      echo "LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader}/lib LC_ALL=C.UTF-8'' + nixGLRes + ''${godot}/bin/godot" > $out/bin/simula
+      echo "LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader}/lib LC_ALL=C.UTF-8 '' + nixGLRes + '' ${godot}/bin/godot" > $out/bin/simula
       chmod +x $out/bin/simula
       '';
     };

@@ -1,7 +1,7 @@
 RUNNING_NIXOS=$(nixos-version)
 NVIDIA_VERSION=$(nvidia-smi | grep -ho "Driver Version: [0-9]*.[0-9]*" |  awk '{print $NF}')
 
-if [ ! -z $RUNNING_NIXOS]; then
+if [ ! -z "$RUNNING_NIXOS" ]; then
    echo "nixos"
 elif [ -z $NVIDIA_VERSION ]; then
    echo "intel"
