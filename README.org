@@ -32,7 +32,7 @@ nix-build --option build-use-sandbox false \
 ./result/bin/simula # Needs SteamVR to be running
 #+END_SRC
 
-Simula is untested on machines with AMD drivers, though AMD cards running intel drivers should be supported. If you do not have ~nix~, you can install it via
+Simula is untested on machines with AMD drivers, though AMD cards running mesa drivers should be supported. If you do not have ~nix~, you can install it via
 
 #+BEGIN_SRC shell
 curl https://nixos.org/nix/install | sh
