@@ -11,13 +11,16 @@ let
     nixVulkanNvidia = ((import ./submodules/godot/nixGL.nix) { nvidiaVersion = "${nvidia-version}"; nvidiaHash = "${nvidia-hash}"; }).nixVulkanNvidia;
     nixGLIntel = ((import ./submodules/godot/nixGL.nix) { }).nixGLIntel;
     nixGLRes = if ((builtins.head driverCheckList) == "nixos") then " " else (if ((builtins.head driverCheckList) == "nvidia") then " ${nixVulkanNvidia}/bin/nixVulkanNvidia " else " ${nixGLIntel}/bin/nixGLIntel ");
+    generateExport = if driverCheck == "nixos" then "xvfb-run ${godot}/bin/godot.x11.tools.64 --export \"Linux/X11\" $out/bin/Simula" else "nixGLIntel xvfb-run ${godot}/bin/godot.x11.tools.64 --export \"Linux/X11\" $out/bin/Simula";
 
     xpra = callPackage ./nix/xpra/default.nix { };
+
+    xvfb-run = callPackage ./submodules/godot/xvfb-run.nix { };
 
     simula = stdenv.mkDerivation {
       name = "Simula";
       src = ./utils;
-      buildInputs = [ godot godot-haskell-plugin terminator xpra xrdb wmctrl];
+      buildInputs = [ godot godot-haskell-plugin terminator xpra xrdb wmctrl nixGLIntel xvfb-run ];
       installPhase = ''
       mkdir -p $out/bin
       ln -s ${godot-haskell-plugin}/lib/ghc-8.6.5/libgodot-haskell-plugin.so $out/bin/libgodot-haskell-plugin.so
@@ -25,7 +28,10 @@ let
       ln -s ${xpra}/bin/xpra $out/bin/xpra
       ln -s ${xrdb}/bin/xrdb $out/bin/xrdb
       ln -s ${wmctrl}/bin/wmctrl $out/bin/wmctrl
-      echo "LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader}/lib LC_ALL=C.UTF-8 '' + nixGLRes + '' ${godot}/bin/godot" > $out/bin/simula
+      ln -s ${godot}/bin/godot.x11.opt.64 $out/bin/godot.x11.opt.64
+      ln -s ${godot}/bin/godot.x11.opt.debug.64 $out/bin/godot.x11.opt.debug.64
+      echo "if [ ! -d .import ]; then LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader}/lib LC_ALL=C.UTF-8 '' + nixGLRes + '' ${godot}/bin/godot.x11.tools.64 --export \"Linux/X11\" ./result/bin/SimulaExport; fi" > $out/bin/simula
+      echo "LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader}/lib LC_ALL=C.UTF-8 '' + nixGLRes + '' ${godot}/bin/godot.x11.opt.64 -m" >> $out/bin/simula
       chmod +x $out/bin/simula
       '';
     };

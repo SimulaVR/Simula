@@ -60,16 +60,16 @@ in buildPythonApplication rec {
   propagatedBuildInputs = with python3.pkgs; [
     pillow rencode pycrypto cryptography pycups lz4 dbus-python
     netifaces numpy pygobject3 pycairo gst-python pam
-    pyopengl-fixed paramiko opencv4 python-uinput pyxdg
-    ipaddress idna
+    paramiko opencv4 python-uinput pyxdg
+    ipaddress idna pyopengl-fixed
   ];
 
     # error: 'import_cairo' defined but not used
   NIX_CFLAGS_COMPILE = "-Wno-error=unused-function";
 
   setupPyBuildFlags = [
-    "--with-Xdummy"
-    "--without-strict"
+    "--without-Xdummy"
+    "--without-Xdummy_wrapper"
     "--with-gtk3"
     "--without-gtk2"
     # Override these, setup.py checks for headers in /usr/* paths
@@ -89,7 +89,7 @@ in buildPythonApplication rec {
 
   enableParallelBuilding = true;
 
-  passthru = { inherit xf86videodummy; };
+  # passthru = { inherit xf86videodummy; };
 
   meta = {
     homepage = http://xpra.org/;
