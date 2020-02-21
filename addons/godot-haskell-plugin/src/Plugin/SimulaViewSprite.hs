@@ -298,7 +298,7 @@ newGodotSimulaViewSprite gss simulaView = do
   -- wlrSurface <- getWlrSurface eitherSurface
   -- dimensions@(originalWidth, originalHeight) <- getBufferDimensions wlrSurface
   --  atomically $ writeTVar (gsvs ^. gsvsTargetSize) (SpriteDimensions (originalWidth, originalHeight))
-  atomically $ writeTVar (gsvs ^. gsvsTargetSize) (SpriteDimensions (800, 800))
+  atomically $ writeTVar (gsvs ^. gsvsTargetSize) (SpriteDimensions (900, 900))
 
   -- atomically $ writeTVar (_gsvsObj       gss) gsObj'      -- :: GodotObject (filled in classInit)
   atomically $ writeTVar (_gsvsServer    gsvs) gss           -- :: TVar GodotSimulaServer

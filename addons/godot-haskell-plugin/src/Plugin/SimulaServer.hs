@@ -659,10 +659,10 @@ launchXpra gss = do
       output <- readCreateProcess (shell "./result/bin/xpra list") ""
       let isXpraAlreadyLive = isInfixOf ":13" output
       case isXpraAlreadyLive of
-        False -> do createSessionLeader "./result/bin/xpra" ["--fake-xinerama=no", "start", ":13"] (Just envListWithDisplay)
+        False -> do createSessionLeader "./result/bin/xpra" ["--fake-xinerama=no", "--dpi=96", "start", ":13"] (Just envListWithDisplay)
                     waitForXpraRecursively
         True -> do putStrLn "xpra is already running!"
-      createSessionLeader "./result/bin/xpra" ["attach", ":13"] (Just envListWithDisplay)
+      createSessionLeader "./result/bin/xpra" ["--dpi=96", "attach", ":13"] (Just envListWithDisplay)
       return ()
       where waitForXpraRecursively = do
               output <- readCreateProcess (shell "./result/bin/xpra list") ""
