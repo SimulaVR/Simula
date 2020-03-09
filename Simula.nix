@@ -1,6 +1,6 @@
 { stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, terminator, xrdb, wmctrl, SDL2, vulkan-loader, lib, driverCheck ? "" }:
 let
-    godot = callPackage ./submodules/godot/godot.nix { driverCheck = driverCheck; };
+    godot = callPackage ./submodules/godot/godot.nix { };
     godot-api = "${godot}/bin/api.json";
     godot-haskell = haskellPackages.callPackage ./submodules/godot-haskell/default.nix { api-json = godot-api; };
     godot-haskell-plugin = haskellPackages.callPackage ./addons/godot-haskell-plugin/godot-haskell-plugin.nix { };
@@ -14,12 +14,12 @@ let
 
     xpra = callPackage ./nix/xpra/default.nix { };
 
-    xvfb-run = callPackage ./submodules/godot/xvfb-run.nix { };
+    # xvfb-run = callPackage ./submodules/godot/xvfb-run.nix { };
 
     simula = stdenv.mkDerivation {
       name = "Simula";
       src = ./utils;
-      buildInputs = [ godot godot-haskell-plugin terminator xpra xrdb wmctrl nixGLIntel xvfb-run ];
+      buildInputs = [ godot godot-haskell-plugin terminator xpra xrdb wmctrl nixGLIntel ];
       installPhase = ''
       mkdir -p $out/bin
       ln -s ${godot-haskell-plugin}/lib/ghc-8.6.5/libgodot-haskell-plugin.so $out/bin/libgodot-haskell-plugin.so
