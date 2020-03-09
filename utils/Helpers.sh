@@ -92,208 +92,6 @@ installArchDependencies() {
   upgradeStack
 }
 
-installWlrootsInBuildFolder() {
-    mkdir -p ./build
-    cd ./build
-
-    if [ -d wlroots ]; then
-        echo "wlroots already built"
-    else
-        git clone --branch simula https://github.com/SimulaVR/wlroots
-        cd wlroots
-        meson --default-library static --buildtype release  build
-        ninja -C build
-        cd ..
-    fi
-
-    cd ..
-}
-
-# Only works on Ubuntu (or Debian based distros) and Arch
-installNvidiaDrivers() {
-    if hash apt 2>/dev/null; then
-        sudo apt-get install nvidia-driver-418
-    elif hash pacman 2>/dev/null; then
-        sudo pacman -S nvidia
-    else
-        echo "Neither apt nor pacman is installed."
-    fi
-}
-
-# Only works on Ubuntu (or Debian based distros) and Arch
-installAMDDrivers() {
-    if hash apt 2>/dev/null; then
-        sudo add-apt-repository ppa:kisak/steamvr
-        sudo apt update
-        sudo apt dist-upgrade
-        sudo apt-get install linux-generic-steamvr-18.04 \
-                             xserver-xorg-hwe-18.04
-                             mesa-vulkan-drivers
-                             mesa-vulkan-drivers:i386
-    elif hash pacman 2>/dev/null; then
-        sudo pacman -S mesa vulkan-radeon libva-mesa-driver mesa-vdpau
-    else
-        echo "Neither apt nor pacman is installed."
-    fi
-
-}
-
-upgradeStack() {
-  stack upgrade
-}
-
-ensureGodotBinaryExists() {
-    mkdir -p ./bin
-    sudo rm ./bin/godot
-    cp ./build/godot/bin/godot.x11.tools.64 ./bin/godot
-    chmod +x ./bin/godot
-}
-
-# A helper function to
-#   (i) Compile an instance of SimulaVR/godot with the gdwlroots bindings.
-#  (ii) Use (i) to generate generate godot-haskell-gdwlroots-*.tar.gz
-# The resulting tarball is playced in ./addons/godot-haskell-plugin/*.tar.gz
-generateResourceTarballs() {
-  if [ -e resources/godot.tar.gz -a -e resources/godot-haskell-gdwlroots.tar.gz ]; then
-      echo "resources/*.tar.gz already exist"
-  else
-    local ROOTSIMULADIR=$(pwd)
-
-    # Remove files and place ourselves in ./build
-    mkdir -p resources
-    cd ./resources
-    sudo rm godot.tar.gz
-    sudo rm godot-haskell-gdwlroots.tar.gz
-    cd ..
-
-    mkdir -p build
-    cd ./build
-    read -p "About to delete ./build/godot! If you are developing in that folder, press C-c to cancel script. Otherwise, press any key."
-    sudo rm -r godot
-
-    # Get ./godot + ./godot/modules/gdwlroots + ./godot/godot-haskell-gdwlroots
-        # 3.06-stable doesn't work (compilation issues)
-        # 3.1 doesn't work (compilation issues)
-        # TODO: Use godot 3.1
-    git clone --branch "3.2-simula" --recursive https://github.com/SimulaVR/godot godot
-    cd godot
-    git clone --branch simula --recursive https://github.com/SimulaVR/godot-haskell godot-haskell-gdwlroots
-    cd modules
-    git clone --branch "xwayland-3.2" --recursive https://github.com/SimulaVR/gdwlroots gdwlroots
-    cd gdwlroots
-    make all
-
-    # Compile godot (w/ godot/modules/gdwlrots)
-    cd ../..
-    scons use_static_cpp=yes platform=x11 target=debug -j 8
-
-    # Tarball godot and place in resources folder
-    cd bin
-    tar -cvzf ../../../resources/godot.tar.gz godot.x11.tools.64
-    cd ..
-
-    # Generate ./godot/godot-haskell-gdwlroots/api.json
-    cd godot-haskell-gdwlroots
-    rm api.json
-    ../bin/godot.x11.tools.64 --gdnative-generate-json-api api.json
-
-    # Morph ./godot/godot-haskell-gdwlroots source code to reflect updated api.json
-    cd classgen
-    stack build
-    stack exec godot-haskell-classgen ../api.json
-    cd ..
-    cp -r src src.bak
-    rsync -a classgen/src/ src/
-
-    # Create godot-haskell-gdwlroots.tar.gz and place in resources folder
-    cabal sdist
-    mv ./dist/godot-haskell-3.1.0.0.tar.gz ../../../resources/godot-haskell-gdwlroots.tar.gz
-
-    cd $ROOTSIMULADIR
-  fi
-}
-
-ask() {
-    # https://gist.github.com/davejamesmiller/1965569
-    local prompt default reply
-
-    if [ "${2:-}" = "Y" ]; then
-        prompt="Y/n"
-        default=Y
-    elif [ "${2:-}" = "N" ]; then
-        prompt="y/N"
-        default=N
-    else
-        prompt="y/n"
-        default=
-    fi
-
-    while true; do
-
-        # Ask the question (not using "read -p" as it uses stderr not stdout)
-        echo -n "$1 [$prompt] "
-
-        # Read the answer (use /dev/tty in case stdin is redirected from somewhere else)
-        read reply </dev/tty
-
-        # Default?
-        if [ -z "$reply" ]; then
-            reply=$default
-        fi
-
-        # Check if the reply is valid
-        case "$reply" in
-            Y*|y*) return 0 ;;
-            N*|n*) return 1 ;;
-        esac
-
-    done
-}
-
-# make godot-update
-updateResourceGodot() {
-    local ROOTSIMULADIR=$(pwd)
-
-    sudo rm ./resources/godot.tar.gz
-    cd ./build/godot
-    scons use_static_cpp=yes platform=x11 target=debug -j 8
-
-    # Tarball godot and place in resources folder
-    cd bin
-    tar -cvzf ../../../resources/godot.tar.gz godot.x11.tools.64
-    cd "$ROOTSIMULADIR"
-}
-
-# make godot-haskell-gdwlroots-update
-updateResourceGodotHaskellGdwlroots() {
-    # Generate ./godot/godot-haskell-gdwlroots/api.json
-    local ROOTSIMULADIR=$(pwd)
-
-    sudo rm ./resources/godot-haskell-gdwlroots.tar.gz
-    cd build/godot
-    sudo rm -r godot-haskell-gdwlroots
-    # git clone --branch gdwlroots --recursive https://github.com/SimulaVR/godot-haskell godot-haskell-gdwlroots
-    git clone --branch simula --recursive https://github.com/SimulaVR/godot-haskell godot-haskell-gdwlroots
-
-    cd godot-haskell-gdwlroots
-    rm api.json
-    ../bin/godot.x11.tools.64 --gdnative-generate-json-api api.json
-
-    # Morph ./godot/godot-haskell-gdwlroots source code to reflect updated api.json
-    cd classgen
-    stack build
-    stack exec godot-haskell-classgen ../api.json
-    cd ..
-    cp -r src src.bak
-    rsync -a classgen/src/ src/
-
-    # Create godot-haskell-gdwlroots.tar.gz and place in resources folder
-    cabal sdist
-    mv ./dist/godot-haskell-3.1.0.0.tar.gz ../../../resources/godot-haskell-gdwlroots.tar.gz
-
-    cd $ROOTSIMULADIR
-}
-
 ubuntuAltTabReset() {
   gsettings reset org.gnome.desktop.wm.keybindings switch-applications
   gsettings get org.gnome.desktop.wm.keybindings switch-applications
@@ -404,5 +202,24 @@ installSimula() {
     checkInstallNix
     checkInstallCachix
     cachix use simula
-    nix-build --option build-use-sandbox false default.nix --argstr driverCheck "$(./utils/DriverCheck.sh)"
+    nix-build default.nix --argstr driverCheck "$(./utils/DriverCheck.sh)"
+}
+
+pushSimulaToCachix() {
+  nix-build default.nix --argstr driverCheck "nvidia 430.26 1rnfxl4dxa3jjidfdvfjmg1a8nc787ss15cakrp2wwrn8jlr9av6" | cachix push simula
+  nix-build default.nix --argstr driverCheck "nvidia 430.34 0c3x25gilibbgazvp20d5sfmmgcf0gfqf024nzzqryxg4m05h39b" | cachix push simula
+  nix-build default.nix --argstr driverCheck "nvidia 430.40 1myzhy1mf27dcx0admm3pbbkfdd9p66lw0cq2mz1nwds92gqj07p" | cachix push simula
+  nix-build default.nix --argstr driverCheck "nvidia 430.50 1i9x9lr6izfq6csgnh8dfg3sa7s3has20hdpi7wlbla7msa36s0c" | cachix push simula
+  nix-build default.nix --argstr driverCheck "nvidia 430.64 1k5s05a7yvrms97nr3gd8cbvladn788qamsmwr6jsmdzv6yh5gvk" | cachix push simula
+  nix-build default.nix --argstr driverCheck "nvidia 435.17 19p9v5km1kfw45ghqmzgawa2fdq559jj6h1dkbnkbbzhp2syq757" | cachix push simula
+  nix-build default.nix --argstr driverCheck "nvidia 435.21 0v3pq677ab01qdmwl5dawk8hn39qlwj05p8s9qzh9irmrlnc1izs" | cachix push simula
+  nix-build default.nix --argstr driverCheck "nvidia 440.26 0ay3c4vhl8cqhl57vjar4p6v1nkh5zpvya41ag2sibj30spyg62z" | cachix push simula
+  nix-build default.nix --argstr driverCheck "nvidia 440.31 03w5v3079c35sz3nkdk28yc76jb5hv8dy99jjy7pkywvbhw2ynfd" | cachix push simula
+  nix-build default.nix --argstr driverCheck "nvidia 440.36 0nbdldwizb802w4x0rqnyb1p7iqz5nqiahqr534n5ihz21a6422h" | cachix push simula
+  nix-build default.nix --argstr driverCheck "nvidia 440.44 057wq9p2vl87gy61f079b6d7clw2vhw3kq7rj411brhrnvr7shmd" | cachix push simula
+  nix-build default.nix --argstr driverCheck "nvidia 440.59 162gq6w44l8sgnn4qnl2rdlx8c008p04zv4c3i1ps20p21n1mjv1" | cachix push simula
+  nix-build default.nix --argstr driverCheck "nvidia 440.64 0xbm1dh95kz8h4d62pql2wmvw2gbgc7iif2bkixbnqijl4dryg71" | cachix push simula
+
+  nix-build default.nix --argstr driverCheck "nixos" | cachix push simula
+  nix-build default.nix --argstr driverCheck "intel" | cachix push simula
 }

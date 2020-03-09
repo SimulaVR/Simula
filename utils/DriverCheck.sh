@@ -1,4 +1,4 @@
-RUNNING_NIXOS=$(nixos-version)
+RUNNING_NIXOS=$(nixos-version > /dev/null 2>&1)
 NVIDIA_VERSION=$(nvidia-smi | grep -ho "Driver Version: [0-9]*.[0-9]*" |  awk '{print $NF}')
 
 if [ ! -z "$RUNNING_NIXOS" ]; then
