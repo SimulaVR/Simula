@@ -11,7 +11,6 @@ let
     nixVulkanNvidia = ((import ./submodules/godot/nixGL.nix) { nvidiaVersion = "${nvidia-version}"; nvidiaHash = "${nvidia-hash}"; }).nixVulkanNvidia;
     nixGLIntel = ((import ./submodules/godot/nixGL.nix) { }).nixGLIntel;
     nixGLRes = if ((builtins.head driverCheckList) == "nixos") then " " else (if ((builtins.head driverCheckList) == "nvidia") then " ${nixVulkanNvidia}/bin/nixVulkanNvidia " else " ${nixGLIntel}/bin/nixGLIntel ");
-    generateExport = if driverCheck == "nixos" then "xvfb-run ${godot}/bin/godot.x11.tools.64 --export \"Linux/X11\" $out/bin/Simula" else "nixGLIntel xvfb-run ${godot}/bin/godot.x11.tools.64 --export \"Linux/X11\" $out/bin/Simula";
 
     xpra = callPackage ./nix/xpra/default.nix { };
 

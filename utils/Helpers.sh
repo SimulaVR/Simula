@@ -386,3 +386,23 @@ switchToLocal() {
     sudo ln -s $(which wmctrl) wmctrl
     cd -
 }
+
+checkInstallCachix() {
+    if [ ! command -v cachix ]; then
+        nix-env -iA cachix -f https://cachix.org/api/v1/install
+    fi
+}
+
+checkInstallNix() {
+    if [ ! command -v nix ]; then
+        curl https://nixos.org/nix/install | sh
+        . $HOME/.nix-profile/etc/profile.d/nix.sh
+    fi
+}
+
+installSimula() {
+    checkInstallNix
+    checkInstallCachix
+    cachix use simula
+    nix-build --option build-use-sandbox false default.nix --argstr driverCheck "$(./utils/DriverCheck.sh)"
+}

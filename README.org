@@ -17,26 +17,21 @@ Simula is a VR window manager for Linux that runs on top of [[https://godotengin
 
 * Installation
 
-Simula can be built and ran with ~nix~ as follows:
+To install Simula on all Linux distros, run:
 
 #+BEGIN_SRC shell
+# Clone
 git clone --recursive https://github.com/SimulaVR/Simula
 cd Simula
 
-# Compile Simula (takes a while)
-nix-build --option build-use-sandbox false \
-          default.nix \
-          --argstr driverCheck "$(./utils/DriverCheck.sh)" # Ensures Simula is compatible on any Linux machine with nvidia drivers, intel drivers, or systems running NixOS.
+# Build
+source ./utils/Helpers.sh && installSimula
 
-# Launch Simula
+# Launch
 ./result/bin/simula # Needs SteamVR to be running
 #+END_SRC
 
-Simula is untested on machines with AMD drivers, though AMD cards running mesa drivers should be supported. If you do not have ~nix~, you can install it via
-
-#+BEGIN_SRC shell
-curl https://nixos.org/nix/install | sh
-#+END_SRC
+This script does a few things under the hood: (i) checks whether you have ~nix~ and ~cachix~ installed (and, if not, installs them); (ii) checks which graphics drivers you have and (iii) builds Simula via ~nix~ and ~cachix~ with the appropriate driver flags. Simula is untested on machines with AMD drivers, though AMD cards running mesa drivers should be supported.
 
 ** COMMENT AppImage
 
