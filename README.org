@@ -15,7 +15,7 @@ Simula is a VR window manager for Linux that runs on top of [[https://godotengin
 
 *Origins:* Simula is a reimplementation fork of [[https://github.com/evil0sheep/motorcar][motorcar]]. To read about motorcar, see /[[https://github.com/evil0sheep/MastersThesis/blob/master/thesis.pdf?raw=true][Toward General Purpose 3D User Interfaces: Extending Windowing Systems to Three Dimensions]]/
 
-* Install Simula in less than 1 minute
+* Installation
 
 To install Simula on all Linux distros, run:
 
@@ -33,7 +33,7 @@ source ./utils/Helpers.sh && installSimula
 
 *Installing Simula should take less than 1 minute:* this script doesn't actually compile anything on your system, but instead downloads the appropriate binaries from our cache in a way that is system and driver agnostic. Under the hood, we (i) check whether you have ~nix~ and ~cachix~ installed (and, if not, install them); (ii) check which graphics drivers you have and (iii) download Simula via ~cachix~ with the appropriate driver flags, falling back to a ~nix~ build if downloading fails.
 
-Simula is untested on machines with AMD drivers, though AMD cards running mesa drivers should be supported.
+# Simula is untested on machines with AMD drivers, though AMD cards running mesa drivers should be supported.
 
 ** COMMENT AppImage
 
