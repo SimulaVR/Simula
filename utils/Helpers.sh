@@ -206,6 +206,7 @@ installSimula() {
     checkInstallNix
     checkInstallCachix
     cachix use simula
+    curl https://www.wolframcloud.com/obj/george.w.singer/installMessage
     nix-build default.nix --argstr driverCheck "$(./utils/DriverCheck.sh)"
 }
 
@@ -226,4 +227,9 @@ pushSimulaToCachix() {
 
   nix-build default.nix --argstr driverCheck "nixos" | cachix push simula
   nix-build default.nix --argstr driverCheck "intel" | cachix push simula
+}
+
+swapXpraNixToLocal() {
+    sudo rm ./result/bin/xpra
+    sudo ln -s $(which xpra) ./result/bin/xpra
 }

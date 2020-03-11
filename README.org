@@ -1,6 +1,6 @@
 [[file:./doc/TEMP_LOGO.png]]
 
-Simula is a VR window manager for Linux that runs on top of [[https://godotengine.org/][Godot]].
+Simula is a VR window manager for Linux that runs on top of [[https://godotengine.org/][Godot]]. It takes less than 1 minute to install.
 
 # [[https://d.tube/#!/v/sudoreboot/t026ny0m][file:./doc/SimulaDesktop.png]]
 # [[https://i.imgur.com/zNTYTiG.png]]
@@ -15,7 +15,7 @@ Simula is a VR window manager for Linux that runs on top of [[https://godotengin
 
 *Origins:* Simula is a reimplementation fork of [[https://github.com/evil0sheep/motorcar][motorcar]]. To read about motorcar, see /[[https://github.com/evil0sheep/MastersThesis/blob/master/thesis.pdf?raw=true][Toward General Purpose 3D User Interfaces: Extending Windowing Systems to Three Dimensions]]/
 
-* Installation
+* Install Simula in less than 1 minute
 
 To install Simula on all Linux distros, run:
 
@@ -24,14 +24,16 @@ To install Simula on all Linux distros, run:
 git clone --recursive https://github.com/SimulaVR/Simula
 cd Simula
 
-# Build
+# Download (or build, if downloading fails)
 source ./utils/Helpers.sh && installSimula
 
 # Launch
 ./result/bin/simula # Needs SteamVR to be running
 #+END_SRC
 
-This script does a few things under the hood: (i) checks whether you have ~nix~ and ~cachix~ installed (and, if not, installs them); (ii) checks which graphics drivers you have and (iii) builds Simula via ~nix~ and ~cachix~ with the appropriate driver flags. Simula is untested on machines with AMD drivers, though AMD cards running mesa drivers should be supported.
+*Installing Simula should take less than 1 minute:* this script doesn't actually compile anything on your system, but instead downloads the appropriate binaries from our cache in a way that is system and driver agnostic. Under the hood, we (i) check whether you have ~nix~ and ~cachix~ installed (and, if not, install them); (ii) check which graphics drivers you have and (iii) download Simula via ~cachix~ with the appropriate driver flags, falling back to a ~nix~ build if downloading fails.
+
+Simula is untested on machines with AMD drivers, though AMD cards running mesa drivers should be supported.
 
 ** COMMENT AppImage
 
@@ -112,6 +114,11 @@ xpra attach :13
 #+END_SRC
 
 and they will appear on your current ~DISPLAY~. Running ~xpra stop~ (or just ~pkill xpra~) is a quick way to kill all apps associated with your Simula session(s).
+
+
+* Community
+
+For troubleshooting and discussion, join our community at https://discordapp.com/invite/a4PnP7n.
 
 * COMMENT Installation
   
