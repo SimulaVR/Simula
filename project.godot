@@ -34,5 +34,6 @@ common/physics_fps=90
 [rendering]
 
 quality/filters/anisotropic_filter_level=16
+environment/default_clear_color=Color( 1, 1, 1, 1 )
 quality/filters/msaa=3
 environment/default_environment="res://default_env.tres"

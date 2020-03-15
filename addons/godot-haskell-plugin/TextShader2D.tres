@@ -18,8 +18,8 @@ vec4 supersample(sampler2D tex, vec2 uv) {
 	ivec2 pixelWidth = ivec2(width * vec2(size));
 	ivec2 xy = ivec2(uv * vec2(size));
 	
-	ivec2 start = xy - pixelWidth;
-	ivec2 end = xy + pixelWidth;
+	ivec2 start = xy - pixelWidth/2;
+	ivec2 end = xy + pixelWidth/2;
 	
 	vec4 outColor = vec4(0.0);
 	int n = 0;
@@ -67,26 +67,17 @@ vec4 lowpassFilter(sampler2D tex, vec2 uv, float alpha) {
 
 	ivec2 size = textureSize(tex, 0);
 	
-	ivec2 pixelWidth = ivec2(width * vec2(size));
-	vec2 aspectRatio = normalize(vec2(pixelWidth));
+	vec2 pixelWidth = floor(width * vec2(size));
+	vec2 aspectRatio = normalize(pixelWidth);
 	
 	ivec2 xy = ivec2(uv * vec2(size));
 	vec2 xyf = uv * vec2(size);
 	
-	if (pixelWidth.x < 2 || pixelWidth.y < 2) {
-		return texture(tex, uv);
-	}
+	pixelWidth = clamp(pixelWidth, vec2(1.0), vec2(2.0));
 	
-	if (pixelWidth.x % 2 != 0) {
-		pixelWidth.x += 1;
-	}
 	
-	if (pixelWidth.y % 2 != 0) {
-		pixelWidth.y += 1;
-	}
-	
-	ivec2 start = xy - pixelWidth/2;
-	ivec2 end = xy + pixelWidth/2;
+	ivec2 start = xy - ivec2(pixelWidth);
+	ivec2 end = xy + ivec2(pixelWidth);
 	
 	vec4 outColor = vec4(0.0);
 	
@@ -94,10 +85,9 @@ vec4 lowpassFilter(sampler2D tex, vec2 uv, float alpha) {
 	
 	for (int v = start.y; v <= end.y; v++) {
 		for (int u = start.x; u <= end.x; u++) {
-			float kx = fcFactor * (xyf.x - float(u))/float(pixelWidth.x);
-			float ky = fcFactor * (xyf.y - float(v))/float(pixelWidth.y);
+			float kx = fcFactor * (xyf.x - float(u))/pixelWidth.x;
+			float ky = fcFactor * (xyf.y - float(v))/pixelWidth.y;
 			 
-			//float lanczosValue = gaussian(kx, fcx);
 			float lanczosValue = kaiser(sqrt(kx*kx + ky*ky), alpha);
 			
 			q += texelFetch(tex, ivec2(u, v), 0) * lanczosValue;
@@ -112,6 +102,7 @@ vec4 lowpassFilter(sampler2D tex, vec2 uv, float alpha) {
 void fragment() {
 	vec4 outColor = vec4(0.0);
 	outColor = lowpassFilter(TEXTURE, UV, ripple);
+  //outColor = texture(TEXTURE, UV); //to turn off
 
 	COLOR = outColor;
 }"
