@@ -15,6 +15,14 @@ Simula is a VR window manager for Linux that runs on top of [[https://godotengin
 
 *Origins:* Simula is a reimplementation fork of [[https://github.com/evil0sheep/motorcar][motorcar]]. To read about motorcar, see /[[https://github.com/evil0sheep/MastersThesis/blob/master/thesis.pdf?raw=true][Toward General Purpose 3D User Interfaces: Extending Windowing Systems to Three Dimensions]]/
 
+* Text Quality
+
+A common objection to the viability of VR Desktop is that it exhibits poor text quality; however, with our low pass filter, Simula has taken special care to make text quality as clear as possible:
+
+[[https://im6.ezgif.com/tmp/ezgif-6-bc6925b61b96.gif]]
+
+The left image is a VR terminal *without* our filter applied; the right is the same image *with* our filter applied. Compared to other VR Desktops, Simula allows significantly longer sessions without uncomfortable eye strain.
+
 * Installation
 
 To install Simula on all Linux distros, run:
