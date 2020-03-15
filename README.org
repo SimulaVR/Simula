@@ -19,7 +19,7 @@ Simula is a VR window manager for Linux that runs on top of [[https://godotengin
 
 A common objection to the viability of VR Desktop is that it exhibits poor text quality; however, with our low pass filter, Simula has taken special care to make text quality as clear as possible:
 
-[[https://www.wolframcloud.com/obj/george.w.singer/TextQuality.gif]]
+[[./doc/TextQuality.gif]]
 
 The left image is a VR terminal *without* our filter applied; the right is the same image *with* our filter applied. Compared to other VR Desktops, Simula allows significantly longer sessions without uncomfortable eye strain.
 
