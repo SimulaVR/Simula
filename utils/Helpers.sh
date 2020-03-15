@@ -186,7 +186,7 @@ switchToLocal() {
 }
 
 checkInstallCachix() {
-    if [ "command -v cachix" ]; then
+    if command -v cachix; then
         echo "cachix already installed.."
     else
         nix-env -iA cachix -f https://cachix.org/api/v1/install
@@ -194,7 +194,7 @@ checkInstallCachix() {
 }
 
 checkInstallNix() {
-    if [ "command -v nix" ]; then
+    if command -v nix; then
         echo "nix already installed.."
     else
         curl https://nixos.org/nix/install | sh
