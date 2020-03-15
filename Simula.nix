@@ -1,4 +1,4 @@
-{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, terminator, xrdb, wmctrl, SDL2, vulkan-loader, lib, driverCheck ? "" }:
+{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, terminator, xrdb, wmctrl, SDL2, vulkan-loader, lib, driverCheck ? "", xwayland, xkbcomp }:
 let
     godot = callPackage ./submodules/godot/godot.nix { };
     godot-api = "${godot}/bin/api.json";
@@ -30,7 +30,7 @@ let
       ln -s ${godot}/bin/godot.x11.opt.64 $out/bin/godot.x11.opt.64
       ln -s ${godot}/bin/godot.x11.opt.debug.64 $out/bin/godot.x11.opt.debug.64
       echo "if [ ! -d .import ]; then LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader}/lib LC_ALL=C.UTF-8 '' + nixGLRes + '' ${godot}/bin/godot.x11.tools.64 --export \"Linux/X11\" ./result/bin/SimulaExport; fi" > $out/bin/simula
-      echo "LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader}/lib LC_ALL=C.UTF-8 '' + nixGLRes + '' ${godot}/bin/godot.x11.opt.64 -m" >> $out/bin/simula
+      echo "PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader}/lib LC_ALL=C.UTF-8 '' + nixGLRes + '' ${godot}/bin/godot.x11.opt.64 -m" >> $out/bin/simula
       chmod +x $out/bin/simula
       '';
     };
