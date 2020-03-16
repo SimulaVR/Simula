@@ -12,6 +12,8 @@ let
     nixGLIntel = ((import ./submodules/godot/nixGL.nix) { }).nixGLIntel;
     nixGLRes = if ((builtins.head driverCheckList) == "nixos") then " " else (if ((builtins.head driverCheckList) == "nvidia") then " ${nixVulkanNvidia}/bin/nixVulkanNvidia " else " ${nixGLIntel}/bin/nixGLIntel ");
 
+    ghc-version = (import <nixpkgs> { }).ghc.version;
+
     xpra = callPackage ./nix/xpra/default.nix { };
 
     # xvfb-run = callPackage ./submodules/godot/xvfb-run.nix { };
@@ -22,7 +24,7 @@ let
       buildInputs = [ godot godot-haskell-plugin terminator xpra xrdb wmctrl nixGLIntel ];
       installPhase = ''
       mkdir -p $out/bin
-      ln -s ${godot-haskell-plugin}/lib/ghc-8.6.5/libgodot-haskell-plugin.so $out/bin/libgodot-haskell-plugin.so
+      ln -s ${godot-haskell-plugin}/lib/ghc-${ghc-version}/libgodot-haskell-plugin.so $out/bin/libgodot-haskell-plugin.so
       ln -s ${terminator}/bin/terminator $out/bin/terminator
       ln -s ${xpra}/bin/xpra $out/bin/xpra
       ln -s ${xrdb}/bin/xrdb $out/bin/xrdb
