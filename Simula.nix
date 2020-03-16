@@ -1,4 +1,4 @@
-{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, terminator, xrdb, wmctrl, SDL2, vulkan-loader, lib, driverCheck ? "", xwayland, xkbcomp }:
+{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, terminator, xrdb, wmctrl, SDL2, vulkan-loader, lib, driverCheck ? "", xwayland, xkbcomp, ghc }:
 let
     godot = callPackage ./submodules/godot/godot.nix { };
     godot-api = "${godot}/bin/api.json";
@@ -8,11 +8,11 @@ let
     driverCheckList = lib.splitString " " driverCheck;
     nvidia-version = if ((builtins.head driverCheckList) == "nvidia") then (builtins.elemAt driverCheckList 1) else null;
     nvidia-hash = if ((builtins.head driverCheckList) == "nvidia") then (builtins.elemAt driverCheckList 2) else null;
-    nixVulkanNvidia = ((import ./submodules/godot/nixGL.nix) { nvidiaVersion = "${nvidia-version}"; nvidiaHash = "${nvidia-hash}"; }).nixVulkanNvidia;
-    nixGLIntel = ((import ./submodules/godot/nixGL.nix) { }).nixGLIntel;
+    nixVulkanNvidia = ((import ./submodules/godot/nixGL.nix) { nvidiaVersion = "${nvidia-version}"; nvidiaHash = "${nvidia-hash}"; pkgs = import ./pinned-nixpkgs.nix; }).nixVulkanNvidia;
+    nixGLIntel = ((import ./submodules/godot/nixGL.nix) { pkgs = import ./pinned-nixpkgs.nix; }).nixGLIntel;
     nixGLRes = if ((builtins.head driverCheckList) == "nixos") then " " else (if ((builtins.head driverCheckList) == "nvidia") then " ${nixVulkanNvidia}/bin/nixVulkanNvidia " else " ${nixGLIntel}/bin/nixGLIntel ");
 
-    ghc-version = (import <nixpkgs> { }).ghc.version;
+    ghc-version = ghc.version;
 
     xpra = callPackage ./nix/xpra/default.nix { };
 

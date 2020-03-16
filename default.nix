@@ -1,2 +1,2 @@
 { driverCheck ? "" }:
-(import <nixpkgs> {}).callPackage ./Simula.nix { driverCheck = driverCheck; }
+(import ./pinned-nixpkgs.nix { }).callPackage ./Simula.nix { driverCheck = driverCheck; }
