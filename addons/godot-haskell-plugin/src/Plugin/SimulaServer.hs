@@ -570,7 +570,7 @@ appLaunch gss appStr args = do
   return ()
 
 terminalLaunch :: GodotSimulaServer -> IO ()
-terminalLaunch gss = appLaunch gss "terminator" []
+terminalLaunch gss = appLaunch gss "./result/bin/terminator" []
 
 -- Master routing function for keyboard-mouse-window manipulation. Guaranteed to
 -- only be called if Simula's MOD key is pressed (currently set to `SUPER_L` or
@@ -692,9 +692,7 @@ launchHMDWebCam gss = do
   maybePath <- getHMDWebCamPath
   case maybePath of
     Nothing -> putStrLn "Cannot find HMD web cam!"
-    Just path  -> do
-      putStrLn $ "ffplay -loglevel quiet -f v4l2 " ++ path
-      appLaunch gss "ffplay" ["-loglevel", "quiet", "-f", "v4l2", path]
+    Just path  -> appLaunch gss "./result/bin/ffplay" ["-loglevel", "quiet", "-f", "v4l2", path]
     where getHMDWebCamPath :: IO (Maybe FilePath)
           getHMDWebCamPath = (listToMaybe . map ("/dev/v4l/by-id/" ++) . sort . filter viveOrValve) <$> listDirectory "/dev/v4l/by-id"
           viveOrValve :: String -> Bool
