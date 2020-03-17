@@ -178,10 +178,12 @@ switchToLocal() {
     sudo rm ./xpra
     sudo rm ./xrdb
     sudo rm ./wmctrl
+    sudo rm ./ffplay
     sudo ln -s $(which terminator) terminator
     sudo ln -s $(which xpra) xpra
     sudo ln -s $(which xrdb) xrdb
     sudo ln -s $(which wmctrl) wmctrl
+    sudo ln -s $(which ffplay) ffplay
     cd -
 }
 

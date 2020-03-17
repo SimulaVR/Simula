@@ -692,8 +692,10 @@ launchHMDWebCam gss = do
   maybePath <- getHMDWebCamPath
   case maybePath of
     Nothing -> putStrLn "Cannot find HMD web cam!"
-    Just path  -> appLaunch gss "ffplay" ["-loglevel", "quiet", "-f", "v4l2", path]
+    Just path  -> do
+      putStrLn $ "ffplay -loglevel quiet -f v4l2 " ++ path
+      appLaunch gss "ffplay" ["-loglevel", "quiet", "-f", "v4l2", path]
     where getHMDWebCamPath :: IO (Maybe FilePath)
-          getHMDWebCamPath = (listToMaybe . map ("/dev/v4l-by-id/" ++) . sort . filter viveOrValve) <$> listDirectory "/dev/v4l/by-id"
+          getHMDWebCamPath = (listToMaybe . map ("/dev/v4l/by-id/" ++) . sort . filter viveOrValve) <$> listDirectory "/dev/v4l/by-id"
           viveOrValve :: String -> Bool
           viveOrValve str = any (`isInfixOf` str) ["Vive", "Valve"]

@@ -1,4 +1,4 @@
-{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, terminator, xrdb, wmctrl, SDL2, vulkan-loader, lib, driverCheck ? "", xwayland, xkbcomp, ghc }:
+{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, terminator, xrdb, wmctrl, SDL2, vulkan-loader, lib, driverCheck ? "", xwayland, xkbcomp, ghc, ffmpeg-full }:
 let
     godot = callPackage ./submodules/godot/godot.nix { };
     godot-api = "${godot}/bin/api.json";
@@ -21,7 +21,7 @@ let
     simula = stdenv.mkDerivation {
       name = "Simula";
       src = ./utils;
-      buildInputs = [ godot godot-haskell-plugin terminator xpra xrdb wmctrl nixGLIntel ];
+      buildInputs = [ godot godot-haskell-plugin terminator xpra xrdb wmctrl ];
       installPhase = ''
       mkdir -p $out/bin
       ln -s ${godot-haskell-plugin}/lib/ghc-${ghc-version}/libgodot-haskell-plugin.so $out/bin/libgodot-haskell-plugin.so
@@ -31,6 +31,7 @@ let
       ln -s ${wmctrl}/bin/wmctrl $out/bin/wmctrl
       ln -s ${godot}/bin/godot.x11.opt.64 $out/bin/godot.x11.opt.64
       ln -s ${godot}/bin/godot.x11.opt.debug.64 $out/bin/godot.x11.opt.debug.64
+      ln -s ${ffmpeg-full}/bin/ffplay $out/bin/ffplay
       echo "if [ ! -d .import ]; then LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader}/lib LC_ALL=C.UTF-8 '' + nixGLRes + '' ${godot}/bin/godot.x11.tools.64 --export \"Linux/X11\" ./result/bin/SimulaExport; fi" > $out/bin/simula
       echo "PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader}/lib LC_ALL=C.UTF-8 '' + nixGLRes + '' ${godot}/bin/godot.x11.opt.64 -m" >> $out/bin/simula
       chmod +x $out/bin/simula
