@@ -570,7 +570,7 @@ appLaunch gss appStr args = do
   return ()
 
 terminalLaunch :: GodotSimulaServer -> IO ()
-terminalLaunch gss = appLaunch gss "./result/bin/terminator" []
+terminalLaunch gss = appLaunch gss "./result/bin/xfce4-terminal" []
 
 -- Master routing function for keyboard-mouse-window manipulation. Guaranteed to
 -- only be called if Simula's MOD key is pressed (currently set to `SUPER_L` or

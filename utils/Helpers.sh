@@ -174,12 +174,12 @@ switchToLocal() {
     mkdir -p ./result/bin
     cd ./result/bin
 
-    sudo rm ./terminator
+    sudo rm ./xfce4-terminal
     sudo rm ./xpra
     sudo rm ./xrdb
     sudo rm ./wmctrl
     sudo rm ./ffplay
-    sudo ln -s $(which terminator) terminator
+    sudo ln -s $(which xfce4-terminal) xfce4-terminal
     sudo ln -s $(which xpra) xpra
     sudo ln -s $(which xrdb) xrdb
     sudo ln -s $(which wmctrl) wmctrl

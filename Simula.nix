@@ -1,4 +1,4 @@
-{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, terminator, xrdb, wmctrl, SDL2, vulkan-loader, lib, driverCheck ? "", xwayland, xkbcomp, ghc, ffmpeg-full }:
+{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, vulkan-loader, lib, driverCheck ? "", xwayland, xkbcomp, ghc, ffmpeg-full, xfce }:
 let
     godot = callPackage ./submodules/godot/godot.nix { };
     godot-api = "${godot}/bin/api.json";
@@ -21,11 +21,11 @@ let
     simula = stdenv.mkDerivation {
       name = "Simula";
       src = ./utils;
-      buildInputs = [ godot godot-haskell-plugin terminator xpra xrdb wmctrl ];
+      buildInputs = [ godot godot-haskell-plugin xpra xrdb wmctrl ];
       installPhase = ''
       mkdir -p $out/bin
       ln -s ${godot-haskell-plugin}/lib/ghc-${ghc-version}/libgodot-haskell-plugin.so $out/bin/libgodot-haskell-plugin.so
-      ln -s ${terminator}/bin/terminator $out/bin/terminator
+      ln -s ${xfce.xfce4-terminal}/bin/xfce4-terminal $out/bin/xfce4-terminal
       ln -s ${xpra}/bin/xpra $out/bin/xpra
       ln -s ${xrdb}/bin/xrdb $out/bin/xrdb
       ln -s ${wmctrl}/bin/wmctrl $out/bin/wmctrl
