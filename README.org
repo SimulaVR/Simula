@@ -41,6 +41,14 @@ source ./utils/Helpers.sh && installSimula
 
 *Installing Simula should take less than 1 minute:* this script doesn't actually compile anything on your system, but instead downloads the appropriate binaries from our cache in a way that is system and driver agnostic. Under the hood, we (i) check whether you have ~nix~ and ~cachix~ installed (and, if not, install them); (ii) check which graphics drivers you have and (iii) download Simula via ~cachix~ with the appropriate driver flags, falling back to a ~nix~ build if downloading fails.
 
+On NixOS systems, you must ensure
+
+#+BEGIN_SRC 
+nix.trustedUsers = [ "root" "<your_user_name>"];
+#+END_SRC
+
+is added to your ~configuration.nix~, or the install command above will be unable to download Simula from our cache, instead falling back to a manual build (which takes 1hr+).
+
 # Simula is untested on machines with AMD drivers, though AMD cards running mesa drivers should be supported.
 
 ** COMMENT AppImage
