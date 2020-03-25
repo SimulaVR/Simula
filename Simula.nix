@@ -1,9 +1,11 @@
 { stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, vulkan-loader, lib, driverCheck ? "", xwayland, xkbcomp, ghc, ffmpeg-full, xfce, devBuild }:
 let
+    # extension = sel: sup: { mkDerivation = drv: sup.mkDerivation (drv // { doHaddock = false; doCheck = false; enableLibraryProfiling = false; }); };
+    # hp = haskellPackages.extend(extension);
     godot = callPackage ./submodules/godot/godot.nix { devBuild = devBuild; driverCheck = driverCheck; pkgs = import ./pinned-nixpkgs.nix; };
     godot-api = "${godot}/bin/api.json";
-    godot-haskell = haskellPackages.callPackage ./submodules/godot-haskell/default.nix { api-json = godot-api; };
-    godot-haskell-plugin = haskellPackages.callPackage ./addons/godot-haskell-plugin/godot-haskell-plugin.nix { devBuild = devBuild; driverCheck = driverCheck; pkgs = import ./pinned-nixpkgs.nix; };
+    godot-haskell = haskellPackages.callPackage ./submodules/godot-haskell/godot-haskell.nix { api-json = godot-api; };
+    godot-haskell-plugin = haskellPackages.callPackage ./addons/godot-haskell-plugin/godot-haskell-plugin.nix { devBuild = devBuild; driverCheck = driverCheck; pkgs = import ./pinned-nixpkgs.nix; godot = godot; godot-haskell = godot-haskell; };
 
     driverCheckList = lib.splitString " " driverCheck;
     nvidia-version = if ((builtins.head driverCheckList) == "nvidia") then (builtins.elemAt driverCheckList 1) else null;

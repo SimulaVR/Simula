@@ -2,13 +2,8 @@
 , colour, containers, directory, extra, http-client
 , http-client-tls, http-types, inline-c, iso8601-time, lens, linear
 , process, raw-strings-qq, stdenv, stm, text, time, unix, uuid
-, vector, fetchFromGitHub, callPackage, haskellPackages, devBuild ? false, driverCheck ? "", pkgs ? (import ../../pinned-nixpkgs.nix)
+, vector, fetchFromGitHub, callPackage, haskellPackages, devBuild ? false, driverCheck ? "", pkgs ? (import ../../pinned-nixpkgs.nix), godot, godot-haskell
 }:
-let
-    godot = callPackage ../../submodules/godot/godot.nix { devBuild = devBuild; driverCheck = driverCheck; pkgs = pkgs; };
-    godot-api = "${godot}/bin/api.json";
-    godot-haskell = haskellPackages.callPackage ../../submodules/godot-haskell/default.nix { api-json = godot-api; };
-in
 mkDerivation {
   pname = "godot-haskell-plugin";
   version = "0.1.0.0";
@@ -21,4 +16,8 @@ mkDerivation {
   ];
   homepage = "https://github.com/SimulaVR/Simula#readme";
   license = stdenv.lib.licenses.asl20;
+
+  doHaddock = false;
+  doCheck = false;
+  enableLibraryProfiling = false;
 }
