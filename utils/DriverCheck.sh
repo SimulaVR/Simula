@@ -42,6 +42,9 @@ getNvidiaHash() {
         440.64)
           echo 0xbm1dh95kz8h4d62pql2wmvw2gbgc7iif2bkixbnqijl4dryg71
           ;;
+        440.82)
+          echo 13km9800skyraa0s312fc4hwyw5pzb0jfkrv1yg6anppyan1bm7d
+          ;;
         *)
           echo $(nix-prefetch-url http://download.nvidia.com/XFree86/Linux-x86_64/${NVIDIA_VERSION}/NVIDIA-Linux-x86_64-${NVIDIA_VERSION}.run | tail -1)
           ;;
