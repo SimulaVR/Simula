@@ -29,10 +29,10 @@ import Foreign
 import Plugin.SimulaViewSprite
 import Plugin.Types
 
-type SurfaceMap = M.Map SimulaView GodotSimulaViewSprite -- C2HS version
+type SurfaceTelemetryMap = M.Map SimulaView GodotSimulaViewSprite -- C2HS version
 
 data Payload = Payload
-               { numWindowsOpen :: TVar SurfaceMap
+               { numWindowsOpen :: TVar SurfaceTelemetryMap
                , minutesElapsedSinceLastPayload :: Double
                , minutesTotalSession :: Double
                }
@@ -115,20 +115,20 @@ forkSendAppLaunchEvent uuid = forkIO $ do
   response <- httpLbs request manager
   return ()
 
-forkSendPayloadEveryMinuteInterval :: UUID -> TVar SurfaceMap -> Integer -> IO ThreadId
-forkSendPayloadEveryMinuteInterval uuid tvarSurfaceMap min = forkIO $ (doLoop 0)
+forkSendPayloadEveryMinuteInterval :: UUID -> TVar SurfaceTelemetryMap -> Integer -> IO ThreadId
+forkSendPayloadEveryMinuteInterval uuid tvarSurfaceTelemetryMap min = forkIO $ (doLoop 0)
     where
     doLoop :: Double -> IO ()
     doLoop dbl = do
         threadDelay (1000 * 1000 * 60 * (fromIntegral min))
-        forkSendPayload uuid (Payload { numWindowsOpen = tvarSurfaceMap
+        forkSendPayload uuid (Payload { numWindowsOpen = tvarSurfaceTelemetryMap
                                       , minutesElapsedSinceLastPayload = (fromIntegral min)
                                       , minutesTotalSession = (dbl + (fromIntegral min))
                                       })
         doLoop (dbl + (fromIntegral min))
 
 forkSendPayload :: UUID -> Payload -> IO ()
-forkSendPayload uuid (Payload { numWindowsOpen = tvarSurfaceMap
+forkSendPayload uuid (Payload { numWindowsOpen = tvarSurfaceTelemetryMap
                               , minutesElapsedSinceLastPayload = minutesElapsedSinceLastPayload'
                               , minutesTotalSession = minutesTotalSession'
                               }) = do
@@ -138,7 +138,7 @@ forkSendPayload uuid (Payload { numWindowsOpen = tvarSurfaceMap
   manager <- newManager tlsManagerSettings
 
   --  readMvarInt <- readMVar mvarInt
-  surfaceMap  <- readTVarIO tvarSurfaceMap
+  surfaceMap  <- readTVarIO tvarSurfaceTelemetryMap
   let numSurfaces = M.size surfaceMap
 
   -- Construct a bytestring encoded request object with the properties we want.
@@ -167,8 +167,8 @@ forkSendPayload uuid (Payload { numWindowsOpen = tvarSurfaceMap
   return ()
 
 -- The first variable encodes the number of windows open (possibly useful data).
-startTelemetry :: TVar SurfaceMap -> IO ()
-startTelemetry tvarSurfaceMap = do uuid <- generateSessionUUID
-                                   forkIO $ ensureUUIDIsRegistered uuid
-                                   forkSendPayloadEveryMinuteInterval uuid tvarSurfaceMap 5 -- Send payload every 5 minutes
-                                   return ()
+startTelemetry :: TVar SurfaceTelemetryMap -> IO ()
+startTelemetry tvarSurfaceTelemetryMap = do uuid <- generateSessionUUID
+                                            forkIO $ ensureUUIDIsRegistered uuid
+                                            forkSendPayloadEveryMinuteInterval uuid tvarSurfaceTelemetryMap 5 -- Send payload every 5 minutes
+                                            return ()

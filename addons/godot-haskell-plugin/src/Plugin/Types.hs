@@ -52,6 +52,9 @@ import System.Process
 import System.Process.Internals
 import System.Posix.Types
 
+import Godot.Core.GodotViewport as G
+
+import Data.Map.Ordered as MO
 
 unfoldrM :: Monad m => (b -> m (Maybe (a, b))) -> b -> m [a]
 unfoldrM f b = f b >>= \case
@@ -68,13 +71,7 @@ type instance TypeOf 'HaskellTy GodotArray = [GodotVariant]
 instance GodotFFI GodotArray [GodotVariant] where
   fromLowLevel vs = do
     size <- fromIntegral <$> Api.godot_array_size vs
-    let maybeNext n v =
-          if n == (size - 1)
-          then Nothing
-          else Just (v, n + 1)
-    let variantAt n =
-          maybeNext n <$> (Api.godot_array_get vs n)
-    unfoldrM variantAt 0
+    forM [0..size-1] $ Api.godot_array_get vs
 
   toLowLevel vs = do
     array <- Api.godot_array_new
@@ -109,6 +106,8 @@ instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
   super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
 
+type SurfaceMap = OMap GodotWlrSurface CanvasSurface
+
 -- Wish there was a more elegant way to jam values into these fields at classInit
 data GodotSimulaViewSprite = GodotSimulaViewSprite
   { _gsvsObj               :: GodotObject
@@ -117,7 +116,8 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsSprite            :: TVar GodotSprite3D
   , _gsvsShape             :: TVar GodotBoxShape
   , _gsvsView              :: TVar SimulaView -- Contains Wlr data
-  , _gsvsSimulaCanvasItem  :: TVar GodotSimulaCanvasItem
+  , _gsvsCanvasBase        :: TVar CanvasBase
+  , _gsvsSurfaceMap        :: TVar (OMap GodotWlrSurface CanvasSurface)
   , _gsvsCursorCoordinates :: TVar SurfaceLocalCoordinates
   , _gsvsTargetSize        :: TVar SpriteDimensions
   -- , _gsvsMapped         :: TVar Bool
@@ -128,18 +128,31 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
 
 instance HasBaseClass GodotSimulaViewSprite where
   type BaseClass GodotSimulaViewSprite = GodotRigidBody
-  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _) = GodotRigidBody obj
+  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _ _) = GodotRigidBody obj
 
+data CanvasBase = CanvasBase {
+    _cbObject       :: GodotObject
+  , _cbGSVS         :: TVar GodotSimulaViewSprite
+  , _cbViewport     :: TVar GodotViewport
+}
 
-data GodotSimulaCanvasItem = GodotSimulaCanvasItem {
-     _gsciObject :: GodotObject -- Meant to extend/be casted as GodotCanvasItem
-   , _gsciGSVS :: TVar GodotSimulaViewSprite
-   , _gsciViewport :: TVar GodotViewport
- }
+data CanvasSurface = CanvasSurface {
+    _csObject       :: GodotObject
+  , _csGSVS         :: TVar GodotSimulaViewSprite
+  , _csSurface      :: TVar (GodotWlrSurface, Int, Int)
+  , _csViewport     :: TVar GodotViewport
+  , _csClearShader  :: TVar GodotShaderMaterial
+  , _csPremulShader :: TVar GodotShaderMaterial
+  , _csFrameCounter :: TVar Integer
+}
 
-instance HasBaseClass GodotSimulaCanvasItem where
-  type BaseClass GodotSimulaCanvasItem = GodotNode2D
-  super (GodotSimulaCanvasItem obj _ _ ) = GodotNode2D obj
+instance HasBaseClass CanvasBase where
+  type BaseClass CanvasBase = GodotNode2D
+  super (CanvasBase obj _ _ ) = GodotNode2D obj
+
+instance HasBaseClass CanvasSurface where
+  type BaseClass CanvasSurface = GodotNode2D
+  super (CanvasSurface obj _ _ _ _ _ _) = GodotNode2D obj
 
 data SimulaView = SimulaView
   { _svServer                  :: GodotSimulaServer -- Can obtain WlrSeat
@@ -167,7 +180,8 @@ instance Ord SimulaView where
 --   | InteractiveResize
 
 makeLenses ''GodotSimulaViewSprite
-makeLenses ''GodotSimulaCanvasItem
+makeLenses ''CanvasBase
+makeLenses ''CanvasSurface
 makeLenses ''SimulaView
 makeLenses ''GodotSimulaServer
 makeLenses ''GodotPancakeCamera
@@ -530,3 +544,112 @@ getPid ph = withProcessHandle ph go
     go ph_ = case ph_ of
                OpenHandle x   -> return $ Just x
                ClosedHandle _ -> return Nothing
+
+-- Generic imports from SimulaCanvasItem.hs
+getCoordinatesFromCenter :: GodotWlrSurface -> Int -> Int -> IO GodotVector2
+getCoordinatesFromCenter wlrSurface sx sy = do
+  -- putStrLn "getCoordinatesFromCenter"
+  (bufferWidth', bufferHeight')    <- getBufferDimensions wlrSurface
+  let (bufferWidth, bufferHeight)  = (fromIntegral bufferWidth', fromIntegral bufferHeight')
+  let (fromTopLeftX, fromTopLeftY) = (fromIntegral sx, fromIntegral sy)
+  let fromCenterX                  = -(bufferWidth/2) + fromTopLeftX
+  let fromCenterY                  = -(-(bufferHeight/2) + fromTopLeftY)
+  -- NOTE: In godotston fromCenterY is isn't negative, but since we set
+  -- `G.render_target_v_flip viewport True` we can set this
+  -- appropriately
+  let v2 = (V2 fromCenterX fromCenterY) :: V2 Float
+  gv2 <- toLowLevel v2 :: IO GodotVector2
+  return gv2
+
+-- Delete improveTextureQuality
+-- Delete old intializeRenderTarget
+
+data ViewportType = ViewportBase | ViewportSurface
+
+initializeRenderTarget :: GodotSimulaViewSprite -> ViewportType -> IO (GodotViewport)
+initializeRenderTarget gsvs viewportType = do
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  let eitherSurface = (simulaView ^. svWlrEitherSurface)
+  wlrSurface <- getWlrSurface eitherSurface
+  renderTarget <- unsafeInstance GodotViewport "Viewport"
+  dimensions@(width, height) <- getBufferDimensions wlrSurface
+  pixelDimensionsOfWlrSurface <- toGodotVector2 dimensions
+
+  G.set_disable_input renderTarget True
+  G.set_usage renderTarget G.USAGE_2D
+  G.set_transparent_background renderTarget True
+  G.set_update_mode renderTarget G.UPDATE_WHEN_VISIBLE
+  G.set_vflip renderTarget True
+  G.set_size renderTarget pixelDimensionsOfWlrSurface
+
+  case viewportType of
+    ViewportBase -> G.set_clear_mode renderTarget G.CLEAR_MODE_ALWAYS
+    ViewportSurface -> G.set_clear_mode renderTarget G.CLEAR_MODE_NEVER
+
+  return renderTarget
+
+getBufferDimensions :: GodotWlrSurface -> IO (Int, Int)
+getBufferDimensions wlrSurface = do
+  dims@(bufferWidth, bufferHeight) <- withCurrentState $ getBufferDimensions'
+  return dims
+  where withCurrentState :: (GodotWlrSurfaceState -> IO b) -> IO b
+        withCurrentState stateAction = do
+          wlrSurfaceState <- G.alloc_current_state wlrSurface
+          ret             <- stateAction wlrSurfaceState
+          G.delete_state wlrSurfaceState
+          return ret
+        getBufferDimensions' :: GodotWlrSurfaceState -> IO (Int, Int)
+        getBufferDimensions' wlrSurfaceState = do
+          bufferWidth <- G.get_buffer_width wlrSurfaceState
+          bufferHeight <- G.get_buffer_height wlrSurfaceState
+          -- width <- G.get_width wlrSurfaceState
+          -- height <-G.get_height wlrSurfaceState
+          return (bufferWidth, bufferHeight)
+
+newCanvasSurface :: GodotSimulaViewSprite -> (GodotWlrSurface, Int, Int) -> IO CanvasSurface
+newCanvasSurface gsvs arg@(wlrSurface, x, y) = do
+  cs <- "res://addons/godot-haskell-plugin/CanvasSurface.gdns"
+    & newNS' []
+    >>= godot_nativescript_get_userdata
+    >>= deRefStablePtr . castPtrToStablePtr :: IO CanvasSurface
+  viewport <- initializeRenderTarget gsvs ViewportSurface
+
+  addChild gsvs viewport
+  addChild viewport cs
+
+  atomically $ writeTVar (_csGSVS cs) gsvs
+  atomically $ writeTVar (_csSurface cs) arg
+  atomically $ writeTVar (_csViewport cs) viewport
+
+  atomically $ writeTVar (_csFrameCounter cs) 0
+
+  return cs
+
+fst3 :: (a, b, c) -> a
+fst3 (a, b, c) = a
+
+savePng :: CanvasSurface -> GodotViewportTexture -> GodotWlrSurface -> IO ()
+savePng cs surfaceTexture wlrSurface = do
+  let isNull = ((unsafeCoerce surfaceTexture) == nullPtr) || ((unsafeCoerce wlrSurface) == nullPtr)
+  case isNull of
+    True -> putStrLn "Texture is null in savePng!"
+    False -> do -- Get image
+                gsvs <- readTVarIO (cs ^. csGSVS)
+                visualServer <- getVisualServer gsvs
+                textureRID <- G.get_rid surfaceTexture
+                surfaceTextureAsImage <- G.texture_get_data visualServer textureRID 0
+
+                -- Get file path
+                sprite3D <- readTVarIO (gsvs ^. gsvsSprite)
+                frame <- readTVarIO (cs ^. csFrameCounter)
+                atomically $ writeTVar (cs ^. csFrameCounter) (frame + 1)
+                let pathStr = "./png/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
+                pathStr' <- toLowLevel (pack pathStr)
+
+                -- Save as png
+                G.save_png surfaceTextureAsImage pathStr'
+                return ()
+  where getVisualServer gsvs = do
+          gss <- readTVarIO (gsvs ^. gsvsServer)
+          visualServer <- readTVarIO (gss ^. gssVisualServer)
+          return visualServer

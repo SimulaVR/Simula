@@ -1,4 +1,3 @@
-
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
@@ -31,7 +30,8 @@ import qualified Godot.Methods                as G
 import qualified Godot.Gdnative.Internal.Api  as Api
 import           Godot.Nativescript
 
-import Plugin.SimulaCanvasItem
+import Plugin.CanvasBase
+import Plugin.CanvasSurface
 import Plugin.Types
 import Data.Maybe
 import Data.Either
@@ -49,6 +49,7 @@ import           Control.Lens                hiding (Context)
 import Data.Typeable
 
 import qualified Data.Map.Strict as M
+import Data.Map.Ordered as MO
 
 instance Eq GodotSimulaViewSprite where
   (==) = (==) `on` _gsvsObj
@@ -61,6 +62,7 @@ instance NativeScript GodotSimulaViewSprite where
        GodotSimulaViewSprite (safeCast obj)
                       <$> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar True)
+                      <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
@@ -96,7 +98,7 @@ updateSimulaViewSprite gsvs = do
 
   adjustTargetDimensions gsvs -- 1600 1600 -- 2048 2048
 
-  useSimulaCanvasItemToDrawSubsurfaces gsvs
+  applyViewportBaseTexture gsvs
     -- useViewportToDrawParentSurface gsvs -- Causes _draw() error
     -- drawSurfacesOnSprite gsvs
 
@@ -185,7 +187,7 @@ updateSimulaViewSprite gsvs = do
           -- putStrLn "moveToUnoccupied"
           gss <- readTVarIO (gsvs ^. gsvsServer)
           viewMap <- atomically $ readTVar (_gssViews gss)
-          let otherGsvs = filter (\x -> asObj x /= asObj gsvs) $ M.elems viewMap
+          let otherGsvs = Prelude.filter (\x -> asObj x /= asObj gsvs) $ M.elems viewMap
 
           extents <- forM otherGsvs $ \viewSprite -> do
             sprite <- atomically $ readTVar (gsvs ^. gsvsSprite) -- getSprite viewSprite
@@ -213,8 +215,14 @@ adjustTargetDimensions :: GodotSimulaViewSprite -> IO ()
 adjustTargetDimensions gsvs = do
   targetDims@(SpriteDimensions (w, h)) <- readTVarIO (gsvs ^. gsvsTargetSize)
 
-  gsci <- readTVarIO (gsvs ^. gsvsSimulaCanvasItem)
-  renderTarget <- readTVarIO (gsci ^. gsciViewport)
+  cb <- readTVarIO (gsvs ^. gsvsCanvasBase)
+  renderTargetBase <- readTVarIO (cb ^. cbViewport)
+
+  surfaceMap <- readTVarIO (gsvs ^. gsvsSurfaceMap)
+  let surfaces = MO.assocs surfaceMap
+  let css = fmap snd surfaces
+  csViewports <- mapM (\cs -> readTVarIO (cs ^. csViewport)) css
+
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
   wlrSurface <- getWlrSurface eitherSurface
@@ -234,7 +242,9 @@ adjustTargetDimensions gsvs = do
 
   -- Set our corresponding render target to match our new target size
   pixelDimensionsOfWlrSurface <- toGodotVector2 d'
-  G.set_size renderTarget pixelDimensionsOfWlrSurface
+  G.set_size renderTargetBase pixelDimensionsOfWlrSurface
+  mapM (\renderTargetSurface -> G.set_size renderTargetSurface pixelDimensionsOfWlrSurface) csViewports
+  return ()
 
 ready :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 ready self _ = do
@@ -604,3 +614,19 @@ safeSurfaceAt gsvs sx sy = do
                                                    return (Just surfaceAtRes)
             _ -> return Nothing
   return ret
+
+applyViewportBaseTexture :: GodotSimulaViewSprite -> IO ()
+applyViewportBaseTexture gsvs = do
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  let eitherSurface = (simulaView ^. svWlrEitherSurface)
+  wlrSurface <- getWlrSurface eitherSurface
+  sprite3D <- readTVarIO (gsvs ^. gsvsSprite)
+  cb <- readTVarIO (gsvs ^. gsvsCanvasBase)
+  viewportBase <- readTVarIO (cb ^. cbViewport)
+  viewportBaseTexture <- G.get_texture viewportBase
+
+  G.set_texture sprite3D (safeCast viewportBaseTexture)
+
+  G.send_frame_done wlrSurface
+
+  return ()

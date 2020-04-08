@@ -19,5 +19,6 @@ registerClasses desc = do
   reg $ classInit @GodotSimulaController
   reg $ classInit @GodotSimulaServer
   reg $ classInit @GodotSimulaViewSprite
-  reg $ classInit @GodotSimulaCanvasItem
+  reg $ classInit @CanvasBase
+  reg $ classInit @CanvasSurface
   reg $ classInit @GodotPancakeCamera

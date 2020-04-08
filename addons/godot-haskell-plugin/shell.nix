@@ -1,26 +1,19 @@
-{ pkgs ? import <nixpkgs> {}, ghc ? pkgs.ghc }:
+{ pkgs ? import ../../pinned-nixpkgs.nix { }, ghc ? pkgs.ghc }:
+
+let
+    godot = pkgs.callPackage ../../submodules/godot/godot.nix { devBuild = "true"; driverCheck = "nvidia 440.64 0xbm1dh95kz8h4d62pql2wmvw2gbgc7iif2bkixbnqijl4dryg71"; pkgs = import ../../pinned-nixpkgs.nix; };
+    godot-api = "${godot}/bin/api.json";
+    godot-haskell = pkgs.haskellPackages.callPackage ../../submodules/godot-haskell/godot-haskell.nix { api-json = godot-api; };
+
+in
 
 pkgs.haskell.lib.buildStackProject {
   name = "Simula";
   inherit ghc;
-  buildInputs = with pkgs; [ 
-                             libinput
-                             (callPackage ./nix/wayland.nix { } )
-                             (callPackage ./nix/wayland-protocols.nix { } )
-                             (callPackage ./nix/wlroots.nix { } )
-                             (callPackage ./nix/libdrm.nix { } )
-                             pkgconfig
-                             pixman
-                             libGL
-                             xorg.pixman
-                             libxkbcommon
-                             zlib
-                             git
-                           # godot # TODO: Make nix expression for our Godot fork
-                             xorg.libX11
-                             udev
-                             cabal-install
-                          ];
+  buildInputs =  [
+    godot-haskell # <- Doesn't work
+    pkgs.zlib
+  ];
 
   LANG = "en_US.UTF-8";
   TMPDIR = "/tmp";

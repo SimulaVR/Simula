@@ -65,6 +65,7 @@ library
     , iso8601-time
     , raw-strings-qq
     , inline-c
+    , ordered-containers
     -- , libinput
     -- , hsroots
     -- , hayland
@@ -77,7 +78,8 @@ library
       Plugin.Pointer
       Plugin.Types
       Plugin.SimulaViewSprite
-      Plugin.SimulaCanvasItem
+      Plugin.CanvasBase
+      Plugin.CanvasSurface
       Plugin.Input
       Plugin.Input.Grab
       Plugin.Input.Telekinesis
@@ -127,7 +129,8 @@ foreign-library godot-haskell-plugin
     Plugin.Pointer
     Plugin.Types
     Plugin.SimulaViewSprite
-    Plugin.SimulaCanvasItem
+    Plugin.CanvasBase
+    Plugin.CanvasSurface
     Plugin.Input
     Plugin.Input.Grab
     Plugin.Input.Telekinesis
@@ -165,6 +168,7 @@ foreign-library godot-haskell-plugin
     , iso8601-time
     , raw-strings-qq
     , inline-c
+    , ordered-containers
     -- , libinput
     -- , hsroots
     -- , hayland

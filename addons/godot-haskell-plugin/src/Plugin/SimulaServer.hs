@@ -62,7 +62,8 @@ import           Foreign.Marshal.Alloc
 import           Foreign.C.Types
 import qualified Language.C.Inline as C
 
-import           Plugin.SimulaCanvasItem
+import           Plugin.CanvasBase
+import           Plugin.CanvasSurface
 
 import           System.Clock
 import           Control.Monad.Extra
@@ -135,7 +136,6 @@ ready gss _ = do
 
   connectGodotSignal wlrXWayland "new_surface" gss "_on_WlrXWayland_new_surface" []
 
-  -- Start telemetry
   startTelemetry (gss ^. gssViews)
 
   viewport <- G.get_viewport gss :: IO GodotViewport
@@ -152,7 +152,8 @@ ready gss _ = do
   createProcess ((shell $ "./result/bin/wmctrl -ia " ++ simulaWindow) { env = Just [("DISPLAY", oldDisplay)] })
 
   appendFile "log.txt" "Starting logs..\n"
-  launchXpra gss
+  terminalLaunch gss
+  -- launchXpra gss
 
 -- | Populate the GodotSimulaServer's TVar's with Wlr types; connect some Wlr methods
 -- | to their signals. This implicitly starts the compositor.
@@ -370,14 +371,13 @@ handle_map_surface gss [gsvsVariant] = do
                                 ((safeCast gsvs) :: GodotNode)
                                 True
 
-                    -- Add gsci to scene graph so that its _draw gets called every frame
-                    gsci <- newGodotSimulaCanvasItem gsvs
-                    atomically $ writeTVar (gsvs ^. gsvsSimulaCanvasItem) gsci
-                    G.set_process gsci True
+                    cb <- newCanvasBase gsvs
+                    viewportBase <- readTVarIO (cb ^. cbViewport)
 
-                    viewport <- readTVarIO (gsci ^. gsciViewport)
-                    addChild gsvs viewport
-                    addChild viewport gsci
+                    atomically $ writeTVar (gsvs ^. gsvsCanvasBase) cb
+                    G.set_process cb True
+                    addChild gsvs viewportBase
+                    addChild viewportBase cb
 
                     setInFrontOfUser gsvs (-2)
 
@@ -483,8 +483,8 @@ _input gss [eventGV] = do
 updateCursorStateRelative :: GodotSimulaViewSprite -> Float -> Float -> IO ()
 updateCursorStateRelative gsvs dx dy = do
     activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
-    gsci <- readTVarIO (gsvs ^. gsvsSimulaCanvasItem)
-    textureViewport <- readTVarIO (gsci ^. gsciViewport)
+    cb <- readTVarIO (gsvs ^. gsvsCanvasBase)
+    textureViewport <- readTVarIO (cb ^. cbViewport)
     tvGV2 <- G.get_size textureViewport
     (V2 mx my) <- fromLowLevel tvGV2
 
@@ -496,8 +496,8 @@ updateCursorStateRelative gsvs dx dy = do
 
 updateCursorStateAbsolute :: GodotSimulaViewSprite -> Float -> Float -> IO ()
 updateCursorStateAbsolute gsvs sx sy = do
-    gsci <- readTVarIO (gsvs ^. gsvsSimulaCanvasItem)
-    textureViewport <- readTVarIO (gsci ^. gsciViewport)
+    cb <- readTVarIO (gsvs ^. gsvsCanvasBase)
+    textureViewport <- readTVarIO (cb ^. cbViewport)
     tvGV2 <- G.get_size textureViewport
     (V2 mx my) <- fromLowLevel tvGV2
 
@@ -562,8 +562,8 @@ appLaunch gss appStr args = do
     Nothing -> putStrLn "No DISPLAY found!"
     (Just xwaylandDisplay) -> do
       let envMap = M.fromList originalEnv
-      -- let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
-      let envMapWithDisplay = M.insert "DISPLAY" ":13" envMap
+      let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
+      -- let envMapWithDisplay = M.insert "DISPLAY" ":13" envMap
       let envListWithDisplay = M.toList envMapWithDisplay
       createSessionLeader appStr args (Just envListWithDisplay)
       return ()
