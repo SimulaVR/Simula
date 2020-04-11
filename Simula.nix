@@ -12,7 +12,8 @@ let
     nvidia-hash = if ((builtins.head driverCheckList) == "nvidia") then (builtins.elemAt driverCheckList 2) else null;
     nixVulkanNvidia = ((import ./submodules/godot/nixGL.nix) { nvidiaVersion = "${nvidia-version}"; nvidiaHash = "${nvidia-hash}"; pkgs = import ./pinned-nixpkgs.nix; }).nixVulkanNvidia;
     nixGLIntel = ((import ./submodules/godot/nixGL.nix) { pkgs = import ./pinned-nixpkgs.nix; }).nixGLIntel;
-    nixGLRes = if ((builtins.head driverCheckList) == "nixos") then " " else (if ((builtins.head driverCheckList) == "nvidia") then " ${nixVulkanNvidia}/bin/nixVulkanNvidia " else " ${nixGLIntel}/bin/nixGLIntel ");
+    nixVulkanIntel = ((import ./submodules/godot/nixGL.nix) { pkgs = import ./pinned-nixpkgs.nix; }).nixVulkanIntel;
+    nixGLRes = if ((builtins.head driverCheckList) == "nixos") then " " else (if ((builtins.head driverCheckList) == "nvidia") then " ${nixVulkanNvidia}/bin/nixVulkanNvidia " else " ${nixVulkanIntel}/bin/nixVulkanIntel ");
 
     ghc-version = ghc.version;
 
