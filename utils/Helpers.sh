@@ -210,7 +210,7 @@ installSimula() {
     cachix use simula
     curl https://www.wolframcloud.com/obj/george.w.singer/installMessage
     if [ -z $1 ]; then
-      nix-build -K default.nix --argstr driverCheck "$(./utils/DriverCheck.sh)" --arg devBuild "false"
+      nix-build default.nix --argstr driverCheck "$(./utils/DriverCheck.sh)" --arg devBuild "false"
     else
       nix-build -K default.nix --argstr driverCheck "$(./utils/DriverCheck.sh)" --arg devBuild "true"
     fi
