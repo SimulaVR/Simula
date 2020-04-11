@@ -9,7 +9,7 @@ Simula is a VR window manager for Linux that runs on top of [[https://godotengin
 
 *Video:* [[http://www.youtube.com/watch?v=FWLuwG91HnI][Demonstration.]]
 
-*Compatibility:* Currently, Simula is only compatible with SteamVR headsets (e.g. HTC Vive, HTC Vive Pro, & Valve Index).
+*Compatibility:* Currently, Simula is only compatible with SteamVR headsets equipped with Linux drivers (e.g. HTC Vive, HTC Vive Pro, & Valve Index).
 
 *Mission:* Facilitate a Linux future for VR & AR Desktop. In the short-run, this means allowing people to run 2D Linux apps with current generation headsets. In the long-run, this means allowing people to run Linux in standalone AR & VR HMDs.
 
@@ -81,7 +81,7 @@ Windows become "active" once you look at them. Active windows receive typing eve
 
 | *Key binding.*       | *Action*                                                                |
 |----------------------+-------------------------------------------------------------------------|
-| ~Super + /~          | Quick launch terminal (~terminator~)                                    |
+| ~Super + /~          | Quick launch terminal                                                   |
 | ~Super + Apostrophe~ | Send window cursor to gaze point (hold down to make cursor follow gaze) |
 | ~Super + Enter~      | Left click surface cursor at gaze point                                 |
 | ~Super + Alt~        | Grab surface for movement (release to let go)                           |
@@ -95,7 +95,7 @@ Windows become "active" once you look at them. Active windows receive typing eve
 | ~Super + Backspace~  | Kill surface being looked at                                            |
 | ~Super + k~          | Quick launch firefox                                                    |
 | ~Super + g~          | Quick launch google-chrome                                              |
-| ~Super + w~          | Launch headset webcam view (requires ~ffplay~).                         |
+| ~Super + w~          | Launch headset webcam view                                              |
 
 ** VR Controllers
 
