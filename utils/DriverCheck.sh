@@ -1,4 +1,3 @@
-RUNNING_NIXOS=$(nixos-version > /dev/null 2>&1)
 NVIDIA_VERSION=$(nvidia-smi | grep -ho "Driver Version: [0-9]*.[0-9]*" |  awk '{print $NF}')
 
 getNvidiaHash() {
@@ -51,7 +50,7 @@ getNvidiaHash() {
     esac
 }
 
-if [ ! -z "$RUNNING_NIXOS" ]; then
+if [ -e /etc/NIXOS ]; then
    echo "nixos"
 elif [ -z $NVIDIA_VERSION ]; then
    echo "intel"
