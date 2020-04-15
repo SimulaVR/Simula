@@ -210,29 +210,10 @@ installSimula() {
     cachix use simula
     curl https://www.wolframcloud.com/obj/george.w.singer/installMessage
     if [ -z $1 ]; then
-      nix-build default.nix --argstr driverCheck "$(./utils/DriverCheck.sh)" --arg devBuild "false"
+      NIXPKGS_ALLOW_UNFREE=1 nix-build default.nix --argstr driverCheck "$(./utils/DriverCheck.sh)" --arg devBuild "false"
     else
-      nix-build -K default.nix --argstr driverCheck "$(./utils/DriverCheck.sh)" --arg devBuild "true"
+      NIXPKGS_ALLOW_UNFREE=1 nix-build -K default.nix --argstr driverCheck "$(./utils/DriverCheck.sh)" --arg devBuild "true"
     fi
-}
-
-pushSimulaToCachix() {
-  nix-build default.nix --argstr driverCheck "nvidia 430.26 1rnfxl4dxa3jjidfdvfjmg1a8nc787ss15cakrp2wwrn8jlr9av6" | cachix push simula
-  nix-build default.nix --argstr driverCheck "nvidia 430.34 0c3x25gilibbgazvp20d5sfmmgcf0gfqf024nzzqryxg4m05h39b" | cachix push simula
-  nix-build default.nix --argstr driverCheck "nvidia 430.40 1myzhy1mf27dcx0admm3pbbkfdd9p66lw0cq2mz1nwds92gqj07p" | cachix push simula
-  nix-build default.nix --argstr driverCheck "nvidia 430.50 1i9x9lr6izfq6csgnh8dfg3sa7s3has20hdpi7wlbla7msa36s0c" | cachix push simula
-  nix-build default.nix --argstr driverCheck "nvidia 430.64 1k5s05a7yvrms97nr3gd8cbvladn788qamsmwr6jsmdzv6yh5gvk" | cachix push simula
-  nix-build default.nix --argstr driverCheck "nvidia 435.17 19p9v5km1kfw45ghqmzgawa2fdq559jj6h1dkbnkbbzhp2syq757" | cachix push simula
-  nix-build default.nix --argstr driverCheck "nvidia 435.21 0v3pq677ab01qdmwl5dawk8hn39qlwj05p8s9qzh9irmrlnc1izs" | cachix push simula
-  nix-build default.nix --argstr driverCheck "nvidia 440.26 0ay3c4vhl8cqhl57vjar4p6v1nkh5zpvya41ag2sibj30spyg62z" | cachix push simula
-  nix-build default.nix --argstr driverCheck "nvidia 440.31 03w5v3079c35sz3nkdk28yc76jb5hv8dy99jjy7pkywvbhw2ynfd" | cachix push simula
-  nix-build default.nix --argstr driverCheck "nvidia 440.36 0nbdldwizb802w4x0rqnyb1p7iqz5nqiahqr534n5ihz21a6422h" | cachix push simula
-  nix-build default.nix --argstr driverCheck "nvidia 440.44 057wq9p2vl87gy61f079b6d7clw2vhw3kq7rj411brhrnvr7shmd" | cachix push simula
-  nix-build default.nix --argstr driverCheck "nvidia 440.59 162gq6w44l8sgnn4qnl2rdlx8c008p04zv4c3i1ps20p21n1mjv1" | cachix push simula
-  nix-build default.nix --argstr driverCheck "nvidia 440.64 0xbm1dh95kz8h4d62pql2wmvw2gbgc7iif2bkixbnqijl4dryg71" | cachix push simula
-
-  nix-build default.nix --argstr driverCheck "nixos" | cachix push simula
-  nix-build default.nix --argstr driverCheck "intel" | cachix push simula
 }
 
 swapXpraNixToLocal() {
