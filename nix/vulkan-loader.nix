@@ -1,5 +1,5 @@
 { stdenv, fetchFromGitHub, cmake, python3, vulkan-headers, pkgconfig
-, xlibsWrapper, libxcb, libXrandr, libXext, wayland, addOpenGLRunpath, mesa_noglu }:
+, xlibsWrapper, libxcb, libXrandr, libXext, wayland, addOpenGLRunpath, mesa_drivers }:
 
 stdenv.mkDerivation rec {
   pname = "vulkan-loader";
