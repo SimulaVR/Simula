@@ -21,7 +21,7 @@ stdenv.mkDerivation rec {
   '';
 
   cmakeFlags = [
-    "-DSYSCONFDIR=${mesa_noglu}/share" # Don't use addOpenGLRunpath.driverLink
+    "-DSYSCONFDIR=${mesa_drivers}/share" # Don't use addOpenGLRunpath.driverLink
     "-DVULKAN_HEADERS_INSTALL_DIR=${vulkan-headers}"
   ];
 

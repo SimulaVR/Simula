@@ -204,15 +204,23 @@ checkInstallNix() {
     fi
 }
 
+checkIfNixOS() {
+    if [ -e /etc/NIXOS ]; then
+        echo "true";
+    else
+        echo "false";
+    fi
+}
+
 installSimula() {
     checkInstallNix
     checkInstallCachix
     cachix use simula
     curl https://www.wolframcloud.com/obj/george.w.singer/installMessage
     if [ -z $1 ]; then
-      NIXPKGS_ALLOW_UNFREE=1 nix-build default.nix --argstr driverCheck "$(./utils/DriverCheck.sh)" --arg devBuild "false"
+      NIXPKGS_ALLOW_UNFREE=1 nix-build default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
     else
-      NIXPKGS_ALLOW_UNFREE=1 nix-build -K default.nix --argstr driverCheck "$(./utils/DriverCheck.sh)" --arg devBuild "true"
+      NIXPKGS_ALLOW_UNFREE=1 nix-build -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
     fi
 }
 

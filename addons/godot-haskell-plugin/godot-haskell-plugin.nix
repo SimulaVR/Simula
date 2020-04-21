@@ -2,7 +2,7 @@
 , colour, containers, directory, extra, http-client
 , http-client-tls, http-types, inline-c, iso8601-time, lens, linear
 , process, raw-strings-qq, stdenv, stm, text, time, unix, uuid
-, vector, fetchFromGitHub, callPackage, haskellPackages, devBuild ? false, driverCheck ? "", pkgs ? (import ../../pinned-nixpkgs.nix), godot, godot-haskell, ordered-containers
+, vector, fetchFromGitHub, callPackage, haskellPackages, devBuild ? false, onNixOS ? false, pkgs ? (import ../../pinned-nixpkgs.nix), godot, godot-haskell, ordered-containers
 }:
 mkDerivation {
   pname = "godot-haskell-plugin";
