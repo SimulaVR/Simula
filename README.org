@@ -81,6 +81,7 @@ Windows become "active" once you look at them. Active windows receive typing eve
 
 | *Key binding.*       | *Action*                                                                |
 |----------------------+-------------------------------------------------------------------------|
+| ~Super + Escape~     | Toggle Simula's mouse & keyboard grab (see below).                      |
 | ~Super + /~          | Quick launch terminal                                                   |
 | ~Super + Apostrophe~ | Send window cursor to gaze point (hold down to make cursor follow gaze) |
 | ~Super + Enter~      | Left click surface cursor at gaze point                                 |
@@ -96,6 +97,8 @@ Windows become "active" once you look at them. Active windows receive typing eve
 | ~Super + k~          | Quick launch firefox                                                    |
 | ~Super + g~          | Quick launch google-chrome                                              |
 | ~Super + w~          | Launch headset webcam view                                              |
+
+*NOTE:* In order to prevent Simula's keyboard shortcuts from conflicting with your existing window manager's shortcuts, Simula "grabs" the system keyboard and cursor to prevent input events from propagating past Simula. This creates a problem: it is then impossible for you to escape Simula once you launch it! In order to get around this, press ~Super + Escape~ to ungrab Simula, which will restore mouse and keyboard control to your normal window manager.
 
 ** VR Controllers
 

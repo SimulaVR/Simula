@@ -609,6 +609,8 @@ _on_simula_shortcut gss [godotScanCodeGVar, isPressedGVar] = do
         appLaunch gss "firefox" ["-new-window"]
       (_, G.KEY_G, True) -> do
         appLaunch gss "google-chrome-stable" ["--new-window google.com"]
+      (_, G.KEY_ESCAPE, True) -> do
+        toggleGrabMode
       (_, G.KEY_W, True) -> do
         launchHMDWebCam gss
         -- appLaunch gss "ffplay" ["/dev/video2"]
@@ -697,3 +699,14 @@ launchHMDWebCam gss = do
           getHMDWebCamPath = (listToMaybe . map ("/dev/v4l/by-id/" ++) . sort . filter viveOrValve) <$> listDirectory "/dev/v4l/by-id"
           viveOrValve :: String -> Bool
           viveOrValve str = any (`isInfixOf` str) ["Vive", "Valve"]
+
+-- | HACK: `G.set_mouse_mode` is set to toggle the grab on *both* the keyboard and
+-- | the mouse cursor.
+toggleGrabMode :: IO ()
+toggleGrabMode = do
+  getSingleton GodotInput "Input" >>= \inp -> do
+    mode <- G.get_mouse_mode inp
+    case mode of
+      G.MOUSE_MODE_CAPTURED -> G.set_mouse_mode inp G.MOUSE_MODE_VISIBLE
+      G.MOUSE_MODE_VISIBLE -> G.set_mouse_mode inp G.MOUSE_MODE_CAPTURED
+  return ()
