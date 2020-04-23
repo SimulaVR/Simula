@@ -120,3 +120,5 @@ _draw cs _ = do
                                     premulShm <- readTVarIO (cs ^. csPremulShader)
                                     G.set_material cs (safeCast premulShm)
                                     G.draw_texture_rect_region cs surfaceTexture bufferRect region modulateColor False (coerce nullPtr) True
+
+                                    G.send_frame_done wlrSurface

@@ -627,6 +627,4 @@ applyViewportBaseTexture gsvs = do
 
   G.set_texture sprite3D (safeCast viewportBaseTexture)
 
-  G.send_frame_done wlrSurface
-
   return ()
