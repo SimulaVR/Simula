@@ -645,7 +645,10 @@ _on_simula_shortcut gss [godotScanCodeGVar, isPressedGVar] = do
         case eitherSurface of
           (Left wlrXdgSurface) -> return ()
           (Right wlrXWaylandSurface) -> G.send_close wlrXWaylandSurface
-      _ -> putStrLn "Unrecognized shortcut!"
+      (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy))), _, False) -> do
+        keyboardGrabLetGo gsvs
+      _ -> do
+        putStrLn "Unrecognized shortcut!"
 
 launchXpra :: GodotSimulaServer -> IO ()
 launchXpra gss = do
