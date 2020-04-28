@@ -17,7 +17,7 @@ let
       ln -s ${godot}/bin/godot.x11.tools.64 $out/bin/godot.x11.tools.64
       ln -s ${godot}/bin/godot.x11.opt.64 $out/bin/godot.x11.opt.64
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula
-      echo "if [ ! -d .import ]; then LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader}/lib $(./result/bin/GetNixGL.sh) ${godot}/bin/godot.x11.tools.64 --export \"Linux/X11\" ./result/bin/SimulaExport; fi" >> $out/bin/simula
+      echo "if [ ! -d .import ]; then LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader}/lib \$(./result/bin/GetNixGL.sh) ${godot}/bin/godot.x11.tools.64 --export \"Linux/X11\" ./result/bin/SimulaExport; fi" >> $out/bin/simula
       echo "PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader}/lib \$(./result/bin/GetNixGL.sh) ${godot}/bin/godot.x11.opt.64 -m" >> $out/bin/simula
       chmod +x $out/bin/simula
 
