@@ -123,9 +123,24 @@ _draw cb _ = do
   -- Draw surfaces from CanvasSurface
   drawSurfaces cb gsvs
 
+  -- Draw free children
+    -- updateFreeChildrenCoordinates -- possibly needed down the road, in case free child coordinates change
+  drawFreeChildren cb gsvs
+
   -- Draw cursor
   drawCursor cb gsvs
   where
+    drawFreeChildren :: CanvasBase -> GodotSimulaViewSprite -> IO ()
+    drawFreeChildren cb gsvs = do
+      gss <- readTVarIO (gsvs ^. gsvsServer)
+      freeChildren <- readTVarIO (gsvs  ^. gsvsFreeChildren)
+
+      mapM (drawFreeChild cb) freeChildren
+      return ()
+    drawFreeChild :: CanvasBase -> CanvasSurface -> IO ()
+    drawFreeChild cb cs = do
+      (wlrSurface, _, _) <- readTVarIO (cs ^. csSurface)
+      drawSurface cb (wlrSurface, cs)
     savePngCS :: (GodotWlrSurface, CanvasSurface) -> IO ()
     savePngCS arg@((wlrSurface, cs)) = do
       viewportSurface <- readTVarIO (cs ^. csViewport) :: IO GodotViewport

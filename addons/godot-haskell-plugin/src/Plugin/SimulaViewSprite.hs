@@ -48,6 +48,7 @@ import           Control.Lens                hiding (Context)
 
 import Data.Typeable
 
+import Data.List
 import qualified Data.Map.Strict as M
 import Data.Map.Ordered as MO
 
@@ -69,6 +70,7 @@ instance NativeScript GodotSimulaViewSprite where
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
+                      <*> atomically (newTVar [])
                       -- <*> atomically (newTVar False)
   -- classExtends = "RigidBody"
   classMethods =
@@ -79,10 +81,12 @@ instance NativeScript GodotSimulaViewSprite where
     , func NoRPC "_handle_map" _handle_map         -- Connected in SimulaServer.hs
     , func NoRPC "_process" Plugin.SimulaViewSprite._process
     , func NoRPC "_handle_unmap" _handle_unmap     -- Connected in SimulaServer.hs
+    , func NoRPC "handle_map_free_child" handle_map_free_child
     ]
 
   -- Test:
   classSignals = [ signal "map" [("gsvs", GodotVariantTypeObject)]
+                 , signal "map_free_child" [("wlrXWaylandSurface", GodotVariantTypeObject)]
                  , signal "unmap" [("gsvs", GodotVariantTypeObject)]
                  ]
 
@@ -476,19 +480,38 @@ _handle_map self args = do
   return ()
 
 _handle_unmap :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
-_handle_unmap self args = do
-  simulaView <- readTVarIO (self ^. gsvsView)
-  atomically $ writeTVar (simulaView ^. svMapped) False
-
--- Ensure that we de-focus the gsvs if it is active
+_handle_unmap self [wlrXWaylandSurfaceVariant] = do
   gss <- readTVarIO (self ^. gsvsServer)
-  maybeGSVSFocused <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
-  case maybeGSVSFocused of
-    Nothing -> return ()
-    (Just gsvsFocused) -> do
-      simulaViewFocused <- readTVarIO (gsvsFocused ^. gsvsView)
-      if (simulaViewFocused == simulaView) then (atomically $ writeTVar (gss ^. gssKeyboardFocusedSprite) Nothing)
-                                          else (return ())
+  freeChildrenMap <- readTVarIO (gss ^. gssFreeChildren)
+  wlrXWaylandSurface <- fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface
+  G.reference wlrXWaylandSurface
+  let maybeCS = M.lookup wlrXWaylandSurface freeChildrenMap
+  case maybeCS of
+    Just cs -> do -- Delete the free child from the parentGSVS and the gssFreeChildren map
+                  parentGSVS <- readTVarIO (cs ^. csGSVS)
+                  freeChildren <- readTVarIO (parentGSVS ^. gsvsFreeChildren)
+                  let freeChildrenNew = Data.List.delete cs freeChildren
+                  atomically $ writeTVar (parentGSVS ^. gsvsFreeChildren) freeChildrenNew
+                  let freeChildrenMapNew = M.delete wlrXWaylandSurface freeChildrenMap
+                  atomically $ writeTVar (gss ^. gssFreeChildren) freeChildrenMapNew
+
+                  -- Destroy and prevent drawing
+                  G.set_process cs False
+                  G.queue_free cs
+
+
+    Nothing -> do simulaView <- readTVarIO (self ^. gsvsView)
+                  atomically $ writeTVar (simulaView ^. svMapped) False
+
+                  -- Ensure that we de-focus the gsvs if it is active
+                  gss <- readTVarIO (self ^. gsvsServer)
+                  maybeGSVSFocused <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
+                  case maybeGSVSFocused of
+                    Nothing -> return ()
+                    (Just gsvsFocused) -> do
+                      simulaViewFocused <- readTVarIO (gsvsFocused ^. gsvsView)
+                      if (simulaViewFocused == simulaView) then (atomically $ writeTVar (gss ^. gssKeyboardFocusedSprite) Nothing)
+                                                          else (return ())
 
   G.set_process self False
   emitSignal self "unmap" ([self] :: [GodotSimulaViewSprite])
@@ -510,6 +533,7 @@ _process self _ = do
 --    GodotSimulaViewSprite that calls to `queue_free` can use.
 _handle_destroy :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 _handle_destroy gsvs [gsvsGV] = do
+  putStrLn "_handle_destroy"
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
   gss <- readTVarIO (gsvs ^. gsvsServer)
@@ -522,7 +546,7 @@ _handle_destroy gsvs [gsvsGV] = do
   -- Api.godot_object_destroy (safeCast gsvs)
   deleteSurface eitherSurface
 
-  where 
+  where
     deleteSurface eitherSurface = 
       case eitherSurface of
         (Left xdgSurface) -> destroyMaybe (safeCast xdgSurface)
@@ -628,3 +652,42 @@ applyViewportBaseTexture gsvs = do
   G.set_texture sprite3D (safeCast viewportBaseTexture)
 
   return ()
+
+handle_map_free_child :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
+handle_map_free_child gsvsInvisible [wlrXWaylandSurfaceVariant] = do
+  gss <- readTVarIO $ (gsvsInvisible ^. gsvsServer)
+  wlrXWaylandSurface <- fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface
+  maybeActiveCursorGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
+  case maybeActiveCursorGSVS of
+     Nothing -> putStrLn "Cannot map free child!"
+     Just gsvs -> do maybeSurfaceLocalCoords <- computeSurfaceLocalCoordinates gsvs wlrXWaylandSurface
+                     case maybeSurfaceLocalCoords of
+                       Nothing -> return ()
+                       Just (sx, sy) -> do -- Push surface onto end of gsvsFreeChildren stack
+                                           G.reference wlrXWaylandSurface
+                                           wlrSurface <- G.get_wlr_surface wlrXWaylandSurface
+                                           cs <- newCanvasSurface gsvs (wlrSurface, sx, sy)
+                                           freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
+                                           atomically $ writeTVar (gsvs ^. gsvsFreeChildren) (freeChildren ++ [cs])
+
+                                           -- Add surface into gssFreeChildren map
+                                           freeChildrenMapOld <- readTVarIO (gss ^. gssFreeChildren) :: IO (M.Map GodotWlrXWaylandSurface CanvasSurface)
+                                           let freeChildrenMapNew = M.insert wlrXWaylandSurface cs freeChildrenMapOld
+                                           atomically $ writeTVar (gss ^. gssFreeChildren) freeChildrenMapNew
+
+  simulaView <- readTVarIO (gsvsInvisible ^. gsvsView)
+  atomically $ writeTVar (simulaView ^. svMapped) True
+  where
+        computeSurfaceLocalCoordinates :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> IO (Maybe (Int, Int))
+        computeSurfaceLocalCoordinates gsvs child = do
+          localX <- G.get_x child
+          localY <- G.get_y child
+
+          simulaView <- readTVarIO (gsvs ^. gsvsView)
+          let eitherSurface = (simulaView ^. svWlrEitherSurface)
+          maybeCoords <- case eitherSurface of
+                          Left wlrXdgSurface -> return Nothing
+                          Right parent -> do globalX <- G.get_x parent
+                                             globalY <- G.get_y parent
+                                             return $ Just (localX - globalX, localY - globalY)
+          return maybeCoords

@@ -260,6 +260,8 @@ initGodotSimulaServer obj = do
 
   gssOriginalEnv' <- getEnvironment
 
+  gssFreeChildren' <- newTVarIO M.empty :: IO (TVar (M.Map GodotWlrXWaylandSurface CanvasSurface))
+
   let gss = GodotSimulaServer {
     _gssObj                   = obj                       :: GodotObject
   , _gssWaylandDisplay        = gssWaylandDisplay'        :: TVar GodotWaylandDisplay
@@ -280,6 +282,7 @@ initGodotSimulaServer obj = do
   , _gssKeyboardGrabbedSprite = gssKeyboardGrabbedSprite' :: TVar (Maybe (GodotSimulaViewSprite, Float))
   , _gssXWaylandDisplay       = gssXWaylandDisplay'       :: TVar (Maybe String)
   , _gssOriginalEnv           = gssOriginalEnv'           :: [(String, String)]
+  , _gssFreeChildren          = gssFreeChildren'          :: TVar (M.Map GodotWlrXWaylandSurface CanvasSurface)
   }
 
   return gss
@@ -402,12 +405,6 @@ handle_unmap_surface gss [gsvsVariant] = do
 
 _on_wlr_key :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_wlr_key gss [keyboardGVar, eventGVar] = do
-  -- maybeGSVSFocused <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
-  -- case maybeGSVSFocused of
-  --   Nothing -> return ()
-  --   (Just gsvsFocused) -> do
-  --     logGSVS "gsvsFocused before key press: " gsvsFocused
-  --     focus gsvsFocused
   wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
   event <- fromGodotVariant eventGVar
   G.reference event
@@ -416,11 +413,6 @@ _on_wlr_key gss [keyboardGVar, eventGVar] = do
 
 _on_wlr_modifiers :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_wlr_modifiers gss [keyboardGVar] = do
-  -- maybeGSVSFocused <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
-  -- case maybeGSVSFocused of
-  --   Nothing -> return ()
-  --   (Just gsvsFocused) -> do
-  --     focus gsvsFocused
   wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
   G.keyboard_notify_modifiers wlrSeat
   return ()
@@ -436,6 +428,7 @@ _on_WlrXWayland_new_surface gss [wlrXWaylandSurfaceVariant] = do
 
   connectGodotSignal gsvs "map" gss "handle_map_surface" []
   connectGodotSignal gsvs "unmap" gss "handle_unmap_surface" []
+  connectGodotSignal wlrXWaylandSurface "map_free_child" gsvs "handle_map_free_child" []
   connectGodotSignal wlrXWaylandSurface "destroy" gsvs "_handle_destroy" []
   connectGodotSignal wlrXWaylandSurface "map" gsvs "_handle_map" []
   connectGodotSignal wlrXWaylandSurface "unmap" gsvs "_handle_unmap" []

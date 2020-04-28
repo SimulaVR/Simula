@@ -56,6 +56,16 @@ import Godot.Core.GodotViewport as G
 
 import Data.Map.Ordered as MO
 
+instance Show GodotWlrXWaylandSurface where
+  show wlrXWaylandSurface = (show (coerce wlrXWaylandSurface :: Ptr ()))
+instance Show GodotWlrXdgSurface where
+  show wlrXWaylandSurface = (show (coerce wlrXWaylandSurface :: Ptr ()))
+instance Show GodotWlrSurface where
+  show wlrSurface = (show (coerce wlrSurface :: Ptr ()))
+
+instance Ord GodotWlrXWaylandSurface where
+  wlrXWaylandSurface1 `compare` wlrXWaylandSurface2 = ((coerce wlrXWaylandSurface1) :: Ptr ()) `compare` ((coerce wlrXWaylandSurface2) :: Ptr ())
+
 unfoldrM :: Monad m => (b -> m (Maybe (a, b))) -> b -> m [a]
 unfoldrM f b = f b >>= \case
   Just (a, b') -> return . (a :) =<< unfoldrM f b'
@@ -100,11 +110,12 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssKeyboardGrabbedSprite :: TVar (Maybe (GodotSimulaViewSprite, Float)) -- We encode both the gsvs and its original distance from the user
   , _gssXWaylandDisplay       :: TVar (Maybe String) -- For appLaunch
   , _gssOriginalEnv           :: [(String, String)]
+  , _gssFreeChildren :: TVar (M.Map GodotWlrXWaylandSurface CanvasSurface)
   }
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
@@ -124,17 +135,22 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   -- , gsvsGeometry        :: GodotRect2
   -- , gsvsWlrSeat         :: GodotWlrSeat
   -- , gsvsInputMode       :: TVar InteractiveMode
+  , _gsvsFreeChildren :: TVar [CanvasSurface]
   }
 
 instance HasBaseClass GodotSimulaViewSprite where
   type BaseClass GodotSimulaViewSprite = GodotRigidBody
-  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _ _) = GodotRigidBody obj
+  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _ _ _) = GodotRigidBody obj
 
 data CanvasBase = CanvasBase {
     _cbObject       :: GodotObject
   , _cbGSVS         :: TVar GodotSimulaViewSprite
   , _cbViewport     :: TVar GodotViewport
 }
+
+instance HasBaseClass CanvasBase where
+  type BaseClass CanvasBase = GodotNode2D
+  super (CanvasBase obj _ _ ) = GodotNode2D obj
 
 data CanvasSurface = CanvasSurface {
     _csObject       :: GodotObject
@@ -146,13 +162,12 @@ data CanvasSurface = CanvasSurface {
   , _csFrameCounter :: TVar Integer
 }
 
-instance HasBaseClass CanvasBase where
-  type BaseClass CanvasBase = GodotNode2D
-  super (CanvasBase obj _ _ ) = GodotNode2D obj
-
 instance HasBaseClass CanvasSurface where
   type BaseClass CanvasSurface = GodotNode2D
   super (CanvasSurface obj _ _ _ _ _ _) = GodotNode2D obj
+
+instance Eq CanvasSurface where
+  (==) = (==) `on` _csObject
 
 data SimulaView = SimulaView
   { _svServer                  :: GodotSimulaServer -- Can obtain WlrSeat
@@ -424,38 +439,12 @@ getEngine = Api.godot_global_get_singleton & withCString (unpack "Engine")
 godotPrint :: Text -> IO ()
 godotPrint str = Api.godot_print =<< toLowLevel str
 
-printGSVS :: GodotSimulaViewSprite -> IO ()
-printGSVS gsvs = do
-  simulaView <- readTVarIO (gsvs ^. gsvsView)
-  let maybeID = (simulaView ^. gsvsUUID)
-  case maybeID of
-     Nothing -> putStrLn "Couldn't get GSVS ID"
-     (Just id) -> putStrLn $ "gsvs id: " ++ (show id)
-
 getWlrSurface :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO GodotWlrSurface
 getWlrSurface eitherSurface = do
   case eitherSurface of
     (Left wlrXdgSurface) -> G.get_wlr_surface wlrXdgSurface
     (Right wlrXWaylandSurface) -> G.get_wlr_surface wlrXWaylandSurface
 
-
--- For reference: this is the buggy instance imported from godot-extra that we replace.
--- type instance TypeOf 'HaskellTy GodotArray = [GodotVariant]
--- instance GodotFFI GodotArray [GodotVariant] where
---   fromLowLevel vs = do
---     size <- fromIntegral <$> Api.godot_array_size vs
---     let maybeNext n v =
---           if n == (size - 1)
---           then Nothing
---           else Just (v, n + 1)
---     let variantAt n =
---           maybeNext n <$> (Api.godot_array_get vs n)
---     unfoldrM variantAt 0
-
---   toLowLevel vs = do
---     array <- Api.godot_array_new
---     mapM_ (Api.godot_array_append array) vs
---     return array
 
 -- | Used to supply GodotVector2 to
 -- |   G.set_size :: GodotViewport -> GodotVector2 -> IO ()
@@ -528,10 +517,24 @@ showGSVS gsvs = do
                   Just uuid -> "(GSVS: " ++ (show uuid) ++ ")"
   return ret
 
-logGSVS :: String -> GodotSimulaViewSprite-> IO ()
-logGSVS string gsvs = do
-  showGsvs <- showGSVS gsvs
-  appendFile "log.txt" $ string ++ (showGsvs) ++ "\n"
+logGSVS :: String -> GodotSimulaViewSprite -> IO ()
+logGSVS str gsvs = do
+  appendFile "log.txt" $ "Printing from " ++ (show str) ++ "\n"
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  isMapped <- readTVarIO (simulaView ^. svMapped)
+  let eitherSurface = (simulaView ^. svWlrEitherSurface)
+  let maybeID = (simulaView ^. gsvsUUID)
+  case maybeID of
+     Nothing -> appendFile "log.txt" $  "  Couldn't get GSVS ID" ++ "\n"
+     (Just id) -> do appendFile "log.txt" $ "  gsvs id: " ++ (show id) ++ "\n"
+                     case eitherSurface of
+                       Left wlrXdgSurface -> do appendFile "log.txt" $ ("  wlrXdgSurface: " ++ (show wlrXdgSurface)) ++ "\n"
+                                                wlrSurface <- G.get_wlr_surface wlrXdgSurface
+                                                appendFile "log.txt" $ ("  wlrSurface: " ++ (show wlrSurface)) ++ "\n"
+                       Right wlrXWaylandSurface -> do appendFile "log.txt" $ ("  wlrXWaylandSurface: " ++ (show wlrXWaylandSurface)) ++ "\n"
+                                                      wlrSurface <- G.get_wlr_surface wlrXWaylandSurface
+                                                      appendFile "log.txt" $ ("  wlrSurface: " ++ (show wlrSurface)) ++ "\n"
+  appendFile "log.txt" $ "  isMapped: " ++ (show isMapped) ++ "\n"
 
 logStr :: String -> IO ()
 logStr string = do

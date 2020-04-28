@@ -49,9 +49,6 @@ import Data.Typeable
 import qualified Data.Map.Strict as M
 import Data.Map.Ordered
 
--- instance Eq CanvasSurface
---   (==) = (==) `on` _csObject
-
 instance NativeScript CanvasSurface where
   className = "CanvasSurface"
   classInit obj = do
@@ -93,14 +90,14 @@ _draw :: CanvasSurface -> [GodotVariant] -> IO ()
 _draw cs _ = do
   (wlrSurface, x, y) <- readTVarIO (cs ^. csSurface)
   drawWlrSurface cs wlrSurface x y
-
   where
     drawWlrSurface :: CanvasSurface -> GodotWlrSurface -> Int -> Int -> IO ()
     drawWlrSurface cs wlrSurface x y = do
       let isNull = ((unsafeCoerce wlrSurface) == nullPtr)
       case isNull of
         True -> putStrLn $ "CanvasSurface is null!"
-        False -> do surfaceTexture <- G.get_texture wlrSurface :: IO GodotTexture
+        False -> do G.reference wlrSurface
+                    surfaceTexture <- G.get_texture wlrSurface :: IO GodotTexture
                     case ((unsafeCoerce surfaceTexture) == nullPtr) of
                       True -> return ()
                       False -> do modulateColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1) :: IO GodotColor
