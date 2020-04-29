@@ -121,7 +121,7 @@ ready gss _ = do
   wlrXWayland <- readTVarIO (gss ^. gssWlrXWayland)
 
 
-  oldDisplay <- getEnv "DISPLAY"  
+  oldDisplay <- getEnv "DISPLAY"
 
   -- We wait till here to start XWayland so we can feed it a seat + compositor
   G.start_xwayland wlrXWayland (safeCast wlrCompositor) (safeCast wlrSeat)
@@ -558,7 +558,7 @@ appLaunch gss appStr args = do
       let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
       -- let envMapWithDisplay = M.insert "DISPLAY" ":13" envMap
       let envListWithDisplay = M.toList envMapWithDisplay
-      createSessionLeader appStr args (Just envListWithDisplay)
+      createProcess (proc appStr args) { env = Just envListWithDisplay, new_session = True, std_out = NoStream, std_err = NoStream }
       return ()
   return ()
 
