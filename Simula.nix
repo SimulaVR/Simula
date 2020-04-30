@@ -17,8 +17,8 @@ let
       ln -s ${godot}/bin/godot.x11.tools.64 $out/bin/godot.x11.tools.64
       ln -s ${godot}/bin/godot.x11.opt.64 $out/bin/godot.x11.opt.64
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula
-      echo "if [ ! -d .import ]; then LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader}/lib \$(./result/bin/GetNixGL.sh) ${godot}/bin/godot.x11.tools.64 --export \"Linux/X11\" ./result/bin/SimulaExport; fi" >> $out/bin/simula
-      echo "PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader}/lib \$(./result/bin/GetNixGL.sh) ${godot}/bin/godot.x11.opt.64 -m 2>&1 | ${coreutils}/bin/tee output.file" >> $out/bin/simula
+      echo "if [ ! -d .import ]; then LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader}/lib \$(./utils/GetNixGL.sh) ${godot}/bin/godot.x11.tools.64 --export \"Linux/X11\" ./result/bin/SimulaExport; fi" >> $out/bin/simula
+      echo "PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader}/lib \$(./utils/GetNixGL.sh) ${godot}/bin/godot.x11.opt.64 -m 2>&1 | ${coreutils}/bin/tee output.file" >> $out/bin/simula
       echo "sed -in \"s/\$USER/anon/g\" output.file" >> $out/bin/simula
       echo "${curl}/bin/curl --data-urlencode errorMsg@output.file https://www.wolframcloud.com/obj/george.w.singer/errorMessage" >> $out/bin/simula
       chmod +x $out/bin/simula
@@ -31,7 +31,7 @@ let
 
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula
 
-      echo "if [ ! -d .import ]; then PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader}/lib \$(./result/bin/GetNixGL.sh) ${godot}/bin/godot.x11.tools.64 -e; else PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader}/lib \$(./result/bin/GetNixGL.sh) ${godot}/bin/godot.x11.tools.64 -m; fi" >> $out/bin/simula
+      echo "if [ ! -d .import ]; then PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader}/lib \$(./utils/GetNixGL.sh) ${godot}/bin/godot.x11.tools.64 -e; else PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader}/lib \$(./utils/GetNixGL.sh) ${godot}/bin/godot.x11.tools.64 -m; fi" >> $out/bin/simula
       chmod +x $out/bin/simula
      '';
 

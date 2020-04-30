@@ -66,7 +66,7 @@ installNixGL() {
     cd -
 }
 
-installNixVulkanNividia() {
+installNixVulkanNvidia() {
     cd ${SIMULA_UTIL_ROOT}/..
     nix-env -i $(nix-build -E "((import ./submodules/godot/nixGL.nix) { nvidiaVersion = \"$1\"; nvidiaHash = \"$2\"; pkgs = pkgs; }).nixVulkanNvidia")
     cd -
