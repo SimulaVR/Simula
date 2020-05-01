@@ -68,7 +68,7 @@ installNixGL() {
 
 installNixVulkanNvidia() {
     cd ${SIMULA_UTIL_ROOT}/..
-    nix-env -i $(nix-build -E "((import ./submodules/godot/nixGL.nix) { nvidiaVersion = \"$1\"; nvidiaHash = \"$2\"; pkgs = pkgs; }).nixVulkanNvidia")
+    nix-env -i $(nix-build -E "((import ./submodules/godot/nixGL.nix) { nvidiaVersion = \"$1\"; nvidiaHash = \"$2\"; pkgs = (import ./pinned-nixpkgs.nix); }).nixVulkanNvidia")
     cd -
 }
 
@@ -78,6 +78,6 @@ elif [ -z $NVIDIA_VERSION ]; then
    command -v nixGLIntel >/dev/null 2>&1 || { installNixGL; }
    echo "nixGLIntel"
 else
-   command -v nixVulkanNvidia >/dev/null 2>&1 || { installNixVulkanNvidia $NVIDIA_VERSION $(setNvidiaHash "$NVIDIA_VERSION"); }
+   command -v nixVulkanNvidia >/dev/null 2>&1 || { installNixVulkanNvidia $NVIDIA_VERSION $(getNvidiaHash "$NVIDIA_VERSION"); }
    echo "nixVulkanNvidia"
 fi
