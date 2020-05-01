@@ -1,11 +1,11 @@
 SIMULA_UTIL_ROOT="$(dirname "$(readlink -f "$0")")"
 
 getNvidiaVersion() {
-   if [ command -v nvidia-smi >/dev/null 2>&1 ]; then
-       nvidia-smi | grep -ho "Driver Version: [0-9]*.[0-9]*" |  awk '{print $NF}'
-   else
-       echo ""
-   fi
+    if [ -e /sys/bus/pci/drivers/nvidia ]; then
+        cat /sys/bus/pci/drivers/nvidia/module/version
+    else
+        echo ""
+    fi
 }
 
 NVIDIA_VERSION=$(getNvidiaVersion)
