@@ -62,13 +62,13 @@ getNvidiaHash() {
 
 installNixGL() {
     cd ${SIMULA_UTIL_ROOT}/..
-    nix-env -i $(nix-build -E '((import ./submodules/godot/nixGL.nix) { pkgs = (import ./pinned-nixpkgs.nix); }).nixGLIntel')
+    nix-env -i $(nix-build --no-out-link -E '((import ./submodules/godot/nixGL.nix) { pkgs = (import ./pinned-nixpkgs.nix); }).nixGLIntel')
     cd -
 }
 
 installNixVulkanNvidia() {
     cd ${SIMULA_UTIL_ROOT}/..
-    nix-env -i $(nix-build -E "((import ./submodules/godot/nixGL.nix) { nvidiaVersion = \"$1\"; nvidiaHash = \"$2\"; pkgs = (import ./pinned-nixpkgs.nix); }).nixVulkanNvidia")
+    nix-env -i $(nix-build --no-out-link -E "((import ./submodules/godot/nixGL.nix) { nvidiaVersion = \"$1\"; nvidiaHash = \"$2\"; pkgs = (import ./pinned-nixpkgs.nix); }).nixVulkanNvidia")
     cd -
 }
 
