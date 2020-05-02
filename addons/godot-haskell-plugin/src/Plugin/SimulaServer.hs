@@ -13,6 +13,8 @@ module Plugin.SimulaServer where
 import Control.Concurrent
 import System.Posix.Process
 import System.Process
+import qualified System.Process.ByteString as B
+import qualified Data.ByteString.Char8 as B
 import System.Process.Internals
 import System.Posix.Types
 import System.Posix.Signals
@@ -146,7 +148,8 @@ ready gss _ = do
 
   createProcess (shell "./result/bin/xrdb -merge .Xdefaults") { env = Just [("DISPLAY", newDisplay)] }
 
-  windows <- readCreateProcess (shell "./result/bin/wmctrl -lp") ""
+  (_, windows', _) <- B.readCreateProcessWithExitCode (shell "./result/bin/wmctrl -lp") ""
+  let windows = (B.unpack windows')
   let rightWindows = filter (\line -> isInfixOf (show pid) line) (lines windows)
   let simulaWindow = (head . words . head) rightWindows
   createProcess ((shell $ "./result/bin/wmctrl -ia " ++ simulaWindow) { env = Just [("DISPLAY", oldDisplay)] })
@@ -654,7 +657,8 @@ launchXpra gss = do
       let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
       let envListWithDisplay = M.toList envMapWithDisplay
 
-      output <- readCreateProcess (shell "./result/bin/xpra list") ""
+      (_,output',_) <- B.readCreateProcessWithExitCode (shell "./result/bin/xpra list") ""
+      let output = B.unpack output'
       let isXpraAlreadyLive = isInfixOf ":13" output
       case isXpraAlreadyLive of
         False -> do createSessionLeader "./result/bin/xpra" ["--fake-xinerama=no", "start", "--start", "./result/bin/xfce4-terminal", ":13"] (Just envListWithDisplay)
@@ -663,7 +667,8 @@ launchXpra gss = do
       createSessionLeader "./result/bin/xpra" ["attach", ":13"] (Just envListWithDisplay)
       return ()
       where waitForXpraRecursively = do
-              output <- readCreateProcess (shell "./result/bin/xpra list") ""
+              (_,output',_) <- B.readCreateProcessWithExitCode (shell "./result/bin/xpra list") ""
+              let output = B.unpack output'
               putStrLn $ "Output is: " ++ output
               let isXpraAlreadyLive = isInfixOf ":13" output
               case isXpraAlreadyLive of

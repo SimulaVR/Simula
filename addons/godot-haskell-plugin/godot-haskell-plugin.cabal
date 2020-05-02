@@ -66,6 +66,7 @@ library
     , raw-strings-qq
     , inline-c
     , ordered-containers
+    , process-extras
     -- , libinput
     -- , hsroots
     -- , hayland
@@ -169,6 +170,7 @@ foreign-library godot-haskell-plugin
     , raw-strings-qq
     , inline-c
     , ordered-containers
+    , process-extras
     -- , libinput
     -- , hsroots
     -- , hayland
