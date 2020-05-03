@@ -73,13 +73,13 @@ installNixVulkanNvidia() {
 }
 
 if [ -e /etc/NIXOS ]; then
-   echo ""
+    echo ""
 elif [ -z $NVIDIA_VERSION ]; then
-   . $HOME/.nix-profile/etc/profile.d/nix.sh
-   command -v nixGLIntel >/dev/null 2>&1 || { installNixGL; }
-   echo "nixGLIntel"
+    . $HOME/.nix-profile/etc/profile.d/nix.sh
+    command -v nixGLIntel >/dev/null 2>&1 || { installNixGL 2>&1 >/dev/null; }
+    which nixGLIntel
 else
-   . $HOME/.nix-profile/etc/profile.d/nix.sh
-   command -v nixVulkanNvidia >/dev/null 2>&1 || { installNixVulkanNvidia $NVIDIA_VERSION $(getNvidiaHash "$NVIDIA_VERSION"); }
-   echo "nixVulkanNvidia"
+    . $HOME/.nix-profile/etc/profile.d/nix.sh
+    command -v nixVulkanNvidia >/dev/null 2>&1 || { installNixVulkanNvidia $NVIDIA_VERSION $(getNvidiaHash "$NVIDIA_VERSION") 2>&1 >/dev/null; }
+    which nixVulkanNvidia
 fi
