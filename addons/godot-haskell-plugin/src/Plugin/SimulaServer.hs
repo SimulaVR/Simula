@@ -699,7 +699,10 @@ launchHMDWebCam gss = do
     where getHMDWebCamPath :: IO (Maybe FilePath)
           getHMDWebCamPath = (listToMaybe . map ("/dev/v4l/by-id/" ++) . sort . filter viveOrValve) <$> listDirectory "/dev/v4l/by-id"
           viveOrValve :: String -> Bool
-          viveOrValve str = any (`isInfixOf` str) ["Vive", "Valve"]
+          viveOrValve str = any (`isInfixOf` str) ["Vive",  -- HTC Vive
+                                                   "VIVE",  -- HTC Vive Pro
+                                                   "Valve", -- Valve Index?
+                                                   "Etron"] -- Valve Index
 
 -- | HACK: `G.set_mouse_mode` is set to toggle the grab on *both* the keyboard and
 -- | the mouse cursor.
