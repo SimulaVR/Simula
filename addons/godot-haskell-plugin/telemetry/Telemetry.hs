@@ -9,7 +9,7 @@ import qualified Data.ByteString.Lazy    as LBS
 import           Data.Semigroup          ((<>))
 import           Network.HTTP.Client     (getUri, httpLbs, method, newManager,
                                           parseRequest, queryString,
-                                          requestHeaders, responseStatus)
+                                          requestHeaders, responseStatus, Response, Request, HttpException)
 import           Network.HTTP.Client.TLS (tlsManagerSettings)
 import           Network.HTTP.Types      (statusCode)
 import           Control.Concurrent
@@ -28,6 +28,8 @@ import Foreign
 
 import Plugin.SimulaViewSprite
 import Plugin.Types
+
+import Control.Exception
 
 type SurfaceTelemetryMap = M.Map SimulaView GodotSimulaViewSprite -- C2HS version
 
@@ -75,15 +77,18 @@ ensureUUIDIsRegistered uuid = do
   let requestQueryString = ("data=" <> BSB64.encode encodedRequestObject)
 
   -- Construct the 'Request'
-  initialRequest <- parseRequest "http://api.mixpanel.com/engage/"
-  let request = initialRequest
-        { method = "POST"
-        , queryString = requestQueryString
-        , requestHeaders = [("Content-Type", "application/json; charset=utf-8")]
-        }
-
-  -- Send the request and print the response.
-  response <- httpLbs request manager
+  eitherErrorOrInitialRequest <- try $ parseRequest "http://api.mixpanel.com/engage/" :: IO (Either HttpException Request)
+  case eitherErrorOrInitialRequest of
+    Left error -> putStrLn "MixPanel parseRequest error!"
+    Right initialRequest -> do let request = initialRequest
+                                    { method = "POST"
+                                    , queryString = requestQueryString
+                                    , requestHeaders = [("Content-Type", "application/json; charset=utf-8")]
+                                    }
+                               eitherErrorOrResponse <- try $ httpLbs request manager :: IO (Either HttpException (Response LBS.ByteString))
+                               case eitherErrorOrResponse of
+                                 Left _ -> putStrLn "MixPanel httpLbs error!"
+                                 Right _ -> return ()
   return ()
 
 forkSendAppLaunchEvent :: UUID -> IO ThreadId
@@ -105,15 +110,18 @@ forkSendAppLaunchEvent uuid = forkIO $ do
   let requestQueryString = ("data=" <> BSB64.encode encodedRequestObject)
 
   -- Construct the 'Request'
-  initialRequest <- parseRequest "http://api.mixpanel.com/track/"
-  let request = initialRequest
-        { method = "POST"
-        , queryString = requestQueryString
-        , requestHeaders = [("Content-Type", "application/json; charset=utf-8")]
-        }
-
-  response <- httpLbs request manager
-  return ()
+  eitherErrorOrInitialRequest <- try $ parseRequest "http://api.mixpanel.com/engage/" :: IO (Either HttpException Request)
+  case eitherErrorOrInitialRequest of
+    Left error -> putStrLn "MixPanel parseRequest error!"
+    Right initialRequest -> do let request = initialRequest
+                                    { method = "POST"
+                                    , queryString = requestQueryString
+                                    , requestHeaders = [("Content-Type", "application/json; charset=utf-8")]
+                                    }
+                               eitherErrorOrResponse <- try $ httpLbs request manager :: IO (Either HttpException (Response LBS.ByteString))
+                               case eitherErrorOrResponse of
+                                 Left _ -> putStrLn "MixPanel httpLbs error!"
+                                 Right _ -> return ()
 
 forkSendPayloadEveryMinuteInterval :: UUID -> TVar SurfaceTelemetryMap -> Integer -> IO ThreadId
 forkSendPayloadEveryMinuteInterval uuid tvarSurfaceTelemetryMap min = forkIO $ (doLoop 0)
@@ -125,6 +133,7 @@ forkSendPayloadEveryMinuteInterval uuid tvarSurfaceTelemetryMap min = forkIO $ (
                                       , minutesElapsedSinceLastPayload = (fromIntegral min)
                                       , minutesTotalSession = (dbl + (fromIntegral min))
                                       })
+        putStrLn $ "minutesTotalSession: " ++ (show (dbl + (fromIntegral min)))
         doLoop (dbl + (fromIntegral min))
 
 forkSendPayload :: UUID -> Payload -> IO ()
@@ -163,6 +172,7 @@ forkSendPayload uuid (Payload { numWindowsOpen = tvarSurfaceTelemetryMap
         , queryString = requestQueryString
         , requestHeaders = [("Content-Type", "application/json; charset=utf-8")]
         }
+
   response <- httpLbs request manager
   return ()
 
