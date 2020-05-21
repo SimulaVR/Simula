@@ -7,6 +7,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Plugin.Types where
 
@@ -55,6 +57,7 @@ import System.Posix.Types
 import Godot.Core.GodotViewport as G
 
 import Data.Map.Ordered as MO
+import Dhall
 
 instance Show GodotWlrXWaylandSurface where
   show wlrXWaylandSurface = (show (coerce wlrXWaylandSurface :: Ptr ()))
@@ -88,6 +91,27 @@ instance GodotFFI GodotArray [GodotVariant] where
     mapM_ (Api.godot_array_append array) vs
     return array
 
+data KeyboardShortcut = KeyboardShortcut {
+  _keyCombination :: [String]
+, _keyAction      :: String
+} deriving (Generic, Show)
+
+data Configuration = Configuration {
+  _defaultWindowResolution :: (Natural, Natural)
+, _defaultWindowScale :: Double
+, _keyBindings :: [KeyboardShortcut]
+} deriving (Generic, Show)
+
+instance FromDhall KeyboardShortcut
+instance FromDhall Configuration
+
+type Scancode          = Int
+type Modifiers         = Int
+type Keycode           = Int
+type SpriteLocation    = Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates)
+type KeyboardAction    = SpriteLocation -> Bool -> IO () -- `Bool` signifies whether the key is pressed down
+type KeyboardShortcuts = M.Map (Modifiers, Keycode) KeyboardAction
+
 -- We use TVar excessively since these datatypes must be retrieved from the
 -- scene graph (requiring IO)
 data GodotSimulaServer = GodotSimulaServer
@@ -111,11 +135,13 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssXWaylandDisplay       :: TVar (Maybe String) -- For appLaunch
   , _gssOriginalEnv           :: [(String, String)]
   , _gssFreeChildren :: TVar (M.Map GodotWlrXWaylandSurface CanvasSurface)
+  , _gssConfiguration      :: TVar Configuration
+  , _gssKeyboardShortcuts  :: TVar KeyboardShortcuts
   }
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
@@ -200,6 +226,8 @@ makeLenses ''CanvasSurface
 makeLenses ''SimulaView
 makeLenses ''GodotSimulaServer
 makeLenses ''GodotPancakeCamera
+makeLenses ''KeyboardShortcut
+makeLenses ''Configuration
 
 -- Godot helper functions (should eventually be exported to godot-extra).
 

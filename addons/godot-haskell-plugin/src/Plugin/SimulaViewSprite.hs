@@ -47,6 +47,7 @@ import qualified Language.C.Inline as C
 import           Control.Lens                hiding (Context)
 
 import Data.Typeable
+import qualified Dhall
 
 import Data.List
 import qualified Data.Map.Strict as M
@@ -300,35 +301,25 @@ newGodotSimulaViewSprite gss simulaView = do
     Just shm -> G.set_material_override godotSprite3D (safeCast shm)
     Nothing -> error "couldn't fetch shader, hard failing for debug purposes"
 
-  -- HACK: Set transparency to False to ensure that textures never disappear
-  -- G.set_draw_flag godotSprite3D 0 False -- https://github.com/godotengine/godot/blob/89bcfa4b364e1edc8e175f766b50d145864eb159/scene/3d/sprite_3d.h#L44:7
-
   godotBoxShape <- unsafeInstance GodotBoxShape "BoxShape"
   ownerId <- G.create_shape_owner gsvs (safeCast gsvs)
   G.shape_owner_add_shape gsvs ownerId (safeCast godotBoxShape)
 
-  -- simulaView <- readTVarIO (gsvs ^. gsvsView)
-  -- let eitherSurface = (simulaView ^. svWlrEitherSurface)
-  -- wlrSurface <- getWlrSurface eitherSurface
-  -- dimensions@(originalWidth, originalHeight) <- getBufferDimensions wlrSurface
-  --  atomically $ writeTVar (gsvs ^. gsvsTargetSize) (SpriteDimensions (originalWidth, originalHeight))
-  atomically $ writeTVar (gsvs ^. gsvsTargetSize) (SpriteDimensions (900, 900))
-
-  -- atomically $ writeTVar (_gsvsObj       gss) gsObj'      -- :: GodotObject (filled in classInit)
   atomically $ writeTVar (_gsvsServer    gsvs) gss           -- :: TVar GodotSimulaServer
-  -- atomically $ writeTVar (_gsvsShouldMoe gsvs) gsvsShouldMoe' -- :: TVar Bool   (filled in classInit)
   atomically $ writeTVar (_gsvsSprite    gsvs) godotSprite3D -- :: TVar GodotSprite3D
   atomically $ writeTVar (_gsvsShape     gsvs) godotBoxShape -- :: TVar GodotBoxShape
   atomically $ writeTVar (_gsvsView      gsvs) simulaView    -- :: TVar SimulaView
   atomically $ writeTVar (_gsvsCursorCoordinates gsvs) (SurfaceLocalCoordinates (0,0))
 
-  -- Initialize and load render target into _gsvsViewport field
-    -- let wlrXdgSurface = (simulaView ^. svWlrXdgSurface)
-    -- renderTarget <- initializeRenderTarget wlrXdgSurface
-    -- atomically $ writeTVar (_gsvsViewport gsvs) renderTarget
-  G.set_process gsvs False
+  -- Set config settings
+  keyboardShortcuts <- readTVarIO (gss ^. gssKeyboardShortcuts)
+  configuration <- readTVarIO (gss ^. gssConfiguration)
+  let windowResolution'@(x, y) = (configuration ^. defaultWindowResolution) :: (Dhall.Natural, Dhall.Natural)
+  let windowScale = realToFrac (configuration ^. defaultWindowScale) :: Float
+  (V3 1 1 1 ^* (windowScale)) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
+  atomically $ writeTVar (gsvs ^. gsvsTargetSize) (SpriteDimensions (fromIntegral x, fromIntegral y))
 
---  updateSimulaViewSprite gsvs -- Now we update everything
+  G.set_process gsvs False
 
   return gsvs
 

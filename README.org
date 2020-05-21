@@ -77,7 +77,7 @@ chmod +x ./bin/godot.AppImage
 * Usage
 ** Mouse & Keyboard Controls
 
-Windows become "active" once you look at them. Active windows receive typing events from the keyboard, and cursor events from mouse movement.  In addition, the following window-manipulation shortcuts are hard-coded into Simula (we're going to make this customizable in the near future):
+Windows become "active" once you look at them. Active windows receive typing events from the keyboard, and cursor events from mouse movement.  In addition, the following window-manipulation shortcuts are provided by default into Simula (these can be adjusted by changing ~./config.dhall~):
 
 | *Key binding.*       | *Action*                                                                |
 |----------------------+-------------------------------------------------------------------------|

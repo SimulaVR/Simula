@@ -67,10 +67,7 @@ library
     , inline-c
     , ordered-containers
     , process-extras
-    -- , libinput
-    -- , hsroots
-    -- , hayland
-    -- , xkbcommon
+    , dhall
   exposed-modules:
       Telemetry
       Plugin
@@ -104,13 +101,6 @@ library
       FunctionalDependencies
   ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code
  
-  -- pkgconfig-depends:
-  --     wlroots
-  --   , xkbcommon
-  --   , udev
-  --   , wayland-server
-  --   , libinput
-
 -- | After adding hsroots, we are forced to copy cabal fields for `library`
 -- down to `foreign-library godot-haskell-plugin` (unclear why).
 -- TODO: Switch to package.yaml pending on this change: https://github.com/sol/hpack/issues/258
@@ -171,10 +161,7 @@ foreign-library godot-haskell-plugin
     , inline-c
     , ordered-containers
     , process-extras
-    -- , libinput
-    -- , hsroots
-    -- , hayland
-    -- , xkbcommon
+    , dhall
 
   default-extensions:
        FlexibleContexts
@@ -189,14 +176,4 @@ foreign-library godot-haskell-plugin
        FunctionalDependencies
   c-sources:
       cbits/flib.c
-      -- cbits/xdg-shell-protocol.c
-      -- cbits/wlr_godot_backend.c
-  -- include-dirs:
-  --     include
   default-language: Haskell2010
-  -- pkgconfig-depends:
-  --     wlroots
-  --   , xkbcommon
-  --   , udev
-  --   , wayland-server
-  --   , libinput

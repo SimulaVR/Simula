@@ -58,7 +58,7 @@ initVR node vri =
   initSuccess :: IO VRInitResult
   initSuccess = do
     getSingleton Godot_OS "OS" >>= (`G.set_use_vsync` False) -- Vsync must be disabled or we're limited to 60fps
-    getSingleton Godot_Engine "Engine" >>= (`G.set_target_fps` 90) -- Boost FPS to 90 without vsync
+    getSingleton Godot_Engine "Engine" >>= (`G.set_target_fps` 0) -- Setting this to constants other than 0 messes with SteamVR Hz settings, and can cause jitters
 
     InitVRSuccess <$ godotPrint "Initialized VR interface."
 
