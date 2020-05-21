@@ -96,18 +96,17 @@ getKeyboardAction gss keyboardShortcut =
     "zoomOut" -> zoomOut
     "zoomIn" -> zoomIn
     "terminateWindow" -> terminateWindow
+    "reloadConfig" -> reloadConfig
     _ -> shellLaunch gss (keyboardShortcut ^. keyAction)
 
   where moveCursor :: SpriteLocation -> Bool -> IO ()
         moveCursor (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          putStrLn "moveCursor"
           updateCursorStateAbsolute gsvs sx sy
           sendWlrootsMotion gsvs
         moveCursor _ _ = return ()
   
         leftClick :: SpriteLocation -> Bool -> IO ()
         leftClick (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          putStrLn "leftClick"
           updateCursorStateAbsolute gsvs sx sy
           sendWlrootsMotion gsvs
           processClickEvent' gsvs (Button True 1) coords -- BUTTON_LEFT = 1
@@ -117,7 +116,6 @@ getKeyboardAction gss keyboardShortcut =
 
         grabWindow :: SpriteLocation -> Bool -> IO () 
         grabWindow (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          putStrLn "grabWindow"
           keyboardGrabInitiate gsvs
         grabWindow (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) False = do
           keyboardGrabLetGo gsvs
@@ -125,7 +123,6 @@ getKeyboardAction gss keyboardShortcut =
 
         terminateWindow :: SpriteLocation -> Bool -> IO () 
         terminateWindow (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          putStrLn "terminateWindow"
           simulaView <- readTVarIO (gsvs ^. gsvsView)
           let eitherSurface = (simulaView ^. svWlrEitherSurface)
           case eitherSurface of
@@ -135,7 +132,6 @@ getKeyboardAction gss keyboardShortcut =
   
         shellLaunch :: GodotSimulaServer -> String -> SpriteLocation -> Bool -> IO ()
         shellLaunch gss shellCmd _ True = do
-          putStrLn "shellLaunch"
           let rootCmd = head (words shellCmd)
           let args = tail (words shellCmd)
           appLaunch gss rootCmd args
@@ -149,58 +145,58 @@ getKeyboardAction gss keyboardShortcut =
   
         toggleGrabMode' :: SpriteLocation -> Bool -> IO ()
         toggleGrabMode' (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          putStrLn "toggleGrabMode'"
           toggleGrabMode
         toggleGrabMode' _ _ = return ()
   
         launchHMDWebCam' :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
         launchHMDWebCam' gss _ True = do
-          putStrLn "launchHMDWebCam'"
           -- gss <- readTVarIO (gsvs ^. gsvsServer)
           launchHMDWebCam gss
         launchHMDWebCam' _ _ _ = return ()
   
         orientSpriteTowardsGaze' :: SpriteLocation -> Bool -> IO ()
         orientSpriteTowardsGaze' (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-         putStrLn "orientSpriteTowardsGaze'"
          orientSpriteTowardsGaze gsvs
         orientSpriteTowardsGaze' _ _ = return ()
   
         pushWindow :: SpriteLocation -> Bool -> IO ()
         pushWindow (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          putStrLn "pushWindow"
           moveSpriteAlongObjectZAxis gsvs 0.1
         pushWindow _ _ = return ()
   
         pullWindow :: SpriteLocation -> Bool -> IO ()
         pullWindow (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          putStrLn "pullWindow"
           moveSpriteAlongObjectZAxis gsvs (-0.1)
         pullWindow _ _ = return ()
   
         scaleWindowDown :: SpriteLocation -> Bool -> IO ()
         scaleWindowDown (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          putStrLn "scaleWindowDown"
           V3 1 1 1 ^* (1 + 1 * (-0.1)) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
         scaleWindowDown _ _ = return ()
   
         scaleWindowUp :: SpriteLocation -> Bool -> IO ()
         scaleWindowUp (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          putStrLn "scaleWindowUp"
           V3 1 1 1 ^* (1 + 1 * (0.1)) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
         scaleWindowUp _ _ = return ()
   
         zoomOut :: SpriteLocation -> Bool -> IO ()
         zoomOut (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          putStrLn "zoomOut"
           resizeGSVS gsvs 50
         zoomOut _ _ = return ()
 
         zoomIn :: SpriteLocation -> Bool -> IO ()
         zoomIn (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          putStrLn "zoomIn"
           resizeGSVS gsvs (-50)
         zoomIn _ _ = return ()
+
+        reloadConfig :: SpriteLocation -> Bool -> IO ()
+        reloadConfig _ True = do
+          putStrLn "Reloading Simula config.."
+          configuration <- parseConfiguration
+          let keyboardShortcutsVal = getKeyboardShortcuts gss (configuration ^. keyBindings)
+          atomically $ writeTVar (gss ^. gssConfiguration) configuration
+          atomically $ writeTVar (gss ^. gssKeyboardShortcuts) keyboardShortcutsVal
+        reloadConfig _ _ = return ()
 
 isMask :: Int -> Bool
 isMask keyOrMask = elem keyOrMask [ G.KEY_MASK_SHIFT
@@ -393,6 +389,11 @@ addWlrChildren gss = do
           socketName' <- toLowLevel (pack socketName)
           G.set_socket_name waylandDisplay socketName'
 
+parseConfiguration :: IO (Configuration)
+parseConfiguration = do
+  config <- input auto "./config.dhall" :: IO Configuration
+  return config
+
 -- | We first fill the TVars with dummy state, before updating them with their
 -- | real values in `ready`.
 initGodotSimulaServer :: GodotObject -> IO (GodotSimulaServer)
@@ -431,9 +432,6 @@ initGodotSimulaServer obj = do
   rec
       configuration <- parseConfiguration
       let keyboardShortcutsVal = getKeyboardShortcuts gss (configuration ^. keyBindings)
-      putStrLn (show (configuration ^. keyBindings))
-      putStrLn $ "M.size keyboardShotcutsVal: " ++ (show (M.size keyboardShortcutsVal))
-      putStrLn $ (show (M.keys keyboardShortcutsVal))
       gssConfiguration'       <- newTVarIO configuration :: IO (TVar Configuration)
       gssKeyboardShortcuts'    <- newTVarIO keyboardShortcutsVal :: IO (TVar KeyboardShortcuts)
 
@@ -471,10 +469,6 @@ initGodotSimulaServer obj = do
           exitCode <- G.load godotImage pngUrl
           G.create_from_image godotImageTexture godotImage G.TEXTURE_FLAGS_DEFAULT
           if (unsafeCoerce godotImageTexture == nullPtr) then (return Nothing) else (return (Just (safeCast godotImageTexture)))
-        parseConfiguration :: IO (Configuration)
-        parseConfiguration = do
-          config <- input auto "./config.dhall" :: IO Configuration
-          return config
 
 _on_WaylandDisplay_ready :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_WaylandDisplay_ready gss _ = do
