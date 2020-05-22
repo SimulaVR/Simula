@@ -745,14 +745,15 @@ _on_simula_shortcut gss [scancodeWithModifiers', isPressed'] = do
   let maybeKeyboardAction = M.lookup (modifiers, keycode) keyboardShortcuts
 
   case maybeKeyboardAction of
-    Just action -> do if isSuper then (return ()) else (action maybeHMDLookAtSprite isPressed)
-                      if (isPressed == False) then (keyboardGrabLetGo' maybeHMDLookAtSprite)
-                                              else return ()
-    Nothing -> do if isSuper then (return ())
-                             else do G.send_wlr_event_keyboard_key wlrKeyboard keycode isPressed
+    Just action -> action maybeHMDLookAtSprite isPressed
+    Nothing -> case isPressed of
+                 False -> do keyboardGrabLetGo' maybeHMDLookAtSprite -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
+                             G.send_wlr_event_keyboard_key wlrKeyboard keycode isPressed
+                 True -> G.send_wlr_event_keyboard_key wlrKeyboard keycode isPressed
+
   where keyboardGrabLetGo' :: Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates) -> IO ()
-        keyboardGrabLetGo' (Just (gsvs, _)) = keyboardGrabLetGo gsvs
-        keyboardGrabLetGo' _ = return ()
+        keyboardGrabLetGo' (Just (gsvs, _)) = do putStrLn "6" >> keyboardGrabLetGo gsvs
+        keyboardGrabLetGo' _ = putStrLn "7" -- return ()
 
         extractMods :: Int -> [Int]
         extractMods sc = concatMap (extractIf sc) [G.KEY_MASK_SHIFT, G.KEY_MASK_ALT, G.KEY_MASK_META, G.KEY_MASK_CTRL, G.KEY_MASK_CMD, G.KEY_MASK_KPAD, G.KEY_MASK_GROUP_SWITCH]
