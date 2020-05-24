@@ -25,7 +25,7 @@ let Configuration =
 
                                 -- Anything else is parsed as a shell command:
                               , { _keyCombination = ["KEY_MASK_META", "KEY_K"]          , _keyAction = "firefox -new-window" }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_G"]          , _keyAction = "google-chrome-stable1 --new-window google.com" }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_G"]          , _keyAction = "google-chrome-stable --new-window google.com" }
                               ]
   }
 
