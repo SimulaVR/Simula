@@ -79,25 +79,26 @@ chmod +x ./bin/godot.AppImage
 
 Windows become "active" once you look at them. Active windows receive typing events from the keyboard, and cursor events from mouse movement.  In addition, the following window-manipulation shortcuts are provided by default into Simula (these can be adjusted by changing ~./config.dhall~):
 
-| *Key binding.*       | *Action*                                                                |
-|----------------------+-------------------------------------------------------------------------|
-| ~Super + Escape~     | Toggle Simula's mouse & keyboard grab (see below).                      |
-| ~Super + /~          | Quick launch terminal                                                   |
-| ~Super + Apostrophe~ | Send window cursor to gaze point (hold down to make cursor follow gaze) |
-| ~Super + Enter~      | Left click surface cursor at gaze point                                 |
-| ~Super + Alt~        | Grab surface for movement (release to let go)                           |
-| ~Super + f~          | Orient window towards user gaze                                         |
-| ~Super + 9~          | Scale window to smaller size                                            |
-| ~Super + 0~          | Scale window to larger size                                             |
-| ~Super + -~          | Increase window resolution ("zoom out")                                 |
-| ~Super + =~          | Increase window resolution ("zoom in")                                  |
-| ~Super + Comma~      | Move window towards you                                                 |
-| ~Super + Period~     | Move window away from you                                               |
-| ~Super + Backspace~  | Kill surface being looked at                                            |
-| ~Super + k~          | Quick launch firefox                                                    |
-| ~Super + g~          | Quick launch google-chrome                                              |
-| ~Super + w~          | Launch headset webcam view                                              |
-| ~Super + r~          | Reload Simula's configuration (~./config.dhall~)                        |
+| *Key binding.*           | *Action*                                                                |
+|--------------------------+-------------------------------------------------------------------------|
+| ~Super + Shift + Escape~ | Terminate Simula.                                                       |
+| ~Super + Escape~         | Toggle Simula's mouse & keyboard grab (see below).                      |
+| ~Super + /~              | Quick launch terminal                                                   |
+| ~Super + Apostrophe~     | Send window cursor to gaze point (hold down to make cursor follow gaze) |
+| ~Super + Enter~          | Left click surface cursor at gaze point                                 |
+| ~Super + Alt~            | Grab surface for movement (release to let go)                           |
+| ~Super + f~              | Orient window towards user gaze                                         |
+| ~Super + 9~              | Scale window to smaller size                                            |
+| ~Super + 0~              | Scale window to larger size                                             |
+| ~Super + -~              | Increase window resolution ("zoom out")                                 |
+| ~Super + =~              | Increase window resolution ("zoom in")                                  |
+| ~Super + Comma~          | Move window towards you                                                 |
+| ~Super + Period~         | Move window away from you                                               |
+| ~Super + Backspace~      | Kill surface being looked at                                            |
+| ~Super + k~              | Quick launch firefox                                                    |
+| ~Super + g~              | Quick launch google-chrome                                              |
+| ~Super + w~              | Launch headset webcam view                                              |
+| ~Super + r~              | Reload Simula's configuration (~./config.dhall~)                        |
 
 *NOTE:* In order to prevent Simula's keyboard shortcuts from conflicting with your existing window manager's shortcuts, Simula "grabs" the system keyboard and cursor to prevent input events from propagating past Simula. This creates a problem: it is then impossible for you to escape Simula once you launch it! In order to get around this, press ~Super + Escape~ to ungrab Simula, which will restore mouse and keyboard control to your normal window manager.
 
