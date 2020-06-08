@@ -97,6 +97,7 @@ getKeyboardAction gss keyboardShortcut =
     "zoomIn" -> zoomIn
     "terminateWindow" -> terminateWindow
     "reloadConfig" -> reloadConfig
+    "terminateSimula" -> terminateSimula
     _ -> shellLaunch gss (keyboardShortcut ^. keyAction)
 
   where moveCursor :: SpriteLocation -> Bool -> IO ()
@@ -128,7 +129,7 @@ getKeyboardAction gss keyboardShortcut =
           case eitherSurface of
             (Left wlrXdgSurface) -> return ()
             (Right wlrXWaylandSurface) -> G.send_close wlrXWaylandSurface
-        terminateWindow _ _ = putStrLn "terminateWindow False"
+        terminateWindow _ _ = return ()
   
         shellLaunch :: GodotSimulaServer -> String -> SpriteLocation -> Bool -> IO ()
         shellLaunch gss shellCmd _ True = do
@@ -193,10 +194,20 @@ getKeyboardAction gss keyboardShortcut =
         reloadConfig _ True = do
           putStrLn "Reloading Simula config.."
           configuration <- parseConfiguration
-          let keyboardShortcutsVal = getKeyboardShortcuts gss (configuration ^. keyBindings)
           atomically $ writeTVar (gss ^. gssConfiguration) configuration
+          let keyboardShortcutsVal = getKeyboardShortcuts gss (configuration ^. keyBindings)
           atomically $ writeTVar (gss ^. gssKeyboardShortcuts) keyboardShortcutsVal
+          let keyboardRemappingsVal = getKeyboardRemappings gss (configuration ^. keyRemappings)
+          atomically $ writeTVar (gss ^. gssKeyboardRemappings) keyboardRemappingsVal
         reloadConfig _ _ = return ()
+
+        terminateSimula :: SpriteLocation -> Bool -> IO ()
+        terminateSimula _ True = do
+          putStrLn "Terminating Simula.."
+          pid <- getProcessID
+          createProcess (shell $ "kill " ++ (show pid))
+          return ()
+        terminateSimula _ _ = return ()
 
 isMask :: Int -> Bool
 isMask keyOrMask = elem keyOrMask [ G.KEY_MASK_SHIFT
@@ -236,6 +247,19 @@ getKeyboardShortcuts gss lstOfKeyboardShortcuts = let
   entriesMap = M.fromList entries :: M.Map (Modifiers, Keycode) KeyboardAction
   in entriesMap
 
+getKeyboardRemappings :: GodotSimulaServer -> [KeyboardRemapping] -> KeyboardRemappings
+getKeyboardRemappings gss lstOfKeyboardRemapping = let
+  maybeEntries = fmap (getTuple) lstOfKeyboardRemapping :: [Maybe (Scancode, Scancode)]
+  entries = catMaybes maybeEntries :: [(Scancode, Scancode)]
+  entriesMap = M.fromList entries :: M.Map Scancode Scancode
+  in entriesMap
+  where getTuple :: KeyboardRemapping -> Maybe (Scancode, Scancode)
+        getTuple keyboardRemapping = let
+          a = getScancode (keyboardRemapping ^. keyOriginal) :: Maybe Scancode
+          b = getScancode (keyboardRemapping ^. keyMappedTo) :: Maybe Scancode
+          in case (a, b) of
+              (Just s1, Just s2) -> Just (s1, s2)
+              _                  -> Nothing
 
 instance NativeScript GodotSimulaServer where
   -- className = "SimulaServer"
@@ -431,9 +455,11 @@ initGodotSimulaServer obj = do
 
   rec
       configuration <- parseConfiguration
-      let keyboardShortcutsVal = getKeyboardShortcuts gss (configuration ^. keyBindings)
       gssConfiguration'       <- newTVarIO configuration :: IO (TVar Configuration)
+      let keyboardShortcutsVal = getKeyboardShortcuts gss (configuration ^. keyBindings)
       gssKeyboardShortcuts'    <- newTVarIO keyboardShortcutsVal :: IO (TVar KeyboardShortcuts)
+      let keyboardRemappingsVal = getKeyboardRemappings gss (configuration ^. keyRemappings)
+      gssKeyboardRemappings'    <- newTVarIO keyboardRemappingsVal :: IO (TVar KeyboardRemappings)
 
       let gss = GodotSimulaServer {
         _gssObj                   = obj                       :: GodotObject
@@ -458,6 +484,7 @@ initGodotSimulaServer obj = do
       , _gssFreeChildren          = gssFreeChildren'          :: TVar (M.Map GodotWlrXWaylandSurface CanvasSurface)
       , _gssConfiguration         = gssConfiguration'         :: TVar Configuration
       , _gssKeyboardShortcuts     = gssKeyboardShortcuts'     :: TVar KeyboardShortcuts
+      , _gssKeyboardRemappings      = gssKeyboardRemappings'      :: TVar KeyboardRemappings
       }
 
   return gss
@@ -738,22 +765,27 @@ _on_simula_shortcut gss [scancodeWithModifiers', isPressed'] = do
   isPressed <- fromGodotVariant isPressed' :: IO Bool
   wlrKeyboard <- readTVarIO $ (gss ^. gssWlrKeyboard)
   keyboardShortcuts <- readTVarIO (gss ^. gssKeyboardShortcuts)
+  keyboardRemappings <- readTVarIO (gss ^. gssKeyboardRemappings)
   maybeHMDLookAtSprite <- getHMDLookAtSprite gss
   let modifiers = (foldl (.|.) 0 (extractMods scancodeWithModifiers))
   let keycode = (scancodeWithModifiers .&. G.KEY_CODE_MASK) :: Int
   let isSuper = ((scancodeWithModifiers == G.KEY_SUPER_L) || (scancodeWithModifiers == G.KEY_SUPER_R))
   let maybeKeyboardAction = M.lookup (modifiers, keycode) keyboardShortcuts
+  let maybeKeycodeRemapping = M.lookup keycode keyboardRemappings
 
+  let keycode' = case maybeKeycodeRemapping of
+        (Just remappedKeycode) -> remappedKeycode
+        Nothing                -> keycode
   case maybeKeyboardAction of
     Just action -> action maybeHMDLookAtSprite isPressed
     Nothing -> case isPressed of
                  False -> do keyboardGrabLetGo' maybeHMDLookAtSprite -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
-                             G.send_wlr_event_keyboard_key wlrKeyboard keycode isPressed
-                 True -> G.send_wlr_event_keyboard_key wlrKeyboard keycode isPressed
+                             G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
+                 True -> G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
 
   where keyboardGrabLetGo' :: Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates) -> IO ()
-        keyboardGrabLetGo' (Just (gsvs, _)) = do putStrLn "6" >> keyboardGrabLetGo gsvs
-        keyboardGrabLetGo' _ = putStrLn "7" -- return ()
+        keyboardGrabLetGo' (Just (gsvs, _)) = do keyboardGrabLetGo gsvs
+        keyboardGrabLetGo' _ = return ()
 
         extractMods :: Int -> [Int]
         extractMods sc = concatMap (extractIf sc) [G.KEY_MASK_SHIFT, G.KEY_MASK_ALT, G.KEY_MASK_META, G.KEY_MASK_CTRL, G.KEY_MASK_CMD, G.KEY_MASK_KPAD, G.KEY_MASK_GROUP_SWITCH]

@@ -617,7 +617,8 @@ safeSetActivated gsvs active = do
   isMapped <- readTVarIO $ (simulaView ^. svMapped)
   case (isMapped, wlrEitherSurface) of
     (True, Right wlrXWaylandSurface) -> G.set_activated wlrXWaylandSurface True
-    _ -> putStrLn "Can't set_activate!"
+    (False, _) -> return ()
+    (_, Left wlrXdgSurface) -> putStrLn "ERROR: XDG surfaces not supported by Simula at the moment."
 
 safeSurfaceAt :: GodotSimulaViewSprite -> Float -> Float -> IO (Maybe GodotWlrSurfaceAtResult)
 safeSurfaceAt gsvs sx sy = do

@@ -96,12 +96,19 @@ data KeyboardShortcut = KeyboardShortcut {
 , _keyAction      :: String
 } deriving (Generic, Show)
 
+data KeyboardRemapping = KeyboardRemapping {
+  _keyOriginal :: String
+, _keyMappedTo :: String
+} deriving (Generic, Show)
+
 data Configuration = Configuration {
   _defaultWindowResolution :: (Natural, Natural)
 , _defaultWindowScale :: Double
 , _keyBindings :: [KeyboardShortcut]
+, _keyRemappings :: [KeyboardRemapping]
 } deriving (Generic, Show)
 
+instance FromDhall KeyboardRemapping
 instance FromDhall KeyboardShortcut
 instance FromDhall Configuration
 
@@ -111,6 +118,7 @@ type Keycode           = Int
 type SpriteLocation    = Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates)
 type KeyboardAction    = SpriteLocation -> Bool -> IO () -- `Bool` signifies whether the key is pressed down
 type KeyboardShortcuts = M.Map (Modifiers, Keycode) KeyboardAction
+type KeyboardRemappings = M.Map Scancode Scancode
 
 -- We use TVar excessively since these datatypes must be retrieved from the
 -- scene graph (requiring IO)
@@ -137,11 +145,12 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssFreeChildren :: TVar (M.Map GodotWlrXWaylandSurface CanvasSurface)
   , _gssConfiguration      :: TVar Configuration
   , _gssKeyboardShortcuts  :: TVar KeyboardShortcuts
+  , _gssKeyboardRemappings   :: TVar KeyboardRemappings
   }
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
@@ -227,6 +236,7 @@ makeLenses ''SimulaView
 makeLenses ''GodotSimulaServer
 makeLenses ''GodotPancakeCamera
 makeLenses ''KeyboardShortcut
+makeLenses ''KeyboardRemapping
 makeLenses ''Configuration
 
 -- Godot helper functions (should eventually be exported to godot-extra).
