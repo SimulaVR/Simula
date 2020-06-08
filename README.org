@@ -81,8 +81,8 @@ Windows become "active" once you look at them. Active windows receive typing eve
 
 | *Key binding.*           | *Action*                                                                |
 |--------------------------+-------------------------------------------------------------------------|
-| ~Super + Shift + Escape~ | Terminate Simula.                                                       |
-| ~Super + Escape~         | Toggle Simula's mouse & keyboard grab (see below).                      |
+| ~Super + Shift + Escape~ | Terminate Simula                                                        |
+| ~Super + Escape~         | Toggle Simula's mouse & keyboard grab (see below)                       |
 | ~Super + /~              | Quick launch terminal                                                   |
 | ~Super + Apostrophe~     | Send window cursor to gaze point (hold down to make cursor follow gaze) |
 | ~Super + Enter~          | Left click surface cursor at gaze point                                 |
