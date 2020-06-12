@@ -273,7 +273,6 @@ instance NativeScript GodotSimulaServer where
     , func NoRPC "_on_WaylandDisplay_ready"    Plugin.SimulaServer._on_WaylandDisplay_ready
     , func NoRPC "_on_WlrXdgShell_new_surface" Plugin.SimulaServer._on_WlrXdgShell_new_surface
     , func NoRPC "handle_map_surface" Plugin.SimulaServer.handle_map_surface
-    , func NoRPC "handle_unmap_surface" Plugin.SimulaServer.handle_unmap_surface
     , func NoRPC "_on_wlr_key" Plugin.SimulaServer._on_wlr_key
     , func NoRPC "_on_wlr_modifiers" Plugin.SimulaServer._on_wlr_modifiers
     , func NoRPC "_on_WlrXWayland_new_surface" Plugin.SimulaServer._on_WlrXWayland_new_surface
@@ -519,8 +518,6 @@ _on_WlrXdgShell_new_surface gss [wlrXdgSurfaceVariant] = do
 
               --surface.connect("map", self, "handle_map_surface")
               connectGodotSignal gsvs "map" gss "handle_map_surface" []
-              --surface.connect("unmap", self, "handle_unmap_surface")
-              connectGodotSignal gsvs "unmap" gss "handle_unmap_surface" []
 
               -- _xdg_surface_set logic from godotston:
               -- xdg_surface.connect("destroy", self, "_handle_destroy"):
@@ -584,17 +581,6 @@ handle_map_surface gss [gsvsVariant] = do
                     atomically $ writeTVar (simulaView ^. svMapped) True
   return ()
 
-handle_unmap_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
-handle_unmap_surface gss [gsvsVariant] = do
-  maybeGsvs <- variantToReg gsvsVariant :: IO (Maybe GodotSimulaViewSprite)
-  case maybeGsvs of
-    Nothing -> putStrLn "Failed to cast GodotSimulaViewSprite!"
-    Just gsvs -> do simulaView <- atomically $ readTVar (gsvs ^. gsvsView)
-                    atomically $ writeTVar (simulaView ^. svMapped) False
-                    removeChild gss gsvs
-                    -- Deletion should be handled elsewhere.
-  return ()
-
 _on_wlr_key :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_wlr_key gss [keyboardGVar, eventGVar] = do
   wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
@@ -619,7 +605,6 @@ _on_WlrXWayland_new_surface gss [wlrXWaylandSurfaceVariant] = do
   atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
 
   connectGodotSignal gsvs "map" gss "handle_map_surface" []
-  connectGodotSignal gsvs "unmap" gss "handle_unmap_surface" []
   connectGodotSignal wlrXWaylandSurface "map_free_child" gsvs "handle_map_free_child" []
   connectGodotSignal wlrXWaylandSurface "destroy" gsvs "_handle_destroy" []
   connectGodotSignal wlrXWaylandSurface "map" gsvs "_handle_map" []
@@ -650,7 +635,7 @@ _input gss [eventGV] = do
      mouseRelativeGV2 <- G.get_relative event :: IO GodotVector2
      mouseRelative@(V2 dx dy) <- fromLowLevel mouseRelativeGV2
      case maybeActiveGSVS of
-         Nothing -> putStrLn "movement: No cursor focused surface!"
+         Nothing -> return ()
          (Just gsvs) -> do updateCursorStateRelative gsvs dx dy
                            sendWlrootsMotion gsvs
   whenM (event `isClass` "InputEventMouseButton") $ do
@@ -663,7 +648,7 @@ _input gss [eventGV] = do
          (Just gsvs, G.BUTTON_WHEEL_DOWN) -> G.pointer_notify_axis_continuous wlrSeat 0 (-0.05)
          (Just gsvs, _) -> do activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
                               processClickEvent' gsvs (Button pressed button) activeGSVSCursorPos
-         (Nothing, _) -> putStrLn "Button: No cursor focused surface!"
+         (Nothing, _) -> return ()
 
 updateCursorStateRelative :: GodotSimulaViewSprite -> Float -> Float -> IO ()
 updateCursorStateRelative gsvs dx dy = do
@@ -769,19 +754,19 @@ _on_simula_shortcut gss [scancodeWithModifiers', isPressed'] = do
   maybeHMDLookAtSprite <- getHMDLookAtSprite gss
   let modifiers = (foldl (.|.) 0 (extractMods scancodeWithModifiers))
   let keycode = (scancodeWithModifiers .&. G.KEY_CODE_MASK) :: Int
-  let isSuper = ((scancodeWithModifiers == G.KEY_SUPER_L) || (scancodeWithModifiers == G.KEY_SUPER_R))
   let maybeKeyboardAction = M.lookup (modifiers, keycode) keyboardShortcuts
   let maybeKeycodeRemapping = M.lookup keycode keyboardRemappings
 
   let keycode' = case maybeKeycodeRemapping of
         (Just remappedKeycode) -> remappedKeycode
         Nothing                -> keycode
+
   case maybeKeyboardAction of
     Just action -> action maybeHMDLookAtSprite isPressed
     Nothing -> case isPressed of
-                 False -> do keyboardGrabLetGo' maybeHMDLookAtSprite -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
-                             G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
-                 True -> G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
+                 False -> do if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
+                             keyboardGrabLetGo' maybeHMDLookAtSprite -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
+                 True -> if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
 
   where keyboardGrabLetGo' :: Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates) -> IO ()
         keyboardGrabLetGo' (Just (gsvs, _)) = do keyboardGrabLetGo gsvs
@@ -790,6 +775,8 @@ _on_simula_shortcut gss [scancodeWithModifiers', isPressed'] = do
         extractMods :: Int -> [Int]
         extractMods sc = concatMap (extractIf sc) [G.KEY_MASK_SHIFT, G.KEY_MASK_ALT, G.KEY_MASK_META, G.KEY_MASK_CTRL, G.KEY_MASK_CMD, G.KEY_MASK_KPAD, G.KEY_MASK_GROUP_SWITCH]
         extractIf sc mod = if (sc .&. mod) /= 0 then [mod] else []
+
+        keyNull = 0
 extractMods _ = []
 
 launchXpra :: GodotSimulaServer -> IO ()

@@ -198,7 +198,7 @@ rescaleOrScroll ct delta = do
     maybeWindow <- pointerWindow ct
     wlrSeat <- getWlrSeatFromPath ct
     case maybeWindow of
-      Nothing -> putStrLn "Couldn't get wlrSeat!"
+      Nothing -> return ()
       _ -> G.pointer_notify_axis_continuous wlrSeat (diff ^. _x) (diff ^. _y)
   rescaleBy :: (GodotSpatial :< child) => V2 Float -> child -> IO ()
   rescaleBy (V2 _ y) a = do

@@ -59,8 +59,7 @@ instance Eq GodotSimulaViewSprite where
 instance NativeScript GodotSimulaViewSprite where
   className = "SimulaViewSprite"
   classInit obj =
-    do putStrLn "SimulaViewSprite Constructor called"
-       -- putStrLn $ "show $ Proxy @(BaseClass a): " ++ (show $ Proxy @(BaseClass GodotSimulaViewSprite))
+    do putStrLn "SimulaViewSprite()"
        GodotSimulaViewSprite (safeCast obj)
                       <$> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar True)
@@ -88,7 +87,6 @@ instance NativeScript GodotSimulaViewSprite where
   -- Test:
   classSignals = [ signal "map" [("gsvs", GodotVariantTypeObject)]
                  , signal "map_free_child" [("wlrXWaylandSurface", GodotVariantTypeObject)]
-                 , signal "unmap" [("gsvs", GodotVariantTypeObject)]
                  ]
 
 -- | Updates the GodotSimulaViewSprite state (including updating its texture).
@@ -473,8 +471,12 @@ _handle_map self args = do
 _handle_unmap :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 _handle_unmap self [wlrXWaylandSurfaceVariant] = do
   gss <- readTVarIO (self ^. gsvsServer)
+  simulaView <- atomically $ readTVar (self ^. gsvsView)
   freeChildrenMap <- readTVarIO (gss ^. gssFreeChildren)
   wlrXWaylandSurface <- fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface
+
+  keyboardGrabLetGo self
+
   G.reference wlrXWaylandSurface
   let maybeCS = M.lookup wlrXWaylandSurface freeChildrenMap
   case maybeCS of
@@ -505,8 +507,11 @@ _handle_unmap self [wlrXWaylandSurfaceVariant] = do
                                                           else (return ())
 
   G.set_process self False
-  emitSignal self "unmap" ([self] :: [GodotSimulaViewSprite])
-  return ()
+  atomically $ writeTVar (simulaView ^. svMapped) False
+  isInSceneGraph <- G.is_a_parent_of ((safeCast gss) :: GodotNode ) ((safeCast self) :: GodotNode)
+  case isInSceneGraph of
+       True -> removeChild gss self
+       False -> return ()
 
 -- Passes control entirely to updateSimulaViewSprite.
 _process :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
@@ -544,14 +549,18 @@ _handle_destroy gsvs [gsvsGV] = do
         (Right xwaylandSurface) -> destroyMaybe (safeCast xwaylandSurface)
 
 orientSpriteTowardsGaze :: GodotSimulaViewSprite -> IO ()
-orientSpriteTowardsGaze gsvs = do 
+orientSpriteTowardsGaze gsvs = do
   gss <- readTVarIO (gsvs ^. gsvsServer)
-  upV3 <- toLowLevel (V3 0 1 0) :: IO GodotVector3
-  rotationAxisY <- toLowLevel (V3 0 1 0) :: IO GodotVector3
-  targetV3 <- getARVRCameraOrPancakeCameraTransform gss >>= Api.godot_transform_get_origin -- void look_at ( Vector3 target, Vector3 up )
-  G.look_at gsvs targetV3 upV3                      -- The negative z-axis of the gsvs looks at HMD
-  return ()
-  -- G.rotate_object_local gsvs rotationAxisY 3.14159  -- The positive z-axis of the gsvs looks at HMD
+  isInSceneGraph <- G.is_a_parent_of ((safeCast gss) :: GodotNode ) ((safeCast gsvs) :: GodotNode)
+  case isInSceneGraph of
+    False -> putStrLn "Nothing to orient!"
+    True -> do gss <- readTVarIO (gsvs ^. gsvsServer)
+               upV3 <- toLowLevel (V3 0 1 0) :: IO GodotVector3
+               rotationAxisY <- toLowLevel (V3 0 1 0) :: IO GodotVector3
+               targetV3 <- getARVRCameraOrPancakeCameraTransform gss >>= Api.godot_transform_get_origin -- void look_at ( Vector3 target, Vector3 up )
+               G.look_at gsvs targetV3 upV3                      -- The negative z-axis of the gsvs looks at HMD
+               return ()
+               -- G.rotate_object_local gsvs rotationAxisY 3.14159  -- The positive z-axis of the gsvs looks at HMD
 
   
 -- | Push the gsvs by `dist` units along its object-local z-axis. Negative values of `dist`
@@ -567,27 +576,27 @@ moveSpriteAlongObjectZAxis gsvs dist = do
 -- Sets gssKeyboardGrabbedSprite to `Just (gsvs, dist)`
 keyboardGrabInitiate :: GodotSimulaViewSprite -> IO ()
 keyboardGrabInitiate gsvs = do
-  gss <- readTVarIO $ (gsvs ^. gsvsServer)
-
-  -- Compute dist
-  orientSpriteTowardsGaze gsvs
-  posGSVS <- (G.get_global_transform gsvs) >>= Api.godot_transform_get_origin
-  hmdTransform <- getARVRCameraOrPancakeCameraTransform gss
-  posHMD  <- Api.godot_transform_get_origin hmdTransform
-  dist <- realToFrac <$> Api.godot_vector3_distance_to posGSVS posHMD
-  -- Load state
-  atomically $ writeTVar (gss ^. gssKeyboardGrabbedSprite) (Just (gsvs, (-dist)))
-
+  gss <- readTVarIO (gsvs ^. gsvsServer)
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  isInSceneGraph <- G.is_a_parent_of ((safeCast gss) :: GodotNode ) ((safeCast gsvs) :: GodotNode)
+  case isInSceneGraph of
+    False -> keyboardGrabLetGo gsvs 
+    True -> do gss <- readTVarIO $ (gsvs ^. gsvsServer)
+               -- Compute dist
+               orientSpriteTowardsGaze gsvs
+               posGSVS <- (G.get_global_transform gsvs) >>= Api.godot_transform_get_origin
+               hmdTransform <- getARVRCameraOrPancakeCameraTransform gss
+               posHMD  <- Api.godot_transform_get_origin hmdTransform
+               dist <- realToFrac <$> Api.godot_vector3_distance_to posGSVS posHMD
+               -- Load state
+               atomically $ writeTVar (gss ^. gssKeyboardGrabbedSprite) (Just (gsvs, (-dist)))
   return ()
 
 -- Sets gssKeyboardGrabbedSprite to `Nothing`
 keyboardGrabLetGo :: GodotSimulaViewSprite -> IO ()
 keyboardGrabLetGo gsvs = do
   gss <- readTVarIO $ (gsvs ^. gsvsServer)
-
-  -- Release state
   atomically $ writeTVar (gss ^. gssKeyboardGrabbedSprite) Nothing
-  return ()
 
 setInFrontOfUser :: GodotSimulaViewSprite -> Float -> IO ()
 setInFrontOfUser gsvs zAxisDist = do

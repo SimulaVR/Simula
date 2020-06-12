@@ -268,6 +268,7 @@ keyTranslation = M.fromList
 
 -- https://github.com/godotengine/godot/blob/35e700e931f565aa37040055126fa61f02424ae0/core/os/keyboard.h
 getScancode :: String -> Maybe Scancode
+getScancode "KEY_NULL"              =  Just 0             -- Allows users to remap keys to a "null" keycode (effectively disabling the key)
 getScancode "KEY_ESCAPE"            =  Just G.KEY_ESCAPE
 getScancode "KEY_TAB"               =  Just G.KEY_TAB
 getScancode "KEY_BACKTAB"           =  Just G.KEY_BACKTAB

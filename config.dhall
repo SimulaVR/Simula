@@ -32,8 +32,11 @@ let Configuration =
                               , { _keyCombination = ["KEY_MASK_META", "KEY_J"] , _keyAction = "gvim"                                         }
                               ]
 
-    , _keyRemappings         = [ -- Simula allows you to remap keys (`KEY_*`). For example, remapping `KEY_CAPSLOCK` to `KEY_ESCAPE`:
-                                 -- { _keyOriginal =  "KEY_CAPSLOCK" , _keyMappedTo = "KEY_ESCAPE" }
+    , _keyRemappings         = [ -- Simula allows you to remap keys (`KEY_*`). For example, remapping `KEY_HYPER_L` to `KEY_ESCAPE`:
+                                 -- { _keyOriginal =  "KEY_HYPER_L" , _keyMappedTo = "KEY_ESCAPE" }
+                                 --
+                                 -- If you'd like to disable a key, map it to `KEY_NULL`, as in
+                                 -- , { _keyOriginal =  "KEY_ESCAPE" , _keyMappedTo = "KEY_NULL" }
                                ] : List { _keyOriginal : Text, _keyMappedTo : Text }
   }
 
