@@ -161,7 +161,7 @@ moveToUnoccupied gsvs appPositionIndex = do
                    atomically $ writeTVar (gss ^. gssStartingApps) tailApps
                    let secondApp = if tailApps == [] then Nothing else Just (Data.List.head tailApps)
                    case secondApp of
-                     Nothing -> return ()
+                     Nothing -> focus gsvs
                      Just secondApp' -> appStrLaunch gss secondApp'
 
 -- Adjust gsvs wlr_surface dimensions *and* render target dimensions to the

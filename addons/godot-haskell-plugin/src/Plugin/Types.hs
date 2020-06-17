@@ -764,10 +764,15 @@ launchHMDWebCam :: GodotSimulaServer -> IO ()
 launchHMDWebCam gss = do
   maybePath <- getHMDWebCamPath
   case maybePath of
-    Nothing -> putStrLn "Cannot find HMD web cam!"
+    Nothing -> do putStrLn "Cannot find HMD web cam!"
+                  appStrLaunch gss "nullApp"
     Just path  -> appLaunch gss "./result/bin/ffplay" ["-loglevel", "quiet", "-f", "v4l2", path]
     where getHMDWebCamPath :: IO (Maybe FilePath)
-          getHMDWebCamPath = (listToMaybe . Data.List.map ("/dev/v4l/by-id/" ++) . sort . Data.List.filter viveOrValve) <$> listDirectory "/dev/v4l/by-id"
+          getHMDWebCamPath = do
+            res <- try $ listDirectory "/dev/v4l/by-id" :: IO (Either IOException [FilePath])
+            case res of
+              Left _ -> return Nothing
+              Right _ -> (listToMaybe . Data.List.map ("/dev/v4l/by-id/" ++) . sort . Data.List.filter viveOrValve) <$> listDirectory "/dev/v4l/by-id"
           viveOrValve :: String -> Bool
           viveOrValve str = Data.List.any (`Data.List.isInfixOf` str) ["Vive",  -- HTC Vive
                                                                        "VIVE",  -- HTC Vive Pro
