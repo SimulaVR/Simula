@@ -16,6 +16,8 @@ import           Data.Maybe
 import           Control.Monad
 import           Data.Coerce
 import           Unsafe.Coerce
+import           Control.Exception
+import           System.Directory
 
 import           Data.Typeable
 import           Godot.Gdnative.Types
@@ -53,6 +55,7 @@ import Data.UUID
 import System.Process
 import System.Process.Internals
 import System.Posix.Types
+import GHC.IO.Handle
 
 import Godot.Core.GodotViewport as G
 
@@ -101,8 +104,17 @@ data KeyboardRemapping = KeyboardRemapping {
 , _keyMappedTo :: String
 } deriving (Generic, Show)
 
+data StartingApps = StartingApps {
+  _center :: Maybe String
+, _right  :: Maybe String
+, _bottom :: Maybe String
+, _left   :: Maybe String
+, _top    :: Maybe String
+} deriving (Generic, Show)
+
 data Configuration = Configuration {
-  _defaultWindowResolution :: (Natural, Natural)
+  _startingApps :: StartingApps
+, _defaultWindowResolution :: (Natural, Natural)
 , _defaultWindowScale :: Double
 , _keyBindings :: [KeyboardShortcut]
 , _keyRemappings :: [KeyboardRemapping]
@@ -111,6 +123,7 @@ data Configuration = Configuration {
 instance FromDhall KeyboardRemapping
 instance FromDhall KeyboardShortcut
 instance FromDhall Configuration
+instance FromDhall StartingApps
 
 type Scancode          = Int
 type Modifiers         = Int
@@ -119,6 +132,8 @@ type SpriteLocation    = Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates)
 type KeyboardAction    = SpriteLocation -> Bool -> IO () -- `Bool` signifies whether the key is pressed down
 type KeyboardShortcuts = M.Map (Modifiers, Keycode) KeyboardAction
 type KeyboardRemappings = M.Map Scancode Scancode
+type StartingAppsLaunched = Int
+type StartingAppsRemaining = Int
 
 -- We use TVar excessively since these datatypes must be retrieved from the
 -- scene graph (requiring IO)
@@ -142,15 +157,17 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssKeyboardGrabbedSprite :: TVar (Maybe (GodotSimulaViewSprite, Float)) -- We encode both the gsvs and its original distance from the user
   , _gssXWaylandDisplay       :: TVar (Maybe String) -- For appLaunch
   , _gssOriginalEnv           :: [(String, String)]
-  , _gssFreeChildren :: TVar (M.Map GodotWlrXWaylandSurface CanvasSurface)
-  , _gssConfiguration      :: TVar Configuration
-  , _gssKeyboardShortcuts  :: TVar KeyboardShortcuts
-  , _gssKeyboardRemappings   :: TVar KeyboardRemappings
+  , _gssFreeChildren          :: TVar (M.Map GodotWlrXWaylandSurface CanvasSurface)
+  , _gssConfiguration         :: TVar Configuration
+  , _gssKeyboardShortcuts     :: TVar KeyboardShortcuts
+  , _gssKeyboardRemappings    :: TVar KeyboardRemappings
+  , _gssStartingAppsCounter   :: TVar (StartingAppsLaunched, StartingAppsRemaining)
+  , _gssStartingApps          :: TVar [String]
   }
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
@@ -158,7 +175,7 @@ type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 data GodotSimulaViewSprite = GodotSimulaViewSprite
   { _gsvsObj               :: GodotObject
   , _gsvsServer            :: TVar GodotSimulaServer    -- Contains the WlrSeat
-  , _gsvsShouldMove        :: TVar Bool
+  , _gsvsShouldMove        :: TVar (Bool, Int)
   , _gsvsSprite            :: TVar GodotSprite3D
   , _gsvsShape             :: TVar GodotBoxShape
   , _gsvsView              :: TVar SimulaView -- Contains Wlr data
@@ -237,6 +254,7 @@ makeLenses ''GodotSimulaServer
 makeLenses ''GodotPancakeCamera
 makeLenses ''KeyboardShortcut
 makeLenses ''KeyboardRemapping
+makeLenses ''StartingApps
 makeLenses ''Configuration
 
 -- Godot helper functions (should eventually be exported to godot-extra).
@@ -694,3 +712,73 @@ savePng cs surfaceTexture wlrSurface = do
           gss <- readTVarIO (gsvs ^. gsvsServer)
           visualServer <- readTVarIO (gss ^. gssVisualServer)
           return visualServer
+
+-- Run shell command with DISPLAY set to our XWayland server value (typically
+-- :2)
+appLaunch :: GodotSimulaServer -> String -> [String] -> IO ()
+appLaunch gss appStr args = do
+  -- We shouldn't need to set WAYLAND_DISPLAY, but do need to set Xwayland DISPLAY
+  let originalEnv = (gss ^. gssOriginalEnv)
+  maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
+  case (appStr, maybeXwaylandDisplay) of
+    ("nullApp", _) -> do logStr "Launching nullApp:"
+                         appCounter@(appsLaunched, appsRemaining) <- readTVarIO (gss ^. gssStartingAppsCounter)
+                         logStr $ "  appsLaunched: " ++ (show appsLaunched)
+                         logStr $ "  appsRemaining: " ++ (show appsRemaining)
+                         atomically $ writeTVar (_gssStartingAppsCounter gss) (appsLaunched + 1, appsRemaining - 1)
+                         sApps <- readTVarIO (gss ^. gssStartingApps)
+
+                         let nextApp = if (sApps == []) then Nothing else Just (Data.List.head sApps)
+                         case nextApp of
+                           Nothing -> return ()
+                           Just app -> do let tailApps = (Data.List.tail sApps)
+                                          atomically $ writeTVar (gss ^. gssStartingApps) tailApps
+                                          let secondApp = if tailApps == [] then Nothing else Just (Data.List.head tailApps)
+                                          case secondApp of
+                                            Nothing -> return ()
+                                            Just secondApp' -> appStrLaunch gss secondApp'
+
+                         -- sApps' <- readTVarIO (gss ^. gssStartingApps)
+                         -- let nextApp' = if (sApps' == []) then Nothing else Just (Data.List.head sApps')
+                         -- case nextApp' of
+                         --      Nothing -> return ()
+                         --      Just app -> do
+                         --        atomically $ writeTVar (gss ^. gssStartingApps)  (Data.List.tail sApps')
+                         --        appLaunch gss app []
+    ("launchHMDWebcam", _) -> launchHMDWebCam gss
+    ("launchTerminal", _) -> terminalLaunch gss
+    ("launchUsageInstructions", _) -> appStrLaunch gss "./result/bin/midori https://github.com/SimulaVR/Simula#usage -p"
+    (_, Nothing) -> putStrLn "No DISPLAY found!"
+    (_, (Just xwaylandDisplay)) -> do
+      let envMap = M.fromList originalEnv
+      let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
+      -- let envMapWithDisplay = M.insert "DISPLAY" ":13" envMap
+      let envListWithDisplay = M.toList envMapWithDisplay
+      res <- try $ createProcess (proc appStr args) { env = Just envListWithDisplay, new_session = True, std_out = NoStream, std_err = NoStream } :: IO (Either IOException (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle))
+      case res of
+        Left _ -> putStrLn $ "Cannot find command: " ++ appStr
+        Right _ -> return ()
+  return ()
+
+launchHMDWebCam :: GodotSimulaServer -> IO ()
+launchHMDWebCam gss = do
+  maybePath <- getHMDWebCamPath
+  case maybePath of
+    Nothing -> putStrLn "Cannot find HMD web cam!"
+    Just path  -> appLaunch gss "./result/bin/ffplay" ["-loglevel", "quiet", "-f", "v4l2", path]
+    where getHMDWebCamPath :: IO (Maybe FilePath)
+          getHMDWebCamPath = (listToMaybe . Data.List.map ("/dev/v4l/by-id/" ++) . sort . Data.List.filter viveOrValve) <$> listDirectory "/dev/v4l/by-id"
+          viveOrValve :: String -> Bool
+          viveOrValve str = Data.List.any (`Data.List.isInfixOf` str) ["Vive",  -- HTC Vive
+                                                                       "VIVE",  -- HTC Vive Pro
+                                                                       "Valve", -- Valve Index?
+                                                                       "Etron"] -- Valve Index
+
+terminalLaunch :: GodotSimulaServer -> IO ()
+terminalLaunch gss = appLaunch gss "./result/bin/xfce4-terminal" []
+
+appStrLaunch :: GodotSimulaServer -> String -> IO ()
+appStrLaunch gss appStr = do
+  let rootCmd = Data.List.head (Data.List.words appStr)
+  let args = Data.List.tail (Data.List.words appStr)
+  appLaunch gss rootCmd args

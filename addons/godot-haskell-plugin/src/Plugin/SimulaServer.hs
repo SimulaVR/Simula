@@ -337,7 +337,15 @@ ready gss _ = do
   createProcess ((shell $ "./result/bin/wmctrl -ia " ++ simulaWindow) { env = Just [("DISPLAY", oldDisplay)] })
 
   appendFile "log.txt" "Starting logs..\n"
-  terminalLaunch gss
+
+  -- Launch default apps
+  sApps <- readTVarIO (gss ^. gssStartingApps)
+  putStrLn $ "Launching default apps: " ++ (show sApps)
+  let firstApp = if (sApps == []) then Nothing else Just (head sApps)
+  case firstApp of
+    Nothing -> return ()
+    Just app -> do appStrLaunch gss app
+  return ()
   -- launchXpra gss
 
 -- | Populate the GodotSimulaServer's TVar's with Wlr types; connect some Wlr methods
@@ -460,6 +468,12 @@ initGodotSimulaServer obj = do
       let keyboardRemappingsVal = getKeyboardRemappings gss (configuration ^. keyRemappings)
       gssKeyboardRemappings'    <- newTVarIO keyboardRemappingsVal :: IO (TVar KeyboardRemappings)
 
+      let sApps = getStartingAppsList (configuration ^. startingApps)
+      let numberOfStartingApps = length sApps
+      gssStartingAppsCounter'    <- newTVarIO (0, numberOfStartingApps) :: IO (TVar (StartingAppsLaunched, StartingAppsRemaining))
+      gssStartingApps' <- newTVarIO sApps
+
+
       let gss = GodotSimulaServer {
         _gssObj                   = obj                       :: GodotObject
       , _gssWaylandDisplay        = gssWaylandDisplay'        :: TVar GodotWaylandDisplay
@@ -483,7 +497,9 @@ initGodotSimulaServer obj = do
       , _gssFreeChildren          = gssFreeChildren'          :: TVar (M.Map GodotWlrXWaylandSurface CanvasSurface)
       , _gssConfiguration         = gssConfiguration'         :: TVar Configuration
       , _gssKeyboardShortcuts     = gssKeyboardShortcuts'     :: TVar KeyboardShortcuts
-      , _gssKeyboardRemappings      = gssKeyboardRemappings'      :: TVar KeyboardRemappings
+      , _gssKeyboardRemappings    = gssKeyboardRemappings'    :: TVar KeyboardRemappings
+      , _gssStartingAppsCounter   = gssStartingAppsCounter'   :: TVar (StartingAppsLaunched, StartingAppsRemaining)
+      , _gssStartingApps          = gssStartingApps'          :: TVar [String]
       }
 
   return gss
@@ -495,6 +511,13 @@ initGodotSimulaServer obj = do
           exitCode <- G.load godotImage pngUrl
           G.create_from_image godotImageTexture godotImage G.TEXTURE_FLAGS_DEFAULT
           if (unsafeCoerce godotImageTexture == nullPtr) then (return Nothing) else (return (Just (safeCast godotImageTexture)))
+        getStartingAppsStr :: Maybe String -> String
+        getStartingAppsStr Nothing = "nullApp"
+        getStartingAppsStr (Just str) = str
+
+        getStartingAppsList :: StartingApps -> [String]
+        getStartingAppsList startingApps =
+            fmap getStartingAppsStr [(startingApps ^. center), (startingApps ^. right), (startingApps ^. bottom), (startingApps ^. left), (startingApps ^. top)]
 
 _on_WaylandDisplay_ready :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_WaylandDisplay_ready gss _ = do
@@ -512,9 +535,6 @@ _on_WlrXdgShell_new_surface gss [wlrXdgSurfaceVariant] = do
       1 -> do                    -- XDG_SURFACE_ROLE_TOPLEVEL
               simulaView <- newSimulaView gss wlrXdgSurface
               gsvs <- newGodotSimulaViewSprite gss simulaView
-
-              -- Mutate the server with our updated state
-              atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
 
               --surface.connect("map", self, "handle_map_surface")
               connectGodotSignal gsvs "map" gss "handle_map_surface" []
@@ -601,8 +621,6 @@ _on_WlrXWayland_new_surface gss [wlrXWaylandSurfaceVariant] = do
   G.reference wlrXWaylandSurface
   simulaView <- newSimulaView gss wlrXWaylandSurface
   gsvs <- newGodotSimulaViewSprite gss simulaView
-
-  atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
 
   connectGodotSignal gsvs "map" gss "handle_map_surface" []
   connectGodotSignal wlrXWaylandSurface "map_free_child" gsvs "handle_map_free_child" []
@@ -721,29 +739,6 @@ shellCmd1 gss appStr = do
   createProcess (shell appStr) { env = Just originalEnv }
   return ()
 
--- Run shell command with DISPLAY set to our XWayland server value (typically
--- :2)
-appLaunch :: GodotSimulaServer -> String -> [String] -> IO ()
-appLaunch gss appStr args = do
-  -- We shouldn't need to set WAYLAND_DISPLAY, but do need to set Xwayland DISPLAY
-  let originalEnv = (gss ^. gssOriginalEnv)
-  maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
-  case maybeXwaylandDisplay of
-    Nothing -> putStrLn "No DISPLAY found!"
-    (Just xwaylandDisplay) -> do
-      let envMap = M.fromList originalEnv
-      let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
-      -- let envMapWithDisplay = M.insert "DISPLAY" ":13" envMap
-      let envListWithDisplay = M.toList envMapWithDisplay
-      res <- try $ createProcess (proc appStr args) { env = Just envListWithDisplay, new_session = True, std_out = NoStream, std_err = NoStream } :: IO (Either IOException (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle))
-      case res of
-        Left _ -> putStrLn $ "Cannot find command " ++ appStr
-        Right _ -> return ()
-  return ()
-
-terminalLaunch :: GodotSimulaServer -> IO ()
-terminalLaunch gss = appLaunch gss "./result/bin/xfce4-terminal" []
-
 _on_simula_shortcut :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_simula_shortcut gss [scancodeWithModifiers', isPressed'] = do
   scancodeWithModifiers <- fromGodotVariant scancodeWithModifiers' :: IO Int
@@ -822,20 +817,6 @@ createProcessWithGroup pgid exe args env =
    forkProcess $ do
     joinProcessGroup pgid
     executeFile exe True args env
-
-launchHMDWebCam :: GodotSimulaServer -> IO ()
-launchHMDWebCam gss = do
-  maybePath <- getHMDWebCamPath
-  case maybePath of
-    Nothing -> putStrLn "Cannot find HMD web cam!"
-    Just path  -> appLaunch gss "./result/bin/ffplay" ["-loglevel", "quiet", "-f", "v4l2", path]
-    where getHMDWebCamPath :: IO (Maybe FilePath)
-          getHMDWebCamPath = (listToMaybe . Data.List.map ("/dev/v4l/by-id/" ++) . sort . filter viveOrValve) <$> listDirectory "/dev/v4l/by-id"
-          viveOrValve :: String -> Bool
-          viveOrValve str = any (`isInfixOf` str) ["Vive",  -- HTC Vive
-                                                   "VIVE",  -- HTC Vive Pro
-                                                   "Valve", -- Valve Index?
-                                                   "Etron"] -- Valve Index
 
 -- | HACK: `G.set_mouse_mode` is set to toggle the grab on *both* the keyboard and
 -- | the mouse cursor.

@@ -1,7 +1,19 @@
 -- For requests/questions about Simula's configuration, check out our discord: https://discordapp.com/invite/a4PnP7n
 
 let Configuration =
-  { _defaultWindowResolution = { _1 = 900, _2 = 900 } -- When apps launch, they default to this (square) resolution.
+       -- Simula can handle up to 5 default starting apps (parsed as shell commands).
+       -- You can also use the following special commands:
+       --   "launchTerminal" to launch the default terminal
+       --   "launchHMDWebcam" to launch the HMD webcam view
+       --   "launchUsageInstructions" to launch Simula's usage instructions
+       -- To omit launching an app in a spot, use `None Text` instead of `Some "cmd"`.
+     { _startingApps = { _center = Some "./result/bin/xfce4-terminal"
+                       , _right  = Some "launchUsageInstructions"
+                       , _bottom = Some "launchHMDWebcam"
+                       , _left   = Some "launchTerminal"
+                       , _top    = Some "launchTerminal"
+                       }
+  , _defaultWindowResolution = { _1 = 900, _2 = 900 } -- When apps launch, they default to this (square) resolution.
   , _defaultWindowScale      = 1.0 : Double           -- In addition to resolution, apps can be scaled up or down by this factor
   , _keyBindings             = [ -- For keyboard shortcuts, use keynames from
                                  -- https://github.com/SimulaVR/godot/blob/3.2-simula/core/os/keyboard.h

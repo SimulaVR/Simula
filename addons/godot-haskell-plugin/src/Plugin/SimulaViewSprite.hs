@@ -62,7 +62,7 @@ instance NativeScript GodotSimulaViewSprite where
     do putStrLn "SimulaViewSprite()"
        GodotSimulaViewSprite (safeCast obj)
                       <$> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
-                      <*> atomically (newTVar True)
+                      <*> atomically (newTVar (False, 0))
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
@@ -93,66 +93,20 @@ instance NativeScript GodotSimulaViewSprite where
 -- | Intended to be called every frame.
 updateSimulaViewSprite :: GodotSimulaViewSprite -> IO ()
 updateSimulaViewSprite gsvs = do
-  -- putStrLn "updateSimulaViewSprite"
-
-  -- Update sprite texture; doesn't yet include popups or other subsurfaces.
-  -- useViewportToDrawParentSurface gsvs
-  -- drawParentWlrSurfaceTextureOntoSprite gsvs
-
-  adjustTargetDimensions gsvs -- 1600 1600 -- 2048 2048
-
+  adjustTargetDimensions gsvs
   applyViewportBaseTexture gsvs
-    -- useViewportToDrawParentSurface gsvs -- Causes _draw() error
-    -- drawSurfacesOnSprite gsvs
-
-  -- Set extents
   setExtents gsvs
 
-  -- whenM (spriteShouldMove gsvs) $ do
-  --   atomically $ writeTVar (_gsvsShouldMove gsvs) False
-  --   moveToUnoccupied gsvs
-  where
-        -- As the name makes clear, this function *only* draws the parent WlrSurface
-        -- onto a GodotSimulaViewSprite's Sprite3D field. It doesn't include popups or
-        -- any other subsurfaces. This is a temporary hack that needs fixed.
-        drawParentWlrSurfaceTextureOntoSprite :: GodotSimulaViewSprite -> IO ()
-        drawParentWlrSurfaceTextureOntoSprite gsvs = do
-          -- Get state
-          sprite3D <- readTVarIO (gsvs ^. gsvsSprite)
-          simulaView <- readTVarIO (gsvs ^. gsvsView)
-          let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
-          wlrSurface <- case wlrEitherSurface of
-                                Left wlrXdgSurface       -> G.get_wlr_surface wlrXdgSurface
-                                Right wlrXWaylandSurface -> do
-                                  -- TODO: Complete this experiment
-                                  -- children <- G.get_children wlrXWaylandSurface
-                                  -- size' <- Api.godot_array_size children
-                                  -- putStrLn $ "# of WlrXWayland Surfaces: " ++ (show size')
-                                  G.get_wlr_surface wlrXWaylandSurface
-          parentWlrTexture <- G.get_texture wlrSurface
+  (isStartingApp, startingPositionIndex) <- (readTVarIO (gsvs ^. gsvsShouldMove))
 
+  case isStartingApp of
+    False -> return ()
+    True -> do
+      whenM (spriteShouldMove gsvs) $ do
+          atomically $ writeTVar (_gsvsShouldMove gsvs) (False, 0)
+          moveToUnoccupied gsvs startingPositionIndex
 
-          -- saveTextureToDisk wlrXdgSurface parentWlrTexture -- Causes crash
-          -- Set Sprite3D texture
-         
-          -- Attempt to force maximize windows doesn't work:
-          -- wlrXdgSurfaceToplevel <- G.get_xdg_toplevel wlrXdgSurface
-          -- G.set_maximized wlrXdgSurfaceToplevel True -- Doesn't seem to work
-          rid <- G.get_rid parentWlrTexture
-          -- rid_canvas <- G.get_canvas self
-          -- rid_canvas_item <- G.get_canvas self
-          visualServer <- getSingleton GodotVisualServer "VisualServer"
-          -- Enable everything but mipmapping (since this causes old textures get to interpolated
-          -- with updated textures when far enough from the user).
-          G.texture_set_flags visualServer rid 6
-          -- G.texture_set_flags visualServer rid_canvas 6
-          -- G.texture_set_flags visualServer rid_canvas_item 6
-          G.set_texture sprite3D parentWlrTexture
-
-          -- Tell client surface it should start rendering the next frame
-          G.send_frame_done wlrSurface
-
-        setExtents :: GodotSimulaViewSprite -> IO ()
+  where setExtents :: GodotSimulaViewSprite -> IO ()
         setExtents gsvs = do
           simulaView <- readTVarIO (gsvs ^. gsvsView)
           let eitherSurface = simulaView ^. svWlrEitherSurface
@@ -172,45 +126,43 @@ updateSimulaViewSprite gsvs = do
           -- Set extents
           G.set_extents shape size'
 
-        spriteShouldMove :: GodotSimulaViewSprite -> IO Bool
-        spriteShouldMove gsvs = do
-          en <- atomically $ readTVar (_gsvsShouldMove gsvs)
-          if en then do
-            -- putStrLn "spriteShouldMove"
-            sprite <- atomically $ readTVar (_gsvsSprite gsvs)
-            aabb <- G.get_aabb sprite
-            size <- godot_aabb_get_size aabb
-            vsize <- fromLowLevel size
-            return (vsize > 0)
-            else return False
+spriteShouldMove :: GodotSimulaViewSprite -> IO Bool
+spriteShouldMove gsvs = do
+  (isStartingApp, startingPositionIndex) <- atomically $ readTVar (_gsvsShouldMove gsvs)
+  if isStartingApp then do sprite <- atomically $ readTVar (_gsvsSprite gsvs)
+                           aabb <- G.get_aabb sprite
+                           size <- godot_aabb_get_size aabb
+                           vsize <- fromLowLevel size
+                           return (vsize > 0) -- The first frame or so, the sprite has vsize 0
+                   else return False
 
-        -- TODO: check the origin plane?
-        moveToUnoccupied :: GodotSimulaViewSprite -> IO ()
-        moveToUnoccupied gsvs = do
-          -- putStrLn "moveToUnoccupied"
-          gss <- readTVarIO (gsvs ^. gsvsServer)
-          viewMap <- atomically $ readTVar (_gssViews gss)
-          let otherGsvs = Prelude.filter (\x -> asObj x /= asObj gsvs) $ M.elems viewMap
+moveToUnoccupied :: GodotSimulaViewSprite -> Int -> IO ()
+moveToUnoccupied gsvs appPositionIndex = do
+  sprite <- atomically $ readTVar (gsvs ^. gsvsSprite)
+  aabb   <- G.get_aabb sprite
+  size   <- Api.godot_aabb_get_size aabb >>= fromLowLevel
+  let sizeX  = size ^. _x
+  case ((appPositionIndex - 1), (appPositionIndex - 1) `mod` 4) of
+    (0, _) -> do moveSpriteAlongObjectZAxis gsvs 0.3
+    (_, 1) -> do G.translate gsvs =<< toLowLevel (V3 (-sizeX) 0 0)
+    (_, 2) -> do G.translate gsvs =<< toLowLevel (V3 0 (-sizeX) 0)
+    (_, 3) -> do G.translate gsvs =<< toLowLevel (V3 (sizeX) 0 0)
+    (_, 0) -> do G.translate gsvs =<< toLowLevel (V3 0 (sizeX) 0)
+    _ -> return ()
+  orientSpriteTowardsGaze gsvs
 
-          extents <- forM otherGsvs $ \viewSprite -> do
-            sprite <- atomically $ readTVar (gsvs ^. gsvsSprite) -- getSprite viewSprite
-            aabb   <- G.get_transformed_aabb sprite
-            size   <- Api.godot_aabb_get_size aabb >>= fromLowLevel
-            pos    <- Api.godot_aabb_get_position aabb >>= fromLowLevel
-            return (pos, size + pos)
-
-          let minX = minimum $ 0 : map (view $ _1._x) extents
-              maxX = maximum $ 0 :  map (view $ _2._x) extents
-          sprite <- atomically $ readTVar (gsvs ^. gsvsSprite)
-          aabb   <- G.get_aabb sprite
-          size   <- Api.godot_aabb_get_size aabb >>= fromLowLevel
-          let sizeX  = size ^. _x
-              newPos =
-                if abs minX < abs maxX
-                then V3 (minX - sizeX/2) 0 0
-                else V3 (maxX + sizeX/2) 0 0
-
-          G.translate gsvs =<< toLowLevel newPos
+  -- Launch next starting app, if there is one
+  gss <- readTVarIO (gsvs ^. gsvsServer)
+  sApps <- readTVarIO (gss ^. gssStartingApps)
+  let nextApp = if (sApps == []) then Nothing else Just (Data.List.head sApps)
+  case nextApp of
+    Nothing -> return ()
+    Just app -> do let tailApps = (Data.List.tail sApps)
+                   atomically $ writeTVar (gss ^. gssStartingApps) tailApps
+                   let secondApp = if tailApps == [] then Nothing else Just (Data.List.head tailApps)
+                   case secondApp of
+                     Nothing -> return ()
+                     Just secondApp' -> appStrLaunch gss secondApp'
 
 -- Adjust gsvs wlr_surface dimensions *and* render target dimensions to the
 -- gsvsTargetSize every frame.
@@ -459,13 +411,23 @@ pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (ssx, ssy)) = 
   G.pointer_notify_enter wlrSeat wlrSurface ssx ssy -- Causing a crash
 
 _handle_map :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
-_handle_map self args = do
-  simulaView <- readTVarIO (self ^. gsvsView)
+_handle_map gsvs args = do
+  gss <- readTVarIO (gsvs ^. gsvsServer)
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
 
-  G.set_process self True
-  G.set_process_input self True -- We do this in Godotston but not in original Simula
-  emitSignal self "map" ([self] :: [GodotSimulaViewSprite])
+  G.set_process gsvs True
+  G.set_process_input gsvs True
+  emitSignal gsvs "map" ([gsvs] :: [GodotSimulaViewSprite])
   atomically $ writeTVar (simulaView ^. svMapped) True
+  atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
+
+  -- Flag the gsvs as a starting application, if it is one
+  appCounter@(appsLaunched, appsRemaining) <- readTVarIO (gss ^. gssStartingAppsCounter)
+  case appsRemaining of
+    0 -> return ()
+    _ -> do atomically $ writeTVar (_gsvsShouldMove gsvs) (True, appsLaunched + 1)
+            atomically $ writeTVar (_gssStartingAppsCounter gss) (appsLaunched + 1, appsRemaining - 1)
+
   return ()
 
 _handle_unmap :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
