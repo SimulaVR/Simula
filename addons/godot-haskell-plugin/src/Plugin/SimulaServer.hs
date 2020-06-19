@@ -24,6 +24,8 @@ import System.Directory
 import           Data.Bits
 import           Linear
 import           Plugin.Imports
+import Data.Colour
+import Data.Colour.SRGB.Linear
 
 import Godot.Core.GodotVisualServer          as G
 import qualified Godot.Gdnative.Internal.Api as Api
@@ -98,6 +100,7 @@ getKeyboardAction gss keyboardShortcut =
     "terminateWindow" -> terminateWindow
     "reloadConfig" -> reloadConfig
     "terminateSimula" -> terminateSimula
+    "cycleEnvironment" -> cycleEnvironment gss
     _ -> shellLaunch gss (keyboardShortcut ^. keyAction)
 
   where moveCursor :: SpriteLocation -> Bool -> IO ()
@@ -199,6 +202,9 @@ getKeyboardAction gss keyboardShortcut =
           atomically $ writeTVar (gss ^. gssKeyboardShortcuts) keyboardShortcutsVal
           let keyboardRemappingsVal = getKeyboardRemappings gss (configuration ^. keyRemappings)
           atomically $ writeTVar (gss ^. gssKeyboardRemappings) keyboardRemappingsVal
+          worldEnv@(worldEnvironment, _) <- readTVarIO (gss ^. gssWorldEnvironment)
+          textures <- loadEnvironmentTextures configuration worldEnvironment
+          atomically $ writeTVar (gss ^. gssEnvironmentTextures) textures
         reloadConfig _ _ = return ()
 
         terminateSimula :: SpriteLocation -> Bool -> IO ()
@@ -208,6 +214,14 @@ getKeyboardAction gss keyboardShortcut =
           createProcess (shell $ "kill " ++ (show pid))
           return ()
         terminateSimula _ _ = return ()
+
+        cycleEnvironment :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
+        cycleEnvironment gss _ True = do
+          putStrLn "Cycling environment.."
+          cycleGSSEnvironment gss
+          return ()
+        cycleEnvironment _ _ _ = do
+          return ()
 
 isMask :: Int -> Bool
 isMask keyOrMask = elem keyOrMask [ G.KEY_MASK_SHIFT
@@ -346,6 +360,13 @@ ready gss _ = do
     Nothing -> return ()
     Just app -> do appStrLaunch gss app
   return ()
+
+  -- Adding a `WorldEnvironment` anywhere to an active scene graph
+  -- overrides the default environment
+  (worldEnvironment, _) <- readTVarIO (gss ^. gssWorldEnvironment)
+  addChild gss worldEnvironment
+  return ()
+
   -- launchXpra gss
 
 -- | Populate the GodotSimulaServer's TVar's with Wlr types; connect some Wlr methods
@@ -473,7 +494,32 @@ initGodotSimulaServer obj = do
       gssStartingAppsCounter'    <- newTVarIO (0, numberOfStartingApps) :: IO (TVar (StartingAppsLaunched, StartingAppsRemaining))
       gssStartingApps' <- newTVarIO sApps
 
+      panoramaSky      <- unsafeInstance GodotPanoramaSky "PanoramaSky"
+      environment      <- unsafeInstance GodotEnvironment "Environment"
+      worldEnvironment <- unsafeInstance GodotWorldEnvironment "WorldEnvironment"
 
+      -- Environment
+      G.set_background environment G.ENV_BG_SKY -- 2
+      G.set_sky environment (safeCast panoramaSky)
+      backgroundColor <- (toLowLevel $ (rgb 0.0 0.538333 0.703125) `withOpacity` 1) :: IO GodotColor
+      G.set_bg_color environment backgroundColor
+      ambientLightColor <- (toLowLevel $ (rgb 0.328125 0.328125 0.328125) `withOpacity` 1) :: IO GodotColor
+      G.set_ambient_light_color environment ambientLightColor
+      G.set_ssao_blur environment G.ENV_SSAO_BLUR_1x1 -- 1
+
+      -- WorldEnvironment
+      G.set_environment worldEnvironment environment
+      -- G.set_transform gssWorldEnvironment Transform( 0.623013, -0.733525, 0.271654, 0.321394, 0.55667, 0.766044, -0.713134, -0.389948, 0.582563, 0, 100, 0 )
+
+      let texStr = (configuration ^. environmentDefault)
+      maybeDefaultTexture <- getTextureFromURL ("res://" ++ texStr)
+      case maybeDefaultTexture of
+           Nothing -> do putStrLn "Can't set panorama texture!"
+           Just tex -> do G.set_panorama panoramaSky tex
+      gssWorldEnvironment' <- newTVarIO (worldEnvironment, texStr)
+      texturesStr <- loadEnvironmentTextures configuration worldEnvironment
+      gssEnvironmentTextures' <- newTVarIO texturesStr
+      gssStartingAppTransform' <- newTVarIO Nothing
       let gss = GodotSimulaServer {
         _gssObj                   = obj                       :: GodotObject
       , _gssWaylandDisplay        = gssWaylandDisplay'        :: TVar GodotWaylandDisplay
@@ -500,18 +546,12 @@ initGodotSimulaServer obj = do
       , _gssKeyboardRemappings    = gssKeyboardRemappings'    :: TVar KeyboardRemappings
       , _gssStartingAppsCounter   = gssStartingAppsCounter'   :: TVar (StartingAppsLaunched, StartingAppsRemaining)
       , _gssStartingApps          = gssStartingApps'          :: TVar [String]
+      , _gssWorldEnvironment      = gssWorldEnvironment'      :: TVar (GodotWorldEnvironment, String)
+      , _gssEnvironmentTextures   = gssEnvironmentTextures'   :: TVar [String]
+      , _gssStartingAppTransform   = gssStartingAppTransform'   :: TVar (Maybe GodotTransform)
       }
-
   return gss
-  where getTextureFromURL :: String -> IO (Maybe GodotTexture)
-        getTextureFromURL urlStr = do
-          godotImage <- unsafeInstance GodotImage "Image" :: IO GodotImage
-          godotImageTexture <- unsafeInstance GodotImageTexture "ImageTexture"
-          pngUrl <- toLowLevel (pack urlStr) :: IO GodotString
-          exitCode <- G.load godotImage pngUrl
-          G.create_from_image godotImageTexture godotImage G.TEXTURE_FLAGS_DEFAULT
-          if (unsafeCoerce godotImageTexture == nullPtr) then (return Nothing) else (return (Just (safeCast godotImageTexture)))
-        getStartingAppsStr :: Maybe String -> String
+  where getStartingAppsStr :: Maybe String -> String
         getStartingAppsStr Nothing = "nullApp"
         getStartingAppsStr (Just str) = str
 
@@ -828,3 +868,4 @@ toggleGrabMode = do
       G.MOUSE_MODE_CAPTURED -> G.set_mouse_mode inp G.MOUSE_MODE_VISIBLE
       G.MOUSE_MODE_VISIBLE -> G.set_mouse_mode inp G.MOUSE_MODE_CAPTURED
   return ()
+

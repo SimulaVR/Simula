@@ -27,6 +27,7 @@ let Configuration =
                               , { _keyCombination = ["KEY_MASK_META", "KEY_ENTER"]                     , _keyAction = "clickLeft"               }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_ALT_R"]                     , _keyAction = "grabWindow"              }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_ALT_L"]                     , _keyAction = "grabWindow"              }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_E"]                         , _keyAction = "cycleEnvironment"        }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_F"]                         , _keyAction = "orientSpriteTowardsGaze" }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_9"]                         , _keyAction = "scaleWindowDown"         }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_0"]                         , _keyAction = "scaleWindowUp"           }
@@ -50,6 +51,9 @@ let Configuration =
                                  -- If you'd like to disable a key, map it to `KEY_NULL`, as in
                                  -- , { _keyOriginal =  "KEY_ESCAPE" , _keyMappedTo = "KEY_NULL" }
                                ] : List { _keyOriginal : Text, _keyMappedTo : Text }
+  -- Environments must be local to Simula's root directory
+  , _environmentsDirectory = "./environments"
+  , _environmentDefault    = "./environments/AllSkyFree_Sky_EpicBlueSunset_Equirect.png"
   }
 
 in Configuration

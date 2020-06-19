@@ -13,3 +13,6 @@
 	path = submodules/godot-haskell
 	url = https://github.com/SimulaVR/godot-haskell
 	branch = simula
+[submodule "environments"]
+	path = environments
+	url = https://github.com/SimulaVR/environments

@@ -138,16 +138,35 @@ spriteShouldMove gsvs = do
 
 moveToUnoccupied :: GodotSimulaViewSprite -> Int -> IO ()
 moveToUnoccupied gsvs appPositionIndex = do
+  gss <- readTVarIO (gsvs ^. gsvsServer)
   sprite <- atomically $ readTVar (gsvs ^. gsvsSprite)
   aabb   <- G.get_aabb sprite
   size   <- Api.godot_aabb_get_size aabb >>= fromLowLevel
   let sizeX  = size ^. _x
   case ((appPositionIndex - 1), (appPositionIndex - 1) `mod` 4) of
-    (0, _) -> do moveSpriteAlongObjectZAxis gsvs 0.3
-    (_, 1) -> do G.translate gsvs =<< toLowLevel (V3 (-sizeX) 0 0)
-    (_, 2) -> do G.translate gsvs =<< toLowLevel (V3 0 (-sizeX) 0)
-    (_, 3) -> do G.translate gsvs =<< toLowLevel (V3 (sizeX) 0 0)
-    (_, 0) -> do G.translate gsvs =<< toLowLevel (V3 0 (sizeX) 0)
+    (0, _) -> do gsvsTransform <- G.get_global_transform gsvs
+                 atomically $ writeTVar (gss ^. gssStartingAppTransform) (Just gsvsTransform)
+                 moveSpriteAlongObjectZAxis gsvs 0.3
+    (_, 1) -> do startingAppTransform <- readTVarIO (gss ^. gssStartingAppTransform)
+                 case startingAppTransform of
+                   Just transform -> G.set_global_transform gsvs transform
+                   Nothing -> return ()
+                 G.translate gsvs =<< toLowLevel (V3 (-sizeX) 0 0)
+    (_, 2) -> do startingAppTransform <- readTVarIO (gss ^. gssStartingAppTransform)
+                 case startingAppTransform of
+                   Just transform -> G.set_global_transform gsvs transform
+                   Nothing -> return ()
+                 G.translate gsvs =<< toLowLevel (V3 0 (-sizeX) 0)
+    (_, 3) -> do startingAppTransform <- readTVarIO (gss ^. gssStartingAppTransform)
+                 case startingAppTransform of
+                   Just transform -> G.set_global_transform gsvs transform
+                   Nothing -> return ()
+                 G.translate gsvs =<< toLowLevel (V3 (sizeX) 0 0)
+    (_, 0) -> do startingAppTransform <- readTVarIO (gss ^. gssStartingAppTransform)
+                 case startingAppTransform of
+                   Just transform -> G.set_global_transform gsvs transform
+                   Nothing -> return ()
+                 G.translate gsvs =<< toLowLevel (V3 0 (sizeX) 0)
     _ -> return ()
   orientSpriteTowardsGaze gsvs
 
@@ -505,7 +524,7 @@ _handle_destroy gsvs [gsvsGV] = do
   deleteSurface eitherSurface
 
   where
-    deleteSurface eitherSurface = 
+    deleteSurface eitherSurface =
       case eitherSurface of
         (Left xdgSurface) -> destroyMaybe (safeCast xdgSurface)
         (Right xwaylandSurface) -> destroyMaybe (safeCast xwaylandSurface)
@@ -542,7 +561,7 @@ keyboardGrabInitiate gsvs = do
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   isInSceneGraph <- G.is_a_parent_of ((safeCast gss) :: GodotNode ) ((safeCast gsvs) :: GodotNode)
   case isInSceneGraph of
-    False -> keyboardGrabLetGo gsvs 
+    False -> keyboardGrabLetGo gsvs
     True -> do gss <- readTVarIO $ (gsvs ^. gsvsServer)
                -- Compute dist
                orientSpriteTowardsGaze gsvs

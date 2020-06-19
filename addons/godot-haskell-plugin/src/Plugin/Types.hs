@@ -13,6 +13,7 @@
 module Plugin.Types where
 
 import           Data.Maybe
+import           Control.Concurrent
 import           Control.Monad
 import           Data.Coerce
 import           Unsafe.Coerce
@@ -25,12 +26,13 @@ import           Godot.Nativescript
 
 import           Plugin.Imports
 
+import           Godot.Core.GodotVisualServer          as G
 import qualified Godot.Methods               as G
 import           Godot.Gdnative.Types -- for Variant access
 import           Godot.Gdnative.Internal.Api as Api
 import           Godot.Nativescript as NativeScript
 
-import qualified Godot.Core.GodotImage       as Image
+import qualified Godot.Core.GodotImage       as G
 import           Control.Lens                hiding (Context)
 
 import           Foreign
@@ -118,6 +120,8 @@ data Configuration = Configuration {
 , _defaultWindowScale :: Double
 , _keyBindings :: [KeyboardShortcut]
 , _keyRemappings :: [KeyboardRemapping]
+, _environmentsDirectory :: String
+, _environmentDefault :: String
 } deriving (Generic, Show)
 
 instance FromDhall KeyboardRemapping
@@ -134,6 +138,9 @@ type KeyboardShortcuts = M.Map (Modifiers, Keycode) KeyboardAction
 type KeyboardRemappings = M.Map Scancode Scancode
 type StartingAppsLaunched = Int
 type StartingAppsRemaining = Int
+
+data SimulaEnvironment = Day | Night
+  deriving (Eq, Show)
 
 -- We use TVar excessively since these datatypes must be retrieved from the
 -- scene graph (requiring IO)
@@ -163,11 +170,14 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssKeyboardRemappings    :: TVar KeyboardRemappings
   , _gssStartingAppsCounter   :: TVar (StartingAppsLaunched, StartingAppsRemaining)
   , _gssStartingApps          :: TVar [String]
+  , _gssWorldEnvironment      :: TVar (GodotWorldEnvironment, String)
+  , _gssEnvironmentTextures   :: TVar [String]
+  , _gssStartingAppTransform  :: TVar (Maybe GodotTransform)
   }
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
@@ -787,3 +797,73 @@ appStrLaunch gss appStr = do
   let rootCmd = Data.List.head (Data.List.words appStr)
   let args = Data.List.tail (Data.List.words appStr)
   appLaunch gss rootCmd args
+
+getTextureFromURL :: String -> IO (Maybe GodotTexture)
+getTextureFromURL urlStr = do
+   godotImage <- unsafeInstance GodotImage "Image" :: IO GodotImage
+   godotImageTexture <- unsafeInstance GodotImageTexture "ImageTexture"
+   pngUrl <- toLowLevel (pack urlStr) :: IO GodotString
+   exitCode <- G.load godotImage pngUrl
+   -- G.compress godotImage G.COMPRESS_ETC2 G.COMPRESS_SOURCE_GENERIC 1
+   G.create_from_image godotImageTexture godotImage G.TEXTURE_FLAGS_DEFAULT
+   if (unsafeCoerce godotImageTexture == nullPtr) then (return Nothing) else (return (Just (safeCast godotImageTexture)))
+
+loadEnvironmentTextures :: Configuration -> GodotWorldEnvironment -> IO [String]
+loadEnvironmentTextures configuration worldEnvironment = do
+  -- configuration <- readTVarIO (gss ^. gssConfiguration)
+  let envDir = (configuration ^. environmentsDirectory)
+  dirExists <- try $ listDirectory envDir :: IO (Either IOException [FilePath])
+  dirs <- case dirExists of
+              Left _ -> return []
+              Right _ -> findAll [".png", ".jpg", ".jpeg"] <$> listDirectory envDir
+  let dirs' = Data.List.map (("./" ++ envDir ++ "/") ++) dirs
+  -- textures <- catMaybes <$> mapM (getEnvironmentTexture (worldEnvironment, tex)) dirs'
+  return dirs'
+  where contain w end = Data.List.take (Data.List.length end) (Data.List.reverse w) == Data.List.reverse end
+        findAll ends txt = Data.List.filter (\w -> Data.List.any (contain w) ends) txt
+
+getEnvironmentTexture :: GodotWorldEnvironment -> String -> IO (Maybe GodotTexture)
+getEnvironmentTexture worldEnvironment filePath = do
+  -- (worldEnvironment, tex) <- readTVarIO (gss ^. gssWorldEnvironment)
+  environment <- G.get_environment worldEnvironment :: IO GodotEnvironment
+  sky <- G.get_sky environment :: IO GodotSky
+  panoramaSky <- asClass' GodotPanoramaSky "PanoramaSky" sky
+
+  maybeMilkyTexture <- getTextureFromURL $ "res://" ++ filePath
+  -- maybeMilkyTexture <- getTextureFromURL $ filePath
+  case maybeMilkyTexture of
+    Nothing -> do putStrLn $ "Can't load texture: " ++ filePath
+                  return Nothing
+    Just tex -> return $ Just tex
+
+instance Eq GodotTexture where
+  texture1 == texture2 = ((coerce texture1) :: Ptr ()) == ((coerce texture2) :: Ptr ())
+
+-- TODO: This leaks. Fix it.
+cycleGSSEnvironment :: GodotSimulaServer -> IO ()
+cycleGSSEnvironment gss = do
+  (worldEnvironment, currentTextureStr) <- readTVarIO (gss ^. gssWorldEnvironment)
+  texturesLst <- readTVarIO (gss ^. gssEnvironmentTextures)
+  environment <- G.get_environment worldEnvironment :: IO GodotEnvironment
+  sky <- G.get_sky environment :: IO GodotSky
+  panoramaSky <- asClass' GodotPanoramaSky "PanoramaSky" sky
+
+  let maybeNextTextureStr = next (Just currentTextureStr) texturesLst
+  case maybeNextTextureStr of
+    Nothing -> putStrLn $ "Unable to cycle environment texture!"
+    Just nextTextureStr -> do
+      atomically $ writeTVar (gss ^. gssWorldEnvironment) (worldEnvironment, nextTextureStr)
+      maybeNextTexture <- getEnvironmentTexture worldEnvironment nextTextureStr
+      case maybeNextTexture of
+        Nothing -> putStrLn "Unable to cycle environment texture!"
+        Just nextTexture -> do oldTex <- G.get_panorama panoramaSky :: IO GodotTexture
+                               G.set_panorama panoramaSky nextTexture
+                               -- G.unreference @GodotReference (safeCast oldTex) -- Doesn't actually fix leak
+                               -- Api.godot_object_destroy $ safeCast oldTex -- Causes crash, which means oldTex is still being used somehow
+                               return ()
+  where next :: Eq a => Maybe a -> [a] -> Maybe a
+        next _ []             = Nothing
+        next Nothing    (x:_) = Just x
+        next (Just e) l@(x:_) = Just $ case Data.List.dropWhile (/= e) l of
+                                  (_:y:_) -> y
+                                  _       -> x
