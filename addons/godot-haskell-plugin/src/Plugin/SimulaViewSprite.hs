@@ -490,8 +490,7 @@ _handle_unmap self [wlrXWaylandSurfaceVariant] = do
   G.set_process self False
   atomically $ writeTVar (simulaView ^. svMapped) False
   isInSceneGraph <- G.is_a_parent_of ((safeCast gss) :: GodotNode ) ((safeCast self) :: GodotNode)
-  isMapped <- readTVarIO $ (simulaView ^. svMapped)
-  case (isInSceneGraph && isMapped) of
+  case isInSceneGraph of
        True -> removeChild gss self
        False -> return ()
 
