@@ -199,7 +199,7 @@ checkInstallNix() {
     if command -v nix; then
         echo "nix already installed.."
     else
-        curl https://nixos.org/nix/install | sh
+        curl -L https://nixos.org/nix/install | sh
         . $HOME/.nix-profile/etc/profile.d/nix.sh
     fi
 }
