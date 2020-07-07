@@ -451,6 +451,7 @@ _handle_map gsvs args = do
 
 _handle_unmap :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 _handle_unmap self [wlrXWaylandSurfaceVariant] = do
+  putStrLn "_handle_unmap"
   gss <- readTVarIO (self ^. gsvsServer)
   simulaView <- atomically $ readTVar (self ^. gsvsView)
   freeChildrenMap <- readTVarIO (gss ^. gssFreeChildren)
@@ -493,6 +494,10 @@ _handle_unmap self [wlrXWaylandSurfaceVariant] = do
   case isInSceneGraph of
        True -> removeChild gss self
        False -> return ()
+  let eitherSurface = (simulaView ^. svWlrEitherSurface)
+  case eitherSurface of
+    Left wlrXdgSurface -> return ()
+    Right wlrXWaylandSurface -> do G.send_close wlrXWaylandSurface -- Fixes ulauncher crashes
 
 -- Passes control entirely to updateSimulaViewSprite.
 _process :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()

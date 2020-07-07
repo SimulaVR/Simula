@@ -101,6 +101,7 @@ getKeyboardAction gss keyboardShortcut =
     "reloadConfig" -> reloadConfig
     "terminateSimula" -> terminateSimula
     "cycleEnvironment" -> cycleEnvironment gss
+    "launchAppLauncher" -> shellLaunch gss "./result/bin/ulauncher"
     _ -> shellLaunch gss (keyboardShortcut ^. keyAction)
 
   where moveCursor :: SpriteLocation -> Bool -> IO ()
