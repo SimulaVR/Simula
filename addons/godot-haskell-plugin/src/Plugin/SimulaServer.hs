@@ -95,10 +95,10 @@ getKeyboardAction gss keyboardShortcut =
     "pullWindow" -> pullWindow
     "scaleWindowDown" -> scaleWindowDown
     "scaleWindowUp" -> scaleWindowUp
-    "shortenWindowHorizontally" -> horizontalContract
-    "enlargeWindowHorizontally" -> horizontalExtend
-    "shortenWindowVertically" -> verticalContract
-    "enlargeWindowVertically" -> verticalExtend
+    "contractWindowHorizontally" -> horizontalContract
+    "extendWindowHorizontally" -> horizontalExtend
+    "contractWindowVertically" -> verticalContract
+    "extendWindowVertically" -> verticalExtend
     "squareWindow" -> squareWindow
     "zoomOut" -> zoomOut
     "zoomIn" -> zoomIn
