@@ -98,7 +98,7 @@ Windows become "active" once you look at them. Active windows receive typing eve
 | ~Super + <left>~         | Contract window horizontally                                                    |
 | ~Super + <down>~         | Extend window vertically                                                        |
 | ~Super + <up>~           | Contract window vertically                                                      |
-| ~Super + s~              | Resize window to take square dimensions                                         |
+| ~Super + s~              | Resize window to take its default (typically square) dimensions                 |
 | ~Super + Comma~          | Move window towards you                                                         |
 | ~Super + Period~         | Move window away from you                                                       |
 | ~Super + Backspace~      | Kill surface being looked at                                                    |

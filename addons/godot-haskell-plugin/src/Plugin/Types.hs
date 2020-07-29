@@ -887,29 +887,40 @@ resizeGSVS gsvs resizeMethod factor =
 
      newTargetDims@(SpriteDimensions (wTarget, hTarget)) <- case resizeMethod of
             Horizontal -> do
-              V3 (1 * factor) 1 1 & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
-              return $ SpriteDimensions (round $ ((fromIntegral w) * factor), round $ ((fromIntegral h)))
+              case (((fromIntegral w) * factor) > 450) of
+                True -> do V3 (1 * factor) 1 1 & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
+                           return $ SpriteDimensions (round $ ((fromIntegral w) * factor), round $ ((fromIntegral h)))
+                False -> return $ oldTargetDims
             Vertical   -> do
-              V3 1 (1 * factor) 1 & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
-              return $ SpriteDimensions (round $ ((fromIntegral w)), round $ ((fromIntegral h) * factor))
+              case (((fromIntegral h) * factor) > 450) of
+                True -> do V3 1 (1 * factor) 1 & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
+                           return $ SpriteDimensions (round $ ((fromIntegral w)), round $ ((fromIntegral h) * factor))
+                False -> return $ oldTargetDims
             Zoom       -> do
               return $ SpriteDimensions (round $ ((fromIntegral w) * factor), round $ ((fromIntegral h) * factor))
 
      atomically $ writeTVar (gsvs ^. gsvsTargetSize) (Just newTargetDims)
 
-squareGSVS :: GodotSimulaViewSprite -> IO ()
-squareGSVS gsvs =
-  do maybeOldTargetDims <- readTVarIO (gsvs ^. gsvsTargetSize)
-     oldTargetDims@(SpriteDimensions (w, h)) <- case maybeOldTargetDims of
-       Just oldTargetDims' -> return oldTargetDims'
-       Nothing -> do simulaView <- readTVarIO (gsvs ^. gsvsView)
-                     let eitherSurface = (simulaView ^. svWlrEitherSurface)
-                     wlrSurface <- getWlrSurface eitherSurface
-                     (x, y) <- getBufferDimensions wlrSurface
-                     return $ SpriteDimensions (x, y)
+defaultSizeGSVS :: GodotSimulaViewSprite -> IO ()
+defaultSizeGSVS gsvs = do
+    gss <- readTVarIO (gsvs ^. gsvsServer)
+    configuration <- readTVarIO (gss ^. gssConfiguration)
+    let windowScale = realToFrac (configuration ^. defaultWindowScale) :: Float
+    (V3 1 1 1 ^* (windowScale)) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
 
-     case (h > w) of
-          True -> do
-            resizeGSVS gsvs Horizontal ((fromIntegral h) / (fromIntegral w))
-          False -> do
-            resizeGSVS gsvs Vertical ((fromIntegral w) / (fromIntegral h))
+    let maybeWindowResolution = (configuration ^. defaultWindowResolution) :: Maybe (Dhall.Natural, Dhall.Natural)
+    let newTargetDims@(SpriteDimensions (x, y)) = case maybeWindowResolution of
+                                                       Just windowResolution'@(x, y) ->  SpriteDimensions (fromIntegral x, fromIntegral y)
+                                                       Nothing -> SpriteDimensions (900, 900)
+
+    maybeOldTargetDims <- readTVarIO (gsvs ^. gsvsTargetSize)
+    oldTargetDims@(SpriteDimensions (w, h)) <- case maybeOldTargetDims of
+      Just oldTargetDims' -> return oldTargetDims'
+      Nothing -> do simulaView <- readTVarIO (gsvs ^. gsvsView)
+                    let eitherSurface = (simulaView ^. svWlrEitherSurface)
+                    wlrSurface <- getWlrSurface eitherSurface
+                    (x, y) <- getBufferDimensions wlrSurface
+                    return $ SpriteDimensions (x, y)
+
+    resizeGSVS gsvs Horizontal ((fromIntegral x) / (fromIntegral w))
+    resizeGSVS gsvs Vertical ((fromIntegral y) / (fromIntegral h))
