@@ -13,32 +13,39 @@ let Configuration =
                        , _left   = Some "launchTerminal"
                        , _top    = Some "launchTerminal"
                        }
-  , _defaultWindowResolution = { _1 = 900, _2 = 900 } -- When apps launch, they default to this (square) resolution.
-  , _defaultWindowScale      = 1.0 : Double           -- In addition to resolution, apps can be scaled up or down by this factor
+  , _defaultWindowResolution = Some { _1 = 900, _2 = 900 } -- New windows default this (typically square) resolution
+                                                           -- Set to `None { _1 : Natural, _2 : Natural }` for windows to launch with their default (typically non-square) resolutions
+
+  , _defaultWindowScale      = 1.0 : Double                -- In addition to resolution, apps can be scaled up or down by this factor upon launch
   , _keyBindings             = [ -- For keyboard shortcuts, use keynames from
                                  -- https://github.com/SimulaVR/godot/blob/3.2-simula/core/os/keyboard.h
                                  -- For modifiers, use `KEY_MASK_*`. For everything else, use `KEY_*`.
                                  -- 
                                  -- Simula has the following special functions (explained in the README): https://github.com/SimulaVR/Simula#mouse--keyboard-controls
-                                { _keyCombination = ["KEY_MASK_META", "KEY_BACKSPACE"]                 , _keyAction = "terminateWindow"         }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_ESCAPE"]                    , _keyAction = "toggleGrabMode"          }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_SLASH"]                     , _keyAction = "launchTerminal"          }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_APOSTROPHE"]                , _keyAction = "moveCursor"              }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_ENTER"]                     , _keyAction = "clickLeft"               }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_ALT_R"]                     , _keyAction = "grabWindow"              }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_ALT_L"]                     , _keyAction = "grabWindow"              }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_A"]                         , _keyAction = "launchAppLauncher"            }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_E"]                         , _keyAction = "cycleEnvironment"        }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_F"]                         , _keyAction = "orientSpriteTowardsGaze" }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_9"]                         , _keyAction = "scaleWindowDown"         }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_0"]                         , _keyAction = "scaleWindowUp"           }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_MINUS"]                     , _keyAction = "zoomOut"                 }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_EQUAL"]                     , _keyAction = "zoomIn"                  }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_COMMA"]                     , _keyAction = "pullWindow"              }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_PERIOD"]                    , _keyAction = "pushWindow"              }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_W"]                         , _keyAction = "launchHMDWebCam"         }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_R"]                         , _keyAction = "reloadConfig"            }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_ESCAPE"]  , _keyAction = "terminateSimula"         }
+                                { _keyCombination = ["KEY_MASK_META", "KEY_BACKSPACE"]                 , _keyAction = "terminateWindow"           }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_ESCAPE"]                    , _keyAction = "toggleGrabMode"            }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_SLASH"]                     , _keyAction = "launchTerminal"            }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_APOSTROPHE"]                , _keyAction = "moveCursor"                }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_ENTER"]                     , _keyAction = "clickLeft"                 }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_ALT_R"]                     , _keyAction = "grabWindow"                }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_ALT_L"]                     , _keyAction = "grabWindow"                }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_A"]                         , _keyAction = "launchAppLauncher"         }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_E"]                         , _keyAction = "cycleEnvironment"          }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_F"]                         , _keyAction = "orientSpriteTowardsGaze"   }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_9"]                         , _keyAction = "scaleWindowDown"           }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_0"]                         , _keyAction = "scaleWindowUp"             }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_MINUS"]                     , _keyAction = "zoomOut"                   }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_EQUAL"]                     , _keyAction = "zoomIn"                    }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_LEFT"]                      , _keyAction = "contractWindowHorizontally" }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_RIGHT"]                     , _keyAction = "extendWindowHorizontally" }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_UP"]                        , _keyAction = "contractWindowVertically"   }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_DOWN"]                      , _keyAction = "extendWindowVertically"   }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_S"]                         , _keyAction = "squareWindow"              }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_COMMA"]                     , _keyAction = "pullWindow"                }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_PERIOD"]                    , _keyAction = "pushWindow"                }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_W"]                         , _keyAction = "launchHMDWebCam"           }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_R"]                         , _keyAction = "reloadConfig"              }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_ESCAPE"]  , _keyAction = "terminateSimula"           }
 
                                 -- Anything else is parsed as a shell command:
                               , { _keyCombination = ["KEY_MASK_META", "KEY_K"] , _keyAction = "firefox -new-window"                          }

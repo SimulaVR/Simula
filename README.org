@@ -87,13 +87,18 @@ Windows become "active" once you look at them. Active windows receive typing eve
 | ~Super + Apostrophe~     | Send window cursor to gaze point (hold down to make cursor follow gaze)         |
 | ~Super + Enter~          | Left click surface cursor at gaze point                                         |
 | ~Super + Alt~            | Grab surface for movement (release to let go)                                   |
-| ~Super + a~              | Launch Simula's app launcher ([[https://ulauncher.io/][ulauncher]])   |
+| ~Super + a~              | Launch Simula's app launcher ([[https://ulauncher.io/][ulauncher]])             |
 | ~Super + e~              | Cycle Simula's background environment                                           |
 | ~Super + f~              | Orient window towards user gaze                                                 |
 | ~Super + 9~              | Scale window to smaller size                                                    |
 | ~Super + 0~              | Scale window to larger size                                                     |
 | ~Super + -~              | Increase window resolution ("zoom out")                                         |
 | ~Super + =~              | Increase window resolution ("zoom in")                                          |
+| ~Super + <right>~        | Extend window horizontally                                                      |
+| ~Super + <left>~         | Contract window horizontally                                                    |
+| ~Super + <down>~         | Extend window vertically                                                        |
+| ~Super + <up>~           | Contract window vertically                                                      |
+| ~Super + s~              | Resize window to take square dimensions                                         |
 | ~Super + Comma~          | Move window towards you                                                         |
 | ~Super + Period~         | Move window away from you                                                       |
 | ~Super + Backspace~      | Kill surface being looked at                                                    |

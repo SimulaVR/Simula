@@ -95,6 +95,11 @@ getKeyboardAction gss keyboardShortcut =
     "pullWindow" -> pullWindow
     "scaleWindowDown" -> scaleWindowDown
     "scaleWindowUp" -> scaleWindowUp
+    "shortenWindowHorizontally" -> horizontalContract
+    "enlargeWindowHorizontally" -> horizontalExtend
+    "shortenWindowVertically" -> verticalContract
+    "enlargeWindowVertically" -> verticalExtend
+    "squareWindow" -> squareWindow
     "zoomOut" -> zoomOut
     "zoomIn" -> zoomIn
     "terminateWindow" -> terminateWindow
@@ -102,6 +107,7 @@ getKeyboardAction gss keyboardShortcut =
     "terminateSimula" -> terminateSimula
     "cycleEnvironment" -> cycleEnvironment gss
     "launchAppLauncher" -> shellLaunch gss "./result/bin/ulauncher"
+    "textToSpeech" -> textToSpeech gss
     _ -> shellLaunch gss (keyboardShortcut ^. keyAction)
 
   where moveCursor :: SpriteLocation -> Bool -> IO ()
@@ -141,6 +147,23 @@ getKeyboardAction gss keyboardShortcut =
           let args = tail (words shellCmd)
           appLaunch gss rootCmd args
         shellLaunch _ _ _ _ = return ()
+
+        textToSpeech :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
+        textToSpeech gss _ True = do
+          let originalEnv = (gss ^. gssOriginalEnv)
+          maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
+          case maybeXwaylandDisplay of
+            Nothing -> putStrLn "No DISPLAY found!"
+            (Just xwaylandDisplay) -> do
+              let envMap = M.fromList originalEnv
+              let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
+              let envListWithDisplay = M.toList envMapWithDisplay
+
+              (_, output', _) <- B.readCreateProcessWithExitCode ((shell "./result/bin/xsel -p") { env = Just envListWithDisplay, new_session = True }) ""
+              let output = (B.unpack output')
+              createProcess (proc "./result/bin/mimic" ["-pw", "--setf", "duration_stretch=0.68", "-t", output]) { env = Just envListWithDisplay, new_session = True } :: IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+              return ()
+        textToSpeech _ _ _ = return ()
   
         launchXpra' :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
         launchXpra' gss _ True = do
@@ -186,13 +209,38 @@ getKeyboardAction gss keyboardShortcut =
   
         zoomOut :: SpriteLocation -> Bool -> IO ()
         zoomOut (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          resizeGSVS gsvs 50
+          resizeGSVS gsvs Zoom 0.95
         zoomOut _ _ = return ()
 
         zoomIn :: SpriteLocation -> Bool -> IO ()
         zoomIn (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          resizeGSVS gsvs (-50)
+          resizeGSVS gsvs Zoom 1.05
         zoomIn _ _ = return ()
+
+        horizontalContract :: SpriteLocation -> Bool -> IO ()
+        horizontalContract (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+          resizeGSVS gsvs Horizontal 0.95
+        horizontalContract _ _ = return ()
+
+        horizontalExtend :: SpriteLocation -> Bool -> IO ()
+        horizontalExtend (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+          resizeGSVS gsvs Horizontal 1.05
+        horizontalExtend _ _ = return ()
+
+        verticalContract :: SpriteLocation -> Bool -> IO ()
+        verticalContract (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+          resizeGSVS gsvs Vertical 0.95
+        verticalContract _ _ = return ()
+
+        verticalExtend :: SpriteLocation -> Bool -> IO ()
+        verticalExtend (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+          resizeGSVS gsvs Vertical 1.05
+        verticalExtend _ _ = return ()
+
+        squareWindow :: SpriteLocation -> Bool -> IO ()
+        squareWindow (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+          squareGSVS gsvs
+        squareWindow _ _ = return ()
 
         reloadConfig :: SpriteLocation -> Bool -> IO ()
         reloadConfig _ True = do

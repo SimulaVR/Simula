@@ -83,6 +83,9 @@ data SurfaceLocalCoordinates    = SurfaceLocalCoordinates (Float, Float)
 data SubSurfaceLocalCoordinates = SubSurfaceLocalCoordinates (Float, Float)
 data SpriteDimensions      = SpriteDimensions (Int, Int)
 
+data ResizeMethod = Zoom | Horizontal | Vertical
+
+
 -- This should ideally be `[Variant 'HaskellTy]`, but that would
 -- require `AsVariant` to handle both `LibType`s.
 type instance TypeOf 'HaskellTy GodotArray = [GodotVariant]
@@ -116,7 +119,7 @@ data StartingApps = StartingApps {
 
 data Configuration = Configuration {
   _startingApps :: StartingApps
-, _defaultWindowResolution :: (Natural, Natural)
+, _defaultWindowResolution :: Maybe (Natural, Natural)
 , _defaultWindowScale :: Double
 , _keyBindings :: [KeyboardShortcut]
 , _keyRemappings :: [KeyboardRemapping]
@@ -192,7 +195,7 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsCanvasBase        :: TVar CanvasBase
   , _gsvsSurfaceMap        :: TVar (OMap GodotWlrSurface CanvasSurface)
   , _gsvsCursorCoordinates :: TVar SurfaceLocalCoordinates
-  , _gsvsTargetSize        :: TVar SpriteDimensions
+  , _gsvsTargetSize        :: TVar (Maybe SpriteDimensions)
   -- , _gsvsMapped         :: TVar Bool
   -- , gsvsGeometry        :: GodotRect2
   -- , gsvsWlrSeat         :: GodotWlrSeat
@@ -727,6 +730,8 @@ savePng cs surfaceTexture wlrSurface = do
 -- :2)
 appLaunch :: GodotSimulaServer -> String -> [String] -> IO ()
 appLaunch gss appStr args = do
+  -- logStr $ appStr ++ (show args)
+
   -- We shouldn't need to set WAYLAND_DISPLAY, but do need to set Xwayland DISPLAY
   let originalEnv = (gss ^. gssOriginalEnv)
   maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
@@ -765,6 +770,7 @@ appLaunch gss appStr args = do
       -- let envMapWithDisplay = M.insert "DISPLAY" ":13" envMap
       let envListWithDisplay = M.toList envMapWithDisplay
       res <- try $ createProcess (proc appStr args) { env = Just envListWithDisplay, new_session = True, std_out = NoStream, std_err = NoStream } :: IO (Either IOException (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle))
+      -- res <- try $ createProcess (proc appStr args) { env = Just envListWithDisplay, new_session = True } :: IO (Either IOException (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle))
       case res of
         Left _ -> putStrLn $ "Cannot find command: " ++ appStr
         Right _ -> return ()
@@ -867,3 +873,43 @@ cycleGSSEnvironment gss = do
         next (Just e) l@(x:_) = Just $ case Data.List.dropWhile (/= e) l of
                                   (_:y:_) -> y
                                   _       -> x
+
+resizeGSVS :: GodotSimulaViewSprite -> ResizeMethod -> Float -> IO ()
+resizeGSVS gsvs resizeMethod factor =
+  do maybeOldTargetDims <- readTVarIO (gsvs ^. gsvsTargetSize)
+     oldTargetDims@(SpriteDimensions (w, h)) <- case maybeOldTargetDims of
+       Just oldTargetDims' -> return oldTargetDims'
+       Nothing -> do simulaView <- readTVarIO (gsvs ^. gsvsView)
+                     let eitherSurface = (simulaView ^. svWlrEitherSurface)
+                     wlrSurface <- getWlrSurface eitherSurface
+                     (x, y) <- getBufferDimensions wlrSurface
+                     return $ SpriteDimensions (x, y)
+
+     newTargetDims@(SpriteDimensions (wTarget, hTarget)) <- case resizeMethod of
+            Horizontal -> do
+              V3 (1 * factor) 1 1 & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
+              return $ SpriteDimensions (round $ ((fromIntegral w) * factor), round $ ((fromIntegral h)))
+            Vertical   -> do
+              V3 1 (1 * factor) 1 & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
+              return $ SpriteDimensions (round $ ((fromIntegral w)), round $ ((fromIntegral h) * factor))
+            Zoom       -> do
+              return $ SpriteDimensions (round $ ((fromIntegral w) * factor), round $ ((fromIntegral h) * factor))
+
+     atomically $ writeTVar (gsvs ^. gsvsTargetSize) (Just newTargetDims)
+
+squareGSVS :: GodotSimulaViewSprite -> IO ()
+squareGSVS gsvs =
+  do maybeOldTargetDims <- readTVarIO (gsvs ^. gsvsTargetSize)
+     oldTargetDims@(SpriteDimensions (w, h)) <- case maybeOldTargetDims of
+       Just oldTargetDims' -> return oldTargetDims'
+       Nothing -> do simulaView <- readTVarIO (gsvs ^. gsvsView)
+                     let eitherSurface = (simulaView ^. svWlrEitherSurface)
+                     wlrSurface <- getWlrSurface eitherSurface
+                     (x, y) <- getBufferDimensions wlrSurface
+                     return $ SpriteDimensions (x, y)
+
+     case (h > w) of
+          True -> do
+            resizeGSVS gsvs Horizontal ((fromIntegral h) / (fromIntegral w))
+          False -> do
+            resizeGSVS gsvs Vertical ((fromIntegral w) / (fromIntegral h))

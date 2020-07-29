@@ -69,7 +69,7 @@ instance NativeScript GodotSimulaViewSprite where
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
-                      <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
+                      <*> atomically (newTVar Nothing)
                       <*> atomically (newTVar [])
                       -- <*> atomically (newTVar False)
   -- classExtends = "RigidBody"
@@ -93,24 +93,27 @@ instance NativeScript GodotSimulaViewSprite where
 -- | Intended to be called every frame.
 updateSimulaViewSprite :: GodotSimulaViewSprite -> IO ()
 updateSimulaViewSprite gsvs = do
-  adjustTargetDimensions gsvs
+  setTargetDimensions gsvs
   applyViewportBaseTexture gsvs
-  setExtents gsvs
+  setBoxShapeExtentsToMatchAABB gsvs
 
   (isStartingApp, startingPositionIndex) <- (readTVarIO (gsvs ^. gsvsShouldMove))
-
   case isStartingApp of
     False -> return ()
     True -> do
       whenM (spriteShouldMove gsvs) $ do
           atomically $ writeTVar (_gsvsShouldMove gsvs) (False, 0)
-          moveToUnoccupied gsvs startingPositionIndex
+          moveToStartingPosition gsvs startingPositionIndex
 
-  where setExtents :: GodotSimulaViewSprite -> IO ()
-        setExtents gsvs = do
-          simulaView <- readTVarIO (gsvs ^. gsvsView)
-          let eitherSurface = simulaView ^. svWlrEitherSurface
-          -- Get state
+  -- sprite3D <- readTVarIO (gsvs ^. gsvsSprite)
+  -- opacityFloat <- G.get_opacity sprite3D
+  -- G.set_opacity sprite3D 0.5
+  -- putStrLn $ "GSVS opacity: " ++ (show opacityFloat)
+
+
+  where -- Necessary for window manipulation to function
+        setBoxShapeExtentsToMatchAABB :: GodotSimulaViewSprite -> IO ()
+        setBoxShapeExtentsToMatchAABB gsvs = do
           sprite <- atomically $ readTVar (_gsvsSprite gsvs)
           aabb <- G.get_aabb sprite
           size <- godot_aabb_get_size aabb
@@ -119,11 +122,9 @@ updateSimulaViewSprite gsvs = do
           -- Compute new extents
           size' <- godot_vector3_operator_divide_scalar size 2
           (V3 x y z)  <- fromLowLevel size'
-          -- size2d  <- toLowLevel (V2 x y) :: IO GodotVector2
-          -- size2d' <- toLowLevel (V2 500 500) :: IO GodotVector2
-          --G.set_size wlrXWaylandSurface size2d'
 
-          -- Set extents
+          -- Set the box's "half extents"; in order to set the extents to `e`, you must `set_extents e/2`.
+          -- https://docs.godotengine.org/en/stable/classes/class_boxshape.html
           G.set_extents shape size'
 
 spriteShouldMove :: GodotSimulaViewSprite -> IO Bool
@@ -136,8 +137,8 @@ spriteShouldMove gsvs = do
                            return (vsize > 0) -- The first frame or so, the sprite has vsize 0
                    else return False
 
-moveToUnoccupied :: GodotSimulaViewSprite -> Int -> IO ()
-moveToUnoccupied gsvs appPositionIndex = do
+moveToStartingPosition :: GodotSimulaViewSprite -> Int -> IO ()
+moveToStartingPosition gsvs appPositionIndex = do
   gss <- readTVarIO (gsvs ^. gsvsServer)
   sprite <- atomically $ readTVar (gsvs ^. gsvsSprite)
   aabb   <- G.get_aabb sprite
@@ -183,41 +184,44 @@ moveToUnoccupied gsvs appPositionIndex = do
                      Nothing -> focus gsvs
                      Just secondApp' -> appStrLaunch gss secondApp'
 
--- Adjust gsvs wlr_surface dimensions *and* render target dimensions to the
--- gsvsTargetSize every frame.
-adjustTargetDimensions :: GodotSimulaViewSprite -> IO ()
-adjustTargetDimensions gsvs = do
-  targetDims@(SpriteDimensions (w, h)) <- readTVarIO (gsvs ^. gsvsTargetSize)
-
+-- Sets gsvs wlr_xwayland_surface size and all associated viewports to the
+-- gsvsTargetSize every frame
+setTargetDimensions :: GodotSimulaViewSprite -> IO ()
+setTargetDimensions gsvs = do
   cb <- readTVarIO (gsvs ^. gsvsCanvasBase)
   renderTargetBase <- readTVarIO (cb ^. cbViewport)
-
   surfaceMap <- readTVarIO (gsvs ^. gsvsSurfaceMap)
   let surfaces = MO.assocs surfaceMap
   let css = fmap snd surfaces
   csViewports <- mapM (\cs -> readTVarIO (cs ^. csViewport)) css
-
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
   wlrSurface <- getWlrSurface eitherSurface
-  dimensions@(originalWidth, originalHeight) <- getBufferDimensions wlrSurface
+
+  -- Get state
+  originalDims@(originalWidth, originalHeight) <- getBufferDimensions wlrSurface
+  maybeTargetDims <- readTVarIO (gsvs ^. gsvsTargetSize)
+  targetDims@(SpriteDimensions (targetWidth, targetHeight)) <- case maybeTargetDims of
+        Nothing -> do
+          -- atomically $ writeTVar (gsvs ^. gsvsTargetSize) (Just (SpriteDimensions originalDims))
+          return (SpriteDimensions originalDims)
+        Just targetDims' -> return targetDims'
 
   -- Try to avoid forcing small popups to be large squares.
-  let d'@(w',h') = if (originalWidth > 450 || originalHeight > 450)
-        then (w,h)
+  let settledDimensions@(settledWidth, settledHeight) = if (originalWidth > 450 || originalHeight > 450)
+        then (targetWidth, targetHeight)
         else (originalWidth, originalHeight)
 
-  v <- toLowLevel (V2 (fromIntegral w') (fromIntegral h'))
+  settledDimensions' <- toLowLevel (V2 (fromIntegral settledWidth) (fromIntegral settledHeight))
 
   -- Set buffer dimensions to new target size
   case eitherSurface of
     Left wlrXdgSurface -> return () -- TODO: Fix xdg functionality
-    Right wlrXWaylandSurface -> do G.set_size wlrXWaylandSurface v
+    Right wlrXWaylandSurface -> do G.set_size wlrXWaylandSurface settledDimensions'
 
-  -- Set our corresponding render target to match our new target size
-  pixelDimensionsOfWlrSurface <- toGodotVector2 d'
-  G.set_size renderTargetBase pixelDimensionsOfWlrSurface
-  mapM (\renderTargetSurface -> G.set_size renderTargetSurface pixelDimensionsOfWlrSurface) csViewports
+  -- Set the corresponding Viewports to match our new target size
+  G.set_size renderTargetBase settledDimensions'
+  mapM (\renderTargetSurface -> G.set_size renderTargetSurface settledDimensions') csViewports
   return ()
 
 ready :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
@@ -283,10 +287,13 @@ newGodotSimulaViewSprite gss simulaView = do
   -- Set config settings
   keyboardShortcuts <- readTVarIO (gss ^. gssKeyboardShortcuts)
   configuration <- readTVarIO (gss ^. gssConfiguration)
-  let windowResolution'@(x, y) = (configuration ^. defaultWindowResolution) :: (Dhall.Natural, Dhall.Natural)
   let windowScale = realToFrac (configuration ^. defaultWindowScale) :: Float
   (V3 1 1 1 ^* (windowScale)) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
-  atomically $ writeTVar (gsvs ^. gsvsTargetSize) (SpriteDimensions (fromIntegral x, fromIntegral y))
+
+  let maybeWindowResolution = (configuration ^. defaultWindowResolution) :: Maybe (Dhall.Natural, Dhall.Natural)
+  case maybeWindowResolution of
+    Just windowResolution'@(x, y) -> atomically $ writeTVar (gsvs ^. gsvsTargetSize) (Just (SpriteDimensions (fromIntegral x, fromIntegral y)))
+    Nothing -> return ()
 
   G.set_process gsvs False
 
@@ -595,15 +602,6 @@ setInFrontOfUser gsvs zAxisDist = do
   G.translate_object_local gsvs pushBackVector
   G.rotate_object_local gsvs rotationAxisY 3.14159 -- 180 degrees in radians
   G.scale_object_local (safeCast gsvs :: GodotSpatial) gsvsScale
-
--- We only pass one Int right now since we are augmenting by (n, n) for some (n, n)
--- ∈ (ℤ x ℤ), relying on the assumption that gsvs are forced to be squares
--- right now.
-resizeGSVS :: GodotSimulaViewSprite -> Int -> IO ()
-resizeGSVS gsvs boost = do
-  oldTargetDims@(SpriteDimensions (w, h)) <- readTVarIO (gsvs ^. gsvsTargetSize)
-  let newTargetDims = SpriteDimensions ((w + boost), (h + boost))
-  atomically $ writeTVar (gsvs ^. gsvsTargetSize) newTargetDims
 
 safeSetActivated :: GodotSimulaViewSprite -> Bool -> IO ()
 safeSetActivated gsvs active = do
