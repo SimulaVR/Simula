@@ -874,6 +874,20 @@ cycleGSSEnvironment gss = do
                                   (_:y:_) -> y
                                   _       -> x
 
+orientSpriteTowardsGaze :: GodotSimulaViewSprite -> IO ()
+orientSpriteTowardsGaze gsvs = do
+  gss <- readTVarIO (gsvs ^. gsvsServer)
+  isInSceneGraph <- G.is_a_parent_of ((safeCast gss) :: GodotNode ) ((safeCast gsvs) :: GodotNode)
+  case isInSceneGraph of
+    False -> putStrLn "Nothing to orient!"
+    True -> do gss <- readTVarIO (gsvs ^. gsvsServer)
+               upV3 <- toLowLevel (V3 0 1 0) :: IO GodotVector3
+               rotationAxisY <- toLowLevel (V3 0 1 0) :: IO GodotVector3
+               targetV3 <- getARVRCameraOrPancakeCameraTransform gss >>= Api.godot_transform_get_origin -- void look_at ( Vector3 target, Vector3 up )
+               G.look_at gsvs targetV3 upV3                      -- The negative z-axis of the gsvs looks at HMD
+               return ()
+               -- G.rotate_object_local gsvs rotationAxisY 3.14159  -- The positive z-axis of the gsvs looks at HMD
+
 resizeGSVS :: GodotSimulaViewSprite -> ResizeMethod -> Float -> IO ()
 resizeGSVS gsvs resizeMethod factor =
   do maybeOldTargetDims <- readTVarIO (gsvs ^. gsvsTargetSize)
@@ -887,13 +901,15 @@ resizeGSVS gsvs resizeMethod factor =
 
      newTargetDims@(SpriteDimensions (wTarget, hTarget)) <- case resizeMethod of
             Horizontal -> do
-              case (((fromIntegral w) * factor) > 450) of
-                True -> do V3 (1 * factor) 1 1 & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
+              case (((fromIntegral w) * factor) > 500) of
+                True -> do orientSpriteTowardsGaze gsvs
+                           V3 (1 * factor) 1 1 & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
                            return $ SpriteDimensions (round $ ((fromIntegral w) * factor), round $ ((fromIntegral h)))
                 False -> return $ oldTargetDims
             Vertical   -> do
-              case (((fromIntegral h) * factor) > 450) of
-                True -> do V3 1 (1 * factor) 1 & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
+              case (((fromIntegral h) * factor) > 500) of
+                True -> do orientSpriteTowardsGaze gsvs
+                           V3 1 (1 * factor) 1 & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
                            return $ SpriteDimensions (round $ ((fromIntegral w)), round $ ((fromIntegral h) * factor))
                 False -> return $ oldTargetDims
             Zoom       -> do

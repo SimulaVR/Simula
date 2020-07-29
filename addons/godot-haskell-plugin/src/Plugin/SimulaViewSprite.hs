@@ -541,21 +541,6 @@ _handle_destroy gsvs [gsvsGV] = do
         (Left xdgSurface) -> destroyMaybe (safeCast xdgSurface)
         (Right xwaylandSurface) -> destroyMaybe (safeCast xwaylandSurface)
 
-orientSpriteTowardsGaze :: GodotSimulaViewSprite -> IO ()
-orientSpriteTowardsGaze gsvs = do
-  gss <- readTVarIO (gsvs ^. gsvsServer)
-  isInSceneGraph <- G.is_a_parent_of ((safeCast gss) :: GodotNode ) ((safeCast gsvs) :: GodotNode)
-  case isInSceneGraph of
-    False -> putStrLn "Nothing to orient!"
-    True -> do gss <- readTVarIO (gsvs ^. gsvsServer)
-               upV3 <- toLowLevel (V3 0 1 0) :: IO GodotVector3
-               rotationAxisY <- toLowLevel (V3 0 1 0) :: IO GodotVector3
-               targetV3 <- getARVRCameraOrPancakeCameraTransform gss >>= Api.godot_transform_get_origin -- void look_at ( Vector3 target, Vector3 up )
-               G.look_at gsvs targetV3 upV3                      -- The negative z-axis of the gsvs looks at HMD
-               return ()
-               -- G.rotate_object_local gsvs rotationAxisY 3.14159  -- The positive z-axis of the gsvs looks at HMD
-
-  
 -- | Push the gsvs by `dist` units along its object-local z-axis. Negative values of `dist`
 -- | push the gsvs away from the user; positive values of `dist` push the gsvs
 -- | towards the user.

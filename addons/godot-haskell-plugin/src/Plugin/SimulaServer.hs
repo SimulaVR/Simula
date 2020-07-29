@@ -219,25 +219,21 @@ getKeyboardAction gss keyboardShortcut =
 
         horizontalContract :: SpriteLocation -> Bool -> IO ()
         horizontalContract (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          orientSpriteTowardsGaze gsvs
           resizeGSVS gsvs Horizontal 0.95
         horizontalContract _ _ = return ()
 
         horizontalExtend :: SpriteLocation -> Bool -> IO ()
         horizontalExtend (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          orientSpriteTowardsGaze gsvs
           resizeGSVS gsvs Horizontal 1.05
         horizontalExtend _ _ = return ()
 
         verticalContract :: SpriteLocation -> Bool -> IO ()
         verticalContract (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          orientSpriteTowardsGaze gsvs
           resizeGSVS gsvs Vertical 0.95
         verticalContract _ _ = return ()
 
         verticalExtend :: SpriteLocation -> Bool -> IO ()
         verticalExtend (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          orientSpriteTowardsGaze gsvs
           resizeGSVS gsvs Vertical 1.05
         verticalExtend _ _ = return ()
 
