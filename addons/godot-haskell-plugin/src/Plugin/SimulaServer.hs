@@ -89,7 +89,7 @@ getKeyboardAction gss keyboardShortcut =
     "launchXrpa" -> launchXpra' gss
     "toggleGrabMode" -> toggleGrabMode'
     "launchHMDWebCam" -> launchHMDWebCam' gss
-    "orientSpriteTowardsGaze" -> orientSpriteTowardsGaze'
+    "orientWindowTowardsGaze" -> orientWindowTowardsGaze
     "grabWindow" -> grabWindow
     "pushWindow" -> pushWindow
     "pullWindow" -> pullWindow
@@ -182,10 +182,10 @@ getKeyboardAction gss keyboardShortcut =
           launchHMDWebCam gss
         launchHMDWebCam' _ _ _ = return ()
   
-        orientSpriteTowardsGaze' :: SpriteLocation -> Bool -> IO ()
-        orientSpriteTowardsGaze' (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        orientWindowTowardsGaze :: SpriteLocation -> Bool -> IO ()
+        orientWindowTowardsGaze (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
          orientSpriteTowardsGaze gsvs
-        orientSpriteTowardsGaze' _ _ = return ()
+        orientWindowTowardsGaze _ _ = return ()
   
         pushWindow :: SpriteLocation -> Bool -> IO ()
         pushWindow (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do

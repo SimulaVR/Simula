@@ -31,7 +31,7 @@ let Configuration =
                               , { _keyCombination = ["KEY_MASK_META", "KEY_ALT_L"]                     , _keyAction = "grabWindow"                 }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_A"]                         , _keyAction = "launchAppLauncher"          }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_E"]                         , _keyAction = "cycleEnvironment"           }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_F"]                         , _keyAction = "orientSpriteTowardsGaze"    }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_F"]                         , _keyAction = "orientWindowTowardsGaze"    }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_9"]                         , _keyAction = "scaleWindowDown"            }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_0"]                         , _keyAction = "scaleWindowUp"              }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_MINUS"]                     , _keyAction = "zoomOut"                    }

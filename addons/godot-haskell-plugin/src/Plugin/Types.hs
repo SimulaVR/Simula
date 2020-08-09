@@ -12,6 +12,9 @@
 
 module Plugin.Types where
 
+import           Linear.Matrix
+import           Linear.V3
+
 import           Data.Maybe
 import           Control.Concurrent
 import           Control.Monad
@@ -184,23 +187,18 @@ instance HasBaseClass GodotSimulaServer where
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
--- Wish there was a more elegant way to jam values into these fields at classInit
 data GodotSimulaViewSprite = GodotSimulaViewSprite
   { _gsvsObj               :: GodotObject
-  , _gsvsServer            :: TVar GodotSimulaServer    -- Contains the WlrSeat
+  , _gsvsServer            :: TVar GodotSimulaServer
   , _gsvsShouldMove        :: TVar (Bool, Int)
-  , _gsvsSprite            :: TVar GodotSprite3D
+  , _gsvsMeshInstance      :: TVar GodotMeshInstance
   , _gsvsShape             :: TVar GodotBoxShape
-  , _gsvsView              :: TVar SimulaView -- Contains Wlr data
+  , _gsvsView              :: TVar SimulaView
   , _gsvsCanvasBase        :: TVar CanvasBase
   , _gsvsSurfaceMap        :: TVar (OMap GodotWlrSurface CanvasSurface)
   , _gsvsCursorCoordinates :: TVar SurfaceLocalCoordinates
   , _gsvsTargetSize        :: TVar (Maybe SpriteDimensions)
-  -- , _gsvsMapped         :: TVar Bool
-  -- , gsvsGeometry        :: GodotRect2
-  -- , gsvsWlrSeat         :: GodotWlrSeat
-  -- , gsvsInputMode       :: TVar InteractiveMode
-  , _gsvsFreeChildren :: TVar [CanvasSurface]
+  , _gsvsFreeChildren      :: TVar [CanvasSurface]
   }
 
 instance HasBaseClass GodotSimulaViewSprite where
@@ -493,12 +491,17 @@ getSingleton constr name = do
 
 isClass :: GodotObject :< a => a -> Text -> IO Bool
 isClass obj clsName = do
-  objClass <- G.get_class (GodotNode $ safeCast obj) >>= fromLowLevel
-  let clsName' =
+  objClass' <- G.get_class (GodotNode $ safeCast obj)
+  objClass <- fromLowLevel objClass'
+  let clsNameSanitized =
         if objClass /= "" && Data.Text.head objClass == '_'
         then "_" `Data.Text.append` clsName
         else clsName
-  ((toLowLevel clsName') :: IO GodotString) >>= G.is_class ((safeCast obj) :: GodotObject)
+  clsNameSanitized' <- ((toLowLevel clsNameSanitized) :: IO GodotString)
+  ret <- G.is_class ((safeCast obj) :: GodotObject) clsNameSanitized'
+  Api.godot_string_destroy objClass'
+  Api.godot_string_destroy clsNameSanitized'
+  return ret
 
 -- Leaks
 getEngine :: IO Godot_Engine
@@ -541,21 +544,20 @@ destroyMaybe ref =
 getSurfaceLocalCoordinates :: GodotSimulaViewSprite -> GodotVector3 -> IO (SurfaceLocalCoordinates)
 getSurfaceLocalCoordinates gsvs clickPos = do
   lpos <- G.to_local gsvs clickPos >>= fromLowLevel
-  sprite <- atomically $ readTVar (_gsvsSprite gsvs)
-  aabb <- G.get_aabb sprite
-  size <- godot_aabb_get_size aabb >>= fromLowLevel
+  meshInstance <- atomically $ readTVar (_gsvsMeshInstance gsvs)
+  aabb <- G.get_aabb meshInstance
+  quadMesh <- getQuadMesh gsvs
+  aabbSize <- godot_aabb_get_size aabb >>= fromLowLevel
+  quadMeshSize <- G.get_size quadMesh >>= fromLowLevel
+
   let topleftPos =
-        V2 (size ^. _x / 2 - lpos ^. _x) (size ^. _y / 2 - lpos ^. _y)
-  let scaledPos = liftI2 (/) topleftPos (size ^. _xy)
-  rect <- G.get_item_rect sprite
-  recSize <- godot_rect2_get_size rect >>= fromLowLevel
-  let coords = liftI2 (*) recSize scaledPos
+        V2 (aabbSize ^. _x / 2 - lpos ^. _x) (aabbSize ^. _y / 2 - lpos ^. _y)
+  let scaledPos = liftI2 (/) topleftPos (aabbSize ^. _xy)
+  let coords = liftI2 (*) quadMeshSize scaledPos
   -- coords = surface coordinates in pixel with (0,0) at top left
   let sx = fromIntegral $ truncate (1 * coords ^. _x) -- 256 was old factor
       sy = fromIntegral $ truncate (1 * coords ^. _y) -- 256 was old factor
   clickPos' <- fromLowLevel clickPos
-  -- putStrLn $ "getSurfaceLocalCoordinates clickPos: " ++ (show clickPos')
-  -- putStrLn $ "getSurfaceLocalCoordinates (sx, sy):" ++ "(" ++ (show sx) ++ ", " ++ (show sy) ++ ")"
   return (SurfaceLocalCoordinates (sx, sy))
 
 getARVRCameraOrPancakeCameraTransform :: GodotSimulaServer -> IO GodotTransform
@@ -712,7 +714,6 @@ savePng cs surfaceTexture wlrSurface = do
                 surfaceTextureAsImage <- G.texture_get_data visualServer textureRID 0
 
                 -- Get file path
-                sprite3D <- readTVarIO (gsvs ^. gsvsSprite)
                 frame <- readTVarIO (cs ^. csFrameCounter)
                 atomically $ writeTVar (cs ^. csFrameCounter) (frame + 1)
                 let pathStr = "./png/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
@@ -903,13 +904,11 @@ resizeGSVS gsvs resizeMethod factor =
             Horizontal -> do
               case (((fromIntegral w) * factor) > 500) of
                 True -> do orientSpriteTowardsGaze gsvs
-                           V3 (1 * factor) 1 1 & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
                            return $ SpriteDimensions (round $ ((fromIntegral w) * factor), round $ ((fromIntegral h)))
                 False -> return $ oldTargetDims
             Vertical   -> do
               case (((fromIntegral h) * factor) > 500) of
                 True -> do orientSpriteTowardsGaze gsvs
-                           V3 1 (1 * factor) 1 & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
                            return $ SpriteDimensions (round $ ((fromIntegral w)), round $ ((fromIntegral h) * factor))
                 False -> return $ oldTargetDims
             Zoom       -> do
@@ -929,14 +928,10 @@ defaultSizeGSVS gsvs = do
                                                        Just windowResolution'@(x, y) ->  SpriteDimensions (fromIntegral x, fromIntegral y)
                                                        Nothing -> SpriteDimensions (900, 900)
 
-    maybeOldTargetDims <- readTVarIO (gsvs ^. gsvsTargetSize)
-    oldTargetDims@(SpriteDimensions (w, h)) <- case maybeOldTargetDims of
-      Just oldTargetDims' -> return oldTargetDims'
-      Nothing -> do simulaView <- readTVarIO (gsvs ^. gsvsView)
-                    let eitherSurface = (simulaView ^. svWlrEitherSurface)
-                    wlrSurface <- getWlrSurface eitherSurface
-                    (x, y) <- getBufferDimensions wlrSurface
-                    return $ SpriteDimensions (x, y)
+    atomically $ writeTVar (gsvs ^. gsvsTargetSize) (Just newTargetDims)
 
-    resizeGSVS gsvs Horizontal ((fromIntegral x) / (fromIntegral w))
-    resizeGSVS gsvs Vertical ((fromIntegral y) / (fromIntegral h))
+getQuadMesh :: GodotSimulaViewSprite -> IO GodotQuadMesh
+getQuadMesh gsvs = do
+  meshInstance <- readTVarIO (gsvs ^. gsvsMeshInstance)
+  quadMesh <- G.get_mesh meshInstance >>= asClass' GodotQuadMesh "QuadMesh"
+  return quadMesh

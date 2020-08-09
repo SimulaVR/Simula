@@ -9,6 +9,7 @@
 
 module Plugin.SimulaViewSprite where
 
+import Data.Text
 import Control.Exception
 import Data.Proxy
 
@@ -101,7 +102,7 @@ updateSimulaViewSprite gsvs = do
   case isStartingApp of
     False -> return ()
     True -> do
-      whenM (spriteShouldMove gsvs) $ do
+      whenM (spriteReadyToMove gsvs) $ do
           atomically $ writeTVar (_gsvsShouldMove gsvs) (False, 0)
           moveToStartingPosition gsvs startingPositionIndex
 
@@ -114,8 +115,8 @@ updateSimulaViewSprite gsvs = do
   where -- Necessary for window manipulation to function
         setBoxShapeExtentsToMatchAABB :: GodotSimulaViewSprite -> IO ()
         setBoxShapeExtentsToMatchAABB gsvs = do
-          sprite <- atomically $ readTVar (_gsvsSprite gsvs)
-          aabb <- G.get_aabb sprite
+          meshInstance <- atomically $ readTVar (_gsvsMeshInstance gsvs)
+          aabb <- G.get_aabb meshInstance
           size <- godot_aabb_get_size aabb
           shape <- atomically $ readTVar (_gsvsShape gsvs)
 
@@ -127,11 +128,11 @@ updateSimulaViewSprite gsvs = do
           -- https://docs.godotengine.org/en/stable/classes/class_boxshape.html
           G.set_extents shape size'
 
-spriteShouldMove :: GodotSimulaViewSprite -> IO Bool
-spriteShouldMove gsvs = do
+spriteReadyToMove :: GodotSimulaViewSprite -> IO Bool
+spriteReadyToMove gsvs = do
   (isStartingApp, startingPositionIndex) <- atomically $ readTVar (_gsvsShouldMove gsvs)
-  if isStartingApp then do sprite <- atomically $ readTVar (_gsvsSprite gsvs)
-                           aabb <- G.get_aabb sprite
+  if isStartingApp then do meshInstance <- atomically $ readTVar (_gsvsMeshInstance gsvs)
+                           aabb <- G.get_aabb meshInstance
                            size <- godot_aabb_get_size aabb
                            vsize <- fromLowLevel size
                            return (vsize > 0) -- The first frame or so, the sprite has vsize 0
@@ -140,8 +141,8 @@ spriteShouldMove gsvs = do
 moveToStartingPosition :: GodotSimulaViewSprite -> Int -> IO ()
 moveToStartingPosition gsvs appPositionIndex = do
   gss <- readTVarIO (gsvs ^. gsvsServer)
-  sprite <- atomically $ readTVar (gsvs ^. gsvsSprite)
-  aabb   <- G.get_aabb sprite
+  meshInstance <- atomically $ readTVar (gsvs ^. gsvsMeshInstance)
+  aabb   <- G.get_aabb meshInstance
   size   <- Api.godot_aabb_get_size aabb >>= fromLowLevel
   let sizeX  = size ^. _x
   case ((appPositionIndex - 1), (appPositionIndex - 1) `mod` 4) of
@@ -212,7 +213,7 @@ setTargetDimensions gsvs = do
         then (targetWidth, targetHeight)
         else (originalWidth, originalHeight)
 
-  settledDimensions' <- toLowLevel (V2 (fromIntegral settledWidth) (fromIntegral settledHeight))
+  settledDimensions' <- toLowLevel $ (V2 (fromIntegral settledWidth) (fromIntegral settledHeight))
 
   -- Set buffer dimensions to new target size
   case eitherSurface of
@@ -222,6 +223,8 @@ setTargetDimensions gsvs = do
   -- Set the corresponding Viewports to match our new target size
   G.set_size renderTargetBase settledDimensions'
   mapM (\renderTargetSurface -> G.set_size renderTargetSurface settledDimensions') csViewports
+  quadMesh <- getQuadMesh gsvs
+  G.set_size quadMesh =<< (toLowLevel $ (V2 (0.001 * (fromIntegral settledWidth)) (0.001 * (fromIntegral settledHeight)))) -- QuadMesh need to be significantly scaled down to be normally sized in Godot
   return ()
 
 ready :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
@@ -256,8 +259,6 @@ processInputEvent gsvs ev clickPos = do
     processClickEvent gsvs (Button pressed button) clickPos
     return ()
 
--- | This function used in `_on_WlrXdgShell_new_surface` (where we have access
--- | to GodotSimulaServer + GodotWlrXdgSurface).
 newGodotSimulaViewSprite :: GodotSimulaServer -> SimulaView -> IO (GodotSimulaViewSprite)
 newGodotSimulaViewSprite gss simulaView = do
   gsvsObj <- "res://addons/godot-haskell-plugin/SimulaViewSprite.gdns"
@@ -265,23 +266,25 @@ newGodotSimulaViewSprite gss simulaView = do
   maybeGSVS <- asNativeScript gsvsObj :: IO (Maybe GodotSimulaViewSprite)
   let gsvs = Data.Maybe.fromJust maybeGSVS
 
-  godotSprite3D <- unsafeInstance GodotSprite3D "Sprite3D"
-  G.set_pixel_size godotSprite3D 0.001
-  G.add_child gsvs (safeCast godotSprite3D) True
+
+  meshInstance <- unsafeInstance GodotMeshInstance "MeshInstance"
+  quadMesh <- unsafeInstance GodotQuadMesh "QuadMesh"
+  G.set_mesh meshInstance (safeCast quadMesh)
+  G.add_child gsvs (safeCast meshInstance) True
 
   shm <- load GodotShaderMaterial "ShaderMaterial" "res://addons/godot-haskell-plugin/TextShader.tres"
   case shm of
-    Just shm -> G.set_material_override godotSprite3D (safeCast shm)
+    Just shm -> G.set_material ((safeCast quadMesh) :: GodotPrimitiveMesh) (safeCast shm)
     Nothing -> error "couldn't fetch shader, hard failing for debug purposes"
 
   godotBoxShape <- unsafeInstance GodotBoxShape "BoxShape"
   ownerId <- G.create_shape_owner gsvs (safeCast gsvs)
   G.shape_owner_add_shape gsvs ownerId (safeCast godotBoxShape)
 
-  atomically $ writeTVar (_gsvsServer    gsvs) gss           -- :: TVar GodotSimulaServer
-  atomically $ writeTVar (_gsvsSprite    gsvs) godotSprite3D -- :: TVar GodotSprite3D
-  atomically $ writeTVar (_gsvsShape     gsvs) godotBoxShape -- :: TVar GodotBoxShape
-  atomically $ writeTVar (_gsvsView      gsvs) simulaView    -- :: TVar SimulaView
+  atomically $ writeTVar (_gsvsServer            gsvs) gss
+  atomically $ writeTVar (_gsvsMeshInstance      gsvs) meshInstance
+  atomically $ writeTVar (_gsvsShape             gsvs) godotBoxShape
+  atomically $ writeTVar (_gsvsView              gsvs) simulaView
   atomically $ writeTVar (_gsvsCursorCoordinates gsvs) (SurfaceLocalCoordinates (0,0))
 
   -- Set config settings
@@ -292,8 +295,8 @@ newGodotSimulaViewSprite gss simulaView = do
 
   let maybeWindowResolution = (configuration ^. defaultWindowResolution) :: Maybe (Dhall.Natural, Dhall.Natural)
   case maybeWindowResolution of
-    Just windowResolution'@(x, y) -> atomically $ writeTVar (gsvs ^. gsvsTargetSize) (Just (SpriteDimensions (fromIntegral x, fromIntegral y)))
-    Nothing -> return ()
+    Just windowResolution'@(x, y) -> do atomically $ writeTVar (gsvs ^. gsvsTargetSize) (Just (SpriteDimensions (fromIntegral x, fromIntegral y)))
+    Nothing -> return () -- If we don't have a target size, we delay setting QuadMesh size until we're able to retrieve its buffer dimensions
 
   G.set_process gsvs False
 
@@ -321,8 +324,6 @@ focus gsvs = do
     Right wlrXWaylandSurface -> do wlrSurface  <- G.get_wlr_surface wlrXWaylandSurface
                                    case (((unsafeCoerce wlrXWaylandSurface) == nullPtr), ((unsafeCoerce wlrSurface) == nullPtr)) of
                                      (False, False) -> do G.reference wlrSurface
-                                                          return ()
-                                                          -- isGodotTypeNull wlrSurface
                                                           safeSetActivated gsvs True -- G.set_activated wlrXWaylandSurface True
                                                           G.keyboard_notify_enter wlrSeat wlrSurface
                                                           pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
@@ -581,11 +582,11 @@ setInFrontOfUser gsvs zAxisDist = do
   gsvsScale <- G.get_scale (safeCast gsvs :: GodotSpatial)
   gss <- readTVarIO (gsvs ^. gsvsServer)
   rotationAxisY <- toLowLevel (V3 0 1 0) :: IO GodotVector3
-  pushBackVector <- toLowLevel (V3 0 0 zAxisDist) :: IO GodotVector3 -- For some reason we also have to shift the vector 0.5 units to the right
+  pushBackVector <- toLowLevel (V3 0 0 zAxisDist) :: IO GodotVector3
   hmdGlobalTransform <- getARVRCameraOrPancakeCameraTransform gss
   G.set_global_transform gsvs hmdGlobalTransform
   G.translate_object_local gsvs pushBackVector
-  G.rotate_object_local gsvs rotationAxisY 3.14159 -- 180 degrees in radians
+  G.rotate_object_local gsvs rotationAxisY 3.14159
   G.scale_object_local (safeCast gsvs :: GodotSpatial) gsvsScale
 
 safeSetActivated :: GodotSimulaViewSprite -> Bool -> IO ()
@@ -614,14 +615,17 @@ applyViewportBaseTexture gsvs = do
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
   wlrSurface <- getWlrSurface eitherSurface
-  sprite3D <- readTVarIO (gsvs ^. gsvsSprite)
+  meshInstance <- readTVarIO (gsvs ^. gsvsMeshInstance)
+  quadMesh <- getQuadMesh gsvs
   cb <- readTVarIO (gsvs ^. gsvsCanvasBase)
   viewportBase <- readTVarIO (cb ^. cbViewport)
   viewportBaseTexture <- G.get_texture viewportBase
 
-  G.set_texture sprite3D (safeCast viewportBaseTexture)
+  shm <- G.get_material ((safeCast quadMesh) :: GodotPrimitiveMesh) >>= asClass' GodotShaderMaterial "ShaderMaterial" :: IO GodotShaderMaterial
 
-  return ()
+  viewportBaseTextureGV <- (toLowLevel (toVariant ((safeCast viewportBaseTexture) :: GodotObject))) :: IO GodotVariant
+  texture_albedo <- toLowLevel (pack "texture_albedo") :: IO GodotString
+  G.set_shader_param shm texture_albedo viewportBaseTextureGV
 
 handle_map_free_child :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_map_free_child gsvsInvisible [wlrXWaylandSurfaceVariant] = do
