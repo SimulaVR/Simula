@@ -272,9 +272,12 @@ newGodotSimulaViewSprite gss simulaView = do
   G.set_mesh meshInstance (safeCast quadMesh)
   G.add_child gsvs (safeCast meshInstance) True
 
-  shm <- load GodotShaderMaterial "ShaderMaterial" "res://addons/godot-haskell-plugin/TextShader.tres"
-  case shm of
-    Just shm -> G.set_material ((safeCast quadMesh) :: GodotPrimitiveMesh) (safeCast shm)
+  shader <- load GodotShader "Shader" "res://addons/godot-haskell-plugin/TextShader.tres"
+  case shader of
+    Just shader -> do
+      shm <- unsafeInstance GodotShaderMaterial "ShaderMaterial"
+      G.set_shader shm shader
+      G.set_material quadMesh (safeCast shm)
     Nothing -> error "couldn't fetch shader, hard failing for debug purposes"
 
   godotBoxShape <- unsafeInstance GodotBoxShape "BoxShape"
@@ -621,7 +624,7 @@ applyViewportBaseTexture gsvs = do
   viewportBase <- readTVarIO (cb ^. cbViewport)
   viewportBaseTexture <- G.get_texture viewportBase
 
-  shm <- G.get_material ((safeCast quadMesh) :: GodotPrimitiveMesh) >>= asClass' GodotShaderMaterial "ShaderMaterial" :: IO GodotShaderMaterial
+  shm <- G.get_material quadMesh >>= asClass' GodotShaderMaterial "ShaderMaterial" :: IO GodotShaderMaterial
 
   viewportBaseTextureGV <- (toLowLevel (toVariant ((safeCast viewportBaseTexture) :: GodotObject))) :: IO GodotVariant
   texture_albedo <- toLowLevel (pack "texture_albedo") :: IO GodotString

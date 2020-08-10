@@ -1,6 +1,6 @@
-[gd_resource type="ShaderMaterial" load_steps=2 format=2]
+[gd_resource type="Shader" format=2]
 
-[sub_resource type="Shader" id=1]
+[resource]
 code = "shader_type spatial;
 render_mode unshaded, cull_disabled ;
 
@@ -114,9 +114,3 @@ void fragment() {
 	ALBEDO = outColor.xyz;
 	//ALBEDO = outColor; // Causes invisible textures
 }"
-
-[resource]
-shader = SubResource( 1 )
-shader_param/enabled = null
-shader_param/fcFactor = null
-shader_param/ripple = null

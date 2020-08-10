@@ -1,4 +1,4 @@
-[gd_scene load_steps=5 format=2]
+[gd_scene load_steps=2 format=2]
 
 [ext_resource path="res://addons/godot-haskell-plugin/Simula.gdns" type="Script" id=1]
 
