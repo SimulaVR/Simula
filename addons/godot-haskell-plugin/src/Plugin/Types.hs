@@ -912,7 +912,10 @@ resizeGSVS gsvs resizeMethod factor =
                            return $ SpriteDimensions (round $ ((fromIntegral w)), round $ ((fromIntegral h) * factor))
                 False -> return $ oldTargetDims
             Zoom       -> do
-              return $ SpriteDimensions (round $ ((fromIntegral w) * factor), round $ ((fromIntegral h) * factor))
+              case (((fromIntegral h) * factor) > 500) && (((fromIntegral h) * factor)  < 1500) of
+                False -> return $ oldTargetDims
+                True -> do V3 1 1 1 ^* (1 + 1 * (1 - factor)) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
+                           return $ SpriteDimensions (round $ ((fromIntegral w) * factor), round $ ((fromIntegral h) * factor))
 
      atomically $ writeTVar (gsvs ^. gsvsTargetSize) (Just newTargetDims)
 
@@ -921,7 +924,7 @@ defaultSizeGSVS gsvs = do
     gss <- readTVarIO (gsvs ^. gsvsServer)
     configuration <- readTVarIO (gss ^. gssConfiguration)
     let windowScale = realToFrac (configuration ^. defaultWindowScale) :: Float
-    (V3 1 1 1 ^* (windowScale)) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
+    (V3 1 1 1 ^* (windowScale + 1)) & toLowLevel >>= G.set_scale (safeCast gsvs :: GodotSpatial)
 
     let maybeWindowResolution = (configuration ^. defaultWindowResolution) :: Maybe (Dhall.Natural, Dhall.Natural)
     let newTargetDims@(SpriteDimensions (x, y)) = case maybeWindowResolution of

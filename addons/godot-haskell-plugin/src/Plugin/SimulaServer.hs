@@ -209,12 +209,12 @@ getKeyboardAction gss keyboardShortcut =
   
         zoomOut :: SpriteLocation -> Bool -> IO ()
         zoomOut (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          resizeGSVS gsvs Zoom 0.95
+          resizeGSVS gsvs Zoom 1.05
         zoomOut _ _ = return ()
 
         zoomIn :: SpriteLocation -> Bool -> IO ()
         zoomIn (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          resizeGSVS gsvs Zoom 1.05
+          resizeGSVS gsvs Zoom 0.95
         zoomIn _ _ = return ()
 
         horizontalContract :: SpriteLocation -> Bool -> IO ()
