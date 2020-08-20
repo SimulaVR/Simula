@@ -714,6 +714,7 @@ _on_WlrXWayland_new_surface gss [wlrXWaylandSurfaceVariant] = do
 
   connectGodotSignal gsvs "map" gss "handle_map_surface" []
   connectGodotSignal wlrXWaylandSurface "map_free_child" gsvs "handle_map_free_child" []
+  connectGodotSignal wlrXWaylandSurface "map_child" gsvs "handle_map_child" []
   connectGodotSignal wlrXWaylandSurface "destroy" gsvs "_handle_destroy" []
   connectGodotSignal wlrXWaylandSurface "map" gsvs "_handle_map" []
   connectGodotSignal wlrXWaylandSurface "unmap" gsvs "_handle_unmap" []

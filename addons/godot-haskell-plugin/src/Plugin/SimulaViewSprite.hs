@@ -83,6 +83,7 @@ instance NativeScript GodotSimulaViewSprite where
     , func NoRPC "_process" Plugin.SimulaViewSprite._process
     , func NoRPC "_handle_unmap" _handle_unmap     -- Connected in SimulaServer.hs
     , func NoRPC "handle_map_free_child" handle_map_free_child
+    , func NoRPC "handle_map_child" handle_map_child
     ]
 
   -- Test:
@@ -641,9 +642,21 @@ handle_map_free_child gsvsInvisible [wlrXWaylandSurfaceVariant] = do
                      case maybeSurfaceLocalCoords of
                        Nothing -> return ()
                        Just (sx, sy) -> do -- Push surface onto end of gsvsFreeChildren stack
+                                           x <- G.get_x wlrXWaylandSurface
+                                           y <- G.get_y wlrXWaylandSurface
+                                           let xOffset = (sx - x)
+                                           let yOffset = (sy - y)
+
+                                           adjustedXY <- getAdjustedXYFreeChild gsvs wlrXWaylandSurface
+                                           adjustedXY'@(V2 x' y') <- fromLowLevel adjustedXY :: IO (V2 Float)
+                                           G.set_xy wlrXWaylandSurface adjustedXY
+
+                                           let sx' = (if (round x') == (fromIntegral x) then sx else (round x'))
+                                           let sy' = (if (round y') == (fromIntegral y) then sy else (round y'))
+
                                            G.reference wlrXWaylandSurface
                                            wlrSurface <- G.get_wlr_surface wlrXWaylandSurface
-                                           cs <- newCanvasSurface gsvs (wlrSurface, sx, sy)
+                                           cs <- newCanvasSurface gsvs (wlrSurface, sx', sy')
                                            freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
                                            atomically $ writeTVar (gsvs ^. gsvsFreeChildren) (freeChildren ++ [cs])
 
@@ -651,6 +664,93 @@ handle_map_free_child gsvsInvisible [wlrXWaylandSurfaceVariant] = do
                                            freeChildrenMapOld <- readTVarIO (gss ^. gssFreeChildren) :: IO (M.Map GodotWlrXWaylandSurface CanvasSurface)
                                            let freeChildrenMapNew = M.insert wlrXWaylandSurface cs freeChildrenMapOld
                                            atomically $ writeTVar (gss ^. gssFreeChildren) freeChildrenMapNew
+
+  simulaView <- readTVarIO (gsvsInvisible ^. gsvsView)
+  atomically $ writeTVar (simulaView ^. svMapped) True
+  where
+        computeSurfaceLocalCoordinates :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> IO (Maybe (Int, Int))
+        computeSurfaceLocalCoordinates gsvs child = do
+          localX <- G.get_x child
+          localY <- G.get_y child
+
+          simulaView <- readTVarIO (gsvs ^. gsvsView)
+          let eitherSurface = (simulaView ^. svWlrEitherSurface)
+          maybeCoords <- case eitherSurface of
+                          Left wlrXdgSurface -> return Nothing
+                          Right parent -> do globalX <- G.get_x parent
+                                             globalY <- G.get_y parent
+                                             return $ Just (localX - globalX, localY - globalY)
+          return maybeCoords
+
+getAdjustedXY :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> IO GodotVector2
+getAdjustedXY gsvs wlrXWaylandSurface = do
+  childSX <- G.get_x wlrXWaylandSurface
+  childSY <- G.get_y wlrXWaylandSurface
+  childWidth <- G.get_width wlrXWaylandSurface
+  childHeight <- G.get_height wlrXWaylandSurface
+  maybeSpriteDims <- readTVarIO (gsvs ^. gsvsTargetSize)
+  adjustedXY <- case maybeSpriteDims of
+                     Nothing -> toLowLevel $ V2 (fromIntegral childSX) (fromIntegral childSY)
+                     Just (SpriteDimensions (parentHeight, parentWidth)) -> do
+                               let overlapHeight = (childSY + childHeight) - parentHeight
+                               let overlapWidth = (childSX + childWidth) - parentWidth
+                               let adjustedX = if (overlapWidth > 0) then (childSX - overlapWidth) else childSX
+                               let adjustedY = if (overlapHeight > 0) then (childSY - overlapHeight) else childSY
+                               toLowLevel $ V2 (fromIntegral adjustedX) (fromIntegral adjustedY)
+  return adjustedXY
+
+
+getAdjustedXYFreeChild :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> IO GodotVector2
+getAdjustedXYFreeChild gsvs wlrXWaylandSurface = do
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  let eitherSurface = (simulaView ^. svWlrEitherSurface)
+  (V2 parentX parentY) <- case eitherSurface of
+                               (Left wlrXdgSurface) -> return (V2 0 0)
+                               (Right wlrXWaylandSurfaceParent) -> do x <- G.get_x wlrXWaylandSurfaceParent
+                                                                      y <- G.get_y wlrXWaylandSurfaceParent
+                                                                      return $ V2 x y
+  childX <- G.get_x wlrXWaylandSurface
+  childY <- G.get_y wlrXWaylandSurface
+
+  let childSX = childX - parentX
+  let childSY = childY - parentY
+
+  childWidth <- G.get_width wlrXWaylandSurface
+  childHeight <- G.get_height wlrXWaylandSurface
+  maybeSpriteDims <- readTVarIO (gsvs ^. gsvsTargetSize)
+  adjustedXY <- case maybeSpriteDims of
+                     Nothing -> toLowLevel $ V2 (fromIntegral childSX) (fromIntegral childSY)
+                     Just (SpriteDimensions (parentHeight, parentWidth)) -> do
+                               let overlapHeight = (childSY + childHeight) - parentHeight
+                               let overlapWidth = (childSX + childWidth) - parentWidth
+                               let adjustedX = if (overlapWidth > 0) then (childSX - overlapWidth) else childSX
+                               let adjustedY = if (overlapHeight > 0) then (childSY - overlapHeight) else childSY
+                               toLowLevel $ V2 (fromIntegral adjustedX) (fromIntegral adjustedY)
+  return adjustedXY
+
+getParentGSVS :: GodotSimulaServer -> GodotWlrXWaylandSurface -> IO (Maybe GodotSimulaViewSprite)
+getParentGSVS gss wlrXWaylandSurface = do
+  simulaViewMap <- readTVarIO (gss ^. gssViews)
+  parentWlrXWaylandSurface <- G.get_parent wlrXWaylandSurface -- wlr_xwayland_surface->parent
+  let simulaViews = M.keys simulaViewMap
+  let maybeParentSimulaView = Data.List.find (\simulaView -> (simulaView ^. svWlrEitherSurface) == (Right parentWlrXWaylandSurface)) simulaViews
+  maybeGSVSParent <- case maybeParentSimulaView of
+                          Nothing -> return Nothing
+                          (Just gsvsSimulaView) -> do let gsvsParent = Data.Maybe.fromJust (M.lookup gsvsSimulaView simulaViewMap)
+                                                      return (Just gsvsParent)
+  return maybeGSVSParent
+
+handle_map_child :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
+handle_map_child gsvsInvisible [wlrXWaylandSurfaceVariant] = do
+  putStrLn "handle_map_child"
+  gss <- readTVarIO $ (gsvsInvisible ^. gsvsServer)
+  wlrXWaylandSurface <- fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface
+  gss <- readTVarIO (gsvsInvisible ^. gsvsServer)
+  maybeParentGSVS <- getParentGSVS gss wlrXWaylandSurface
+  case maybeParentGSVS of
+    Nothing -> putStrLn "No parent found for child surface!"
+    Just (parentGSVS) -> do adjustedXY <- getAdjustedXY parentGSVS wlrXWaylandSurface
+                            G.set_xy wlrXWaylandSurface adjustedXY
 
   simulaView <- readTVarIO (gsvsInvisible ^. gsvsView)
   atomically $ writeTVar (simulaView ^. svMapped) True
