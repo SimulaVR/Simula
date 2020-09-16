@@ -53,7 +53,7 @@ is added to your ~configuration.nix~, or the install command above will be unabl
 
 ** OpenXR Backend (Optional)
    
-If you want to avoid using SteamVR, Simula supports an optional OpenXR backend (e.g. [[https://gitlab.freedesktop.org/monado/monado][monado]]).  To use, adjust ~_backend~ from ~"OpenVR"~ to ~"OpenXR"~ in ~./config.dhall~.  You will then be required to ensure that an OpenXR runtime (e.g. ~monado-service~) is running on your system before launching Simula.  In addition, you must tell Simula where your ~libopenxr_monado.so~ is located:
+If you want to avoid using SteamVR, Simula supports an optional OpenXR backend (e.g. [[https://gitlab.freedesktop.org/monado/monado][monado]]).  To use, adjust ~_backend~ from ~OpenVR~ to ~OpenXR~ in ~./config.dhall~.  You will then be required to ensure that an OpenXR runtime (e.g. ~monado-service~) is running on your system before launching Simula.  In addition, you must tell Simula where your ~libopenxr_monado.so~ is located:
 
 #+BEGIN_SRC 
 monado-service &
