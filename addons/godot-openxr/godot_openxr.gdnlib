@@ -1,0 +1,14 @@
+[general]
+
+singleton=true
+load_once=true
+symbol_prefix="godot_openxr_"
+reloadable=false
+
+[entry]
+
+X11.64="res://addons/godot-openxr/bin/linux/libgodot_openxr.so"
+
+[dependencies]
+
+X11.64=[  ]

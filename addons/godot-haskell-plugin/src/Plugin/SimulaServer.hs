@@ -717,7 +717,10 @@ _on_WlrXWayland_new_surface gss [wlrXWaylandSurfaceVariant] = do
   connectGodotSignal wlrXWaylandSurface "map_child" gsvs "handle_map_child" []
   connectGodotSignal wlrXWaylandSurface "destroy" gsvs "_handle_destroy" []
   connectGodotSignal wlrXWaylandSurface "map" gsvs "_handle_map" []
-  connectGodotSignal wlrXWaylandSurface "unmap" gsvs "_handle_unmap" []
+  connectGodotSignal wlrXWaylandSurface "unmap" gsvs "handle_unmap" []
+  connectGodotSignal wlrXWaylandSurface "unmap_child" gsvs "handle_unmap_child" []
+  connectGodotSignal wlrXWaylandSurface "unmap_free_child" gsvs "handle_unmap_free_child" []
+  connectGodotSignal wlrXWaylandSurface "set_parent" gsvs "handle_set_parent" []
   return ()
   where newSimulaView :: GodotSimulaServer -> GodotWlrXWaylandSurface -> IO (SimulaView)
         newSimulaView gss wlrXWaylandSurface = do
@@ -812,13 +815,14 @@ physicsProcess gss _ = do
 
   maybeKeyboardGrabbedGSVS <- readTVarIO (gss ^. gssKeyboardGrabbedSprite)
   maybeLookAtGSVS <- getHMDLookAtSprite gss
+  gsvsActiveCursor <- readTVarIO (gss ^. gssActiveCursorGSVS)
 
   case (maybeKeyboardGrabbedGSVS, maybeLookAtGSVS) of
     (Just (gsvs, dist), _) -> do setInFrontOfUser gsvs dist
                                  orientSpriteTowardsGaze gsvs
-    (Nothing, Just (gsvs, surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)))) -> do -- putStrLn $ "Looking at sprite: " ++ (show sx) ++ ", " ++ (show sy)
-                                                                                        -- orientSpriteTowardsGaze gsvs
-                                                                                        focus gsvs
+    (Nothing, Just (gsvs, surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)))) -> case gsvsActiveCursor of
+                                                                                            Nothing -> focus gsvs
+                                                                                            Just gsvsActiveCursor' -> if (gsvs /= gsvsActiveCursor') then (focus gsvs) else (safeSetActivated gsvs True)
     _ -> return ()
 
   return ()

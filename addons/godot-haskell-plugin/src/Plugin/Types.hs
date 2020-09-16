@@ -121,7 +121,8 @@ data StartingApps = StartingApps {
 } deriving (Generic, Show)
 
 data Configuration = Configuration {
-  _startingApps :: StartingApps
+  _backend :: String
+, _startingApps :: StartingApps
 , _defaultWindowResolution :: Maybe (Natural, Natural)
 , _defaultWindowScale :: Double
 , _keyBindings :: [KeyboardShortcut]

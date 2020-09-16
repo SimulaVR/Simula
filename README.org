@@ -9,7 +9,7 @@ Simula is a VR window manager for Linux that runs on top of [[https://godotengin
 
 *Video:* [[http://www.youtube.com/watch?v=FWLuwG91HnI][Demonstration.]]
 
-*Compatibility:* Currently, Simula is only compatible with SteamVR headsets equipped with Linux drivers (e.g. HTC Vive, HTC Vive Pro, & Valve Index).
+*Compatibility:* Simula is officially compatible with SteamVR headsets equipped with Linux drivers (e.g. HTC Vive, HTC Vive Pro, & Valve Index).  We have also added experimental support to OpenXR headsets that have Monado drivers (e.g. North Star, OSVR HDK, and PSVR).  Some people have gotten the Oculus Rift S to run Simula via OpenHMD (see [[https://github.com/OpenHMD/OpenHMD/issues/225#issuecomment-638454156][here]]), though we have not officially tested this ourselves.
 
 *Mission:* Facilitate a Linux future for VR & AR Desktop. In the short-run, this means allowing people to run 2D Linux apps with current generation headsets. In the long-run, this means allowing people to run Linux in standalone AR & VR HMDs.
 
@@ -50,6 +50,26 @@ nix.trustedUsers = [ "root" "<your_user_name>"];
 is added to your ~configuration.nix~, or the install command above will be unable to download Simula from our cache, instead falling back to a manual build (which takes 1hr+).
 
 # Simula is untested on machines with AMD drivers, though AMD cards running mesa drivers should be supported.
+
+** OpenXR Backend (Optional)
+   
+If you want to avoid using SteamVR, Simula supports an optional OpenXR backend (e.g. [[https://gitlab.freedesktop.org/monado/monado][monado]]).  To use, adjust ~_backend~ from ~"OpenVR"~ to ~"OpenXR"~ in ~./config.dhall~.  You will then be required to ensure that an OpenXR runtime (e.g. ~monado-service~) is running on your system before launching Simula.  In addition, you must tell Simula where your ~libopenxr_monado.so~ is located:
+
+#+BEGIN_SRC 
+monado-service &
+XR_RUNTIME_JSON=/path/to/your/openxr_monado-dev.json ./result/bin/simula
+#+END_SRC
+
+with ~openxr-dev.json~ encoding the location of your ~libopenxr_monado.so~:
+
+#+BEGIN_SRC json
+{
+    "file_format_version": "1.0.0",
+    "runtime": {
+        "library_path": "/path/to/your/openxr/build/src/xrt/targets/openxr/libopenxr_monado.so"
+    }
+}
+#+END_SRC
 
 ** COMMENT AppImage
 

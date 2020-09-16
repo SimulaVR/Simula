@@ -62,8 +62,23 @@ ready :: GodotSimula -> [GodotVariant] -> IO ()
 ready self _ = do
   -- OpenHMD is unfortunately not yet a working substitute for OpenVR
   -- https://github.com/SimulaVR/Simula/issues/72
-  openVR >>= initVR (safeCast self) >>= \case
+
+  gssSpatial <- addSimulaServerNode :: IO GodotSpatial
+  maybeGSS <- asNativeScript (safeCast gssSpatial) :: IO (Maybe GodotSimulaServer)
+  openBackend <- case maybeGSS of
+    Just gss -> do gssConf <- readTVarIO (gss ^. gssConfiguration)
+                   let backend = _backend gssConf :: String
+                   case backend of
+                     "OpenVR" -> return openVR
+                     "OpenXR" -> return openXR
+                     _        -> do putStrLn "Unable to parse backend; defaulting to OpenVR"
+                                    return openVR
+    Nothing -> do return openVR
+
+
+  openBackend >>= initVR (safeCast self) >>= \case
     InitVRSuccess -> do
+      putStrLn "InitVRSuccess"
       vrViewport <- unsafeInstance GodotViewport "Viewport"
 
       G.set_name vrViewport =<< toLowLevel "VRViewport"
@@ -86,12 +101,9 @@ ready self _ = do
       let addCt = addSimulaController orig
       addCt "LeftController" 1 >>= connectController
       addCt "RightController" 2 >>= connectController
-
       return ()
 
-    InitVRFailed  -> return ()
-
-  addSimulaServerNode
+    InitVRFailed  -> putStrLn "InitVRFailed"
 
   gpcObj <- "res://addons/godot-haskell-plugin/PancakeCamera.gdns"
     & newNS' [] :: IO GodotObject
@@ -122,7 +134,7 @@ ready self _ = do
     return (safeCast godotImageTexture) -- NOTE: This [probably] leaks godotImage?
 
 
-  addSimulaServerNode :: IO ()
+  addSimulaServerNode :: IO GodotSpatial
   addSimulaServerNode = do
     gss <- "res://addons/godot-haskell-plugin/SimulaServer.gdns"
       & newNS'' GodotSpatial "Spatial" []
@@ -132,7 +144,7 @@ ready self _ = do
     G.add_child self ((safeCast gss) :: GodotNode)  True
     -- G.print_tree ((safeCast gss) :: GodotNode) -- Print tree for debugging
     -- addDummySprite3D gss -- Test
-    return ()
+    return gss
 
   connectController :: GodotSimulaController -> IO ()
   connectController ct = do

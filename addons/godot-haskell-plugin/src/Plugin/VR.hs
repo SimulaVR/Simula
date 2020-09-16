@@ -3,6 +3,7 @@ module Plugin.VR
   ( VRInitResult(..)
   , openHMD
   , openVR
+  , openXR
   , initVR
   ) where
 
@@ -19,11 +20,13 @@ data VRInitResult
 data VRBackend
   = OpenHMD OpenHMDConfig
   | OpenVR
+  | OpenXR
  deriving Eq
 
 instance Show VRBackend where
   show (OpenHMD _) = "OpenHMD"
   show OpenVR      = "OpenVR"
+  show OpenXR      = "OpenXR"
 
 newtype OpenHMDConfig = OpenHMDConfig GodotObject
  deriving Eq
@@ -47,6 +50,9 @@ openHMD = do
 openVR :: IO GodotARVRInterface
 openVR = findInterface OpenVR
 
+-- | Get the OpenXR ARVRInterface
+openXR :: IO GodotARVRInterface
+openXR = findInterface OpenXR
 
 -- | Initialize the ARVRInterface and return the success/failure
 initVR :: GodotNode -> GodotARVRInterface -> IO VRInitResult

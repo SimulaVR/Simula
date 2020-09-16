@@ -24,7 +24,7 @@ window/vsync/use_vsync=false
 
 [gdnative]
 
-singletons=[ "res://addons/godot-openhmd/godot_openhmd.gdnlib", "res://addons/godot-openvr/godot_openvr.gdnlib" ]
+singletons=[ "res://addons/godot-openhmd/godot_openhmd.gdnlib", "res://addons/godot-openvr/godot_openvr.gdnlib", "res://addons/godot-openxr/godot_openxr.gdnlib" ]
 
 [physics]
 
