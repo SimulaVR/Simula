@@ -551,13 +551,13 @@ getSurfaceLocalCoordinates gsvs clickPos = do
   aabbSize <- godot_aabb_get_size aabb >>= fromLowLevel
   quadMeshSize <- G.get_size quadMesh >>= fromLowLevel
 
-  let topleftPos =
+  let topLeftPos =
         V2 (aabbSize ^. _x / 2 - lpos ^. _x) (aabbSize ^. _y / 2 - lpos ^. _y)
-  let scaledPos = liftI2 (/) topleftPos (aabbSize ^. _xy)
+  let scaledPos = liftI2 (/) topLeftPos (aabbSize ^. _xy)
   let coords = liftI2 (*) quadMeshSize scaledPos
   -- coords = surface coordinates in pixel with (0,0) at top left
-  let sx = fromIntegral $ truncate (1 * coords ^. _x) -- 256 was old factor
-      sy = fromIntegral $ truncate (1 * coords ^. _y) -- 256 was old factor
+  let sx = fromIntegral $ truncate (1000 * coords ^. _x) -- Adjust by a factor of 1000 since we are dealing with Quad Mesh
+      sy = fromIntegral $ truncate (1000 * coords ^. _y) -- "
   clickPos' <- fromLowLevel clickPos
   return (SurfaceLocalCoordinates (sx, sy))
 

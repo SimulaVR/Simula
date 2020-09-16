@@ -126,7 +126,6 @@ updateSimulaViewSprite gsvs = do
 
           -- Compute new extents
           size' <- godot_vector3_operator_divide_scalar size 2
-          (V3 x y z)  <- fromLowLevel size'
 
           -- Set the box's "half extents"; in order to set the extents to `e`, you must `set_extents e/2`.
           -- https://docs.godotengine.org/en/stable/classes/class_boxshape.html
