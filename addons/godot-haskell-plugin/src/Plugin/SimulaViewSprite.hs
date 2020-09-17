@@ -72,6 +72,7 @@ instance NativeScript GodotSimulaViewSprite where
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar Nothing)
                       <*> atomically (newTVar [])
+                      <*> atomically (newTVar 1.0)
                       -- <*> atomically (newTVar False)
   -- classExtends = "RigidBody"
   classMethods =
@@ -98,6 +99,7 @@ instance NativeScript GodotSimulaViewSprite where
 -- | Intended to be called every frame.
 updateSimulaViewSprite :: GodotSimulaViewSprite -> IO ()
 updateSimulaViewSprite gsvs = do
+  updateTransparency gsvs
   setTargetDimensions gsvs
   applyViewportBaseTexture gsvs
   setBoxShapeExtentsToMatchAABB gsvs
@@ -116,7 +118,16 @@ updateSimulaViewSprite gsvs = do
   -- putStrLn $ "GSVS opacity: " ++ (show opacityFloat)
 
 
-  where -- Necessary for window manipulation to function
+  where updateTransparency :: GodotSimulaViewSprite -> IO ()
+        updateTransparency gsvs = do
+          gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
+          gsvsTransparency' <- toLowLevel (toVariant gsvsTransparency)
+          quadMesh <- getQuadMesh gsvs
+          shm <- G.get_material quadMesh >>= asClass' GodotShaderMaterial "ShaderMaterial" :: IO GodotShaderMaterial
+          outsideAlpha <- toLowLevel (pack "outsideAlpha") :: IO GodotString
+          G.set_shader_param shm outsideAlpha gsvsTransparency'
+
+        -- Necessary for window manipulation to function
         setBoxShapeExtentsToMatchAABB :: GodotSimulaViewSprite -> IO ()
         setBoxShapeExtentsToMatchAABB gsvs = do
           meshInstance <- atomically $ readTVar (_gsvsMeshInstance gsvs)
@@ -298,6 +309,9 @@ newGodotSimulaViewSprite gss simulaView = do
   configuration <- readTVarIO (gss ^. gssConfiguration)
   let windowScale = realToFrac (configuration ^. defaultWindowScale) :: Float
   (V3 1 1 1 ^* (windowScale)) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
+  let defaultTransparency' = constrainTransparency $ realToFrac (configuration ^. defaultTransparency)
+
+  atomically $ writeTVar (_gsvsTransparency      gsvs) defaultTransparency'
 
   let maybeWindowResolution = (configuration ^. defaultWindowResolution) :: Maybe (Dhall.Natural, Dhall.Natural)
   case maybeWindowResolution of

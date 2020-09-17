@@ -108,6 +108,8 @@ getKeyboardAction gss keyboardShortcut =
     "cycleEnvironment" -> cycleEnvironment gss
     "launchAppLauncher" -> shellLaunch gss "./result/bin/ulauncher"
     "textToSpeech" -> textToSpeech gss
+    "decreaseTransparency" -> decreaseTransparency
+    "increaseTransparency" -> increaseTransparency
     _ -> shellLaunch gss (keyboardShortcut ^. keyAction)
 
   where moveCursor :: SpriteLocation -> Bool -> IO ()
@@ -226,6 +228,18 @@ getKeyboardAction gss keyboardShortcut =
         horizontalExtend (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
           resizeGSVS gsvs Horizontal 1.05
         horizontalExtend _ _ = return ()
+
+        decreaseTransparency :: SpriteLocation -> Bool -> IO ()
+        decreaseTransparency (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+          gsvsTransparencyVal <- readTVarIO (gsvs ^. gsvsTransparency)
+          atomically $ writeTVar (gsvs ^. gsvsTransparency) (constrainTransparency (gsvsTransparencyVal - 0.05))
+        decreaseTransparency _ _ = return ()
+
+        increaseTransparency :: SpriteLocation -> Bool -> IO ()
+        increaseTransparency (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+          gsvsTransparencyVal <- readTVarIO (gsvs ^. gsvsTransparency)
+          atomically $ writeTVar (gsvs ^. gsvsTransparency) (constrainTransparency (gsvsTransparencyVal + 0.05))
+        increaseTransparency _ _ = return ()
 
         verticalContract :: SpriteLocation -> Bool -> IO ()
         verticalContract (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do

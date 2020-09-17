@@ -1,19 +1,19 @@
 -- For requests/questions about Simula's configuration, check out our discord: https://discordapp.com/invite/a4PnP7n
 
 let Configuration =
-       -- Simula can handle up to 5 default starting apps (parsed as shell commands).
-       -- You can also use the following special commands:
-       --   "launchTerminal" to launch the default terminal
-       --   "launchHMDWebcam" to launch the HMD webcam view
-       --   "launchUsageInstructions" to launch Simula's usage instructions
-       -- To omit launching an app in a spot, use `None Text` instead of `Some "cmd"`.
-     {   _backend = "OpenVR" -- Supported options: "OpenVR", "OpenXR"
-       , _startingApps = { _center = Some "./result/bin/xfce4-terminal"
-                       , _right  = Some "launchUsageInstructions"
-                       , _bottom = Some "launchHMDWebcam"
-                       , _left   = Some "launchTerminal"
-                       , _top    = Some "launchTerminal"
-                       }
+    -- Simula can handle up to 5 default starting apps (parsed as shell commands).
+    -- You can also use the following special commands:
+    --   "launchTerminal" to launch the default terminal
+    --   "launchHMDWebcam" to launch the HMD webcam view
+    --   "launchUsageInstructions" to launch Simula's usage instructions
+    -- To omit launching an app in a spot, use `None Text` instead of `Some "cmd"`.
+  {   _backend = "OpenVR" -- Supported options: "OpenVR", "OpenXR"
+  ,   _startingApps = { _center = Some "./result/bin/xfce4-terminal"
+                      , _right  = Some "launchUsageInstructions"
+                      , _bottom = Some "launchHMDWebcam"
+                      , _left   = Some "launchTerminal"
+                      , _top    = Some "launchTerminal"
+                      }
   , _defaultWindowResolution = Some { _1 = 900, _2 = 900 } -- New windows default this (typically square) resolution
                                                            -- Set to `None { _1 : Natural, _2 : Natural }` for windows to launch with their default (typically non-square) resolutions
 
@@ -48,10 +48,13 @@ let Configuration =
                               , { _keyCombination = ["KEY_MASK_META", "KEY_R"]                         , _keyAction = "reloadConfig"               }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_ESCAPE"]  , _keyAction = "terminateSimula"            }
 
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_ALT", "KEY_UP"]        , _keyAction = "increaseTransparency"       }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_ALT", "KEY_DOWN"]      , _keyAction = "decreaseTransparency"       }
+
                                 -- Anything else is parsed as a shell command:
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_K"] , _keyAction = "firefox -new-window"                          }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_G"] , _keyAction = "google-chrome-stable --new-window google.com" }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_J"] , _keyAction = "gvim"                                         }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_K"] , _keyAction = "firefox -new-window"                                }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_G"] , _keyAction = "google-chrome-stable --new-window google.com"       }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_J"] , _keyAction = "gvim"                                               }
                               ]
 
     , _keyRemappings         = [ -- Simula allows you to remap keys (`KEY_*`). For example, remapping `KEY_HYPER_L` to `KEY_ESCAPE`:
@@ -63,6 +66,7 @@ let Configuration =
   -- Environments must be local to Simula's root directory
   , _environmentsDirectory = "./environments"
   , _environmentDefault    = "./environments/AllSkyFree_Sky_EpicBlueSunset_Equirect.png"
+  , _defaultTransparency  = 1.0 -- Should be a number between 0 and 1
   }
 
 in Configuration

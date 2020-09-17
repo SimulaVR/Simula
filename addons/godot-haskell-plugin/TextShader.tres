@@ -8,6 +8,7 @@ uniform sampler2D texture_albedo : hint_albedo;
 uniform bool enabled = true;
 uniform float fcFactor = 1.0;
 uniform float ripple = 4.0;
+uniform float outsideAlpha = 1.0; //configured by user in ./config.dhall
 
 void vertex() {
   UV = UV;
@@ -112,5 +113,6 @@ void fragment() {
   //outColor = texture(texture_albedo, vec2(1.0 - UV.x, UV.y)); //to turn off
 
 	ALBEDO = outColor.xyz;
+  ALPHA = outsideAlpha;
 	//ALBEDO = outColor; // Causes invisible textures
 }"

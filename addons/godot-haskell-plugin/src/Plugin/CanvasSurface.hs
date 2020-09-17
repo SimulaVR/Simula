@@ -93,6 +93,8 @@ _draw cs _ = do
   where
     drawWlrSurface :: CanvasSurface -> GodotWlrSurface -> Int -> Int -> IO ()
     drawWlrSurface cs wlrSurface x y = do
+      gsvs <- readTVarIO (cs ^. csGSVS)
+      gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
       let isNull = ((unsafeCoerce wlrSurface) == nullPtr)
       case isNull of
         True -> putStrLn $ "CanvasSurface is null!"
@@ -100,7 +102,8 @@ _draw cs _ = do
                     surfaceTexture <- G.get_texture wlrSurface :: IO GodotTexture
                     case ((unsafeCoerce surfaceTexture) == nullPtr) of
                       True -> return ()
-                      False -> do modulateColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1) :: IO GodotColor
+                      False -> do gsvsTransparency <- getTransparency cs
+                                  modulateColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` gsvsTransparency) :: IO GodotColor
                                   -- TODO abstract and refactor
                                   regionsArray <- G.get_damage_regions wlrSurface
                                   regions <- fromLowLevel regionsArray >>= mapM fromGodotVariant
@@ -119,3 +122,9 @@ _draw cs _ = do
                                     G.draw_texture_rect_region cs surfaceTexture bufferRect region modulateColor False (coerce nullPtr) True
 
                                     G.send_frame_done wlrSurface
+
+    getTransparency :: CanvasSurface -> IO Double
+    getTransparency cs = do
+      gsvs <- readTVarIO (cs ^. csGSVS)
+      gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
+      return (realToFrac gsvsTransparency)

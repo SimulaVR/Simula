@@ -130,6 +130,11 @@ _draw cb _ = do
   -- Draw cursor
   drawCursor cb gsvs
   where
+    getTransparency :: CanvasBase -> IO Double
+    getTransparency cb = do
+      gsvs <- readTVarIO (cb ^. cbGSVS)
+      gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
+      return (realToFrac gsvsTransparency)
     drawFreeChildren :: CanvasBase -> GodotSimulaViewSprite -> IO ()
     drawFreeChildren cb gsvs = do
       gss <- readTVarIO (gsvs ^. gsvsServer)
@@ -163,7 +168,8 @@ _draw cb _ = do
       viewportSurfaceTexture <- G.get_texture viewportSurface
 
       renderPosition <- toLowLevel (V2 0 0) :: IO GodotVector2
-      modulateColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1) :: IO GodotColor
+      gsvsTransparency <- getTransparency cb
+      modulateColor <- (toLowLevel $ (rgb 1.0 1.0 (1.0 :: Double)) `withOpacity` gsvsTransparency) :: IO GodotColor
       G.draw_texture cb ((safeCast viewportSurfaceTexture) :: GodotTexture)  renderPosition modulateColor (coerce nullPtr)
 
     drawCursor :: CanvasBase -> GodotSimulaViewSprite -> IO ()
@@ -174,7 +180,7 @@ _draw cb _ = do
       case maybeCursorTexture of
         Nothing -> putStrLn "No cursor texture!"
         Just cursorTexture -> do cursorRenderPosition <- toLowLevel (V2 sx sy) :: IO GodotVector2
-                                 godotColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1) :: IO GodotColor
+                                 godotColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1.0) :: IO GodotColor
                                  G.draw_texture cb cursorTexture cursorRenderPosition godotColor (coerce nullPtr)
 
 -- TODO: All (Int, Int) should be relative to root surface; right now, subsurface coordinates are possibly relative to their immediate parent.

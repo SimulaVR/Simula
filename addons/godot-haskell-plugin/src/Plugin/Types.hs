@@ -129,6 +129,7 @@ data Configuration = Configuration {
 , _keyRemappings :: [KeyboardRemapping]
 , _environmentsDirectory :: String
 , _environmentDefault :: String
+, _defaultTransparency :: Double
 } deriving (Generic, Show)
 
 instance FromDhall KeyboardRemapping
@@ -200,11 +201,12 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsCursorCoordinates :: TVar SurfaceLocalCoordinates
   , _gsvsTargetSize        :: TVar (Maybe SpriteDimensions)
   , _gsvsFreeChildren      :: TVar [CanvasSurface]
+  , _gsvsTransparency      :: TVar Float
   }
 
 instance HasBaseClass GodotSimulaViewSprite where
   type BaseClass GodotSimulaViewSprite = GodotRigidBody
-  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _ _ _) = GodotRigidBody obj
+  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _ _ _ _) = GodotRigidBody obj
 
 data CanvasBase = CanvasBase {
     _cbObject       :: GodotObject
@@ -939,3 +941,10 @@ getQuadMesh gsvs = do
   meshInstance <- readTVarIO (gsvs ^. gsvsMeshInstance)
   quadMesh <- G.get_mesh meshInstance >>= asClass' GodotQuadMesh "QuadMesh"
   return quadMesh
+
+constrainTransparency :: Float -> Float
+constrainTransparency input =
+  case ((input < 0.0), (input > 1.0)) of
+        (True, _) -> 0.0
+        (_, True) -> 1.0
+        _ -> input
