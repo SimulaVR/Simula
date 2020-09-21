@@ -1,4 +1,4 @@
-{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, ulauncher, mimic, xsel }:
+{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, ulauncher, mimic, xsel, xclip }:
 let
     vulkan-loader-custom = if onNixOS then vulkan-loader else (callPackage ./nix/vulkan-loader.nix { });
     glibc-locales = glibcLocales;
@@ -63,6 +63,7 @@ let
       ln -s ${ulauncher}/bin/ulauncher $out/bin/ulauncher
       ln -s ${xsel}/bin/xsel $out/bin/xsel
       ln -s ${mimic}/bin/mimic $out/bin/mimic
+      ln -s ${xclip}/bin/xclip $out/bin/xclip
 
       '' + devBuildScript;
     };

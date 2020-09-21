@@ -73,6 +73,8 @@ instance NativeScript GodotSimulaViewSprite where
                       <*> atomically (newTVar Nothing)
                       <*> atomically (newTVar [])
                       <*> atomically (newTVar 1.0)
+                      <*> atomically (newTVar False)
+                      <*> atomically (newTVar (Nothing, Nothing))
                       -- <*> atomically (newTVar False)
   -- classExtends = "RigidBody"
   classMethods =

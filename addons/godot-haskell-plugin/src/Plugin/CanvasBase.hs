@@ -177,11 +177,47 @@ _draw cb _ = do
       activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
       gss <- readTVarIO (gsvs ^. gsvsServer)
       maybeCursorTexture <- readTVarIO (gss ^. gssCursorTexture)
-      case maybeCursorTexture of
-        Nothing -> putStrLn "No cursor texture!"
-        Just cursorTexture -> do cursorRenderPosition <- toLowLevel (V2 sx sy) :: IO GodotVector2
-                                 godotColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1.0) :: IO GodotColor
-                                 G.draw_texture cb cursorTexture cursorRenderPosition godotColor (coerce nullPtr)
+      maybeScreenshotCursorTexture <- readTVarIO (gss ^. gssScreenshotCursorTexture)
+      screenshotModeEnabled <- readTVarIO (gsvs ^. gsvsScreenshotMode)
+
+      -- Fork behavior depending upon whether screenshot mode is enabled
+      case (screenshotModeEnabled, maybeCursorTexture, maybeScreenshotCursorTexture)  of
+        (False, Just cursorTexture, _) -> do
+           -- Draw normal cursor
+           cursorRenderPosition <- toLowLevel (V2 sx sy) :: IO GodotVector2
+           godotColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1.0) :: IO GodotColor
+           G.draw_texture cb cursorTexture cursorRenderPosition godotColor (coerce nullPtr)
+        (True, _, Just screenshotCursorTexture) -> do
+           -- Draw screenshot cursor
+           cursorRenderPosition <- toLowLevel (V2 (sx - 16) (sy - 16)) :: IO GodotVector2
+           godotColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1.0) :: IO GodotColor
+           G.draw_texture cb screenshotCursorTexture cursorRenderPosition godotColor (coerce nullPtr)
+
+           screenshotCoords@(origin, end) <- readTVarIO (gsvs ^. gsvsScreenshotCoords)
+           case (origin, end) of
+             (Just (SurfaceLocalCoordinates (ox, oy)), Nothing) -> do
+               -- Allow user to see screenshot region
+               activeGSVSCursorPos@(SurfaceLocalCoordinates (cx, cy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+               let sizeX = cx - ox
+               let sizeY = cy - oy
+               let m22Rect = V2 (V2 ox oy) (V2  sizeX sizeY)
+               m22Rect' <- toLowLevel m22Rect
+               grayColor <- (toLowLevel $ (rgb 0.0 0.0 0.0) `withOpacity` 0.5) :: IO GodotColor
+               G.draw_rect cb m22Rect' grayColor False 2.0 False
+             (Just (SurfaceLocalCoordinates (ox, oy)), Just (SurfaceLocalCoordinates (ex, ey))) -> do
+               putStrLn $ "Screenshot mode: taking screenshot from (" ++ (show ox) ++ ", " ++ (show oy) ++ ") to (" ++ (show ex) ++ ", " ++ (show ey) ++ ")"
+
+               -- Take screenshot & save to X clipboard
+               let m22Rect = V2 (V2 ox oy) (V2 (ex - ox) (ey - oy))
+               viewportSurface <- readTVarIO (cb ^. cbViewport) :: IO GodotViewport
+               viewportSurfaceTexture <- (G.get_texture (viewportSurface :: GodotViewport)) :: IO GodotViewportTexture
+               saveViewportAsPngAndLaunch gsvs viewportSurfaceTexture m22Rect
+
+               -- Disable screenshot
+               atomically $ writeTVar (gsvs ^. gsvsScreenshotMode) False
+               atomically $ writeTVar (gsvs ^. gsvsScreenshotCoords) (Nothing, Nothing)
+             _ -> return ()
+        _ -> return ()
 
 -- TODO: All (Int, Int) should be relative to root surface; right now, subsurface coordinates are possibly relative to their immediate parent.
 getDepthFirstSurfaces :: GodotWlrXWaylandSurface -> IO [(GodotWlrSurface, Int, Int)]

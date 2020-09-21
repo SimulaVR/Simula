@@ -110,6 +110,7 @@ getKeyboardAction gss keyboardShortcut =
     "textToSpeech" -> textToSpeech gss
     "decreaseTransparency" -> decreaseTransparency
     "increaseTransparency" -> increaseTransparency
+    "toggleScreenshotMode" -> toggleScreenshotMode
     _ -> shellLaunch gss (keyboardShortcut ^. keyAction)
 
   where moveCursor :: SpriteLocation -> Bool -> IO ()
@@ -240,6 +241,16 @@ getKeyboardAction gss keyboardShortcut =
           gsvsTransparencyVal <- readTVarIO (gsvs ^. gsvsTransparency)
           atomically $ writeTVar (gsvs ^. gsvsTransparency) (constrainTransparency (gsvsTransparencyVal + 0.05))
         increaseTransparency _ _ = return ()
+
+        toggleScreenshotMode :: SpriteLocation -> Bool -> IO ()
+        toggleScreenshotMode (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+          screenshotMode <- readTVarIO (gsvs ^. gsvsScreenshotMode)
+          case screenshotMode of
+            True -> do atomically $ writeTVar (gsvs ^. gsvsScreenshotMode) False
+                       atomically $ writeTVar (gsvs ^. gsvsScreenshotCoords) (Nothing, Nothing)
+
+            False -> do atomically $ writeTVar (gsvs ^. gsvsScreenshotMode) True
+        toggleScreenshotMode _ _ = return ()
 
         verticalContract :: SpriteLocation -> Bool -> IO ()
         verticalContract (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
@@ -532,6 +543,8 @@ initGodotSimulaServer obj = do
 
   maybeCursorTexture <- getTextureFromURL "res://cursor.png"
   gssCursorTexture' <- newTVarIO maybeCursorTexture
+  maybeScreenshotCursorTexture <- getTextureFromURL "res://cursor_plus.png"
+  gssScreenshotCursorTexture' <- newTVarIO maybeScreenshotCursorTexture
 
   rc <- unsafeInstance GodotRayCast "RayCast"
   G.set_cast_to rc =<< toLowLevel (V3 0 0 (negate 10))
@@ -600,6 +613,7 @@ initGodotSimulaServer obj = do
       , _gssVisualServer          = visualServer'             :: TVar GodotVisualServer
       , _gssActiveCursorGSVS      = gssActiveCursorGSVS'      :: TVar (Maybe GodotSimulaViewSprite)
       , _gssCursorTexture         = gssCursorTexture'         :: TVar (Maybe GodotTexture)
+      , _gssScreenshotCursorTexture = gssScreenshotCursorTexture' :: TVar (Maybe GodotTexture)
       , _gssHMDRayCast            = gssHMDRayCast'            :: TVar GodotRayCast
       , _gssKeyboardGrabbedSprite = gssKeyboardGrabbedSprite' :: TVar (Maybe (GodotSimulaViewSprite, Float))
       , _gssXWaylandDisplay       = gssXWaylandDisplay'       :: TVar (Maybe String)
@@ -772,8 +786,16 @@ _input gss [eventGV] = do
     case (maybeActiveGSVS, button) of
          (Just gsvs, G.BUTTON_WHEEL_UP) -> G.pointer_notify_axis_continuous wlrSeat 0 (0.05)
          (Just gsvs, G.BUTTON_WHEEL_DOWN) -> G.pointer_notify_axis_continuous wlrSeat 0 (-0.05)
-         (Just gsvs, _) -> do activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
-                              processClickEvent' gsvs (Button pressed button) activeGSVSCursorPos
+         (Just gsvs, _) -> do
+           screenshotMode <- readTVarIO (gsvs ^. gsvsScreenshotMode)
+           case screenshotMode of
+             False -> do activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+                         processClickEvent' gsvs (Button pressed button) activeGSVSCursorPos
+             True -> do activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+                        case pressed of
+                          True -> do atomically $ writeTVar (gsvs ^. gsvsScreenshotCoords) (Just activeGSVSCursorPos, Nothing)
+                          False -> do screenshotCoords@(origin, end) <- readTVarIO (gsvs ^. gsvsScreenshotCoords)
+                                      atomically $ writeTVar (gsvs ^. gsvsScreenshotCoords) (origin, Just activeGSVSCursorPos)
          (Nothing, _) -> return ()
 
 updateCursorStateRelative :: GodotSimulaViewSprite -> Float -> Float -> IO ()
@@ -805,8 +827,11 @@ updateCursorStateAbsolute gsvs sx sy = do
 
 sendWlrootsMotion :: GodotSimulaViewSprite -> IO ()
 sendWlrootsMotion gsvs = do
+    screenshotModeEnabled <- readTVarIO (gsvs ^. gsvsScreenshotMode)
     activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
-    processClickEvent' gsvs Motion activeGSVSCursorPos
+    case screenshotModeEnabled of
+      False -> processClickEvent' gsvs Motion activeGSVSCursorPos
+      True -> return ()
 
 getHMDLookAtSprite :: GodotSimulaServer -> IO (Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates))
 getHMDLookAtSprite gss = do

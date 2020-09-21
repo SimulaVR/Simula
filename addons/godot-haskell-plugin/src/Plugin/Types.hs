@@ -15,6 +15,7 @@ module Plugin.Types where
 import           Linear.Matrix
 import           Linear.V3
 
+import           Data.Time.Clock
 import           Data.Maybe
 import           Control.Concurrent
 import           Control.Monad
@@ -168,6 +169,7 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssVisualServer          :: TVar GodotVisualServer
   , _gssActiveCursorGSVS      :: TVar (Maybe GodotSimulaViewSprite)
   , _gssCursorTexture         :: TVar (Maybe GodotTexture)
+  , _gssScreenshotCursorTexture  :: TVar (Maybe GodotTexture)
   , _gssHMDRayCast            :: TVar (GodotRayCast)
   , _gssKeyboardGrabbedSprite :: TVar (Maybe (GodotSimulaViewSprite, Float)) -- We encode both the gsvs and its original distance from the user
   , _gssXWaylandDisplay       :: TVar (Maybe String) -- For appLaunch
@@ -185,7 +187,7 @@ data GodotSimulaServer = GodotSimulaServer
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
@@ -202,11 +204,13 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsTargetSize        :: TVar (Maybe SpriteDimensions)
   , _gsvsFreeChildren      :: TVar [CanvasSurface]
   , _gsvsTransparency      :: TVar Float
+  , _gsvsScreenshotMode    :: TVar Bool
+  , _gsvsScreenshotCoords  :: TVar (Maybe SurfaceLocalCoordinates, Maybe SurfaceLocalCoordinates)
   }
 
 instance HasBaseClass GodotSimulaViewSprite where
   type BaseClass GodotSimulaViewSprite = GodotRigidBody
-  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _ _ _ _) = GodotRigidBody obj
+  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotRigidBody obj
 
 data CanvasBase = CanvasBase {
     _cbObject       :: GodotObject
@@ -948,3 +952,27 @@ constrainTransparency input =
         (True, _) -> 0.0
         (_, True) -> 1.0
         _ -> input
+
+saveViewportAsPngAndLaunch :: GodotSimulaViewSprite -> GodotViewportTexture -> M22 Float -> IO ()
+saveViewportAsPngAndLaunch gsvs tex m22@(V2 (V2 ox oy) (V2 ex ey)) = do
+  let isNull = ((unsafeCoerce tex) == nullPtr)
+  case isNull of
+    True -> putStrLn "Texture is null in saveViewportAsPngAndLaunch!"
+    False -> do -- Get image
+                texAsImage <- G.get_data tex
+
+                -- Get file path
+                timeStampStr <- show <$> getCurrentTime
+                let pathStr = "./png/" ++  ((Data.List.filter (/= '"') . show) timeStampStr) ++ ".png"
+                pathStr' <- toLowLevel (pack pathStr)
+
+                -- Save as png
+                rect <- toLowLevel m22
+                rectImage <- G.get_rect texAsImage rect
+                G.save_png rectImage pathStr'
+                gss <- readTVarIO (gsvs ^. gsvsServer)
+
+                -- Copy to clipboard
+                appLaunch gss "./result/bin/xclip" ["-selection", "clipboard", "-t", "image/png", "-i", pathStr]
+
+                return ()
