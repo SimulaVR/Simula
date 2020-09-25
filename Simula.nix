@@ -47,10 +47,16 @@ let
       exec ${xfce.xfce4-terminal}/bin/xfce4-terminal
       '';
 
+    midori-wrapped = writeScriptBin "midori" ''
+      #!${stdenv.shell}
+      export XDG_DATA_HOME=${dejavu_fonts}/share
+      exec ${midori}/bin/midori
+      '';
+
     simula = stdenv.mkDerivation {
       name = "Simula";
       src = ./utils;
-      buildInputs = [ godot godot-haskell-plugin xpra xrdb wmctrl fontconfig glibc-locales xfce4-terminal-wrapped openxr-loader];
+      buildInputs = [ godot godot-haskell-plugin xpra xrdb wmctrl fontconfig glibc-locales xfce4-terminal-wrapped openxr-loader midori-wrapped ];
       installPhase = ''
       mkdir -p $out/bin
       ln -s ${godot-haskell-plugin}/lib/ghc-${ghc-version}/libgodot-haskell-plugin.so $out/bin/libgodot-haskell-plugin.so
@@ -59,7 +65,7 @@ let
       ln -s ${xrdb}/bin/xrdb $out/bin/xrdb
       ln -s ${wmctrl}/bin/wmctrl $out/bin/wmctrl
       ln -s ${ffmpeg-full}/bin/ffplay $out/bin/ffplay
-      ln -s ${midori}/bin/midori $out/bin/midori
+      ln -s ${midori-wrapped}/bin/midori $out/bin/midori
       ln -s ${ulauncher}/bin/ulauncher $out/bin/ulauncher
       ln -s ${xsel}/bin/xsel $out/bin/xsel
       ln -s ${mimic}/bin/mimic $out/bin/mimic

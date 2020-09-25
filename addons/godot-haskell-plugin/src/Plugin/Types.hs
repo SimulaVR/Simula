@@ -12,6 +12,7 @@
 
 module Plugin.Types where
 
+import           System.Directory
 import           Linear.Matrix
 import           Linear.V3
 
@@ -969,6 +970,7 @@ saveViewportAsPngAndLaunch gsvs tex m22@(V2 (V2 ox oy) (V2 ex ey)) = do
                 -- Save as png
                 rect <- toLowLevel m22
                 rectImage <- G.get_rect texAsImage rect
+                System.Directory.createDirectoryIfMissing True "png"
                 G.save_png rectImage pathStr'
                 gss <- readTVarIO (gsvs ^. gsvsServer)
 
