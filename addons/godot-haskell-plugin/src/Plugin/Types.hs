@@ -90,7 +90,6 @@ data SpriteDimensions      = SpriteDimensions (Int, Int)
 
 data ResizeMethod = Zoom | Horizontal | Vertical
 
-
 -- This should ideally be `[Variant 'HaskellTy]`, but that would
 -- require `AsVariant` to handle both `LibType`s.
 type instance TypeOf 'HaskellTy GodotArray = [GodotVariant]
@@ -175,7 +174,7 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssKeyboardGrabbedSprite :: TVar (Maybe (GodotSimulaViewSprite, Float)) -- We encode both the gsvs and its original distance from the user
   , _gssXWaylandDisplay       :: TVar (Maybe String) -- For appLaunch
   , _gssOriginalEnv           :: [(String, String)]
-  , _gssFreeChildren          :: TVar (M.Map GodotWlrXWaylandSurface CanvasSurface)
+  , _gssFreeChildren          :: TVar (M.Map GodotWlrXWaylandSurface GodotSimulaViewSprite)
   , _gssConfiguration         :: TVar Configuration
   , _gssKeyboardShortcuts     :: TVar KeyboardShortcuts
   , _gssKeyboardRemappings    :: TVar KeyboardRemappings
@@ -184,11 +183,12 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssWorldEnvironment      :: TVar (GodotWorldEnvironment, String)
   , _gssEnvironmentTextures   :: TVar [String]
   , _gssStartingAppTransform  :: TVar (Maybe GodotTransform)
+  , _gssPid                   :: String
   }
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
@@ -200,18 +200,20 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsShape             :: TVar GodotBoxShape
   , _gsvsView              :: TVar SimulaView
   , _gsvsCanvasBase        :: TVar CanvasBase
-  , _gsvsSurfaceMap        :: TVar (OMap GodotWlrSurface CanvasSurface)
+  , _gsvsCanvasSurface     :: TVar CanvasSurface
   , _gsvsCursorCoordinates :: TVar SurfaceLocalCoordinates
   , _gsvsTargetSize        :: TVar (Maybe SpriteDimensions)
-  , _gsvsFreeChildren      :: TVar [CanvasSurface]
+  , _gsvsFreeChildren      :: TVar [GodotWlrXWaylandSurface]
   , _gsvsTransparency      :: TVar Float
   , _gsvsScreenshotMode    :: TVar Bool
   , _gsvsScreenshotCoords  :: TVar (Maybe SurfaceLocalCoordinates, Maybe SurfaceLocalCoordinates)
+  , _gsvsActiveSurface     :: TVar (Maybe GodotWlrSurface)
+  , _gsvsFrameCount        :: TVar Integer
   }
 
 instance HasBaseClass GodotSimulaViewSprite where
   type BaseClass GodotSimulaViewSprite = GodotRigidBody
-  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotRigidBody obj
+  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotRigidBody obj
 
 data CanvasBase = CanvasBase {
     _cbObject       :: GodotObject
@@ -226,7 +228,6 @@ instance HasBaseClass CanvasBase where
 data CanvasSurface = CanvasSurface {
     _csObject       :: GodotObject
   , _csGSVS         :: TVar GodotSimulaViewSprite
-  , _csSurface      :: TVar (GodotWlrSurface, Int, Int)
   , _csViewport     :: TVar GodotViewport
   , _csClearShader  :: TVar GodotShaderMaterial
   , _csPremulShader :: TVar GodotShaderMaterial
@@ -235,7 +236,7 @@ data CanvasSurface = CanvasSurface {
 
 instance HasBaseClass CanvasSurface where
   type BaseClass CanvasSurface = GodotNode2D
-  super (CanvasSurface obj _ _ _ _ _ _) = GodotNode2D obj
+  super (CanvasSurface obj _ _ _ _ _) = GodotNode2D obj
 
 instance Eq CanvasSurface where
   (==) = (==) `on` _csObject
@@ -403,6 +404,7 @@ isGodotTypeNullErr godotValue = do
   if isNull then error $ (show (typeOf godotValue)) ++ ": isNull True"
             else putStrLn $ (show (typeOf godotValue)) ++ ": isNull False"
 
+deriving instance Eq GodotWlrOutput
 deriving instance Eq GodotWlrXdgSurface
 deriving instance Eq GodotWlrXWaylandSurface
 
@@ -659,14 +661,12 @@ initializeRenderTarget gsvs viewportType = do
 
   G.set_disable_input renderTarget True
   G.set_usage renderTarget G.USAGE_2D
-  G.set_transparent_background renderTarget True
   G.set_update_mode renderTarget G.UPDATE_WHEN_VISIBLE
   G.set_vflip renderTarget True
   G.set_size renderTarget pixelDimensionsOfWlrSurface
 
-  case viewportType of
-    ViewportBase -> G.set_clear_mode renderTarget G.CLEAR_MODE_ALWAYS
-    ViewportSurface -> G.set_clear_mode renderTarget G.CLEAR_MODE_NEVER
+  G.set_clear_mode renderTarget G.CLEAR_MODE_ALWAYS
+  G.set_transparent_background renderTarget True
 
   return renderTarget
 
@@ -682,14 +682,15 @@ getBufferDimensions wlrSurface = do
           return ret
         getBufferDimensions' :: GodotWlrSurfaceState -> IO (Int, Int)
         getBufferDimensions' wlrSurfaceState = do
-          bufferWidth <- G.get_buffer_width wlrSurfaceState
-          bufferHeight <- G.get_buffer_height wlrSurfaceState
-          -- width <- G.get_width wlrSurfaceState
-          -- height <-G.get_height wlrSurfaceState
-          return (bufferWidth, bufferHeight)
+          -- bufferWidth <- G.get_buffer_width wlrSurfaceState
+          -- bufferHeight <- G.get_buffer_height wlrSurfaceState
+          -- return (bufferWidth, bufferHeight)
+          width <- G.get_width wlrSurfaceState
+          height <-G.get_height wlrSurfaceState
+          return (width, height)
 
-newCanvasSurface :: GodotSimulaViewSprite -> (GodotWlrSurface, Int, Int) -> IO CanvasSurface
-newCanvasSurface gsvs arg@(wlrSurface, x, y) = do
+newCanvasSurface :: GodotSimulaViewSprite -> IO CanvasSurface
+newCanvasSurface gsvs = do
   cs <- "res://addons/godot-haskell-plugin/CanvasSurface.gdns"
     & newNS' []
     >>= godot_nativescript_get_userdata
@@ -700,7 +701,6 @@ newCanvasSurface gsvs arg@(wlrSurface, x, y) = do
   addChild viewport cs
 
   atomically $ writeTVar (_csGSVS cs) gsvs
-  atomically $ writeTVar (_csSurface cs) arg
   atomically $ writeTVar (_csViewport cs) viewport
 
   atomically $ writeTVar (_csFrameCounter cs) 0
@@ -717,13 +717,10 @@ savePng cs surfaceTexture wlrSurface = do
     True -> putStrLn "Texture is null in savePng!"
     False -> do -- Get image
                 gsvs <- readTVarIO (cs ^. csGSVS)
-                visualServer <- getVisualServer gsvs
-                textureRID <- G.get_rid surfaceTexture
-                surfaceTextureAsImage <- G.texture_get_data visualServer textureRID 0
+                surfaceTextureAsImage <- G.get_data surfaceTexture
 
                 -- Get file path
-                frame <- readTVarIO (cs ^. csFrameCounter)
-                atomically $ writeTVar (cs ^. csFrameCounter) (frame + 1)
+                frame <- readTVarIO (gsvs ^. gsvsFrameCount)
                 let pathStr = "./png/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
                 pathStr' <- toLowLevel (pack pathStr)
 
@@ -735,6 +732,20 @@ savePng cs surfaceTexture wlrSurface = do
           visualServer <- readTVarIO (gss ^. gssVisualServer)
           return visualServer
 
+type ScreenshotBaseName = String
+type ScreenshotFullPath = String
+
+savePngPancake :: GodotSimulaServer -> ScreenshotBaseName -> IO (ScreenshotFullPath)
+savePngPancake gss screenshotBaseName = do
+  viewport <- G.get_viewport gss :: IO GodotViewport
+  viewportTexture <- G.get_texture viewport
+  pancakeImg <- G.get_data viewportTexture
+  G.flip_y pancakeImg
+  let relativePath = ("./png/" <> screenshotBaseName <> ".png")
+  fullPath <- System.Directory.canonicalizePath relativePath
+  G.save_png pancakeImg =<< toLowLevel (pack relativePath)
+  return fullPath
+
 -- Run shell command with DISPLAY set to our XWayland server value (typically
 -- :2)
 appLaunch :: GodotSimulaServer -> String -> [String] -> IO ()
@@ -745,12 +756,10 @@ appLaunch gss appStr args = do
   let originalEnv = (gss ^. gssOriginalEnv)
   maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
   case (appStr, maybeXwaylandDisplay) of
-    ("nullApp", _) -> do logStr "Launching nullApp:"
-                         appCounter@(appsLaunched, appsRemaining) <- readTVarIO (gss ^. gssStartingAppsCounter)
-                         logStr $ "  appsLaunched: " ++ (show appsLaunched)
-                         logStr $ "  appsRemaining: " ++ (show appsRemaining)
+    ("nullApp", _) -> do appCounter@(appsLaunched, appsRemaining) <- readTVarIO (gss ^. gssStartingAppsCounter)
                          atomically $ writeTVar (_gssStartingAppsCounter gss) (appsLaunched + 1, appsRemaining - 1)
                          sApps <- readTVarIO (gss ^. gssStartingApps)
+
 
                          let nextApp = if (sApps == []) then Nothing else Just (Data.List.head sApps)
                          case nextApp of
@@ -762,13 +771,7 @@ appLaunch gss appStr args = do
                                             Nothing -> return ()
                                             Just secondApp' -> appStrLaunch gss secondApp'
 
-                         -- sApps' <- readTVarIO (gss ^. gssStartingApps)
-                         -- let nextApp' = if (sApps' == []) then Nothing else Just (Data.List.head sApps')
-                         -- case nextApp' of
-                         --      Nothing -> return ()
-                         --      Just app -> do
-                         --        atomically $ writeTVar (gss ^. gssStartingApps)  (Data.List.tail sApps')
-                         --        appLaunch gss app []
+                         return ()
     ("launchHMDWebcam", _) -> launchHMDWebCam gss
     ("launchTerminal", _) -> terminalLaunch gss
     ("launchUsageInstructions", _) -> appStrLaunch gss "./result/bin/midori https://github.com/SimulaVR/Simula#usage -p"
@@ -776,9 +779,10 @@ appLaunch gss appStr args = do
     (_, (Just xwaylandDisplay)) -> do
       let envMap = M.fromList originalEnv
       let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
+      let envMapWithWaylandDisplay = M.insert "WAYLAND_DISPLAY" "simula-0" envMapWithDisplay
       -- let envMapWithDisplay = M.insert "DISPLAY" ":13" envMap
-      let envListWithDisplay = M.toList envMapWithDisplay
-      res <- try $ createProcess (proc appStr args) { env = Just envListWithDisplay, new_session = True, std_out = NoStream, std_err = NoStream } :: IO (Either IOException (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle))
+      let envListWithDisplays = M.toList envMapWithWaylandDisplay
+      res <- try $ createProcess (proc appStr args) { env = Just envListWithDisplays, new_session = True, std_out = NoStream, std_err = NoStream } :: IO (Either IOException (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle))
       -- res <- try $ createProcess (proc appStr args) { env = Just envListWithDisplay, new_session = True } :: IO (Either IOException (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle))
       case res of
         Left _ -> putStrLn $ "Cannot find command: " ++ appStr
@@ -978,3 +982,8 @@ saveViewportAsPngAndLaunch gsvs tex m22@(V2 (V2 ox oy) (V2 ex ey)) = do
                 appLaunch gss "./result/bin/xclip" ["-selection", "clipboard", "-t", "image/png", "-i", pathStr]
 
                 return ()
+
+fromGodotArray :: GodotArray -> IO [GodotVariant]
+fromGodotArray vs = do
+  size <- fromIntegral <$> Api.godot_array_size vs
+  forM [0..size-1] $ Api.godot_array_get vs

@@ -168,22 +168,7 @@ switchToNix() {
 switchToLocal() {
     cd ./addons/godot-haskell-plugin
     rm libgodot-haskell-plugin.so
-    ln -s $(stack path --local-install-root)/lib/libgodot-haskell-plugin.so libgodot-haskell-plugin.so
-    cd -
-
-    mkdir -p ./result/bin
-    cd ./result/bin
-
-    sudo rm ./xfce4-terminal
-    sudo rm ./xpra
-    sudo rm ./xrdb
-    sudo rm ./wmctrl
-    sudo rm ./ffplay
-    sudo ln -s $(which xfce4-terminal) xfce4-terminal
-    sudo ln -s $(which xpra) xpra
-    sudo ln -s $(which xrdb) xrdb
-    sudo ln -s $(which wmctrl) wmctrl
-    sudo ln -s $(which ffplay) ffplay
+    ln -s ./dist-newstyle/build/x86_64-linux/ghc-8.8.3/godot-haskell-plugin-0.1.0.0/f/godot-haskell-plugin/build/godot-haskell-plugin/libgodot-haskell-plugin.so libgodot-haskell-plugin.so
     cd -
 }
 

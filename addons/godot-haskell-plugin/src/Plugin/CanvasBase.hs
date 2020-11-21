@@ -47,6 +47,7 @@ import           Control.Lens                hiding (Context)
 import Data.Typeable
 
 import qualified Data.Map.Strict as M
+import qualified Data.List
 
 import Data.Map.Ordered as MO
 
@@ -88,64 +89,35 @@ newCanvasBase gsvs = do
 
 _ready :: CanvasBase -> [GodotVariant] -> IO ()
 _ready cb _ = do
-  gsvs <- readTVarIO (cb ^. cbGSVS)
-  simulaView <- readTVarIO (gsvs ^. gsvsView)
-  let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
-  case wlrEitherSurface of
-     Left xdgSurface -> return ()
-     Right wlrXWaylandSurface -> do newSurfacesAndCoords <- getDepthFirstSurfaces wlrXWaylandSurface :: IO [(GodotWlrSurface, Int, Int)]
-                                    surfaceMap <- newSurfaceMap gsvs newSurfacesAndCoords
-                                    atomically $ writeTVar (_gsvsSurfaceMap gsvs) surfaceMap
   G.set_process cb True
 
 _process :: CanvasBase -> [GodotVariant] -> IO ()
 _process self args = do
-  -- putStrLn "process in CanvasBase"
-
   G.update self
   return ()
 
 _draw :: CanvasBase -> [GodotVariant] -> IO ()
 _draw cb _ = do
   gsvs <- readTVarIO (cb ^. cbGSVS)
+  gss <- readTVarIO (gsvs ^. gsvsServer)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
 
-  -- Update surfaces
-  let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
-  case wlrEitherSurface of
-     Left xdgSurface -> return ()
-     Right wlrXWaylandSurface -> do newSurfacesAndCoords <- getDepthFirstSurfaces wlrXWaylandSurface :: IO [(GodotWlrSurface, Int, Int)]
-                                    -- oldSurfaceMap <- newSurfaceMap gsvs newSurfacesAndCoords
-                                    oldSurfaceMap <- readTVarIO (gsvs ^. gsvsSurfaceMap)
-                                    newSurfaceMap <- mergeSurfaceMap gsvs oldSurfaceMap newSurfacesAndCoords
-                                    atomically $ writeTVar (_gsvsSurfaceMap gsvs) newSurfaceMap
-
   -- Draw surfaces from CanvasSurface
-  drawSurfaces cb gsvs
-
-  -- Draw free children
-    -- updateFreeChildrenCoordinates -- possibly needed down the road, in case free child coordinates change
-  drawFreeChildren cb gsvs
+  drawCanvasSurface cb gsvs
 
   -- Draw cursor
   drawCursor cb gsvs
+
+  -- Increment global framecount
+  frameCount <- readTVarIO (gsvs ^. gsvsFrameCount)
+  atomically $ writeTVar (gsvs ^. gsvsFrameCount) (frameCount + 1)
+
   where
     getTransparency :: CanvasBase -> IO Double
     getTransparency cb = do
       gsvs <- readTVarIO (cb ^. cbGSVS)
       gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
       return (realToFrac gsvsTransparency)
-    drawFreeChildren :: CanvasBase -> GodotSimulaViewSprite -> IO ()
-    drawFreeChildren cb gsvs = do
-      gss <- readTVarIO (gsvs ^. gsvsServer)
-      freeChildren <- readTVarIO (gsvs  ^. gsvsFreeChildren)
-
-      mapM (drawFreeChild cb) freeChildren
-      return ()
-    drawFreeChild :: CanvasBase -> CanvasSurface -> IO ()
-    drawFreeChild cb cs = do
-      (wlrSurface, _, _) <- readTVarIO (cs ^. csSurface)
-      drawSurface cb (wlrSurface, cs)
     savePngCS :: (GodotWlrSurface, CanvasSurface) -> IO ()
     savePngCS arg@((wlrSurface, cs)) = do
       viewportSurface <- readTVarIO (cs ^. csViewport) :: IO GodotViewport
@@ -153,23 +125,16 @@ _draw cb _ = do
       savePng cs viewportSurfaceTexture wlrSurface
       return ()
 
-    drawSurfaces :: CanvasBase -> GodotSimulaViewSprite -> IO ()
-    drawSurfaces cb gsvs = do
+    drawCanvasSurface :: CanvasBase -> GodotSimulaViewSprite -> IO ()
+    drawCanvasSurface cb gsvs = do
       gss <- readTVarIO (gsvs ^. gsvsServer)
-      surfaceMap <- readTVarIO (gsvs  ^. gsvsSurfaceMap)
-      let surfaces = MO.assocs surfaceMap
-
-      mapM (drawSurface cb) surfaces
-      return ()
-
-    drawSurface :: CanvasBase -> (GodotWlrSurface, CanvasSurface) -> IO ()
-    drawSurface cb arg@(wlrSurface, cs) = do
+      cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
       viewportSurface <- readTVarIO (cs ^. csViewport)
       viewportSurfaceTexture <- G.get_texture viewportSurface
-
       renderPosition <- toLowLevel (V2 0 0) :: IO GodotVector2
       gsvsTransparency <- getTransparency cb
       modulateColor <- (toLowLevel $ (rgb 1.0 1.0 (1.0 :: Double)) `withOpacity` gsvsTransparency) :: IO GodotColor
+
       G.draw_texture cb ((safeCast viewportSurfaceTexture) :: GodotTexture)  renderPosition modulateColor (coerce nullPtr)
 
     drawCursor :: CanvasBase -> GodotSimulaViewSprite -> IO ()
@@ -218,115 +183,3 @@ _draw cb _ = do
                atomically $ writeTVar (gsvs ^. gsvsScreenshotCoords) (Nothing, Nothing)
              _ -> return ()
         _ -> return ()
-
--- TODO: All (Int, Int) should be relative to root surface; right now, subsurface coordinates are possibly relative to their immediate parent.
-getDepthFirstSurfaces :: GodotWlrXWaylandSurface -> IO [(GodotWlrSurface, Int, Int)]
-getDepthFirstSurfaces wlrXWaylandSurface = do
-  xwaylandMappedChildrenAndCoords <- getXWaylandMappedChildren wlrXWaylandSurface :: IO [(GodotWlrXWaylandSurface, Int, Int)]
-  wlrSurface <- G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface
-  foldM appendXWaylandSurfaceAndChildren [(wlrSurface, 0, 0)] xwaylandMappedChildrenAndCoords
-  where
-        appendXWaylandSurfaceAndChildren :: [(GodotWlrSurface, Int, Int)] -> (GodotWlrXWaylandSurface, Int, Int) -> IO [(GodotWlrSurface, Int, Int)]
-        appendXWaylandSurfaceAndChildren oldList arg@(wlrXWaylandSurface, x, y) = do
-           xwaylandChildSurface <- G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface
-           appendSurfaceAndChildren oldList (xwaylandChildSurface, x, y)
-
-        appendSurfaceAndChildren :: [(GodotWlrSurface, Int, Int)] -> (GodotWlrSurface, Int, Int) -> IO [(GodotWlrSurface, Int, Int)]
-        appendSurfaceAndChildren oldList arg@(wlrSurface, x, y) = do
-           subsurfacesAndCoords <- getSurfaceChildren wlrSurface :: IO [(GodotWlrSurface, Int, Int)]
-           foldM appendSurfaceAndChildren (oldList ++ [(wlrSurface, x, y)]) subsurfacesAndCoords
-
-        -- appendSubsurfaceAndChildren :: [(GodotWlrSurface, Int, Int)] -> (GodotWlrSurface, Int, Int) -> IO [(GodotWlrSurface, Int, Int)]
-        -- appendSubsurfaceAndChildren oldList arg@(wlrSubsurface, ssx, ssy)  = do
-        --    subsurfacesAndCoords <- getSubsurfaceChildren wlrSubsurface
-        --    wlrSurface <- G.getWlrSurface (wlrSubsurface :: GodotWlrSubsurface)
-        --    foldM appendSubsurfaceAndChildren (oldList ++ [(wlrSurface, ssx, ssy)]) subsurfacesAndCoords
-
-        getSurfaceChildren :: GodotWlrSurface -> IO [(GodotWlrSurface, Int, Int)]
-        getSurfaceChildren wlrSurface = do
-          arrayOfChildren <- G.get_children wlrSurface :: IO GodotArray
-          numChildren <- Api.godot_array_size arrayOfChildren
-          arrayOfChildrenGV <- fromLowLevel' arrayOfChildren
-          childrenSubsurfaces <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrSubsurface]
-          childrenSSX <- mapM G.get_ssx childrenSubsurfaces
-          childrenSSY <- mapM G.get_ssy childrenSubsurfaces
-
-          children <- mapM G.getWlrSurface childrenSubsurfaces
-
-          let childrenWithCoords = zip3 children childrenSSX childrenSSY
-
-          Api.godot_array_destroy arrayOfChildren
-          return childrenWithCoords
-
-        -- getSubsurfaceChildren :: GodotWlrSubsurface -> IO [(GodotWlrSurface, Int, Int)]
-        -- getSubsurfaceChildren wlrSubsurface = do
-        --   arrayOfChildren <- G.get_children wlrSubsurface :: IO GodotArray
-        --   numChildren <- Api.godot_array_size arrayOfChildren
-        --   arrayOfChildrenGV <- fromLowLevel' arrayOfChildren
-        --   children <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrSubsurface]
-
-        --   childrenSSX <- mapM G.get_ssx children
-        --   childrenSSY <- mapM G.get_ssy children
-        --   let childrenWithCoords = zip3 children childrenSSX childrenSSY
-
-
-        --   Api.godot_array_destroy arrayOfChildren
-        --   return childrenWithCoords
-
-        getXWaylandMappedChildren :: GodotWlrXWaylandSurface -> IO [(GodotWlrXWaylandSurface, Int, Int)]
-        getXWaylandMappedChildren wlrXWaylandSurface = do
-          arrayOfChildren <- G.get_children wlrXWaylandSurface :: IO GodotArray -- Doesn't return non-mapped children
-          numChildren <- Api.godot_array_size arrayOfChildren
-          arrayOfChildrenGV <- fromLowLevel' arrayOfChildren
-          children <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrXWaylandSurface]
-
-          childrenX <- mapM G.get_x children
-          childrenY <- mapM G.get_y children
-          let childrenWithCoords = zip3 children childrenX childrenY
-
-          Api.godot_array_destroy arrayOfChildren
-          return childrenWithCoords
-
-        fromLowLevel' vs = do
-          size <- fromIntegral <$> Api.godot_array_size vs
-          forM [0..size-1] $ Api.godot_array_get vs
-
--- To be called the first frame
-newSurfaceMap :: GodotSimulaViewSprite -> [(GodotWlrSurface, Int, Int)] -> IO SurfaceMap
-newSurfaceMap gsvs lst = do
-  let surfaces = fmap fst3 lst
-  canvasSurfaces <- mapM (newCanvasSurface gsvs) lst
-  let surfaceMapList = zip surfaces canvasSurfaces
-  -- Assumes `deriving instance Ord GodotWlrSurface`
-  let surfaceMap = MO.fromList surfaceMapList
-  return surfaceMap
-
--- To be called each frame
-mergeSurfaceMap :: GodotSimulaViewSprite -> SurfaceMap -> [(GodotWlrSurface, Int, Int)] -> IO SurfaceMap
-mergeSurfaceMap gsvs oldSurfaceMap depthFirstSurfaces = do
-  let surfaces = fmap fst3 depthFirstSurfaces
-  newCanvasSurfaces <- mapM (getOrCreateCanvasSurface gsvs oldSurfaceMap) depthFirstSurfaces
-  let newSurfaceMapList = zip surfaces newCanvasSurfaces
-  let newSurfaceMap = MO.fromList newSurfaceMapList
-
-  let deleteThisSurfaceMap = (MO.\\) oldSurfaceMap newSurfaceMap
-  let deleteTheseCanvasSurfaces = fmap snd (MO.assocs deleteThisSurfaceMap)
-  mapM_ destroyCS deleteTheseCanvasSurfaces
-
-  return newSurfaceMap
-  where getOrCreateCanvasSurface :: GodotSimulaViewSprite -> SurfaceMap -> (GodotWlrSurface, Int, Int) -> IO CanvasSurface
-        getOrCreateCanvasSurface gsvs oldSurfaceMap key@(wlrSurfaceKey, x, y) = do
-          let maybeCS = MO.lookup wlrSurfaceKey oldSurfaceMap
-          cs <- case maybeCS of
-                    Nothing -> newCanvasSurface gsvs key
-                    Just cs -> return cs
-          return cs
-
-        destroyCS :: CanvasSurface -> IO ()
-        destroyCS cs = do
-          gsvs <- readTVarIO (cs ^. csGSVS)
-          viewport <- readTVarIO (cs ^. csViewport)
-          G.set_process cs False
-          removeChild viewport cs
-          removeChild gsvs viewport
-          Api.godot_object_destroy (safeCast cs)

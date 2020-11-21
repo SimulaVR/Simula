@@ -2,14 +2,12 @@
 
 [sub_resource type="Shader" id=1]
 code = "shader_type canvas_item;
-//render_mode blend_premul_alpha;
-render_mode blend_disabled;
+render_mode blend_wlroots;
 
 void fragment() {
-	vec4 outColor = vec4(0.0);
-        outColor = texture(TEXTURE, UV);
-
-	outColor.a = 0.99999999999; //hack
+  //manual premul alph
+  vec4 orig = texture(TEXTURE, UV);
+  vec4 outColor = vec4(orig.rgb, 1.0) * orig.a;
 	COLOR = outColor;
 }"
 

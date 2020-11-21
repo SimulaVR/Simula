@@ -113,6 +113,5 @@ void fragment() {
   //outColor = texture(texture_albedo, vec2(1.0 - UV.x, UV.y)); //to turn off
 
 	ALBEDO = outColor.xyz;
-  ALPHA = outsideAlpha;
-	//ALBEDO = outColor; // Causes invisible textures
+  ALPHA = outColor.w;
 }"

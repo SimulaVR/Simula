@@ -21,6 +21,8 @@ import System.Process.Internals
 import System.Posix.Types
 import System.Posix.Signals
 import System.Directory
+import System.Exit
+import System.Timeout
 import           Data.Bits
 import           Linear
 import           Plugin.Imports
@@ -71,6 +73,7 @@ import qualified Language.C.Inline as C
 
 import           Plugin.CanvasBase
 import           Plugin.CanvasSurface
+import           Plugin.Debug
 
 import           System.Clock
 import           Control.Monad.Extra
@@ -140,8 +143,11 @@ getKeyboardAction gss keyboardShortcut =
           simulaView <- readTVarIO (gsvs ^. gsvsView)
           let eitherSurface = (simulaView ^. svWlrEitherSurface)
           case eitherSurface of
-            (Left wlrXdgSurface) -> return ()
-            (Right wlrXWaylandSurface) -> G.send_close wlrXWaylandSurface
+            (Left wlrXdgSurface) -> do
+              toplevel  <- G.get_xdg_toplevel wlrXdgSurface :: IO GodotWlrXdgToplevel
+              G.send_close toplevel
+            (Right wlrXWaylandSurface) -> do
+              G.send_close wlrXWaylandSurface
         terminateWindow _ _ = return ()
   
         shellLaunch :: GodotSimulaServer -> String -> SpriteLocation -> Bool -> IO ()
@@ -286,6 +292,7 @@ getKeyboardAction gss keyboardShortcut =
         terminateSimula _ True = do
           putStrLn "Terminating Simula.."
           pid <- getProcessID
+          putStrLn $ "Terminating Simula with pid: " ++ (show pid)
           createProcess (shell $ "kill " ++ (show pid))
           return ()
         terminateSimula _ _ = return ()
@@ -358,7 +365,6 @@ instance NativeScript GodotSimulaServer where
   classMethods =
     [ func NoRPC "_ready" Plugin.SimulaServer.ready
     , func NoRPC "_input" Plugin.SimulaServer._input
-    -- , func NoRPC "_input" Plugin.SimulaServer.input -- replaced by _on_wlr_* handlers
     , func NoRPC "_on_WaylandDisplay_ready"    Plugin.SimulaServer._on_WaylandDisplay_ready
     , func NoRPC "_on_WlrXdgShell_new_surface" Plugin.SimulaServer._on_WlrXdgShell_new_surface
     , func NoRPC "handle_map_surface" Plugin.SimulaServer.handle_map_surface
@@ -367,6 +373,7 @@ instance NativeScript GodotSimulaServer where
     , func NoRPC "_on_WlrXWayland_new_surface" Plugin.SimulaServer._on_WlrXWayland_new_surface
     , func NoRPC "_physics_process" Plugin.SimulaServer.physicsProcess
     , func NoRPC "_on_simula_shortcut" Plugin.SimulaServer._on_simula_shortcut
+    , func NoRPC "handle_wlr_compositor_new_surface" Plugin.SimulaServer.handle_wlr_compositor_new_surface
     ]
 
   classSignals = []
@@ -392,7 +399,6 @@ ready gss _ = do
 
   wlrCompositor <- readTVarIO (gss ^. gssWlrCompositor)
   wlrXWayland <- readTVarIO (gss ^. gssWlrXWayland)
-
 
   oldDisplay <- getEnv "DISPLAY"
 
@@ -425,7 +431,7 @@ ready gss _ = do
   let simulaWindow = (head . words . head) rightWindows
   createProcess ((shell $ "./result/bin/wmctrl -ia " ++ simulaWindow) { env = Just [("DISPLAY", oldDisplay)] })
 
-  appendFile "log.txt" "Starting logs..\n"
+  appendFile "log.txt" ""
 
   -- Launch default apps
   sApps <- readTVarIO (gss ^. gssStartingApps)
@@ -440,6 +446,11 @@ ready gss _ = do
   -- overrides the default environment
   (worldEnvironment, _) <- readTVarIO (gss ^. gssWorldEnvironment)
   addChild gss worldEnvironment
+  debugModeMaybe <- lookupEnv "DEBUG"
+  case debugModeMaybe of
+    Nothing -> return ()
+    Just debugModeVal  -> (forkIO $ debugFunc gss) >> return ()
+
   return ()
 
   -- launchXpra gss
@@ -506,6 +517,7 @@ addWlrChildren gss = do
   atomically $ writeTVar (_gssWlrCompositor gss) wlrCompositor
   G.set_name wlrCompositor =<< toLowLevel "WlrCompositor"
   G.add_child wlrBackend ((safeCast wlrCompositor) :: GodotNode) True
+  connectGodotSignal wlrCompositor "new_surface" gss "handle_wlr_compositor_new_surface" []
 
   rc <- readTVarIO (gss ^. gssHMDRayCast)
   addChild gss rc
@@ -556,7 +568,7 @@ initGodotSimulaServer obj = do
 
   gssOriginalEnv' <- getEnvironment
 
-  gssFreeChildren' <- newTVarIO M.empty :: IO (TVar (M.Map GodotWlrXWaylandSurface CanvasSurface))
+  gssFreeChildren' <- newTVarIO M.empty :: IO (TVar (M.Map GodotWlrXWaylandSurface GodotSimulaViewSprite))
 
   rec
       configuration <- parseConfiguration
@@ -597,6 +609,9 @@ initGodotSimulaServer obj = do
       texturesStr <- loadEnvironmentTextures configuration worldEnvironment
       gssEnvironmentTextures' <- newTVarIO texturesStr
       gssStartingAppTransform' <- newTVarIO Nothing
+
+      pid <- getProcessID
+      let gssPid' = show pid
       let gss = GodotSimulaServer {
         _gssObj                   = obj                       :: GodotObject
       , _gssWaylandDisplay        = gssWaylandDisplay'        :: TVar GodotWaylandDisplay
@@ -618,7 +633,7 @@ initGodotSimulaServer obj = do
       , _gssKeyboardGrabbedSprite = gssKeyboardGrabbedSprite' :: TVar (Maybe (GodotSimulaViewSprite, Float))
       , _gssXWaylandDisplay       = gssXWaylandDisplay'       :: TVar (Maybe String)
       , _gssOriginalEnv           = gssOriginalEnv'           :: [(String, String)]
-      , _gssFreeChildren          = gssFreeChildren'          :: TVar (M.Map GodotWlrXWaylandSurface CanvasSurface)
+      , _gssFreeChildren          = gssFreeChildren'          :: TVar (M.Map GodotWlrXWaylandSurface GodotSimulaViewSprite)
       , _gssConfiguration         = gssConfiguration'         :: TVar Configuration
       , _gssKeyboardShortcuts     = gssKeyboardShortcuts'     :: TVar KeyboardShortcuts
       , _gssKeyboardRemappings    = gssKeyboardRemappings'    :: TVar KeyboardRemappings
@@ -626,7 +641,8 @@ initGodotSimulaServer obj = do
       , _gssStartingApps          = gssStartingApps'          :: TVar [String]
       , _gssWorldEnvironment      = gssWorldEnvironment'      :: TVar (GodotWorldEnvironment, String)
       , _gssEnvironmentTextures   = gssEnvironmentTextures'   :: TVar [String]
-      , _gssStartingAppTransform   = gssStartingAppTransform'   :: TVar (Maybe GodotTransform)
+      , _gssStartingAppTransform  = gssStartingAppTransform'  :: TVar (Maybe GodotTransform)
+      , _gssPid                   = gssPid'                    :: String
       }
   return gss
   where getStartingAppsStr :: Maybe String -> String
@@ -645,33 +661,43 @@ _on_WaylandDisplay_ready gss _ = do
 
 _on_WlrXdgShell_new_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_WlrXdgShell_new_surface gss [wlrXdgSurfaceVariant] = do
+  putStrLn "_on_WlrXdgShell_new_surface"
   wlrXdgSurface <- fromGodotVariant wlrXdgSurfaceVariant :: IO GodotWlrXdgSurface -- Not sure if godot-haskell provides this for us
   roleInt <- G.get_role wlrXdgSurface
   case roleInt of
       0 -> return () -- XDG_SURFACE_ROLE_NONE
-      2 -> return () -- XDG_SURFACE_ROLE_POPUP
-      1 -> do                    -- XDG_SURFACE_ROLE_TOPLEVEL
+      2 -> do -- XDG_SURFACE_ROLE_POPUP
+        wlrSurface <- G.get_wlr_surface wlrXdgSurface
+        maybeGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
+        case maybeGSVS of
+          Nothing -> putStrLn "Unable to connect xdg popup surface signals; no gssActiveCursorGSVS!"
+          Just gsvs -> do
+            -- connectGodotSignal wlrSurface "new_subsurface" gsvs "handle_wlr_surface_new_subsurface" [] -- arguably don't need; subsumed by xdg new_popup signal
+            -- connectGodotSignal wlrSurface "commit" gsvs "handle_wlr_surface_commit" []
+            -- connectGodotSignal wlrSurface "destroy" gsvs "handle_wlr_surface_destroy" []  -- arguably don't need; subsumed by xdg destroy signal
+            return ()
+      1 -> do -- XDG_SURFACE_ROLE_TOPLEVEL
+              wlrXdgToplevel <- G.get_xdg_toplevel wlrXdgSurface
+              wlrSurface <- G.get_wlr_surface wlrXdgSurface
+              G.set_tiled wlrXdgToplevel True
               simulaView <- newSimulaView gss wlrXdgSurface
               gsvs <- newGodotSimulaViewSprite gss simulaView
 
-              --surface.connect("map", self, "handle_map_surface")
               connectGodotSignal gsvs "map" gss "handle_map_surface" []
-
-              -- _xdg_surface_set logic from godotston:
-              -- xdg_surface.connect("destroy", self, "_handle_destroy"):
               connectGodotSignal wlrXdgSurface "destroy" gsvs "_handle_destroy" []
-              -- xdg_surface.connect("map", self, "_handle_map"):
               connectGodotSignal wlrXdgSurface "map" gsvs "_handle_map" []
-              -- xdg_surface.connect("unmap", self, "_handle_unmap"):
-              connectGodotSignal wlrXdgSurface "unmap" gsvs "_handle_unmap" []
+              connectGodotSignal wlrXdgSurface "unmap" gsvs "handle_unmap" []
+              connectGodotSignal wlrXdgSurface "new_popup" gsvs "handle_new_popup" []
+              connectGodotSignal wlrXdgToplevel "request_show_window_menu" gsvs "handle_window_menu" []
+              connectGodotSignal wlrSurface "new_subsurface" gsvs "handle_wlr_surface_new_subsurface" []
+              connectGodotSignal wlrSurface "commit" gsvs "handle_wlr_surface_commit" []
+              connectGodotSignal wlrSurface "destroy" gsvs "handle_wlr_surface_destroy" []
 
               -- Add the gsvs as a child to the SimulaServer
               G.add_child ((safeCast gss) :: GodotNode )
                           ((safeCast gsvs) :: GodotNode)
                           True
 
-              -- Handles 2D window movement across a viewport; not needed:
-              -- toplevel.connect("request_move", self, "_handle_request_move")
               return ()
 
 
@@ -691,6 +717,7 @@ _on_WlrXdgShell_new_surface gss [wlrXdgSurfaceVariant] = do
 
 handle_map_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
 handle_map_surface gss [gsvsVariant] = do
+  putStrLn "handle_map_surface"
   maybeGsvs <- variantToReg gsvsVariant :: IO (Maybe GodotSimulaViewSprite)
   case maybeGsvs of
     Nothing -> putStrLn "Failed to cast GodotSimulaViewSprite in handle_map_surface!"
@@ -703,11 +730,17 @@ handle_map_surface gss [gsvsVariant] = do
 
                     cb <- newCanvasBase gsvs
                     viewportBase <- readTVarIO (cb ^. cbViewport)
-
                     atomically $ writeTVar (gsvs ^. gsvsCanvasBase) cb
                     G.set_process cb True
                     addChild gsvs viewportBase
                     addChild viewportBase cb
+
+                    cs <- newCanvasSurface gsvs
+                    viewportSurface <- readTVarIO (cs ^. csViewport)
+                    atomically $ writeTVar (gsvs ^. gsvsCanvasSurface) cs
+                    G.set_process cs True
+                    addChild gsvs viewportSurface
+                    addChild viewportSurface cs
 
                     setInFrontOfUser gsvs (-2)
 
@@ -861,7 +894,7 @@ physicsProcess gss _ = do
                                  orientSpriteTowardsGaze gsvs
     (Nothing, Just (gsvs, surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)))) -> case gsvsActiveCursor of
                                                                                             Nothing -> focus gsvs
-                                                                                            Just gsvsActiveCursor' -> if (gsvs /= gsvsActiveCursor') then (focus gsvs) else (safeSetActivated gsvs True)
+                                                                                            Just gsvsActiveCursor' -> if (gsvs /= gsvsActiveCursor') then (focus gsvs) else return () -- (safeSetActivated gsvs True)
     _ -> return ()
 
   return ()
@@ -963,3 +996,15 @@ toggleGrabMode = do
       G.MOUSE_MODE_VISIBLE -> G.set_mouse_mode inp G.MOUSE_MODE_CAPTURED
   return ()
 
+handle_wlr_compositor_new_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
+handle_wlr_compositor_new_surface gss args@[wlrSurfaceVariant] = do
+  putStrLn "handle_wlr_compositor_new_surface"
+  wlrSurface <- fromGodotVariant wlrSurfaceVariant :: IO GodotWlrSurface
+  maybeGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
+  case maybeGSVS of
+    Nothing -> return () -- putStrLn "Unable to handle_wlr_compositor_new_surface; no gssActiveCursorGSVS!"
+    Just gsvs -> do
+      connectGodotSignal wlrSurface "new_subsurface" gsvs "handle_wlr_surface_new_subsurface" []
+      connectGodotSignal wlrSurface "commit" gsvs "handle_wlr_surface_commit" []
+      connectGodotSignal wlrSurface "destroy" gsvs "handle_wlr_surface_destroy" []
+      return ()

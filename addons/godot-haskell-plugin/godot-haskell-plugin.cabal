@@ -68,6 +68,9 @@ library
     , ordered-containers
     , process-extras
     , dhall
+    , hspec
+    , hspec-core
+    , QuickCheck
   exposed-modules:
       Telemetry
       Plugin
@@ -85,6 +88,7 @@ library
       Plugin.SimulaController
       Plugin.Simula
       Plugin.VR
+      Plugin.Debug
       -- Debug.C
       -- Debug.Marshal
   default-language: Haskell2010
@@ -99,7 +103,7 @@ library
       TypeOperators
       MultiParamTypeClasses
       FunctionalDependencies
-  ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code
+  ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code -g2 -threaded
  
 -- | After adding hsroots, we are forced to copy cabal fields for `library`
 -- down to `foreign-library godot-haskell-plugin` (unclear why).
@@ -129,10 +133,11 @@ foreign-library godot-haskell-plugin
     Plugin.SimulaController
     Plugin.Simula
     Plugin.VR
+    Plugin.Debug
     -- Debug.C
     -- Debug.Marshal
   other-modules: FLib
-  ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code
+  ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code -g2 -threaded
   build-depends:
       base >=4.12 && <5
     , lens
@@ -162,6 +167,9 @@ foreign-library godot-haskell-plugin
     , ordered-containers
     , process-extras
     , dhall
+    , hspec
+    , hspec-core
+    , QuickCheck
 
   default-extensions:
        FlexibleContexts

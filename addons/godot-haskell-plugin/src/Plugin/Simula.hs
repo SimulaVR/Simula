@@ -34,6 +34,7 @@ import           Godot.Gdnative.Internal                  ( GodotNodePath
                                                           , GodotObject
                                                           )
 
+import           System.Environment
 
 data GodotSimula = GodotSimula
   { _sObj      :: GodotObject
@@ -75,35 +76,38 @@ ready self _ = do
                                     return openVR
     Nothing -> do return openVR
 
+  debugModeMaybe <- lookupEnv "DEBUG"
+  case debugModeMaybe of
+    Just debugModeVal  -> putStrLn "DEBUG mode detected: not launching VR"
+    Nothing ->
+      do openBackend >>= initVR (safeCast self) >>= \case
+                InitVRSuccess -> do
+                  putStrLn "InitVRSuccess"
+                  vrViewport <- unsafeInstance GodotViewport "Viewport"
 
-  openBackend >>= initVR (safeCast self) >>= \case
-    InitVRSuccess -> do
-      putStrLn "InitVRSuccess"
-      vrViewport <- unsafeInstance GodotViewport "Viewport"
+                  G.set_name vrViewport =<< toLowLevel "VRViewport"
+                  G.set_update_mode vrViewport 3 -- UPDATE_ALWAYS
+                  G.set_use_arvr vrViewport True
+                  vrViewportSize <- toLowLevel (V2 100 100) :: IO GodotVector2 -- Godot requires us to set a default size
+                  G.set_size vrViewport vrViewportSize
 
-      G.set_name vrViewport =<< toLowLevel "VRViewport"
-      G.set_update_mode vrViewport 3 -- UPDATE_ALWAYS
-      G.set_use_arvr vrViewport True
-      vrViewportSize <- toLowLevel (V2 100 100) :: IO GodotVector2 -- Godot requires us to set a default size
-      G.set_size vrViewport vrViewportSize
+                  G.add_child self (safeCast vrViewport) True
 
-      G.add_child self (safeCast vrViewport) True
+                  orig <- unsafeInstance GodotARVROrigin "ARVROrigin"
+                  G.add_child vrViewport (safeCast orig) True
 
-      orig <- unsafeInstance GodotARVROrigin "ARVROrigin"
-      G.add_child vrViewport (safeCast orig) True
+                  -- Add the HMD as a child of the origin node
+                  hmd <- unsafeInstance GodotARVRCamera "ARVRCamera"
+                  G.add_child orig (safeCast hmd) True
 
-      -- Add the HMD as a child of the origin node
-      hmd <- unsafeInstance GodotARVRCamera "ARVRCamera"
-      G.add_child orig (safeCast hmd) True
+                  -- Add two controllers and connect their button presses to the Simula
+                  -- node.
+                  let addCt = addSimulaController orig
+                  addCt "LeftController" 1 >>= connectController
+                  addCt "RightController" 2 >>= connectController
+                  return ()
 
-      -- Add two controllers and connect their button presses to the Simula
-      -- node.
-      let addCt = addSimulaController orig
-      addCt "LeftController" 1 >>= connectController
-      addCt "RightController" 2 >>= connectController
-      return ()
-
-    InitVRFailed  -> putStrLn "InitVRFailed"
+                InitVRFailed  -> putStrLn "InitVRFailed"
 
   gpcObj <- "res://addons/godot-haskell-plugin/PancakeCamera.gdns"
     & newNS' [] :: IO GodotObject
