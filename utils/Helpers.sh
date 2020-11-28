@@ -168,7 +168,7 @@ switchToNix() {
 switchToLocal() {
     cd ./addons/godot-haskell-plugin
     rm libgodot-haskell-plugin.so
-    ln -s ./dist-newstyle/build/x86_64-linux/ghc-8.8.3/godot-haskell-plugin-0.1.0.0/f/godot-haskell-plugin/build/godot-haskell-plugin/libgodot-haskell-plugin.so libgodot-haskell-plugin.so
+    ln -s ./dist-newstyle/build/x86_64-linux/ghc-8.8.4/godot-haskell-plugin-0.1.0.0/f/godot-haskell-plugin/build/godot-haskell-plugin/libgodot-haskell-plugin.so libgodot-haskell-plugin.so
     cd -
 }
 
@@ -205,6 +205,7 @@ installSimula() {
     if [ -z $1 ]; then
       NIXPKGS_ALLOW_UNFREE=1 nix-build default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
     else
+      switchToNix
       NIXPKGS_ALLOW_UNFREE=1 nix-build -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
     fi
 }
@@ -212,4 +213,36 @@ installSimula() {
 swapXpraNixToLocal() {
     sudo rm ./result/bin/xpra
     sudo ln -s $(which xpra) ./result/bin/xpra
+}
+
+# Experimental nsBuild* functions allow Simula developers to locally build
+# Simula modules inside a nix-shell
+nsBuildGodot() {
+ cd ./submodules/godot
+ nix-shell --run "wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; \
+                         wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c; \
+                         scons -Q -j8 platform=x11 target=debug;"
+ cd -
+}
+
+# Updates godot-haskell to latest api.json generated from devBuildGodot
+nsBuildGodotHaskell() {
+  cd ./submodules/godot
+  nix-shell --run "$(../../GetNixGL.sh) ./bin/godot.x11.tools.64 --gdnative-generate-json-api ./bin/api.json"
+  cd -
+
+  cd ./submodules/godot-haskell-cabal
+  nix-shell --attr env release.nix --run "./updateApiJSON.sh"
+  cd -
+}
+
+nsBuildGodotHaskellPlugin() {
+  cd ./addons/godot-haskell-plugin
+  nix-shell --attr env shell.nix --run "cabal build"
+  cd -
+}
+
+nsREPLGodotHaskellPlugin() {
+    cd ./addons/godot-haskell-plugin
+    nix-shell --attr env shell.nix --run "cabal repl"
 }

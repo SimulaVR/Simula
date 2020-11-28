@@ -1,0 +1,2 @@
+-- Used for dev purposes only; not used by nix-build:
+packages: ., ../../submodules/godot-haskell-cabal/godot-haskell.cabal

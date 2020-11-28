@@ -16,3 +16,6 @@
 [submodule "environments"]
 	path = environments
 	url = https://github.com/SimulaVR/environments
+[submodule "submodules/godot-haskell-cabal"]
+	path = submodules/godot-haskell-cabal
+	url = https://github.com/SimulaVR/godot-haskell
