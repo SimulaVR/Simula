@@ -228,11 +228,42 @@ testPopups gss = do
     describe "A popup initiated at cursor location (300,300)" $ do
         it ("gedit cursor coordinates should be same as popup location\n\n[[" <> geditScreenshot <> "]]\n\n") $ do
            popupCoordsGedit  `shouldBe` cursorCoordsGedit
+
+testMemoryUsage :: GodotSimulaServer -> IO ()
+testMemoryUsage gss = do
+  let config = defaultConfig { configOutputFile = Right $ "./hspec_output.txt" }
+  pid1 <- logMemPid gss
+  Control.Concurrent.threadDelay (60 * 1000000)
+  pid2 <- logMemPid gss
+  hspecWith config $ do
+    describe "Simula memory usage" $ do
+        it ("Simula memory usage should not incline after 10 seconds w/o launching any apps") $ do
+           pid1  `shouldBe` pid2
+
   return ()
 
 debugFunc :: GodotSimulaServer -> IO ()
 debugFunc gss = do
   (catch :: IO a -> (System.Exit.ExitCode -> IO a) -> IO a) (do testPopups gss
+                                                                testMemoryUsage gss
                                                                 debugTerminateSimula gss)
                                                             (\e -> debugTerminateSimula gss)
   return ()
+
+logMemRecursively :: IO ()
+logMemRecursively = do
+  memoryUsage <- getSingleton Godot_OS "OS" >>= G.get_static_memory_usage
+  logStr $ "G.get_static_memory_usage: " ++ (show memoryUsage)
+  Control.Concurrent.threadDelay (1 * 1000000)
+  logMemRecursively
+
+logMemPid :: GodotSimulaServer -> IO Float
+logMemPid gss = do
+  let pid = (gss ^. gssPid)
+  (_, out', _) <- B.readCreateProcessWithExitCode (shell $ "ps -p " ++ pid ++ " -o pmem=") ""
+  let pidMem = read $ (B.unpack out') :: Float
+  -- logStr $ "PID mem: " ++ (show pidMem)
+  -- Control.Concurrent.threadDelay (1 * 1000000)
+  -- logMemPid gss
+  return pidMem
+
