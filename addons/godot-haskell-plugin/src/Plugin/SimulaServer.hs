@@ -380,9 +380,13 @@ instance NativeScript GodotSimulaServer where
 
 ready :: GodotSimulaServer -> [GodotVariant] -> IO ()
 ready gss _ = do
+  debugModeMaybe <- lookupEnv "DEBUG"
   -- Delete log file
-  readProcess "touch" ["./log.txt"] []
-  readProcess "rm" ["./log.txt"] []
+  case debugModeMaybe of
+    Just "rr" -> return ()
+    _ -> do readProcess "touch" ["./log.txt"] []
+            readProcess "rm" ["./log.txt"] []
+            return ()
 
   addWlrChildren gss
 
@@ -425,11 +429,14 @@ ready gss _ = do
 
   createProcess (shell "./result/bin/xrdb -merge .Xdefaults") { env = Just [("DISPLAY", newDisplay)] }
 
-  (_, windows', _) <- B.readCreateProcessWithExitCode (shell "./result/bin/wmctrl -lp") ""
-  let windows = (B.unpack windows')
-  let rightWindows = filter (\line -> isInfixOf (show pid) line) (lines windows)
-  let simulaWindow = (head . words . head) rightWindows
-  createProcess ((shell $ "./result/bin/wmctrl -ia " ++ simulaWindow) { env = Just [("DISPLAY", oldDisplay)] })
+  case debugModeMaybe of
+    Just "rr" -> return ()
+    _ -> do (_, windows', _) <- B.readCreateProcessWithExitCode (shell "./result/bin/wmctrl -lp") ""
+            let windows = (B.unpack windows')
+            let rightWindows = filter (\line -> isInfixOf (show pid) line) (lines windows)
+            let simulaWindow = (head . words . head) rightWindows
+            createProcess ((shell $ "./result/bin/wmctrl -ia " ++ simulaWindow) { env = Just [("DISPLAY", oldDisplay)] })
+            return ()
 
   appendFile "log.txt" ""
 
@@ -446,7 +453,6 @@ ready gss _ = do
   -- overrides the default environment
   (worldEnvironment, _) <- readTVarIO (gss ^. gssWorldEnvironment)
   addChild gss worldEnvironment
-  debugModeMaybe <- lookupEnv "DEBUG"
   case debugModeMaybe of
     Nothing -> return ()
     Just debugModeVal  -> (forkIO $ debugFunc gss) >> return ()

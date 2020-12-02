@@ -11,6 +11,7 @@ let
 
     xpra = callPackage ./nix/xpra/default.nix { };
     openxr-loader = callPackage ./nix/openxr-loader/default.nix { };
+    rr = callPackage ./nix/rr/unstable.nix {};
 
     devBuildFalse = ''
       cp GetNixGL.sh $out/bin/GetNixGL.sh
@@ -44,10 +45,13 @@ let
       echo "cat gdb.txt" >> $out/bin/simula_gdb
       chmod +x $out/bin/simula_gdb
 
-      # simula_rr
-      echo "PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) /home/george/rr-nix/result/bin/rr record ${godot}/bin/godot.x11.tools.64" >> $out/bin/simula_rr
-      # echo "cat gdb.txt" >> $out/bin/simula_gdb
-      chmod +x $out/bin/simula_rr
+      # simula_rr_record
+      echo "_RR_TRACE_DIR=./rr PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) ${rr}/bin/rr record ./submodules/godot/bin/godot.x11.tools.64 --args -m" >> $out/bin/simula_rr_record
+      chmod +x $out/bin/simula_rr_record
+
+      # simula_rr_replay
+      echo "_RR_TRACE_DIR=./rr PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) ${rr}/bin/rr replay \"\$@\"" >> $out/bin/simula_rr_replay
+      chmod +x $out/bin/simula_rr_replay
 
       # simula_apitrace
       echo "rm *.trace" >> $out/bin/simula_apitrace
@@ -88,6 +92,7 @@ let
       ln -s ${xsel}/bin/xsel $out/bin/xsel
       ln -s ${mimic}/bin/mimic $out/bin/mimic
       ln -s ${xclip}/bin/xclip $out/bin/xclip
+      ln -s ${rr}/bin/rr $out/bin/rr
 
       '' + devBuildScript;
     };
