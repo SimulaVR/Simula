@@ -184,6 +184,9 @@ testRightclickPopup gss app screenshotBase = do
                                              _ -> return $ depthFirstSurfaces !! 0
 
   -- debugTerminateGSVS gsvs -- Suffers from threading issues; use pkill instead
+  Control.Concurrent.threadDelay (1 * 1000000)
+  debugLogDepthFirstSurfaces gsvs
+  Control.Concurrent.threadDelay (2 * 1000000)
   createProcess (shell $ "pkill " ++ app)
   return ((cx, cy), (fromIntegral px, fromIntegral py), screenshotFullPath)
 
@@ -223,7 +226,7 @@ debugTerminateGSVS gsvs = do
 testPopups :: GodotSimulaServer -> IO ()
 testPopups gss = do
   let config = defaultConfig { configOutputFile = Right $ "./hspec_output.txt" }
-  (cursorCoordsGedit, popupCoordsGedit, geditScreenshot) <- testRightclickPopup gss "google-chrome-stable" "google-chrome"
+  (cursorCoordsGedit, popupCoordsGedit, geditScreenshot) <- testRightclickPopup gss "firefox" "firefox"
   hspecWith config $ do
     describe "A popup initiated at cursor location (300,300)" $ do
         it ("gedit cursor coordinates should be same as popup location\n\n[[" <> geditScreenshot <> "]]\n\n") $ do
@@ -240,14 +243,6 @@ testMemoryUsage gss = do
         it ("Simula memory usage should not incline after 10 seconds w/o launching any apps") $ do
            pid1  `shouldBe` pid2
 
-  return ()
-
-debugFunc :: GodotSimulaServer -> IO ()
-debugFunc gss = do
-  (catch :: IO a -> (System.Exit.ExitCode -> IO a) -> IO a) (do testPopups gss
-                                                                testMemoryUsage gss
-                                                                debugTerminateSimula gss)
-                                                            (\e -> debugTerminateSimula gss)
   return ()
 
 logMemRecursively :: IO ()
@@ -267,3 +262,66 @@ logMemPid gss = do
   -- logMemPid gss
   return pidMem
 
+debugLogDepthFirstSurfaces :: GodotSimulaViewSprite -> IO ()
+debugLogDepthFirstSurfaces gsvs = do
+  cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
+  frame <- readTVarIO (gsvs ^. gsvsFrameCount)
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  let eitherSurface = (simulaView ^. svWlrEitherSurface)
+  wlrSurfaceParent <- getWlrSurface eitherSurface
+  depthFirstBaseSurfaces <- getDepthFirstBaseSurfaces gsvs
+  depthFirstWlrSurfaces <- getDepthFirstWlrSurfaces wlrSurfaceParent
+  let depthFirstSurfaces = depthFirstBaseSurfaces ++ depthFirstWlrSurfaces
+
+  logStr $ "===debugLogDepthFirstSurfaces frame: " ++ (show frame) ++ " ==="
+  logStr $ "depthFirstSurfaces:" ++ (show $ length depthFirstSurfaces)
+  logStr $ "  depthFirstBaseSurfaces:" ++ (show $ length depthFirstBaseSurfaces)
+  logStr $ "  " ++ (show depthFirstBaseSurfaces)
+  logStr $ "  depthFirstWlrSurfaces:" ++ (show $ length depthFirstWlrSurfaces)
+  logStr $ "  " ++ (show depthFirstWlrSurfaces)
+
+  mapM_ (logWlrSurface cs) depthFirstSurfaces
+
+  where logWlrSurface :: CanvasSurface -> (GodotWlrSurface, Int, Int) -> IO ()
+        logWlrSurface cs (wlrSurface, x, y) = do
+          path <- saveWlrSurfacePng cs wlrSurface
+          dims <- getBufferDimensions wlrSurface
+          logStr $ "wlrSurface: " ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ " @ (" ++ (show (x,y)) ++ ", " ++ (show dims) ++ ")"
+          logStr $ "[[" ++ path ++ "]]"
+
+        saveWlrSurfacePng :: CanvasSurface -> GodotWlrSurface -> IO String
+        saveWlrSurfacePng cs wlrSurface = do
+          let isNull = ((unsafeCoerce wlrSurface) == nullPtr)
+          case isNull of
+            True -> do putStrLn "Texture is null in savePng!"
+                       return ""
+            False -> do -- Get image
+                        gsvs <- readTVarIO (cs ^. csGSVS)
+                        visualServer <- getVisualServer gsvs
+                        wlrSurfaceTexture <- G.get_texture wlrSurface
+                        rid <- G.get_rid wlrSurfaceTexture
+                        wlrSurfaceImage <- G.texture_get_data visualServer rid 0
+
+                        -- Get file path
+                        frame <- readTVarIO (gsvs ^. gsvsFrameCount)
+                        let pathStr = "./png/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
+                        canonicalPath <- canonicalizePath pathStr
+                        pathStr' <- toLowLevel (pack pathStr)
+
+                        -- Save as png
+                        G.save_png wlrSurfaceImage pathStr'
+                        return canonicalPath
+
+        getVisualServer :: GodotSimulaViewSprite -> IO GodotVisualServer
+        getVisualServer gsvs = do
+          gss <- readTVarIO (gsvs ^. gsvsServer)
+          visualServer <- readTVarIO (gss ^. gssVisualServer)
+          return visualServer
+
+debugFunc :: GodotSimulaServer -> IO ()
+debugFunc gss = do
+  (catch :: IO a -> (System.Exit.ExitCode -> IO a) -> IO a) (do testPopups gss
+                                                                -- testMemoryUsage gss
+                                                                debugTerminateSimula gss)
+                                                            (\e -> debugTerminateSimula gss)
+  return ()

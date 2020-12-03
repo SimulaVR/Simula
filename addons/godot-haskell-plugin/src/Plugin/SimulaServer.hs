@@ -42,6 +42,7 @@ import Data.UUID.V1
 import Plugin.Input
 import Plugin.SimulaViewSprite
 import Plugin.Types
+import Plugin.Debug
 
 import Control.Monad
 import Control.Concurrent
@@ -114,6 +115,7 @@ getKeyboardAction gss keyboardShortcut =
     "decreaseTransparency" -> decreaseTransparency
     "increaseTransparency" -> increaseTransparency
     "toggleScreenshotMode" -> toggleScreenshotMode
+    "debugLogDepthFirstSurfaces" -> debugLogDepthFirstSurfaces
     _ -> shellLaunch gss (keyboardShortcut ^. keyAction)
 
   where moveCursor :: SpriteLocation -> Bool -> IO ()
@@ -121,7 +123,14 @@ getKeyboardAction gss keyboardShortcut =
           updateCursorStateAbsolute gsvs sx sy
           sendWlrootsMotion gsvs
         moveCursor _ _ = return ()
-  
+
+        debugLogDepthFirstSurfaces:: SpriteLocation -> Bool -> IO ()
+        debugLogDepthFirstSurfaces (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+          Plugin.Debug.debugLogDepthFirstSurfaces gsvs
+        debugLogDepthFirstSurfaces (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) False = do
+          return ()
+        debugLogDepthFirstSurfaces _ _ = return ()
+
         leftClick :: SpriteLocation -> Bool -> IO ()
         leftClick (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
           updateCursorStateAbsolute gsvs sx sy
@@ -618,6 +627,7 @@ initGodotSimulaServer obj = do
 
       pid <- getProcessID
       let gssPid' = show pid
+
       let gss = GodotSimulaServer {
         _gssObj                   = obj                       :: GodotObject
       , _gssWaylandDisplay        = gssWaylandDisplay'        :: TVar GodotWaylandDisplay
@@ -648,7 +658,7 @@ initGodotSimulaServer obj = do
       , _gssWorldEnvironment      = gssWorldEnvironment'      :: TVar (GodotWorldEnvironment, String)
       , _gssEnvironmentTextures   = gssEnvironmentTextures'   :: TVar [String]
       , _gssStartingAppTransform  = gssStartingAppTransform'  :: TVar (Maybe GodotTransform)
-      , _gssPid                   = gssPid'                    :: String
+      , _gssPid                   = gssPid'                   :: String
       }
   return gss
   where getStartingAppsStr :: Maybe String -> String

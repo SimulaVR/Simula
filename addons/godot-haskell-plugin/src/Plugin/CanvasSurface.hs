@@ -87,24 +87,7 @@ _process self args = do
 _draw :: CanvasSurface -> [GodotVariant] -> IO ()
 _draw cs _ = do
   gsvs <- readTVarIO (cs ^. csGSVS)
-  simulaView <- readTVarIO (gsvs ^. gsvsView)
-  let eitherSurface = (simulaView ^. svWlrEitherSurface)
-  wlrSurfaceParent <- getWlrSurface eitherSurface
-  depthFirstBaseSurfaces <- case eitherSurface of
-    Left wlrXdgSurface -> do
-      getDepthFirstXdgSurfaces wlrXdgSurface :: IO [(GodotWlrSurface, Int, Int)]
-    Right wlrXWaylandSurface -> do
-      freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
-      freeChildren' <- mapM (\wlrXWaylandSurfaceFC -> do x <- G.get_x wlrXWaylandSurfaceFC
-                                                         y <- G.get_y wlrXWaylandSurfaceFC
-                                                         wlrSurface <- G.get_wlr_surface wlrXWaylandSurfaceFC
-                                                         return (wlrSurface, x, y))
-                            freeChildren
-      depthFirstXWaylandSurfaces <- getDepthFirstXWaylandSurfaces wlrXWaylandSurface :: IO [(GodotWlrSurface, Int, Int)]
-      return (depthFirstXWaylandSurfaces ++ freeChildren')
-  depthFirstWlrSurfaces <- getDepthFirstWlrSurfaces wlrSurfaceParent
-  let depthFirstSurfaces = depthFirstBaseSurfaces ++ depthFirstWlrSurfaces
-
+  depthFirstSurfaces <- getDepthFirstSurfaces gsvs
   mapM (drawWlrSurface cs) depthFirstSurfaces
 
   return ()
@@ -138,6 +121,36 @@ _draw cs _ = do
       gsvs <- readTVarIO (cs ^. csGSVS)
       gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
       return (realToFrac gsvsTransparency)
+
+getDepthFirstSurfaces :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstSurfaces gsvs = do
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  let eitherSurface = (simulaView ^. svWlrEitherSurface)
+  wlrSurfaceParent <- getWlrSurface eitherSurface
+  depthFirstBaseSurfaces <- getDepthFirstBaseSurfaces gsvs
+  depthFirstWlrSurfaces <- getDepthFirstWlrSurfaces wlrSurfaceParent
+  let depthFirstSurfaces = depthFirstBaseSurfaces ++ depthFirstWlrSurfaces
+  return depthFirstSurfaces
+
+getDepthFirstBaseSurfaces :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstBaseSurfaces gsvs = do
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  let eitherSurface = (simulaView ^. svWlrEitherSurface)
+  wlrSurfaceParent <- getWlrSurface eitherSurface
+  depthFirstBaseSurfaces <- case eitherSurface of
+    Left wlrXdgSurface -> do
+      ret <- getDepthFirstXdgSurfaces wlrXdgSurface :: IO [(GodotWlrSurface, Int, Int)]
+      return ret
+    Right wlrXWaylandSurface -> do
+      freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
+      freeChildren' <- mapM (\wlrXWaylandSurfaceFC -> do x <- G.get_x wlrXWaylandSurfaceFC
+                                                         y <- G.get_y wlrXWaylandSurfaceFC
+                                                         wlrSurface <- G.get_wlr_surface wlrXWaylandSurfaceFC
+                                                         return (wlrSurface, x, y))
+                            freeChildren
+      depthFirstXWaylandSurfaces <- getDepthFirstXWaylandSurfaces wlrXWaylandSurface :: IO [(GodotWlrSurface, Int, Int)]
+      return (depthFirstXWaylandSurfaces ++ freeChildren')
+  return depthFirstBaseSurfaces
 
 -- TODO: All (Int, Int) should be relative to root surface; right now,
 -- subsurface coordinates are possibly relative to their immediate parent.

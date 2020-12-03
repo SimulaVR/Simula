@@ -213,7 +213,7 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
 
 instance HasBaseClass GodotSimulaViewSprite where
   type BaseClass GodotSimulaViewSprite = GodotRigidBody
-  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotRigidBody obj
+  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotRigidBody obj
 
 data CanvasBase = CanvasBase {
     _cbObject       :: GodotObject
@@ -710,11 +710,12 @@ newCanvasSurface gsvs = do
 fst3 :: (a, b, c) -> a
 fst3 (a, b, c) = a
 
-savePng :: CanvasSurface -> GodotViewportTexture -> GodotWlrSurface -> IO ()
+savePng :: CanvasSurface -> GodotViewportTexture -> GodotWlrSurface -> IO String
 savePng cs surfaceTexture wlrSurface = do
   let isNull = ((unsafeCoerce surfaceTexture) == nullPtr) || ((unsafeCoerce wlrSurface) == nullPtr)
   case isNull of
-    True -> putStrLn "Texture is null in savePng!"
+    True -> do putStrLn "Texture is null in savePng!"
+               return ""
     False -> do -- Get image
                 gsvs <- readTVarIO (cs ^. csGSVS)
                 surfaceTextureAsImage <- G.get_data surfaceTexture
@@ -722,11 +723,12 @@ savePng cs surfaceTexture wlrSurface = do
                 -- Get file path
                 frame <- readTVarIO (gsvs ^. gsvsFrameCount)
                 let pathStr = "./png/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
+                canonicalPath <- canonicalizePath pathStr
                 pathStr' <- toLowLevel (pack pathStr)
 
                 -- Save as png
                 G.save_png surfaceTextureAsImage pathStr'
-                return ()
+                return canonicalPath
   where getVisualServer gsvs = do
           gss <- readTVarIO (gsvs ^. gsvsServer)
           visualServer <- readTVarIO (gss ^. gssVisualServer)
