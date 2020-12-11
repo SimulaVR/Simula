@@ -225,12 +225,13 @@ debugTerminateGSVS gsvs = do
 
 testPopups :: GodotSimulaServer -> IO ()
 testPopups gss = do
+  let app = "firefox"
   let config = defaultConfig { configOutputFile = Right $ "./hspec_output.txt" }
-  (cursorCoordsGedit, popupCoordsGedit, geditScreenshot) <- testRightclickPopup gss "firefox" "firefox"
+  (cursorCoords, popupCoords, screenshot) <- testRightclickPopup gss app app
   hspecWith config $ do
     describe "A popup initiated at cursor location (300,300)" $ do
-        it ("gedit cursor coordinates should be same as popup location\n\n[[" <> geditScreenshot <> "]]\n\n") $ do
-           popupCoordsGedit  `shouldBe` cursorCoordsGedit
+        it (app ++ " cursor coordinates should be same as popup location\n\n[[" <> screenshot <> "]]\n\n") $ do
+           popupCoords  `shouldBe` cursorCoords
 
 testMemoryUsage :: GodotSimulaServer -> IO ()
 testMemoryUsage gss = do

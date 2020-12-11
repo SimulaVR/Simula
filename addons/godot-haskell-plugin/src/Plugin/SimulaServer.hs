@@ -279,7 +279,7 @@ getKeyboardAction gss keyboardShortcut =
 
         resizeWindowToDefaultSize :: SpriteLocation -> Bool -> IO ()
         resizeWindowToDefaultSize (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          orientSpriteTowardsGaze gsvs
+          -- orientSpriteTowardsGaze gsvs
           defaultSizeGSVS gsvs
         resizeWindowToDefaultSize _ _ = return ()
 
@@ -390,9 +390,10 @@ instance NativeScript GodotSimulaServer where
 ready :: GodotSimulaServer -> [GodotVariant] -> IO ()
 ready gss _ = do
   debugModeMaybe <- lookupEnv "DEBUG"
+  rrModeMaybe <- lookupEnv "RUNNING_UNDER_RR"
   -- Delete log file
-  case debugModeMaybe of
-    Just "rr" -> return ()
+  case rrModeMaybe of
+    Just "1" -> return ()
     _ -> do readProcess "touch" ["./log.txt"] []
             readProcess "rm" ["./log.txt"] []
             return ()
@@ -438,8 +439,8 @@ ready gss _ = do
 
   createProcess (shell "./result/bin/xrdb -merge .Xdefaults") { env = Just [("DISPLAY", newDisplay)] }
 
-  case debugModeMaybe of
-    Just "rr" -> return ()
+  case rrModeMaybe of
+    Just "1" -> return ()
     _ -> do (_, windows', _) <- B.readCreateProcessWithExitCode (shell "./result/bin/wmctrl -lp") ""
             let windows = (B.unpack windows')
             let rightWindows = filter (\line -> isInfixOf (show pid) line) (lines windows)

@@ -77,9 +77,11 @@ ready self _ = do
     Nothing -> do return openVR
 
   debugModeMaybe <- lookupEnv "DEBUG"
-  case debugModeMaybe of
-    Just debugModeVal  -> putStrLn "DEBUG mode detected: not launching VR"
-    Nothing ->
+  rrModeMaybe <- lookupEnv "RUNNING_UNDER_RR"
+  case (rrModeMaybe, debugModeMaybe) of
+    (Just rrModeVal, _)  -> putStrLn "RUNNING_UNDER_RR detected: not launching VR"
+    (_, Just debugModeVal)  -> putStrLn "DEBUG mode detected: not launching VR"
+    _ ->
       do openBackend >>= initVR (safeCast self) >>= \case
                 InitVRSuccess -> do
                   putStrLn "InitVRSuccess"

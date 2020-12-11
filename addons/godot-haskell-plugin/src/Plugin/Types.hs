@@ -209,11 +209,13 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsScreenshotCoords  :: TVar (Maybe SurfaceLocalCoordinates, Maybe SurfaceLocalCoordinates)
   , _gsvsActiveSurface     :: TVar (Maybe GodotWlrSurface)
   , _gsvsFrameCount        :: TVar Integer
+  , _gsvsSpilloverDims     :: TVar (Maybe (Int, Int))
+  , _gsvsResizedLastFrame  :: TVar Bool
   }
 
 instance HasBaseClass GodotSimulaViewSprite where
   type BaseClass GodotSimulaViewSprite = GodotRigidBody
-  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotRigidBody obj
+  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotRigidBody obj
 
 data CanvasBase = CanvasBase {
     _cbObject       :: GodotObject
@@ -917,12 +919,12 @@ resizeGSVS gsvs resizeMethod factor =
      newTargetDims@(SpriteDimensions (wTarget, hTarget)) <- case resizeMethod of
             Horizontal -> do
               case (((fromIntegral w) * factor) > 500) of
-                True -> do orientSpriteTowardsGaze gsvs
+                True -> do -- orientSpriteTowardsGaze gsvs -- Avoid quadMesh rotational behavior (see `setTargetDimensions`)
                            return $ SpriteDimensions (round $ ((fromIntegral w) * factor), round $ ((fromIntegral h)))
                 False -> return $ oldTargetDims
             Vertical   -> do
               case (((fromIntegral h) * factor) > 500) of
-                True -> do orientSpriteTowardsGaze gsvs
+                True -> do -- orientSpriteTowardsGaze gsvs -- Avoid quadMesh rotational behavior (see `setTargetDimensions`)
                            return $ SpriteDimensions (round $ ((fromIntegral w)), round $ ((fromIntegral h) * factor))
                 False -> return $ oldTargetDims
             Zoom       -> do
@@ -931,7 +933,9 @@ resizeGSVS gsvs resizeMethod factor =
                 True -> do V3 1 1 1 ^* (1 + 1 * (1 - factor)) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
                            return $ SpriteDimensions (round $ ((fromIntegral w) * factor), round $ ((fromIntegral h) * factor))
 
-     atomically $ writeTVar (gsvs ^. gsvsTargetSize) (Just newTargetDims)
+     atomically $ do writeTVar (gsvs ^. gsvsResizedLastFrame) True
+                     writeTVar (gsvs ^. gsvsTargetSize) (Just newTargetDims)
+                     writeTVar (gsvs ^. gsvsSpilloverDims) (Just (wTarget, hTarget))
 
 defaultSizeGSVS :: GodotSimulaViewSprite -> IO ()
 defaultSizeGSVS gsvs = do
@@ -989,3 +993,151 @@ fromGodotArray :: GodotArray -> IO [GodotVariant]
 fromGodotArray vs = do
   size <- fromIntegral <$> Api.godot_array_size vs
   forM [0..size-1] $ Api.godot_array_get vs
+
+getDepthFirstSurfaces :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstSurfaces gsvs = do
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  let eitherSurface = (simulaView ^. svWlrEitherSurface)
+  wlrSurfaceParent <- getWlrSurface eitherSurface
+  depthFirstBaseSurfaces <- getDepthFirstBaseSurfaces gsvs
+  depthFirstWlrSurfaces <- getDepthFirstWlrSurfaces wlrSurfaceParent
+  let depthFirstSurfaces = depthFirstBaseSurfaces ++ depthFirstWlrSurfaces
+  return depthFirstSurfaces
+
+getDepthFirstBaseSurfaces :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstBaseSurfaces gsvs = do
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  let eitherSurface = (simulaView ^. svWlrEitherSurface)
+  wlrSurfaceParent <- getWlrSurface eitherSurface
+  depthFirstBaseSurfaces <- case eitherSurface of
+    Left wlrXdgSurface -> do
+      ret <- getDepthFirstXdgSurfaces wlrXdgSurface :: IO [(GodotWlrSurface, Int, Int)]
+      return ret
+    Right wlrXWaylandSurface -> do
+      freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
+      freeChildren' <- mapM (\wlrXWaylandSurfaceFC -> do x <- G.get_x wlrXWaylandSurfaceFC
+                                                         y <- G.get_y wlrXWaylandSurfaceFC
+                                                         wlrSurface <- G.get_wlr_surface wlrXWaylandSurfaceFC
+                                                         return (wlrSurface, x, y))
+                            freeChildren
+      depthFirstXWaylandSurfaces <- getDepthFirstXWaylandSurfaces wlrXWaylandSurface :: IO [(GodotWlrSurface, Int, Int)]
+      return (depthFirstXWaylandSurfaces ++ freeChildren')
+  return depthFirstBaseSurfaces
+
+-- TODO: All (Int, Int) should be relative to root surface; right now,
+-- subsurface coordinates are possibly relative to their immediate parent.
+getDepthFirstXWaylandSurfaces :: GodotWlrXWaylandSurface -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstXWaylandSurfaces wlrXWaylandSurface = do
+  xwaylandMappedChildrenAndCoords <- getXWaylandMappedChildren wlrXWaylandSurface :: IO [(GodotWlrXWaylandSurface, Int, Int)]
+  wlrSurface <- G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface
+  foldM appendXWaylandSurfaceAndChildren [(wlrSurface, 0, 0)] xwaylandMappedChildrenAndCoords
+  where
+        appendXWaylandSurfaceAndChildren :: [(GodotWlrSurface, Int, Int)] -> (GodotWlrXWaylandSurface, Int, Int) -> IO [(GodotWlrSurface, Int, Int)]
+        appendXWaylandSurfaceAndChildren oldList arg@(wlrXWaylandSurface, x, y) = do
+           xwaylandChildSurface <- G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface
+           appendSurfaceAndChildren oldList (xwaylandChildSurface, x, y)
+
+        appendSurfaceAndChildren :: [(GodotWlrSurface, Int, Int)] -> (GodotWlrSurface, Int, Int) -> IO [(GodotWlrSurface, Int, Int)]
+        appendSurfaceAndChildren oldList arg@(wlrSurface, x, y) = do
+           subsurfacesAndCoords <- getSurfaceChildren wlrSurface :: IO [(GodotWlrSurface, Int, Int)]
+           foldM appendSurfaceAndChildren (oldList ++ [(wlrSurface, x, y)]) subsurfacesAndCoords
+
+        getSurfaceChildren :: GodotWlrSurface -> IO [(GodotWlrSurface, Int, Int)]
+        getSurfaceChildren wlrSurface = do
+          arrayOfChildren <- G.get_children wlrSurface :: IO GodotArray
+          numChildren <- Api.godot_array_size arrayOfChildren
+          arrayOfChildrenGV <- fromGodotArray arrayOfChildren
+          childrenSubsurfaces <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrSubsurface]
+          childrenSSX <- mapM G.get_ssx childrenSubsurfaces
+          childrenSSY <- mapM G.get_ssy childrenSubsurfaces
+          children <- mapM G.getWlrSurface childrenSubsurfaces
+          let childrenWithCoords = zip3 children childrenSSX childrenSSY
+          Api.godot_array_destroy arrayOfChildren
+          return childrenWithCoords
+
+        getXWaylandMappedChildren :: GodotWlrXWaylandSurface -> IO [(GodotWlrXWaylandSurface, Int, Int)]
+        getXWaylandMappedChildren wlrXWaylandSurface = do
+          arrayOfChildren <- G.get_children wlrXWaylandSurface :: IO GodotArray -- Doesn't return non-mapped children
+          numChildren <- Api.godot_array_size arrayOfChildren
+          arrayOfChildrenGV <- fromGodotArray arrayOfChildren
+          children <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrXWaylandSurface]
+          childrenX <- mapM G.get_x children
+          childrenY <- mapM G.get_y children
+          let childrenWithCoords = zip3 children childrenX childrenY
+          Api.godot_array_destroy arrayOfChildren
+          return childrenWithCoords
+
+getDepthFirstXdgSurfaces :: GodotWlrXdgSurface -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstXdgSurfaces wlrXdgSurface = do
+  xdgPopups <- getXdgPopups wlrXdgSurface :: IO [(GodotWlrXdgSurface, Int, Int)]
+  depthFirstXdgSurfaces  <- foldM appendXdgSurfaceAndChildren [(wlrXdgSurface, 0, 0)] xdgPopups
+  mapM convertToWlrSurfaceDepthFirstSurfaces depthFirstXdgSurfaces
+  where convertToWlrSurfaceDepthFirstSurfaces :: (GodotWlrXdgSurface, Int, Int) -> IO (GodotWlrSurface, Int, Int)
+        convertToWlrSurfaceDepthFirstSurfaces (wlrXdgSurface, x, y) = do
+          wlrSurface <- G.get_wlr_surface wlrXdgSurface
+          return (wlrSurface, x, y)
+
+        getXdgPopups :: GodotWlrXdgSurface -> IO [(GodotWlrXdgSurface, Int, Int)]
+        getXdgPopups wlrXdgSurface = do
+          arrayOfChildren <- G.get_children wlrXdgSurface :: IO GodotArray -- Doesn't return non-mapped children
+          numChildren <- Api.godot_array_size arrayOfChildren
+          arrayOfChildrenGV <- fromGodotArray arrayOfChildren
+          children <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrXdgSurface]
+          childrenAsPopups <- mapM G.get_xdg_popup children
+          childrenX <- mapM G.get_x childrenAsPopups
+          childrenY <- mapM G.get_y childrenAsPopups
+          let childrenWithCoords = zip3 children childrenX childrenY
+          Api.godot_array_destroy arrayOfChildren
+          return childrenWithCoords
+
+        appendXdgSurfaceAndChildren :: [(GodotWlrXdgSurface, Int, Int)] -> (GodotWlrXdgSurface, Int, Int) -> IO [(GodotWlrXdgSurface, Int, Int)]
+        appendXdgSurfaceAndChildren oldList arg@(wlrXdgSurface, x, y) = do
+          subsurfacesAndCoords <- getXdgPopups wlrXdgSurface :: IO [(GodotWlrXdgSurface, Int, Int)]
+          foldM appendXdgSurfaceAndChildren (oldList ++ [(wlrXdgSurface, x, y)]) subsurfacesAndCoords
+
+getDepthFirstWlrSurfaces :: GodotWlrSurface -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstWlrSurfaces wlrSurface = do
+  surfaceChildrenAndCoords <- getSurfaceChildren wlrSurface
+  foldM appendSurfaceAndChildren [] surfaceChildrenAndCoords
+  where appendSurfaceAndChildren :: [(GodotWlrSurface, Int, Int)] -> (GodotWlrSurface, Int, Int) -> IO [(GodotWlrSurface, Int, Int)]
+        appendSurfaceAndChildren oldList arg@(wlrSurface, x, y) = do
+          surfacesAndCoords <- getSurfaceChildren wlrSurface :: IO [(GodotWlrSurface, Int, Int)]
+          foldM appendSurfaceAndChildren (oldList ++ [(wlrSurface, x, y)]) surfacesAndCoords
+
+        getSurfaceChildren :: GodotWlrSurface -> IO [(GodotWlrSurface, Int, Int)]
+        getSurfaceChildren wlrSurface = do
+          arrayOfChildren <- G.get_children wlrSurface :: IO GodotArray
+          numChildren <- Api.godot_array_size arrayOfChildren
+          arrayOfChildrenGV <- fromGodotArray arrayOfChildren
+          childrenSubsurfaces <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrSubsurface]
+          childrenSSX <- mapM G.get_ssx childrenSubsurfaces
+          childrenSSY <- mapM G.get_ssy childrenSubsurfaces
+          children <- mapM G.getWlrSurface childrenSubsurfaces
+          let childrenWithCoords = zip3 children childrenSSX childrenSSY
+          Api.godot_array_destroy arrayOfChildren
+          return childrenWithCoords
+
+
+-- Types.hs
+getBaseDimensions :: GodotSimulaViewSprite -> IO (Int, Int)
+getBaseDimensions gsvs = do
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  let eitherSurface = (simulaView ^. svWlrEitherSurface)
+  wlrSurfaceParent <- getWlrSurface eitherSurface
+  (parentWidth, parentHeight) <- getBufferDimensions wlrSurfaceParent
+  return (parentWidth, parentHeight)
+
+getSpilloverDims :: GodotSimulaViewSprite -> IO (Int, Int)
+getSpilloverDims gsvs = do
+  depthFirstSurfaces <- getDepthFirstSurfaces gsvs :: IO [(GodotWlrSurface, Int, Int)]
+  spilloverDims <- mapM (getSpilloverDims gsvs) depthFirstSurfaces
+  let spilloverWidth = Data.List.maximum $ fmap fst spilloverDims
+  let spilloverHeight = Data.List.maximum $ fmap snd spilloverDims
+  return (spilloverWidth, spilloverHeight)
+  where getSpilloverDims :: GodotSimulaViewSprite -> (GodotWlrSurface, Int, Int) -> IO (Int, Int)
+        getSpilloverDims gsvs (wlrSurface, sx, sy) = do
+          (baseWidth, baseHeight) <- getBufferDimensions wlrSurface
+          (childWidth, childHeight) <- getBufferDimensions wlrSurface
+          let widthSpill = max 0 ((sx + childWidth) - baseWidth)
+          let heightSpill = max 0 ((sy + childHeight) - baseHeight)
+          return $ (baseWidth + widthSpill, baseHeight + heightSpill)

@@ -77,6 +77,8 @@ instance NativeScript GodotSimulaViewSprite where
                       <*> atomically (newTVar (Nothing, Nothing))
                       <*> atomically (newTVar Nothing)
                       <*> atomically (newTVar 0)
+                      <*> atomically (newTVar Nothing)
+                      <*> atomically (newTVar False)
   -- classExtends = "RigidBody"
   classMethods =
     [ func NoRPC "_input_event" inputEvent
@@ -243,6 +245,9 @@ setTargetDimensions gsvs = do
         else (originalWidth, originalHeight)
   settledDimensions' <- toLowLevel $ (V2 (fromIntegral settledWidth) (fromIntegral settledHeight))
 
+  spilloverDims@(spilloverWidth, spilloverHeight) <- getSpilloverDims gsvs
+  spilloverDims' <- toLowLevel $ (V2 (fromIntegral spilloverWidth) (fromIntegral spilloverHeight))
+
   -- Set buffer dimensions to new target size
   case eitherSurface of
     Left wlrXdgSurface -> do
@@ -251,10 +256,34 @@ setTargetDimensions gsvs = do
     Right wlrXWaylandSurface -> do G.set_size wlrXWaylandSurface settledDimensions'
 
   -- Set the corresponding Viewports to match our new target size
-  G.set_size renderTargetBase settledDimensions'
-  G.set_size renderTargetSurface settledDimensions'
+  G.set_size renderTargetBase spilloverDims'
+  G.set_size renderTargetSurface spilloverDims'
   quadMesh <- getQuadMesh gsvs
-  G.set_size quadMesh =<< (toLowLevel $ (V2 (0.001 * (fromIntegral settledWidth)) (0.001 * (fromIntegral settledHeight)))) -- QuadMesh need to be significantly scaled down to be normally sized in Godot
+  -- QuadMesh need to be scaled down by a factor of 0.001 to be reasonably sized in Godot:
+  G.set_size quadMesh =<< (toLowLevel $ (V2 (0.001 * (fromIntegral spilloverWidth)) (0.001 * (fromIntegral spilloverHeight)))) 
+
+  -- Problem: Calls to `G.set_size quadMesh` cause gsvs to "jitter" (since
+  -- they're resized from the center). We thus have to translate them to create
+  -- the illusion that they're staying still. Unfortunately, doing so can cause
+  -- weird rotational effects due to reasons that are unclear to me. We thus go
+  -- through a the ritual of avoiding translating windows when they are being
+  -- purposely resized; we also avoid calls to `orientSpriteTowardsGaze` when
+  -- resizing windows.
+  maybeSpilloverDimsOld <- readTVarIO (gsvs ^. gsvsSpilloverDims)
+  resizedLastFrame <- readTVarIO (gsvs ^. gsvsResizedLastFrame)
+  case maybeSpilloverDimsOld of
+    Nothing -> do
+      if (spilloverWidth > 0) then atomically $ writeTVar (gsvs ^. gsvsSpilloverDims) (Just spilloverDims) else return ()
+    Just spilloverDimsOld@(oldSpilloverWidth, oldSpilloverHeight) -> do
+      case ((oldSpilloverWidth /= spilloverWidth), resizedLastFrame) of
+        (False, _) -> return ()
+        (True, True) -> do atomically $ do writeTVar (gsvs ^. gsvsResizedLastFrame) False
+                                           writeTVar (gsvs ^. gsvsSpilloverDims) (Just spilloverDims)
+        (True, False) -> do let pushX = spilloverWidth - oldSpilloverWidth
+                            let pushY = spilloverHeight - oldSpilloverHeight
+                            pushBackVector <- toLowLevel (V3 (-0.5 * 0.001 * (fromIntegral pushX)) (-0.5 * 0.001 * (fromIntegral pushY)) 0) :: IO GodotVector3
+                            G.translate_object_local gsvs pushBackVector
+                            atomically $ writeTVar (gsvs ^. gsvsSpilloverDims) (Just spilloverDims)
   return ()
 
 ready :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
@@ -940,7 +969,7 @@ getWlrSurfaceCoords cursorCoords@(SurfaceLocalCoordinates (cx, cy)) (wlrSurfaceF
     _ -> do return Nothing
 
 handle_new_popup :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
-handle_new_popup gsvs args@[wlrXdgPopupVariant] = do
+handle_new_popup gsvs args@[wlrXdgSurfaceParentVariant] = do
   return ()
 
 handle_window_menu :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()

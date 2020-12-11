@@ -1,4 +1,4 @@
-{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, ulauncher, mimic, xsel, xclip }:
+{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, ulauncher, mimic, xsel, xclip, dialog }:
 let
     vulkan-loader-custom = if onNixOS then vulkan-loader else (callPackage ./nix/vulkan-loader.nix { });
     glibc-locales = glibcLocales;
@@ -50,12 +50,12 @@ let
       chmod +x $out/bin/simula_rr_record
 
       # simula_rr_replay
-      echo "_RR_TRACE_DIR=./rr PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) ${rr}/bin/rr replay \"\$@\"" >> $out/bin/simula_rr_replay
+      echo "_RR_TRACE_DIR=./rr PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) ${rr}/bin/rr -M replay \"\$@\"" >> $out/bin/simula_rr_replay
       chmod +x $out/bin/simula_rr_replay
 
       # simula_apitrace
       echo "rm *.trace" >> $out/bin/simula_apitrace
-      echo "PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) apitrace trace --api gl ${godot}/bin/godot.x11.tools.64" >> $out/bin/simula_apitrace
+      echo "PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) apitrace trace --api gl ./submodules/bin/godot.x11.tools.64" >> $out/bin/simula_apitrace
       echo "apitrace dump *.trace | grep glTex > glTex.trace" >> $out/bin/simula_apitrace
       chmod +x $out/bin/simula_apitrace
      '';
@@ -93,6 +93,7 @@ let
       ln -s ${mimic}/bin/mimic $out/bin/mimic
       ln -s ${xclip}/bin/xclip $out/bin/xclip
       ln -s ${rr}/bin/rr $out/bin/rr
+      ln -s ${dialog}/bin/dialog $out/bin/dialog
 
       '' + devBuildScript;
     };
