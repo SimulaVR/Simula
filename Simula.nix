@@ -29,11 +29,6 @@ let
 
     devBuildTrue = ''
       cp GetNixGL.sh $out/bin/GetNixGL.sh
-      ln -s ${godot}/bin/godot.x11.tools.64 $out/bin/godot.x11.tools.64
-
-      # simula
-      echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula
-      echo "if [ ! -d .import ]; then PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib \$(./utils/GetNixGL.sh) ${godot}/bin/godot.x11.tools.64 -e; else PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) ${godot}/bin/godot.x11.tools.64 -m; fi" >> $out/bin/simula
 
       # simula_local
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local
@@ -41,7 +36,7 @@ let
       chmod +x $out/bin/simula_local
 
       # simula_gdb
-      echo "PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) gdb -x ./.gdbinit ${godot}/bin/godot.x11.tools.64" >> $out/bin/simula_gdb
+      echo "PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) gdb -x ./.gdbinit ./submodules/godot/bin/godot.x11.tools.64" >> $out/bin/simula_gdb
       echo "cat gdb.txt" >> $out/bin/simula_gdb
       chmod +x $out/bin/simula_gdb
 
@@ -58,6 +53,19 @@ let
       echo "PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) apitrace trace --api gl ./submodules/bin/godot.x11.tools.64" >> $out/bin/simula_apitrace
       echo "apitrace dump *.trace | grep glTex > glTex.trace" >> $out/bin/simula_apitrace
       chmod +x $out/bin/simula_apitrace
+
+      # rootston
+      echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/rootston
+      echo "PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) ./submodules/wlroots-dev/build/rootston/rootston \"\$@\"" >> $out/bin/rootston
+      chmod +x $out/bin/rootston
+
+      # rootston_rr_record
+      echo "_RR_TRACE_DIR=./rr PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) ${rr}/bin/rr record ./submodules/wlroots-dev/build/rootston/rootston" >> $out/bin/rootston_rr_record
+      chmod +x $out/bin/rootston_rr_record
+
+      # rootston_rr_replay
+      echo "_RR_TRACE_DIR=./rr PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) ${rr}/bin/rr -M replay \"\$@\"" >> $out/bin/rootston_rr_replay
+      chmod +x $out/bin/rootston_rr_replay
      '';
 
     devBuildScript = if (devBuild == true) then devBuildTrue else devBuildFalse;
@@ -75,13 +83,17 @@ let
       exec ${midori}/bin/midori
       '';
 
+    simulaPackages = if devBuild == true then [] else [ godot godot-haskell-plugin ];
+    linkGHP = if devBuild == true then "" else ''
+      ln -s ${godot-haskell-plugin}/lib/ghc-${ghc-version}/libgodot-haskell-plugin.so $out/bin/libgodot-haskell-plugin.so";
+    '';
+
     simula = stdenv.mkDerivation {
       name = "Simula";
       src = ./utils;
-      buildInputs = [ godot godot-haskell-plugin xpra xrdb wmctrl fontconfig glibc-locales xfce4-terminal-wrapped openxr-loader midori-wrapped ];
+      buildInputs = [ xpra xrdb wmctrl fontconfig glibc-locales xfce4-terminal-wrapped openxr-loader midori-wrapped ] ++ simulaPackages;
       installPhase = ''
       mkdir -p $out/bin
-      ln -s ${godot-haskell-plugin}/lib/ghc-${ghc-version}/libgodot-haskell-plugin.so $out/bin/libgodot-haskell-plugin.so
       ln -s ${xpra}/bin/xpra $out/bin/xpra
       ln -s ${xfce4-terminal-wrapped}/bin/xfce4-terminal $out/bin/xfce4-terminal
       ln -s ${xrdb}/bin/xrdb $out/bin/xrdb
@@ -95,7 +107,7 @@ let
       ln -s ${rr}/bin/rr $out/bin/rr
       ln -s ${dialog}/bin/dialog $out/bin/dialog
 
-      '' + devBuildScript;
+      '' + linkGHP + devBuildScript;
     };
 
 in simula

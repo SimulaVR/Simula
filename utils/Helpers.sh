@@ -246,3 +246,13 @@ nsREPLGodotHaskellPlugin() {
     cd ./addons/godot-haskell-plugin
     nix-shell --attr env shell.nix --run "cabal repl"
 }
+
+nsBuildWlroots() {
+    cd ./submodules/wlroots-dev
+    if [ -d "./build" ]; then
+        nix-shell --run "ninja -C build"
+    else
+        nix-shell --run "meson build; ninja -C build"
+    fi
+    cd -
+}
