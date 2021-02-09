@@ -1,3 +1,7 @@
+# Usage instructions:
+#  1. Call `./result/bin/[module]_rr_replay -x ./utils/save_gl_images.gdb <rr_trace>` from Simula root
+#  2. Call `importImageBinary /@ FileNames["*.bin", "/path/to/Simula/gl.bin"]` after importing `./utils/Helpers.wls` from Wolfram
+
 set breakpoint pending on
 set pagination off
 # set logging file ./save_gl_image.log
