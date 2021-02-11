@@ -1136,7 +1136,7 @@ getSpilloverDims gsvs = do
   return (spilloverWidth, spilloverHeight)
   where getSpilloverDims :: GodotSimulaViewSprite -> (GodotWlrSurface, Int, Int) -> IO (Int, Int)
         getSpilloverDims gsvs (wlrSurface, sx, sy) = do
-          (baseWidth, baseHeight) <- getBufferDimensions wlrSurface
+          (baseWidth, baseHeight) <- getBaseDimensions gsvs
           (childWidth, childHeight) <- getBufferDimensions wlrSurface
           let widthSpill = max 0 ((sx + childWidth) - baseWidth)
           let heightSpill = max 0 ((sy + childHeight) - baseHeight)

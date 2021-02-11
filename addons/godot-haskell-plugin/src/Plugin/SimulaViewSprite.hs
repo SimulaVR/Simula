@@ -236,6 +236,7 @@ setTargetDimensions gsvs = do
   maybeTargetDims <- readTVarIO (gsvs ^. gsvsTargetSize)
   targetDims@(SpriteDimensions (targetWidth, targetHeight)) <- case maybeTargetDims of
         Nothing -> do
+          atomically $ writeTVar (gsvs ^. gsvsTargetSize) (Just (SpriteDimensions (originalWidth, originalHeight)))
           return (SpriteDimensions originalDims)
         Just targetDims' -> return targetDims'
 
@@ -260,7 +261,7 @@ setTargetDimensions gsvs = do
   G.set_size renderTargetSurface spilloverDims'
   quadMesh <- getQuadMesh gsvs
   -- QuadMesh need to be scaled down by a factor of 0.001 to be reasonably sized in Godot:
-  G.set_size quadMesh =<< (toLowLevel $ (V2 (0.001 * (fromIntegral spilloverWidth)) (0.001 * (fromIntegral spilloverHeight)))) 
+  G.set_size quadMesh =<< (toLowLevel $ (V2 (0.001 * (fromIntegral spilloverWidth)) (0.001 * (fromIntegral spilloverHeight))))
 
   -- Problem: Calls to `G.set_size quadMesh` cause gsvs to "jitter" (since
   -- they're resized from the center). We thus have to translate them to create
@@ -273,9 +274,9 @@ setTargetDimensions gsvs = do
   resizedLastFrame <- readTVarIO (gsvs ^. gsvsResizedLastFrame)
   case maybeSpilloverDimsOld of
     Nothing -> do
-      if (spilloverWidth > 0) then atomically $ writeTVar (gsvs ^. gsvsSpilloverDims) (Just spilloverDims) else return ()
+      if (spilloverWidth > 0) then atomically $ writeTVar (gsvs ^. gsvsSpilloverDims) (Just settledDimensions) else return ()
     Just spilloverDimsOld@(oldSpilloverWidth, oldSpilloverHeight) -> do
-      case ((oldSpilloverWidth /= spilloverWidth), resizedLastFrame) of
+      case ((oldSpilloverWidth /= spilloverWidth) || (oldSpilloverHeight /= spilloverHeight), resizedLastFrame) of
         (False, _) -> return ()
         (True, True) -> do atomically $ do writeTVar (gsvs ^. gsvsResizedLastFrame) False
                                            writeTVar (gsvs ^. gsvsSpilloverDims) (Just spilloverDims)
@@ -674,12 +675,12 @@ handle_map_free_child gsvsInvisible [wlrXWaylandSurfaceVariant] = do
                                            let xOffset = (sx - x)
                                            let yOffset = (sy - y)
 
-                                           adjustedXY <- getAdjustedXYFreeChild gsvs wlrXWaylandSurface
-                                           adjustedXY'@(V2 x' y') <- fromLowLevel adjustedXY :: IO (V2 Float)
-                                           G.set_xy wlrXWaylandSurface adjustedXY
+                                           -- adjustedXY <- getAdjustedXYFreeChild gsvs wlrXWaylandSurface
+                                           -- adjustedXY'@(V2 x' y') <- fromLowLevel adjustedXY :: IO (V2 Float)
+                                           -- G.set_xy wlrXWaylandSurface adjustedXY
 
-                                           let sx' = (if (round x') == (fromIntegral x) then sx else (round x'))
-                                           let sy' = (if (round y') == (fromIntegral y) then sy else (round y'))
+                                           -- let sx' = (if (round x') == (fromIntegral x) then sx else (round x'))
+                                           -- let sy' = (if (round y') == (fromIntegral y) then sy else (round y'))
 
                                            G.reference wlrXWaylandSurface
                                            wlrSurface <- G.get_wlr_surface wlrXWaylandSurface
@@ -830,8 +831,8 @@ handle_map_child gsvsInvisible args@[wlrXWaylandSurfaceVariant] = do
       -- Since this surface's parent isn't known, we route to `handle_map_free_child`
       putStrLn "handle_map_child: re-routing to handle_map_free_child"
       handle_map_free_child gsvsInvisible args
-    Just (parentGSVS) -> do adjustedXY <- getAdjustedXY parentGSVS wlrXWaylandSurface
-                            G.set_xy wlrXWaylandSurface adjustedXY
+    Just (parentGSVS) -> do -- adjustedXY <- getAdjustedXY parentGSVS wlrXWaylandSurface
+                            -- G.set_xy wlrXWaylandSurface adjustedXY
                             simulaView <- readTVarIO (gsvsInvisible ^. gsvsView)
                             atomically $ writeTVar (simulaView ^. svMapped) True
   where
