@@ -228,7 +228,7 @@ nsBuildGodot() {
 # Updates godot-haskell to latest api.json generated from devBuildGodot
 nsBuildGodotHaskell() {
   cd ./submodules/godot
-  nix-shell --run "$(../../GetNixGL.sh) ./bin/godot.x11.tools.64 --gdnative-generate-json-api ./bin/api.json"
+  nix-shell --run "$(../../utils/GetNixGL.sh) ./bin/godot.x11.tools.64 --gdnative-generate-json-api ./bin/api.json"
   cd -
 
   cd ./submodules/godot-haskell-cabal
@@ -245,6 +245,14 @@ nsBuildGodotHaskellPlugin() {
 nsREPLGodotHaskellPlugin() {
     cd ./addons/godot-haskell-plugin
     nix-shell --attr env shell.nix --run "cabal repl"
+}
+
+nsBuildSimulaLocal() {
+    installSimula 1
+    nsBuildGodot
+    nsBuildGodotHaskell
+    nsBuildGodotHaskellPlugin
+    switchToLocal
 }
 
 nsBuildWlroots() {
