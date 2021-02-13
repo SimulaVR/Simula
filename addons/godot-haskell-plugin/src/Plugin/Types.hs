@@ -88,7 +88,7 @@ data SurfaceLocalCoordinates    = SurfaceLocalCoordinates (Float, Float)
 data SubSurfaceLocalCoordinates = SubSurfaceLocalCoordinates (Float, Float)
 data SpriteDimensions      = SpriteDimensions (Int, Int)
 
-data ResizeMethod = Zoom | Horizontal | Vertical
+data ResizeMethod = Zoom | Horizontal | Vertical deriving (Eq)
 
 -- This should ideally be `[Variant 'HaskellTy]`, but that would
 -- require `AsVariant` to handle both `LibType`s.
@@ -933,7 +933,7 @@ resizeGSVS gsvs resizeMethod factor =
                 True -> do V3 1 1 1 ^* (1 + 1 * (1 - factor)) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
                            return $ SpriteDimensions (round $ ((fromIntegral w) * factor), round $ ((fromIntegral h) * factor))
 
-     atomically $ do writeTVar (gsvs ^. gsvsResizedLastFrame) True
+     atomically $ do if resizeMethod == Zoom then return () else writeTVar (gsvs ^. gsvsResizedLastFrame) True
                      writeTVar (gsvs ^. gsvsTargetSize) (Just newTargetDims)
                      writeTVar (gsvs ^. gsvsSpilloverDims) (Just (wTarget, hTarget))
 
