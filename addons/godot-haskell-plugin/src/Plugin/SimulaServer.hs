@@ -110,7 +110,7 @@ getKeyboardAction gss keyboardShortcut =
     "reloadConfig" -> reloadConfig
     "terminateSimula" -> terminateSimula
     "cycleEnvironment" -> cycleEnvironment gss
-    "launchAppLauncher" -> shellLaunch gss "./result/bin/ulauncher"
+    "launchAppLauncher" -> shellLaunch gss "./result/bin/synapse"
     "textToSpeech" -> textToSpeech gss
     "decreaseTransparency" -> decreaseTransparency
     "increaseTransparency" -> increaseTransparency
