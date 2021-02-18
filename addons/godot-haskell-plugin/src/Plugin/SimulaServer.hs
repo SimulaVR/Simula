@@ -12,6 +12,7 @@
 
 module Plugin.SimulaServer where
 
+import Data.Char
 import Data.Time.Clock
 import Control.Concurrent
 import System.Posix.Process
@@ -272,7 +273,8 @@ getKeyboardAction gss keyboardShortcut =
         takeScreenshotGlobal :: SpriteLocation -> Bool -> IO ()
         takeScreenshotGlobal _ True = do
           timeStampStr <- show <$> getCurrentTime
-          let screenshotBaseName = "simula_pancake_picture_" <> timeStampStr
+          let screenshotBaseName' = "simula_pancake_picture_" <> timeStampStr
+          let screenshotBaseName = filter (\x -> x /= ' ') screenshotBaseName'
           logStr $ "Taking global pancake screenshot"
           screenshotFullPath <- savePngPancake gss screenshotBaseName
           return ()
