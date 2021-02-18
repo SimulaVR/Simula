@@ -12,6 +12,7 @@
 
 module Plugin.SimulaServer where
 
+import Data.Time.Clock
 import Control.Concurrent
 import System.Posix.Process
 import System.Process
@@ -115,6 +116,7 @@ getKeyboardAction gss keyboardShortcut =
     "decreaseTransparency" -> decreaseTransparency
     "increaseTransparency" -> increaseTransparency
     "toggleScreenshotMode" -> toggleScreenshotMode
+    "takeScreenshotGlobal" -> takeScreenshotGlobal
     "debugLogDepthFirstSurfaces" -> debugLogDepthFirstSurfaces
     _ -> shellLaunch gss (keyboardShortcut ^. keyAction)
 
@@ -266,6 +268,15 @@ getKeyboardAction gss keyboardShortcut =
 
             False -> do atomically $ writeTVar (gsvs ^. gsvsScreenshotMode) True
         toggleScreenshotMode _ _ = return ()
+
+        takeScreenshotGlobal :: SpriteLocation -> Bool -> IO ()
+        takeScreenshotGlobal _ True = do
+          timeStampStr <- show <$> getCurrentTime
+          let screenshotBaseName = "simula_pancake_picture_" <> timeStampStr
+          logStr $ "Taking global pancake screenshot"
+          screenshotFullPath <- savePngPancake gss screenshotBaseName
+          return ()
+        takeScreenshotGlobal _ _ = return ()
 
         verticalContract :: SpriteLocation -> Bool -> IO ()
         verticalContract (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do

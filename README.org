@@ -128,6 +128,7 @@ Windows become "active" once you look at them. Active windows receive typing eve
 | ~Super + g~              | Quick launch google-chrome (requires chrome to not already be launched on host)                                               |
 | ~Super + w~              | Launch headset webcam view                                                                                                    |
 | ~PrtSc~                  | Toggle "screenshot" mode (drag a selection on the current window to generate a ~./png/*.png~ and copy it to the X clipboard). |
+| ~Shift + PrtSc~          | Take global screenshot (saved to ~./png/*.png~)                                                                               |
 | ~Super + r~              | Reload Simula's configuration (~./config.dhall~)                                                                              |
 
 *NOTE:* In order to prevent Simula's keyboard shortcuts from conflicting with your existing window manager's shortcuts, Simula "grabs" the system keyboard and cursor to prevent input events from propagating past Simula. This creates a problem: it is then impossible for you to escape Simula once you launch it! In order to get around this, press ~Super + Escape~ to ungrab Simula, which will restore mouse and keyboard control to your normal window manager.

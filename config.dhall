@@ -50,6 +50,8 @@ let Configuration =
                               , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_ALT", "KEY_UP"]        , _keyAction = "increaseTransparency"       }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_ALT", "KEY_DOWN"]      , _keyAction = "decreaseTransparency"       }
                               , { _keyCombination = ["KEY_PRINT"]                                      , _keyAction = "toggleScreenshotMode"       }
+                              , { _keyCombination = ["KEY_MASK_SHIFT", "KEY_PRINT"]                    , _keyAction = "takeScreenshotGlobal"       }
+
 
                                 -- Anything else is parsed as a shell command:
                               , { _keyCombination = ["KEY_MASK_META", "KEY_K"] , _keyAction = "firefox -new-window"                                }
