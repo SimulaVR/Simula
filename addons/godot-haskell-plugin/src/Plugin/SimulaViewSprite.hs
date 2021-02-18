@@ -425,9 +425,12 @@ processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)
                      getXWaylandSubsurfaceAndCoords gsvs godotWlrXWaylandSurface surfaceLocalCoords
                    Left godotWlrXdgSurface -> getXdgSubsurfaceAndCoords godotWlrXdgSurface surfaceLocalCoords
                wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+
+               pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
+               pointerNotifyMotion wlrSeat subSurfaceLocalCoords
+
                case evt of
-                 Motion                -> do pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
-                                             pointerNotifyMotion wlrSeat subSurfaceLocalCoords
+                 Motion                -> do return ()
                  Button pressed button -> do ---focus gsvs
                                              G.keyboard_notify_enter wlrSeat godotWlrSurface
                                              pointerNotifyButton wlrSeat evt
