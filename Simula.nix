@@ -108,6 +108,7 @@ let
       ln -s ${xclip}/bin/xclip $out/bin/xclip
       ln -s ${rr}/bin/rr $out/bin/rr
       ln -s ${dialog}/bin/dialog $out/bin/dialog
+      ln -s ${curl}/bin/curl $out/bin/curl
 
       '' + linkGHP + devBuildScript;
     };
