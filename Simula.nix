@@ -87,7 +87,7 @@ let
 
     simulaPackages = if devBuild == true then [] else [ godot godot-haskell-plugin ];
     linkGHP = if devBuild == true then "" else ''
-      ln -s ${godot-haskell-plugin}/lib/ghc-${ghc-version}/libgodot-haskell-plugin.so $out/bin/libgodot-haskell-plugin.so";
+      ln -s ${godot-haskell-plugin}/lib/ghc-${ghc-version}/libgodot-haskell-plugin.so $out/bin/libgodot-haskell-plugin.so;
     '';
 
     simula = stdenv.mkDerivation {
