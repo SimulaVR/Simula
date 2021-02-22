@@ -21,7 +21,7 @@ let
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula
       echo "source ./utils/Helpers.sh && updateEmail" >> $out/bin/simula
       echo "if [ ! -d .import ]; then LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) ${godot}/bin/godot.x11.tools.64 --export \"Linux/X11\" ./result/bin/SimulaExport; fi" >> $out/bin/simula
-      echo "PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib \$(./utils/GetNixGL.sh) ${godot}/bin/godot.x11.opt.debug.64 -m 2>&1" >> $out/bin/simula
+      echo "PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib \$(./utils/GetNixGL.sh) ${godot}/bin/godot.x11.opt.debug.64 -m 2>&1 | ${coreutils}/bin/tee output.file" >> $out/bin/simula
       echo "sed -in \"s/\$USER/anon/g\" output.file" >> $out/bin/simula
       echo "touch ./email && cat ./email >> output.file" >> $out/bin/simula
       echo "${curl}/bin/curl --data-urlencode errorMsg@output.file https://www.wolframcloud.com/obj/george.w.singer/errorMessage" >> $out/bin/simula
