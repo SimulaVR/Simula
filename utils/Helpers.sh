@@ -264,3 +264,17 @@ nsBuildWlroots() {
     fi
     cd -
 }
+
+updateEmail() {
+    if [ -s ./email ]; then
+        # .. do nothing ..
+        echo ""
+    else
+        ./result/bin/dialog --title "SimulaVR" --backtitle "OPTIONAL: Provide email for important Simula updates & improved bug troubleshooting" --inputbox "Email: " 8 60 --output-fd 1 > ./email 2>&1
+        clear
+    fi
+}
+
+pernoscoSubmit() {
+    PATH=./result/bin:$PATH nix-shell --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false" -p awscli --run "python3 ./nix/pernosco-submit/pernosco-submit upload $1 ./. --title $2"
+}
