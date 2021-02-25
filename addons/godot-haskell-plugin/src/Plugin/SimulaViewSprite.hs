@@ -329,6 +329,7 @@ newGodotSimulaViewSprite gss simulaView = do
 
   meshInstance <- unsafeInstance GodotMeshInstance "MeshInstance"
   quadMesh <- unsafeInstance GodotQuadMesh "QuadMesh"
+  G.set_size quadMesh =<< (toLowLevel $ (V2 0 0)) -- Initialize to (0,0) size or we'll experience "flickering" when apps launch
   G.set_mesh meshInstance (safeCast quadMesh)
   G.add_child gsvs (safeCast meshInstance) True
 
