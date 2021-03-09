@@ -156,12 +156,17 @@ ready self _ = do
   connectController ct = do
     -- putStrLn "connectController"
     argsPressed <- Api.godot_array_new
-    Api.godot_array_append argsPressed =<< toLowLevel (toVariant $ asObj ct)
-    Api.godot_array_append argsPressed =<< toLowLevel (toVariant True)
+    ctA <- toLowLevel $ toVariant $ asObj ct :: IO GodotVariant
+    ctB <- toLowLevel $ toVariant $ asObj ct :: IO GodotVariant
+    trueGV <- toLowLevel $ toVariant True :: IO GodotVariant
+    falseGV <- toLowLevel $ toVariant False :: IO GodotVariant
+
+    Api.godot_array_append argsPressed ctA
+    Api.godot_array_append argsPressed trueGV
 
     argsReleased <- Api.godot_array_new
-    Api.godot_array_append argsReleased =<< toLowLevel (toVariant $ asObj ct)
-    Api.godot_array_append argsReleased =<< toLowLevel (toVariant False)
+    Api.godot_array_append argsReleased ctB
+    Api.godot_array_append argsReleased falseGV
 
     btnSignal   <- toLowLevel "on_button_signal"
     btnPressed  <- toLowLevel "button_pressed"
@@ -169,6 +174,10 @@ ready self _ = do
 
     G.connect ct btnPressed (safeCast self) btnSignal argsPressed 0
     G.connect ct btnReleased (safeCast self) btnSignal argsReleased 0
+
+    mapM_ Api.godot_variant_destroy [ctA, ctB, trueGV, falseGV]
+    mapM_ Api.godot_string_destroy [btnSignal, btnPressed, btnReleased]
+    mapM_ Api.godot_array_destroy [argsPressed]
 
     return ()
 

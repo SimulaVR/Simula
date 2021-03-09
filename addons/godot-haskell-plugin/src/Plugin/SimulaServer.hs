@@ -396,6 +396,7 @@ instance NativeScript GodotSimulaServer where
     , func NoRPC "_physics_process" Plugin.SimulaServer.physicsProcess
     , func NoRPC "_on_simula_shortcut" Plugin.SimulaServer._on_simula_shortcut
     , func NoRPC "handle_wlr_compositor_new_surface" Plugin.SimulaServer.handle_wlr_compositor_new_surface
+    , func NoRPC "seat_request_cursor" Plugin.SimulaServer.seat_request_cursor
     ]
 
   classSignals = []
@@ -422,6 +423,7 @@ ready gss _ = do
   connectGodotSignal wlrKeyboard "key" gss "_on_wlr_key" []
   connectGodotSignal wlrKeyboard "modifiers" gss "_on_wlr_modifiers" []
   connectGodotSignal wlrKeyboard "shortcut" gss "_on_simula_shortcut" []
+  -- connectGodotSignal wlrSeat "request_set_cursor" gss "seat_request_cursor" []
     -- Omission: We omit connecting "size_changed" with "_on_viewport_change"
 
   wlrCompositor <- readTVarIO (gss ^. gssWlrCompositor)
@@ -1038,3 +1040,15 @@ handle_wlr_compositor_new_surface gss args@[wlrSurfaceVariant] = do
       connectGodotSignal wlrSurface "commit" gsvs "handle_wlr_surface_commit" []
       connectGodotSignal wlrSurface "destroy" gsvs "handle_wlr_surface_destroy" []
       return ()
+
+seat_request_cursor :: GodotSimulaServer -> [GodotVariant] -> IO ()
+seat_request_cursor gss args@[wlrSurfaceCursorVariant] = do
+  wlrSurfaceCursor <- fromGodotVariant wlrSurfaceCursorVariant :: IO GodotWlrSurface
+  maybeActiveCursorGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
+  case (maybeActiveCursorGSVS, ((unsafeCoerce wlrSurfaceCursor) == nullPtr))   of
+      (Nothing, _) -> putStrLn "Unable to find active cursor gsvs; unable to load cursor texture."
+      (Just gsvs, False) -> do -- Load the new texture
+                               maybeCursorTextureOld <- readTVarIO (gsvs ^. gsvsCursorTexture) :: IO (Maybe GodotTexture)
+                               wlrSurfaceCursorTexture <- G.get_texture wlrSurfaceCursor :: IO GodotTexture
+                               atomically $ writeTVar (gsvs ^. gsvsCursorTexture) (Just wlrSurfaceCursorTexture)
+      (Just gsvs, True) -> putStrLn "seat_request_cursor surfaced is NULL!"

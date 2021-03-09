@@ -79,6 +79,7 @@ instance NativeScript GodotSimulaViewSprite where
                       <*> atomically (newTVar 0)
                       <*> atomically (newTVar Nothing)
                       <*> atomically (newTVar False)
+                      <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
   -- classExtends = "RigidBody"
   classMethods =
     [ func NoRPC "_input_event" inputEvent
@@ -128,15 +129,16 @@ updateSimulaViewSprite gsvs = do
   -- G.set_opacity sprite3D 0.5
   -- putStrLn $ "GSVS opacity: " ++ (show opacityFloat)
 
-
   where updateTransparency :: GodotSimulaViewSprite -> IO ()
         updateTransparency gsvs = do
           gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
-          gsvsTransparency' <- toLowLevel (toVariant gsvsTransparency)
+          gsvsTransparencyGV <- toLowLevel (toVariant gsvsTransparency)
           quadMesh <- getQuadMesh gsvs
           shm <- G.get_material quadMesh >>= asClass' GodotShaderMaterial "ShaderMaterial" :: IO GodotShaderMaterial
           outsideAlpha <- toLowLevel (pack "outsideAlpha") :: IO GodotString
-          G.set_shader_param shm outsideAlpha gsvsTransparency'
+          G.set_shader_param shm outsideAlpha gsvsTransparencyGV
+          Api.godot_string_destroy outsideAlpha
+          Api.godot_variant_destroy gsvsTransparencyGV
 
         -- Necessary for window manipulation to function
         setBoxShapeExtentsToMatchAABB :: GodotSimulaViewSprite -> IO ()
@@ -345,6 +347,10 @@ newGodotSimulaViewSprite gss simulaView = do
   ownerId <- G.create_shape_owner gsvs (safeCast gsvs)
   G.shape_owner_add_shape gsvs ownerId (safeCast godotBoxShape)
 
+   -- Load default cursor
+  maybeCursorTexture <- readTVarIO (gss ^. gssCursorTexture)
+  atomically $ writeTVar (_gsvsCursorTexture gsvs) maybeCursorTexture
+
   atomically $ writeTVar (_gsvsServer            gsvs) gss
   atomically $ writeTVar (_gsvsMeshInstance      gsvs) meshInstance
   atomically $ writeTVar (_gsvsShape             gsvs) godotBoxShape
@@ -426,7 +432,6 @@ processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)
                      getXWaylandSubsurfaceAndCoords gsvs godotWlrXWaylandSurface surfaceLocalCoords
                    Left godotWlrXdgSurface -> getXdgSubsurfaceAndCoords godotWlrXdgSurface surfaceLocalCoords
                wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
-
                pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
                pointerNotifyMotion wlrSeat subSurfaceLocalCoords
 
@@ -495,7 +500,7 @@ pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (ssx, ssy)) = 
   G.pointer_notify_enter wlrSeat wlrSurface ssx ssy -- Causing a crash
 
 _handle_map :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
-_handle_map gsvs args = do
+_handle_map gsvs _ = do
   putStrLn $ "_handle_map"
   gss <- readTVarIO (gsvs ^. gsvsServer)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
@@ -661,10 +666,11 @@ applyViewportBaseTexture gsvs = do
   viewportBaseTextureGV <- (toLowLevel (toVariant ((safeCast viewportBaseTexture) :: GodotObject))) :: IO GodotVariant
   texture_albedo <- toLowLevel (pack "texture_albedo") :: IO GodotString
   G.set_shader_param shm texture_albedo viewportBaseTextureGV
+  Api.godot_variant_destroy viewportBaseTextureGV
+  Api.godot_string_destroy texture_albedo
 
 handle_map_free_child :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_map_free_child gsvsInvisible [wlrXWaylandSurfaceVariant] = do
-  putStrLn $ "handle_map_free_child"
   gss <- readTVarIO $ (gsvsInvisible ^. gsvsServer)
   wlrXWaylandSurface <- fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface
   maybeActiveCursorGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)

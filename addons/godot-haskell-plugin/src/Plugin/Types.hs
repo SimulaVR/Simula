@@ -211,11 +211,12 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsFrameCount        :: TVar Integer
   , _gsvsSpilloverDims     :: TVar (Maybe (Int, Int))
   , _gsvsResizedLastFrame  :: TVar Bool
+  , _gsvsCursorTexture     :: TVar (Maybe GodotTexture)
   }
 
 instance HasBaseClass GodotSimulaViewSprite where
   type BaseClass GodotSimulaViewSprite = GodotRigidBody
-  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotRigidBody obj
+  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotRigidBody obj
 
 data CanvasBase = CanvasBase {
     _cbObject       :: GodotObject
@@ -829,6 +830,8 @@ getTextureFromURL urlStr = do
    exitCode <- G.load godotImage pngUrl
    -- G.compress godotImage G.COMPRESS_ETC2 G.COMPRESS_SOURCE_GENERIC 1
    G.create_from_image godotImageTexture godotImage G.TEXTURE_FLAGS_DEFAULT
+   Api.godot_string_destroy pngUrl
+   Api.godot_object_destroy $ safeCast godotImage
    if (unsafeCoerce godotImageTexture == nullPtr) then (return Nothing) else (return (Just (safeCast godotImageTexture)))
 
 loadEnvironmentTextures :: Configuration -> GodotWorldEnvironment -> IO [String]
@@ -881,8 +884,8 @@ cycleGSSEnvironment gss = do
         Nothing -> putStrLn "Unable to cycle environment texture!"
         Just nextTexture -> do oldTex <- G.get_panorama panoramaSky :: IO GodotTexture
                                G.set_panorama panoramaSky nextTexture
-                               -- G.unreference @GodotReference (safeCast oldTex) -- Doesn't actually fix leak
-                               -- Api.godot_object_destroy $ safeCast oldTex -- Causes crash, which means oldTex is still being used somehow
+                               -- G.unreference @GodotReference (safeCast oldTex) -- Doesn't work here
+                               Api.godot_object_destroy $ safeCast oldTex
                                return ()
   where next :: Eq a => Maybe a -> [a] -> Maybe a
         next _ []             = Nothing
@@ -1053,6 +1056,7 @@ getDepthFirstXWaylandSurfaces wlrXWaylandSurface = do
           children <- mapM G.getWlrSurface childrenSubsurfaces
           let childrenWithCoords = zip3 children childrenSSX childrenSSY
           Api.godot_array_destroy arrayOfChildren
+          mapM_ Api.godot_variant_destroy arrayOfChildrenGV
           return childrenWithCoords
 
         getXWaylandMappedChildren :: GodotWlrXWaylandSurface -> IO [(GodotWlrXWaylandSurface, Int, Int)]
@@ -1065,6 +1069,7 @@ getDepthFirstXWaylandSurfaces wlrXWaylandSurface = do
           childrenY <- mapM G.get_y children
           let childrenWithCoords = zip3 children childrenX childrenY
           Api.godot_array_destroy arrayOfChildren
+          mapM_ Api.godot_variant_destroy arrayOfChildrenGV
           return childrenWithCoords
 
 getDepthFirstXdgSurfaces :: GodotWlrXdgSurface -> IO [(GodotWlrSurface, Int, Int)]
@@ -1088,6 +1093,7 @@ getDepthFirstXdgSurfaces wlrXdgSurface = do
           childrenY <- mapM G.get_y childrenAsPopups
           let childrenWithCoords = zip3 children childrenX childrenY
           Api.godot_array_destroy arrayOfChildren
+          mapM_ Api.godot_variant_destroy arrayOfChildrenGV
           return childrenWithCoords
 
         appendXdgSurfaceAndChildren :: [(GodotWlrXdgSurface, Int, Int)] -> (GodotWlrXdgSurface, Int, Int) -> IO [(GodotWlrXdgSurface, Int, Int)]
@@ -1115,6 +1121,7 @@ getDepthFirstWlrSurfaces wlrSurface = do
           children <- mapM G.getWlrSurface childrenSubsurfaces
           let childrenWithCoords = zip3 children childrenSSX childrenSSY
           Api.godot_array_destroy arrayOfChildren
+          mapM_ Api.godot_variant_destroy arrayOfChildrenGV
           return childrenWithCoords
 
 

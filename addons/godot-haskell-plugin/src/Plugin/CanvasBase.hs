@@ -141,7 +141,7 @@ _draw cb _ = do
     drawCursor cb gsvs = do
       activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
       gss <- readTVarIO (gsvs ^. gsvsServer)
-      maybeCursorTexture <- readTVarIO (gss ^. gssCursorTexture)
+      maybeCursorTexture <- readTVarIO (gsvs ^. gsvsCursorTexture)
       maybeScreenshotCursorTexture <- readTVarIO (gss ^. gssScreenshotCursorTexture)
       screenshotModeEnabled <- readTVarIO (gsvs ^. gsvsScreenshotMode)
 
