@@ -349,7 +349,7 @@ newGodotSimulaViewSprite gss simulaView = do
 
    -- Load default cursor
   maybeCursorTexture <- readTVarIO (gss ^. gssCursorTexture)
-  atomically $ writeTVar (_gsvsCursorTexture gsvs) maybeCursorTexture
+  atomically $ writeTVar (_gsvsCursor gsvs) (Nothing, maybeCursorTexture)
 
   atomically $ writeTVar (_gsvsServer            gsvs) gss
   atomically $ writeTVar (_gsvsMeshInstance      gsvs) meshInstance

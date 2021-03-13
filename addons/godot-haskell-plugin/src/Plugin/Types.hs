@@ -211,7 +211,7 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsFrameCount        :: TVar Integer
   , _gsvsSpilloverDims     :: TVar (Maybe (Int, Int))
   , _gsvsResizedLastFrame  :: TVar Bool
-  , _gsvsCursorTexture     :: TVar (Maybe GodotTexture)
+  , _gsvsCursor            :: TVar ((Maybe GodotWlrSurface), (Maybe GodotTexture))
   }
 
 instance HasBaseClass GodotSimulaViewSprite where

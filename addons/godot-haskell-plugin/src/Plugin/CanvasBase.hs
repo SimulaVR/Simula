@@ -141,18 +141,25 @@ _draw cb _ = do
     drawCursor cb gsvs = do
       activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
       gss <- readTVarIO (gsvs ^. gsvsServer)
-      maybeCursorTexture <- readTVarIO (gsvs ^. gsvsCursorTexture)
+      (maybeWlrSurfaceCursor, maybeCursorTexture) <- readTVarIO (gsvs ^. gsvsCursor)
       maybeScreenshotCursorTexture <- readTVarIO (gss ^. gssScreenshotCursorTexture)
       screenshotModeEnabled <- readTVarIO (gsvs ^. gsvsScreenshotMode)
 
       -- Fork behavior depending upon whether screenshot mode is enabled
-      case (screenshotModeEnabled, maybeCursorTexture, maybeScreenshotCursorTexture)  of
-        (False, Just cursorTexture, _) -> do
-           -- Draw normal cursor
+      case (screenshotModeEnabled, maybeWlrSurfaceCursor, maybeScreenshotCursorTexture, maybeCursorTexture)  of
+        (False, Just wlrSurfaceCursor, _, _) -> do
+           -- Draw client provided cursor
+           cursorTexture <- G.get_texture wlrSurfaceCursor
            cursorRenderPosition <- toLowLevel (V2 sx sy) :: IO GodotVector2
            godotColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1.0) :: IO GodotColor
            G.draw_texture cb cursorTexture cursorRenderPosition godotColor (coerce nullPtr)
-        (True, _, Just screenshotCursorTexture) -> do
+           G.send_frame_done wlrSurfaceCursor
+        (False, Nothing, _, Just cursorTexture) -> do
+           -- Draw default cursor
+           cursorRenderPosition <- toLowLevel (V2 sx sy) :: IO GodotVector2
+           godotColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1.0) :: IO GodotColor
+           G.draw_texture cb cursorTexture cursorRenderPosition godotColor (coerce nullPtr)
+        (True, _, Just screenshotCursorTexture, _) -> do
            -- Draw screenshot cursor
            cursorRenderPosition <- toLowLevel (V2 (sx - 16) (sy - 16)) :: IO GodotVector2
            godotColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1.0) :: IO GodotColor

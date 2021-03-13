@@ -423,7 +423,7 @@ ready gss _ = do
   connectGodotSignal wlrKeyboard "key" gss "_on_wlr_key" []
   connectGodotSignal wlrKeyboard "modifiers" gss "_on_wlr_modifiers" []
   connectGodotSignal wlrKeyboard "shortcut" gss "_on_simula_shortcut" []
-  -- connectGodotSignal wlrSeat "request_set_cursor" gss "seat_request_cursor" []
+  connectGodotSignal wlrSeat "request_set_cursor" gss "seat_request_cursor" []
     -- Omission: We omit connecting "size_changed" with "_on_viewport_change"
 
   wlrCompositor <- readTVarIO (gss ^. gssWlrCompositor)
@@ -1047,8 +1047,5 @@ seat_request_cursor gss args@[wlrSurfaceCursorVariant] = do
   maybeActiveCursorGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
   case (maybeActiveCursorGSVS, ((unsafeCoerce wlrSurfaceCursor) == nullPtr))   of
       (Nothing, _) -> putStrLn "Unable to find active cursor gsvs; unable to load cursor texture."
-      (Just gsvs, False) -> do -- Load the new texture
-                               maybeCursorTextureOld <- readTVarIO (gsvs ^. gsvsCursorTexture) :: IO (Maybe GodotTexture)
-                               wlrSurfaceCursorTexture <- G.get_texture wlrSurfaceCursor :: IO GodotTexture
-                               atomically $ writeTVar (gsvs ^. gsvsCursorTexture) (Just wlrSurfaceCursorTexture)
-      (Just gsvs, True) -> putStrLn "seat_request_cursor surfaced is NULL!"
+      (Just gsvs, False) -> atomically $ writeTVar (gsvs ^. gsvsCursor) ((Just wlrSurfaceCursor), Nothing)
+      (Just gsvs, True) -> putStrLn "seat_request_cursor surface is NULL!"
