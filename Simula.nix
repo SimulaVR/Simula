@@ -43,7 +43,7 @@ let
       chmod +x $out/bin/simula_gdb
 
       # simula_rr_record
-      echo "_RR_TRACE_DIR=./rr PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) ${rr}/bin/rr record ./submodules/godot/bin/godot.x11.tools.64 --args -m" >> $out/bin/simula_rr_record
+      echo "_RR_TRACE_DIR=./rr PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) ${rr}/bin/rr record -i SIGUSR1 ./submodules/godot/bin/godot.x11.tools.64 --args -m" >> $out/bin/simula_rr_record
       chmod +x $out/bin/simula_rr_record
 
       # simula_rr_replay
