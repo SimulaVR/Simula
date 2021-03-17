@@ -154,6 +154,7 @@ isButtonPressed btnId gsc = do
 pointerWindow :: GodotSimulaController -> IO (Maybe GodotSimulaViewSprite)
 pointerWindow gsc = do
   -- putStrLn "pointerWindow"
+  G.force_raycast_update (_gscRayCast gsc)
   isColliding <- G.is_colliding $ _gscRayCast gsc
   if isColliding
     then G.get_collider (_gscRayCast gsc) >>= asNativeScript -- tryObjectCast @GodotSimulaViewSprite

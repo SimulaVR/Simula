@@ -901,6 +901,7 @@ sendWlrootsMotion gsvs = do
 getHMDLookAtSprite :: GodotSimulaServer -> IO (Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates))
 getHMDLookAtSprite gss = do
   rc <- readTVarIO (gss ^.  gssHMDRayCast)
+  G.force_raycast_update rc -- Necessary to avoid crashes
   hmdGlobalTransform <- getARVRCameraOrPancakeCameraTransform gss
   G.set_global_transform rc hmdGlobalTransform
 

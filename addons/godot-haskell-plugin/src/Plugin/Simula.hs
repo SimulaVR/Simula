@@ -207,6 +207,7 @@ onButton self gsc button pressed = do
 
     _ -> do
       let rc = _gscRayCast gsc
+      G.force_raycast_update rc
       whenM (G.is_colliding rc) $ do
         maybeSprite <- G.get_collider rc >>= asNativeScript :: IO (Maybe GodotSimulaViewSprite) --fromNativeScript
         -- let sprite = Data.Maybe.fromJust maybeSprite
