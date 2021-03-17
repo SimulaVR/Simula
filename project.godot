@@ -17,6 +17,8 @@ _global_script_class_icons={
 
 config/name="Simula"
 run/main_scene="res://addons/godot-haskell-plugin/demo/Demo.tscn"
+boot_splash/image="res://splash.png"
+boot_splash/bg_color=Color( 0, 0, 0, 1 )
 
 [display]
 
