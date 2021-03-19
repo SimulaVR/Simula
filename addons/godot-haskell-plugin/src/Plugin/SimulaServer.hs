@@ -250,14 +250,24 @@ getKeyboardAction gss keyboardShortcut =
 
         decreaseTransparency :: SpriteLocation -> Bool -> IO ()
         decreaseTransparency (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          gsvsTransparencyVal <- readTVarIO (gsvs ^. gsvsTransparency)
-          atomically $ writeTVar (gsvs ^. gsvsTransparency) (constrainTransparency (gsvsTransparencyVal - 0.05))
+          transOld <- readTVarIO (gsvs ^. gsvsTransparency)
+          let transNew = (constrainTransparency (transOld - 0.05))
+          atomically $ writeTVar (gsvs ^. gsvsTransparency) transNew
+          case (transOld == 1, transNew == 1) of
+            (True, False) -> setShader gsvs "res://addons/godot-haskell-plugin/TextShader.tres"
+            (False, True)-> setShader gsvs "res://addons/godot-haskell-plugin/TextShaderOpaque.tres"
+            _ -> return ()
         decreaseTransparency _ _ = return ()
 
         increaseTransparency :: SpriteLocation -> Bool -> IO ()
         increaseTransparency (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          gsvsTransparencyVal <- readTVarIO (gsvs ^. gsvsTransparency)
-          atomically $ writeTVar (gsvs ^. gsvsTransparency) (constrainTransparency (gsvsTransparencyVal + 0.05))
+          transOld <- readTVarIO (gsvs ^. gsvsTransparency)
+          let transNew = (constrainTransparency (transOld + 0.05))
+          atomically $ writeTVar (gsvs ^. gsvsTransparency) transNew
+          case (transOld == 1, transNew == 1) of
+            (True, False) -> setShader gsvs "res://addons/godot-haskell-plugin/TextShader.tres"
+            (False, True)-> setShader gsvs "res://addons/godot-haskell-plugin/TextShaderOpaque.tres"
+            _ -> return ()
         increaseTransparency _ _ = return ()
 
         toggleScreenshotMode :: SpriteLocation -> Bool -> IO ()

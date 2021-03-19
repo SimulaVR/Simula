@@ -68,7 +68,6 @@ let Configuration =
   -- Environments must be local to Simula's root directory
   , _environmentsDirectory = "./environments"
   , _environmentDefault    = "./environments/AllSkyFree_Sky_EpicBlueSunset_Equirect.png"
-  , _defaultTransparency  = 1.0 -- Should be a number between 0 and 1
   }
 
 in Configuration

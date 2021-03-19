@@ -130,7 +130,7 @@ data Configuration = Configuration {
 , _keyRemappings :: [KeyboardRemapping]
 , _environmentsDirectory :: String
 , _environmentDefault :: String
-, _defaultTransparency :: Double
+-- , _defaultTransparency :: Double -- Remove until order independent transparency is implemented
 } deriving (Generic, Show)
 
 instance FromDhall KeyboardRemapping
@@ -1148,3 +1148,15 @@ getSpilloverDims gsvs = do
           let widthSpill = max 0 ((sx + childWidth) - baseWidth)
           let heightSpill = max 0 ((sy + childHeight) - baseHeight)
           return $ (baseWidth + widthSpill, baseHeight + heightSpill)
+
+setShader :: GodotSimulaViewSprite -> String -> IO ()
+setShader gsvs tres = do
+  putStrLn $ "setShader: " ++ tres
+  quadMesh <- getQuadMesh gsvs
+  shader <- load GodotShader "Shader" (Data.Text.pack tres)
+  case shader of
+    Just shader -> do
+      shm <- unsafeInstance GodotShaderMaterial "ShaderMaterial"
+      G.set_shader shm shader
+      G.set_material quadMesh (safeCast shm)
+    Nothing -> error "couldn't fetch shader"
