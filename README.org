@@ -1,6 +1,6 @@
-[[file:./doc/TEMP_LOGO.png]]
+[[file:./doc/SimulaLogoHorizontal.png]]
 
-Simula is a VR window manager for Linux that runs on top of [[https://godotengine.org/][Godot]]. It takes less than 1 minute to install.
+[[https://simulavr.com][Simula]] is a VR window manager for Linux that runs on top of [[https://godotengine.org/][Godot]]. It takes less than 1 minute to install.
 
 # [[https://d.tube/#!/v/sudoreboot/t026ny0m][file:./doc/SimulaDesktop.png]]
 # [[https://i.imgur.com/zNTYTiG.png]]
@@ -12,6 +12,8 @@ Simula is a VR window manager for Linux that runs on top of [[https://godotengin
 *Compatibility:* Simula is officially compatible with SteamVR headsets equipped with Linux drivers (e.g. HTC Vive, HTC Vive Pro, & Valve Index).  We have also added experimental support to OpenXR headsets that have Monado drivers (e.g. North Star, OSVR HDK, and PSVR).  Some people have gotten the Oculus Rift S to run Simula via OpenHMD (see [[https://github.com/OpenHMD/OpenHMD/issues/225#issuecomment-638454156][here]]), though we have not officially tested this ourselves.
 
 *Mission:* Facilitate a Linux future for VR & AR Desktop. In the short-run, this means allowing people to run 2D Linux apps with current generation headsets. In the long-run, this means allowing people to run Linux in standalone AR & VR HMDs.
+
+*Simula One Headset:* We are also in the process of developing a (limited number of) portable VR headsets for sale which come with SimulaVR mounted on them by default.  If you are interested in purchasing one, [[https://simulavr.com][visit our website]] and join our waitlist to receive a place in line and/or periodic updates on its development.
 
 *Origins:* Simula is a reimplementation fork of [[https://github.com/evil0sheep/motorcar][motorcar]]. To read about motorcar, see /[[https://github.com/evil0sheep/MastersThesis/blob/master/thesis.pdf?raw=true][Toward General Purpose 3D User Interfaces: Extending Windowing Systems to Three Dimensions]]/
 
@@ -167,6 +169,9 @@ xpra attach :13
 
 and they will appear on your current ~DISPLAY~. Running ~xpra stop~ (or just ~pkill xpra~) is a quick way to kill all apps associated with your Simula session(s).
 
+* Simula One Headset
+  
+We are in the process of developing a (limited number of) portable VR headsets for sale which come with SimulaVR mounted on them by default.  If you are interested in purchasing one, [[https://simulavr.com][visit our website]] and join our waitlist to receive a place in line and/or periodic updates on its development.
 
 * Community
 
@@ -255,7 +260,6 @@ If you're interested in a future where Linux and VR co-exist, you can donate to 
   - Part-time developers (x 1)
   - Vive donations to contributors (x 3)
   - 
-
 
 * COMMENT Plans & Monthly Updates
 

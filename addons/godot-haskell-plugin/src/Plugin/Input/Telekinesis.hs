@@ -153,6 +153,7 @@ telekinesis isLev isMove tk = do
   tryGrab rc tk' = tk' & _tkBody & \case
     Just _  -> return tk'
     Nothing -> do
+      G.force_raycast_update rc
       isColliding <- (&&) <$> G.is_enabled rc <*> G.is_colliding rc
       if isColliding
         then G.get_collider rc >>= asClass GodotRigidBody "RigidBody" >>= maybe

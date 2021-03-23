@@ -125,15 +125,22 @@ loadOpenVRControllerMesh name = do
 
   loadModelStr <- toLowLevel "load_model"
   nameStr :: GodotString <- toLowLevel $ T.dropEnd 2 name
-  ret <- G.call msh loadModelStr [toVariant nameStr] >>= fromGodotVariant
-  if ret
-    then do return $ Just $ safeCast msh
-    else do genericControllerStr :: GodotString <- toLowLevel "generic_controller"
-            ret' <- G.call msh loadModelStr [toVariant genericControllerStr]
-              >>= fromGodotVariant
-            if ret'
-              then do return $ Just $ safeCast msh
-              else do return Nothing
+  let nameStrVar = toVariant nameStr
+  ret <- G.call msh loadModelStr [nameStrVar] >>= fromGodotVariant
+  retM <- if ret
+             then do return $ Just $ safeCast msh
+             else do genericControllerStr :: GodotString <- toLowLevel "generic_controller"
+                     let var = toVariant genericControllerStr
+                     ret' <- G.call msh loadModelStr [var]
+                       >>= fromGodotVariant
+                     m <- if ret'
+                             then do return $ Just $ safeCast msh
+                             else do return Nothing
+                     Api.godot_string_destroy genericControllerStr
+                     return m
+  Api.godot_string_destroy loadModelStr
+  Api.godot_string_destroy nameStr
+  return retM
 
 -- Because the ARVRController member method is_button_pressed returns Int, not Bool
 isButtonPressed :: Int -> GodotSimulaController -> IO Bool
@@ -147,6 +154,7 @@ isButtonPressed btnId gsc = do
 pointerWindow :: GodotSimulaController -> IO (Maybe GodotSimulaViewSprite)
 pointerWindow gsc = do
   -- putStrLn "pointerWindow"
+  G.force_raycast_update (_gscRayCast gsc)
   isColliding <- G.is_colliding $ _gscRayCast gsc
   if isColliding
     then G.get_collider (_gscRayCast gsc) >>= asNativeScript -- tryObjectCast @GodotSimulaViewSprite

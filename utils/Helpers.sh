@@ -266,7 +266,7 @@ nsBuildWlroots() {
 }
 
 updateEmail() {
-    if [ -s ./email ]; then
+    if [ -e ./email ]; then
         # .. do nothing ..
         echo ""
     else

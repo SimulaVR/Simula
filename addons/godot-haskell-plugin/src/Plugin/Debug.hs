@@ -190,6 +190,19 @@ testRightclickPopup gss app screenshotBase = do
   createProcess (shell $ "pkill " ++ app)
   return ((cx, cy), (fromIntegral px, fromIntegral py), screenshotFullPath)
 
+testAppMemory :: GodotSimulaServer -> String -> Int -> IO (Float, Float)
+testAppMemory gss app sec = do
+  pid1 <- logMemPid gss
+  Control.Concurrent.threadDelay (2 * 1000000)
+  gsvs <- debugLaunchApp gss app []
+  Control.Concurrent.threadDelay (round (0.5 * 1000000))
+  Control.Concurrent.threadDelay (5 * 1000000)
+  Control.Concurrent.threadDelay (1 * 1000000)
+  Control.Concurrent.threadDelay (sec * 1000000)
+  pid2 <- logMemPid gss
+  createProcess (shell $ "pkill " ++ app)
+  return (pid1, pid2)
+
 debugTerminateApps :: GodotSimulaServer -> IO ()
 debugTerminateApps gss = do
   views <- readTVarIO (gss ^. gssViews)
@@ -246,6 +259,18 @@ testMemoryUsage gss = do
 
   return ()
 
+testMemoryUsageWithApp :: GodotSimulaServer -> String -> Int -> IO ()
+testMemoryUsageWithApp gss app sec = do
+  let config = defaultConfig { configOutputFile = Right $ "./hspec_output.txt" }
+
+  (pid1, pid2) <- testAppMemory gss app sec
+  hspecWith config $ do
+    describe "Simula memory usage" $ do
+        it ("Simula memory usage should not incline after " ++ (show (round ((fromIntegral sec) / 60.0))) ++ " minutes after launching " ++ app) $ do
+           pid2  `shouldBe` pid1
+
+  return ()
+
 logMemRecursively :: IO ()
 logMemRecursively = do
   memoryUsage <- getSingleton Godot_OS "OS" >>= G.get_static_memory_usage
@@ -256,12 +281,12 @@ logMemRecursively = do
 logMemPid :: GodotSimulaServer -> IO Float
 logMemPid gss = do
   let pid = (gss ^. gssPid)
-  (_, out', _) <- B.readCreateProcessWithExitCode (shell $ "ps -p " ++ pid ++ " -o pmem=") ""
+  (_, out', _) <- B.readCreateProcessWithExitCode (shell $ "ps -p " ++ pid ++ " -o rss=") ""
   let pidMem = read $ (B.unpack out') :: Float
   -- logStr $ "PID mem: " ++ (show pidMem)
   -- Control.Concurrent.threadDelay (1 * 1000000)
   -- logMemPid gss
-  return pidMem
+  return (pidMem / 1000) -- return ~MB
 
 debugLogDepthFirstSurfaces :: GodotSimulaViewSprite -> IO ()
 debugLogDepthFirstSurfaces gsvs = do
@@ -321,8 +346,9 @@ debugLogDepthFirstSurfaces gsvs = do
 
 debugFunc :: GodotSimulaServer -> IO ()
 debugFunc gss = do
-  (catch :: IO a -> (System.Exit.ExitCode -> IO a) -> IO a) (do testPopups gss
+  (catch :: IO a -> (System.Exit.ExitCode -> IO a) -> IO a) (do -- testPopups gss
                                                                 -- testMemoryUsage gss
+                                                                testMemoryUsageWithApp gss "firefox" (60*1)
                                                                 debugTerminateSimula gss)
                                                             (\e -> debugTerminateSimula gss)
   return ()

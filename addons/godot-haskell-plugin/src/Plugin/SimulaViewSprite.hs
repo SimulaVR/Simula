@@ -79,6 +79,7 @@ instance NativeScript GodotSimulaViewSprite where
                       <*> atomically (newTVar 0)
                       <*> atomically (newTVar Nothing)
                       <*> atomically (newTVar False)
+                      <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
   -- classExtends = "RigidBody"
   classMethods =
     [ func NoRPC "_input_event" inputEvent
@@ -110,7 +111,6 @@ instance NativeScript GodotSimulaViewSprite where
 -- | Intended to be called every frame.
 updateSimulaViewSprite :: GodotSimulaViewSprite -> IO ()
 updateSimulaViewSprite gsvs = do
-  updateTransparency gsvs
   setTargetDimensions gsvs
   applyViewportBaseTexture gsvs
   setBoxShapeExtentsToMatchAABB gsvs
@@ -128,17 +128,7 @@ updateSimulaViewSprite gsvs = do
   -- G.set_opacity sprite3D 0.5
   -- putStrLn $ "GSVS opacity: " ++ (show opacityFloat)
 
-
-  where updateTransparency :: GodotSimulaViewSprite -> IO ()
-        updateTransparency gsvs = do
-          gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
-          gsvsTransparency' <- toLowLevel (toVariant gsvsTransparency)
-          quadMesh <- getQuadMesh gsvs
-          shm <- G.get_material quadMesh >>= asClass' GodotShaderMaterial "ShaderMaterial" :: IO GodotShaderMaterial
-          outsideAlpha <- toLowLevel (pack "outsideAlpha") :: IO GodotString
-          G.set_shader_param shm outsideAlpha gsvsTransparency'
-
-        -- Necessary for window manipulation to function
+  where -- Necessary for window manipulation to function
         setBoxShapeExtentsToMatchAABB :: GodotSimulaViewSprite -> IO ()
         setBoxShapeExtentsToMatchAABB gsvs = do
           meshInstance <- atomically $ readTVar (_gsvsMeshInstance gsvs)
@@ -333,17 +323,13 @@ newGodotSimulaViewSprite gss simulaView = do
   G.set_mesh meshInstance (safeCast quadMesh)
   G.add_child gsvs (safeCast meshInstance) True
 
-  shader <- load GodotShader "Shader" "res://addons/godot-haskell-plugin/TextShader.tres"
-  case shader of
-    Just shader -> do
-      shm <- unsafeInstance GodotShaderMaterial "ShaderMaterial"
-      G.set_shader shm shader
-      G.set_material quadMesh (safeCast shm)
-    Nothing -> error "couldn't fetch shader, hard failing for debug purposes"
-
   godotBoxShape <- unsafeInstance GodotBoxShape "BoxShape"
   ownerId <- G.create_shape_owner gsvs (safeCast gsvs)
   G.shape_owner_add_shape gsvs ownerId (safeCast godotBoxShape)
+
+   -- Load default cursor
+  maybeCursorTexture <- readTVarIO (gss ^. gssCursorTexture)
+  atomically $ writeTVar (_gsvsCursor gsvs) (Nothing, maybeCursorTexture)
 
   atomically $ writeTVar (_gsvsServer            gsvs) gss
   atomically $ writeTVar (_gsvsMeshInstance      gsvs) meshInstance
@@ -356,15 +342,17 @@ newGodotSimulaViewSprite gss simulaView = do
   configuration <- readTVarIO (gss ^. gssConfiguration)
   let windowScale = realToFrac (configuration ^. defaultWindowScale) :: Float
   (V3 1 1 1 ^* (windowScale)) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
-  let defaultTransparency' = constrainTransparency $ realToFrac (configuration ^. defaultTransparency)
 
-  atomically $ writeTVar (_gsvsTransparency      gsvs) defaultTransparency'
+  -- Remove until order independent transparency is implemented
+  -- let defaultTransparency' = constrainTransparency $ realToFrac (configuration ^. defaultTransparency)
+  atomically $ writeTVar (_gsvsTransparency      gsvs) 1
 
   let maybeWindowResolution = (configuration ^. defaultWindowResolution) :: Maybe (Dhall.Natural, Dhall.Natural)
   case maybeWindowResolution of
     Just windowResolution'@(x, y) -> do atomically $ writeTVar (gsvs ^. gsvsTargetSize) (Just (SpriteDimensions (fromIntegral x, fromIntegral y)))
     Nothing -> return () -- If we don't have a target size, we delay setting QuadMesh size until we're able to retrieve its buffer dimensions
 
+  setShader gsvs "res://addons/godot-haskell-plugin/TextShaderOpaque.tres"
   G.set_process gsvs False
 
   return gsvs
@@ -426,7 +414,6 @@ processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)
                      getXWaylandSubsurfaceAndCoords gsvs godotWlrXWaylandSurface surfaceLocalCoords
                    Left godotWlrXdgSurface -> getXdgSubsurfaceAndCoords godotWlrXdgSurface surfaceLocalCoords
                wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
-
                pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
                pointerNotifyMotion wlrSeat subSurfaceLocalCoords
 
@@ -495,7 +482,7 @@ pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (ssx, ssy)) = 
   G.pointer_notify_enter wlrSeat wlrSurface ssx ssy -- Causing a crash
 
 _handle_map :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
-_handle_map gsvs args = do
+_handle_map gsvs _ = do
   putStrLn $ "_handle_map"
   gss <- readTVarIO (gsvs ^. gsvsServer)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
@@ -661,10 +648,11 @@ applyViewportBaseTexture gsvs = do
   viewportBaseTextureGV <- (toLowLevel (toVariant ((safeCast viewportBaseTexture) :: GodotObject))) :: IO GodotVariant
   texture_albedo <- toLowLevel (pack "texture_albedo") :: IO GodotString
   G.set_shader_param shm texture_albedo viewportBaseTextureGV
+  Api.godot_variant_destroy viewportBaseTextureGV
+  Api.godot_string_destroy texture_albedo
 
 handle_map_free_child :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_map_free_child gsvsInvisible [wlrXWaylandSurfaceVariant] = do
-  putStrLn $ "handle_map_free_child"
   gss <- readTVarIO $ (gsvsInvisible ^. gsvsServer)
   wlrXWaylandSurface <- fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface
   maybeActiveCursorGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)

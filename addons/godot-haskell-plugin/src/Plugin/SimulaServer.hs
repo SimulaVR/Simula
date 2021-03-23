@@ -250,14 +250,24 @@ getKeyboardAction gss keyboardShortcut =
 
         decreaseTransparency :: SpriteLocation -> Bool -> IO ()
         decreaseTransparency (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          gsvsTransparencyVal <- readTVarIO (gsvs ^. gsvsTransparency)
-          atomically $ writeTVar (gsvs ^. gsvsTransparency) (constrainTransparency (gsvsTransparencyVal - 0.05))
+          transOld <- readTVarIO (gsvs ^. gsvsTransparency)
+          let transNew = (constrainTransparency (transOld - 0.05))
+          atomically $ writeTVar (gsvs ^. gsvsTransparency) transNew
+          case (transOld == 1, transNew == 1) of
+            (True, False) -> setShader gsvs "res://addons/godot-haskell-plugin/TextShader.tres"
+            (False, True)-> setShader gsvs "res://addons/godot-haskell-plugin/TextShaderOpaque.tres"
+            _ -> return ()
         decreaseTransparency _ _ = return ()
 
         increaseTransparency :: SpriteLocation -> Bool -> IO ()
         increaseTransparency (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          gsvsTransparencyVal <- readTVarIO (gsvs ^. gsvsTransparency)
-          atomically $ writeTVar (gsvs ^. gsvsTransparency) (constrainTransparency (gsvsTransparencyVal + 0.05))
+          transOld <- readTVarIO (gsvs ^. gsvsTransparency)
+          let transNew = (constrainTransparency (transOld + 0.05))
+          atomically $ writeTVar (gsvs ^. gsvsTransparency) transNew
+          case (transOld == 1, transNew == 1) of
+            (True, False) -> setShader gsvs "res://addons/godot-haskell-plugin/TextShader.tres"
+            (False, True)-> setShader gsvs "res://addons/godot-haskell-plugin/TextShaderOpaque.tres"
+            _ -> return ()
         increaseTransparency _ _ = return ()
 
         toggleScreenshotMode :: SpriteLocation -> Bool -> IO ()
@@ -396,6 +406,7 @@ instance NativeScript GodotSimulaServer where
     , func NoRPC "_physics_process" Plugin.SimulaServer.physicsProcess
     , func NoRPC "_on_simula_shortcut" Plugin.SimulaServer._on_simula_shortcut
     , func NoRPC "handle_wlr_compositor_new_surface" Plugin.SimulaServer.handle_wlr_compositor_new_surface
+    , func NoRPC "seat_request_cursor" Plugin.SimulaServer.seat_request_cursor
     ]
 
   classSignals = []
@@ -422,6 +433,7 @@ ready gss _ = do
   connectGodotSignal wlrKeyboard "key" gss "_on_wlr_key" []
   connectGodotSignal wlrKeyboard "modifiers" gss "_on_wlr_modifiers" []
   connectGodotSignal wlrKeyboard "shortcut" gss "_on_simula_shortcut" []
+  connectGodotSignal wlrSeat "request_set_cursor" gss "seat_request_cursor" []
     -- Omission: We omit connecting "size_changed" with "_on_viewport_change"
 
   wlrCompositor <- readTVarIO (gss ^. gssWlrCompositor)
@@ -899,6 +911,7 @@ sendWlrootsMotion gsvs = do
 getHMDLookAtSprite :: GodotSimulaServer -> IO (Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates))
 getHMDLookAtSprite gss = do
   rc <- readTVarIO (gss ^.  gssHMDRayCast)
+  G.force_raycast_update rc -- Necessary to avoid crashes
   hmdGlobalTransform <- getARVRCameraOrPancakeCameraTransform gss
   G.set_global_transform rc hmdGlobalTransform
 
@@ -1038,3 +1051,12 @@ handle_wlr_compositor_new_surface gss args@[wlrSurfaceVariant] = do
       connectGodotSignal wlrSurface "commit" gsvs "handle_wlr_surface_commit" []
       connectGodotSignal wlrSurface "destroy" gsvs "handle_wlr_surface_destroy" []
       return ()
+
+seat_request_cursor :: GodotSimulaServer -> [GodotVariant] -> IO ()
+seat_request_cursor gss args@[wlrSurfaceCursorVariant] = do
+  wlrSurfaceCursor <- fromGodotVariant wlrSurfaceCursorVariant :: IO GodotWlrSurface
+  maybeActiveCursorGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
+  case (maybeActiveCursorGSVS, ((unsafeCoerce wlrSurfaceCursor) == nullPtr))   of
+      (Nothing, _) -> putStrLn "Unable to find active cursor gsvs; unable to load cursor texture."
+      (Just gsvs, False) -> atomically $ writeTVar (gsvs ^. gsvsCursor) ((Just wlrSurfaceCursor), Nothing)
+      (Just gsvs, True) -> putStrLn "seat_request_cursor surface is NULL!"
