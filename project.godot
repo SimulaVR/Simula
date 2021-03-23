@@ -18,6 +18,10 @@ _global_script_class_icons={
 config/name="Simula"
 run/main_scene="res://addons/godot-haskell-plugin/demo/Demo.tscn"
 
+[debug]
+
+settings/stdout/print_fps=true
+
 [display]
 
 window/vsync/use_vsync=false
@@ -33,6 +37,6 @@ common/physics_fps=90
 
 [rendering]
 
-quality/filters/anisotropic_filter_level=16
-quality/filters/msaa=3
+quality/filters/anisotropic_filter_level=0
+quality/filters/msaa=0
 environment/default_environment="res://default_env.tres"

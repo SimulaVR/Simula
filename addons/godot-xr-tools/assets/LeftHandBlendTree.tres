@@ -1,0 +1,37 @@
+[gd_resource type="AnimationNodeBlendTree" load_steps=8 format=2]
+
+[sub_resource type="AnimationNodeAnimation" id=1]
+animation = "IndexFinger"
+
+[sub_resource type="AnimationNodeBlend2" id=2]
+filter_enabled = true
+filters = [ "Armature_Left/Skeleton:index._distal", "Armature_Left/Skeleton:index._middle", "Armature_Left/Skeleton:index._proximal" ]
+
+[sub_resource type="AnimationNodeAnimation" id=3]
+animation = "Grip"
+
+[sub_resource type="AnimationNodeTimeScale" id=4]
+
+[sub_resource type="AnimationNodeTimeScale" id=5]
+
+[sub_resource type="AnimationNodeTimeSeek" id=6]
+
+[sub_resource type="AnimationNodeTimeSeek" id=7]
+
+[resource]
+"nodes/Animation 2/node" = SubResource( 1 )
+"nodes/Animation 2/position" = Vector2( 140, 240 )
+nodes/Blend2/node = SubResource( 2 )
+nodes/Blend2/position = Vector2( 800, 80 )
+nodes/GripAnimation/node = SubResource( 3 )
+nodes/GripAnimation/position = Vector2( 140, 40 )
+nodes/GripTimeScale/node = SubResource( 4 )
+nodes/GripTimeScale/position = Vector2( 540, 40 )
+nodes/IndexTimeScale/node = SubResource( 5 )
+nodes/IndexTimeScale/position = Vector2( 540, 240 )
+nodes/SetGrip/node = SubResource( 6 )
+nodes/SetGrip/position = Vector2( 360, 40 )
+nodes/SetIndex/node = SubResource( 7 )
+nodes/SetIndex/position = Vector2( 360, 240 )
+nodes/output/position = Vector2( 1020, 80 )
+node_connections = [ "output", 0, "Blend2", "SetGrip", 0, "GripAnimation", "Blend2", 0, "GripTimeScale", "Blend2", 1, "IndexTimeScale", "IndexTimeScale", 0, "SetIndex", "SetIndex", 0, "Animation 2", "GripTimeScale", 0, "SetGrip" ]

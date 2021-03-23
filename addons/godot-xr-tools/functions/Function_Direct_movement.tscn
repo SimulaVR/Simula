@@ -1,0 +1,25 @@
+[gd_scene load_steps=3 format=2]
+
+[ext_resource path="res://addons/godot-xr-tools/functions/Function_Direct_movement.gd" type="Script" id=1]
+
+
+[sub_resource type="CapsuleShape" id=1]
+radius = 0.3
+height = 1.2
+
+[node name="Function_Direct_movement" type="Node"]
+script = ExtResource( 1 )
+max_speed = 500.0
+
+[node name="KinematicBody" type="KinematicBody" parent="."]
+collision_mask = 1048574
+
+[node name="CollisionShape" type="CollisionShape" parent="KinematicBody"]
+transform = Transform( 1, 0, 0, 0, -4.37114e-08, -1, 0, 1, -4.37114e-08, 0, 0.9, 0 )
+shape = SubResource( 1 )
+
+[node name="Tail" type="RayCast" parent="KinematicBody"]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0 )
+enabled = true
+cast_to = Vector3( 0, -0.6, 0 )
+collision_mask = 1048574

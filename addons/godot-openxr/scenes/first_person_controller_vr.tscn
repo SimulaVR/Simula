@@ -1,0 +1,28 @@
+[gd_scene load_steps=4 format=2]
+
+[ext_resource path="res://addons/godot-openxr/scenes/first_person_controller_vr.gd" type="Script" id=1]
+[ext_resource path="res://addons/godot-openxr/scenes/controller.gd" type="Script" id=2]
+[ext_resource path="res://addons/godot-openxr/OpenXRConfig.gdns" type="Script" id=3]
+
+[node name="FPSController" type="ARVROrigin"]
+script = ExtResource( 1 )
+
+[node name="Configuration" type="Node" parent="."]
+script = ExtResource( 3 )
+
+[node name="ARVRCamera" type="ARVRCamera" parent="."]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0 )
+cull_mask = 524287
+fov = 65.0
+near = 0.1
+
+[node name="LeftHandController" type="ARVRController" parent="."]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5, 1, -0.5 )
+visible = false
+script = ExtResource( 2 )
+
+[node name="RightHandController" type="ARVRController" parent="."]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 1, -0.5 )
+visible = false
+controller_id = 2
+script = ExtResource( 2 )

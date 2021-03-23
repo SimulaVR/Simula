@@ -1,0 +1,74 @@
+[gd_resource type="ShaderMaterial" load_steps=7 format=2]
+
+[sub_resource type="VisualShaderNodeColorUniform" id=1]
+uniform_name = "Color"
+
+[sub_resource type="VisualShaderNodeVectorOp" id=2]
+default_input_values = [ 0, Vector3( 0, 0, 0 ), 1, Vector3( 0.5, 0.5, 0.5 ) ]
+operator = 2
+
+[sub_resource type="VisualShaderNodeScalarConstant" id=3]
+constant = 0.1
+
+[sub_resource type="VisualShaderNodeFresnel" id=4]
+
+[sub_resource type="VisualShaderNodeVectorOp" id=5]
+operator = 2
+
+[sub_resource type="VisualShader" id=6]
+code = "shader_type spatial;
+uniform vec4 Color : hint_color;
+
+
+
+void vertex() {
+// Output:0
+
+}
+
+void fragment() {
+// ColorUniform:2
+	vec3 n_out2p0 = Color.rgb;
+	float n_out2p1 = Color.a;
+
+// Scalar:4
+	float n_out4p0 = 0.100000;
+
+// VectorOp:3
+	vec3 n_out3p0 = n_out2p0 * vec3(n_out4p0);
+
+// Fresnel:5
+	bool n_in5p2 = false;
+	float n_in5p3 = 1.00000;
+	float n_out5p0 = n_in5p2 ? (pow(clamp(dot(NORMAL, VIEW), 0.0, 1.0), n_in5p3)) : (pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), n_in5p3));
+
+// VectorOp:6
+	vec3 n_out6p0 = n_out2p0 * vec3(n_out5p0);
+
+// Output:0
+	ALBEDO = n_out3p0;
+	EMISSION = n_out6p0;
+
+}
+
+void light() {
+// Output:0
+
+}
+"
+nodes/fragment/0/position = Vector2( 660, 60 )
+nodes/fragment/2/node = SubResource( 1 )
+nodes/fragment/2/position = Vector2( 40, 40 )
+nodes/fragment/3/node = SubResource( 2 )
+nodes/fragment/3/position = Vector2( 360, 60 )
+nodes/fragment/4/node = SubResource( 3 )
+nodes/fragment/4/position = Vector2( 20, 180 )
+nodes/fragment/5/node = SubResource( 4 )
+nodes/fragment/5/position = Vector2( 40, 340 )
+nodes/fragment/6/node = SubResource( 5 )
+nodes/fragment/6/position = Vector2( 360, 220 )
+nodes/fragment/connections = PoolIntArray( 2, 0, 3, 0, 3, 0, 0, 0, 4, 0, 3, 1, 2, 0, 6, 0, 5, 0, 6, 1, 6, 0, 0, 5 )
+
+[resource]
+shader = SubResource( 6 )
+shader_param/Color = Color( 0.301961, 0.392157, 0.988235, 1 )
