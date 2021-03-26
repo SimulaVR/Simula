@@ -219,7 +219,7 @@ swapXpraNixToLocal() {
 # Simula modules inside a nix-shell
 nsBuildGodot() {
  cd ./submodules/godot
- nix-shell -Q --run "wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; \
+ PKG_CONFIG_PATH=./submodules/wlroots-dev/build/meson-uninstalled nix-shell -Q --run "wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; \
                          wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c; \
                          scons -Q -j8 platform=x11 target=debug;"
  cd -
@@ -249,6 +249,7 @@ nsREPLGodotHaskellPlugin() {
 
 nsBuildSimulaLocal() {
     installSimula 1
+    nsBuildWlroots
     nsBuildGodot
     nsBuildGodotHaskell
     nsBuildGodotHaskellPlugin
