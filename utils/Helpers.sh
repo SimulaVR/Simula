@@ -220,9 +220,9 @@ swapXpraNixToLocal() {
 # Simula modules inside a nix-shell
 nsBuildGodot() {
  cd ./submodules/godot
- nix-shell -Q --argstr --run "wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; \
-                         wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c; \
-                         scons -Q -j8 platform=x11 target=debug;"
+ nix-shell --run "wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; \
+                  wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c; \
+                  scons -Q -j8 platform=x11 target=debug;"
  cd -
 }
 
@@ -280,5 +280,5 @@ updateEmail() {
 
 pernoscoSubmit() {
     # `rr sources` attempts to locate libwlroots.so.0.0.0 files in `/build/wlroots/build/../`, so we use this --substitute hack so it can find them locally
-    PATH=./result/bin:$PATH nix-shell --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false" -p awscli --run "python3 ./nix/pernosco-submit/pernosco-submit upload --title $2 --substitute=libwlroots.so.0.0.0=$(pwd)/submodules/wlroots/backend $1 ./. $PWD/submodules/wlroots"
+    PATH=./result/bin:$PATH nix-shell --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false" -p awscli --run "python3 ./submodules/pernosco-submit/pernosco-submit upload --title $2 --substitute=libwlroots.so.0.0.0=$(pwd)/submodules/wlroots/backend $1 ./. $PWD/submodules/wlroots"
 }

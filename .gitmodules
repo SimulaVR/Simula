@@ -19,3 +19,6 @@
 [submodule "submodules/godot-haskell-cabal"]
 	path = submodules/godot-haskell-cabal
 	url = https://github.com/SimulaVR/godot-haskell
+[submodule "submodules/pernosco-submit"]
+	path = submodules/pernosco-submit
+	url = https://github.com/Pernosco/pernosco-submit.git
