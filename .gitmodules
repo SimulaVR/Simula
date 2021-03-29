@@ -19,6 +19,3 @@
 [submodule "submodules/godot-haskell-cabal"]
 	path = submodules/godot-haskell-cabal
 	url = https://github.com/SimulaVR/godot-haskell
-[submodule "submodules/wlroots-dev"]
-	path = submodules/wlroots-dev
-	url = https://github.com/SimulaVR/wlroots

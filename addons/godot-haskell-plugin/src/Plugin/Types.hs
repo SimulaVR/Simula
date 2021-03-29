@@ -622,7 +622,7 @@ logGSVS str gsvs = do
 
 logStr :: String -> IO ()
 logStr string = do
-  appendFile "log.txt" $ string ++ "\n"
+  appendFile "./log/log.txt" $ string ++ "\n"
 
 -- | returns Just pid or Nothing if process has already exited
 getPid :: ProcessHandle -> IO (Maybe ProcessID)

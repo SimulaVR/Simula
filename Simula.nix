@@ -18,11 +18,13 @@ let
       ln -s ${godot}/bin/godot.x11.opt.64 $out/bin/godot.x11.opt.64
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula
       echo "source ./utils/Helpers.sh && updateEmail" >> $out/bin/simula
+      echo "mkdir -p log" >> $out/bin/simula
+      echo "mkdir -p config" >> $out/bin/simula
       echo "if [ ! -d .import ]; then LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) ${godot}/bin/godot.x11.tools.64 --export \"Linux/X11\" ./result/bin/SimulaExport; fi" >> $out/bin/simula
-      echo "PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib \$(./utils/GetNixGL.sh) ${godot}/bin/godot.x11.opt.debug.64 -m 2>&1 | ${coreutils}/bin/tee output.file" >> $out/bin/simula
-      echo "sed -in \"s/\$USER/anon/g\" output.file" >> $out/bin/simula
-      echo "touch ./email && cat ./email >> output.file" >> $out/bin/simula
-      echo "${curl}/bin/curl --data-urlencode errorMsg@output.file https://www.wolframcloud.com/obj/george.w.singer/errorMessage" >> $out/bin/simula
+      echo "PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib \$(./utils/GetNixGL.sh) ${godot}/bin/godot.x11.opt.debug.64 -m 2>&1 | ${coreutils}/bin/tee ./log/output.file" >> $out/bin/simula
+      echo "sed -in \"s/\$USER/anon/g\" ./log/output.file" >> $out/bin/simula
+      echo "touch ./config/email && cat ./config/email >> ./log/output.file" >> $out/bin/simula
+      echo "${curl}/bin/curl --data-urlencode errorMsg@./log/output.file https://www.wolframcloud.com/obj/george.w.singer/errorMessage" >> $out/bin/simula
       chmod +x $out/bin/simula
 
      '';
@@ -32,6 +34,8 @@ let
 
       # simula_local
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local
+      echo "mkdir -p log" >> $out/bin/simula
+      echo "mkdir -p config" >> $out/bin/simula
       echo "if [ ! -d .import ]; then PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -e; else PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m --print-fps; fi" >> $out/bin/simula_local
       chmod +x $out/bin/simula_local
 

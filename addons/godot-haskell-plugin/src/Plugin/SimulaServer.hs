@@ -571,7 +571,7 @@ addWlrChildren gss = do
 
 parseConfiguration :: IO (Configuration)
 parseConfiguration = do
-  config <- input auto "./config.dhall" :: IO Configuration
+  config <- input auto "./config/config.dhall" :: IO Configuration
   return config
 
 -- | We first fill the TVars with dummy state, before updating them with their
