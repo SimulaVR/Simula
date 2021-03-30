@@ -75,7 +75,7 @@ with ~openxr-dev.json~ encoding the location of your ~libopenxr_monado.so~:
 
 ** Updating
 
-To update Simula (without losing your configuration adjustments, etc), simply run
+To update Simula to the current ~master~ (without losing your configuration adjustments), simply run
 
 #+BEGIN_SRC
 ./source/Helpers.sh && updateSimula
