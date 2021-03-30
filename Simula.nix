@@ -12,7 +12,7 @@ let
     rr = callPackage ./nix/rr/unstable.nix {};
 
     devBuildFalse = ''
-      cp GetNixGL.sh $out/bin/GetNixGL.sh
+      cp ./util/GetNixGL.sh $out/bin/GetNixGL.sh
       ln -s ${godot}/bin/godot.x11.opt.debug.64 $out/bin/godot.x11.opt.debug.64
       ln -s ${godot}/bin/godot.x11.tools.64 $out/bin/godot.x11.tools.64
       ln -s ${godot}/bin/godot.x11.opt.64 $out/bin/godot.x11.opt.64
@@ -29,7 +29,7 @@ let
      '';
 
     devBuildTrue = ''
-      cp GetNixGL.sh $out/bin/GetNixGL.sh
+      cp ./utils/GetNixGL.sh $out/bin/GetNixGL.sh
 
       # simula_local
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local
@@ -93,7 +93,19 @@ let
 
     simula = stdenv.mkDerivation {
       name = "Simula";
-      src = ./utils;
+      src = builtins.filterSource (path: type:
+           stdenv.lib.cleanSourceFilter path type                 # Necessary to avoid nix "out of memory" errors
+        && (! (stdenv.lib.hasSuffix ".import" (baseNameOf path))) # Nix shouldn't compare about *.imports and their assets
+        && (! (stdenv.lib.hasSuffix ".md5" (baseNameOf path)))    # "
+        && (! (stdenv.lib.hasSuffix ".stex" (baseNameOf path)))   # "
+        && (baseNameOf (builtins.dirOf path) != ".import")        # "
+        && (baseNameOf (builtins.dirOf path) != "log")            # Don't let log/* files confuse cachix
+        && (baseNameOf (builtins.dirOf path) != "config")         # Don't let user config file alterations confuse cachix
+        && (baseNameOf (builtins.dirOf path) != "png")            # Don't let user pictures confuse cachix
+        # && (baseNameOf path != ".git")                          # Nix/cachix already isn't confused by this
+        # && (baseNameOf path != "result")                        # "
+      ) ./.;
+
       buildInputs = [ xpra xrdb wmctrl fontconfig glibc-locales xfce4-terminal-wrapped openxr-loader midori-wrapped ] ++ simulaPackages;
       installPhase = ''
       mkdir -p $out/bin

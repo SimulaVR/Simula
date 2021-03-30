@@ -204,10 +204,31 @@ installSimula() {
     curl https://www.wolframcloud.com/obj/george.w.singer/installMessage
     if [ -z $1 ]; then
       NIXPKGS_ALLOW_UNFREE=1 nix-build -Q default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
+    # Useful for debug purposes
+    elif [ $1 == "i" ]; then
+      switchToNix
+      NIXPKGS_ALLOW_UNFREE=1 nix-instantiate -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
+      switchToLocal
     else
       switchToNix
       NIXPKGS_ALLOW_UNFREE=1 nix-build -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
       switchToLocal
+    fi
+}
+
+updateSimula() {
+    checkInstallNix
+    checkInstallCachix
+    cachix use simula
+
+    if [ -z $1 ]; then
+        git pull origin master
+        NIXPKGS_ALLOW_UNFREE=1 nix-build -Q default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
+    else
+        switchToNix
+        git pull origin dev
+        NIXPKGS_ALLOW_UNFREE=1 nix-build -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
+        switchToLocal
     fi
 }
 
