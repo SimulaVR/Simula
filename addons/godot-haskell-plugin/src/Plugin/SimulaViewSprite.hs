@@ -262,6 +262,7 @@ setTargetDimensions gsvs = do
   -- resizing windows.
   maybeSpilloverDimsOld <- readTVarIO (gsvs ^. gsvsSpilloverDims)
   resizedLastFrame <- readTVarIO (gsvs ^. gsvsResizedLastFrame)
+  transOld <- readTVarIO (gsvs ^. gsvsTransparency)
   case maybeSpilloverDimsOld of
     Nothing -> do
       if (spilloverWidth > 0) then atomically $ writeTVar (gsvs ^. gsvsSpilloverDims) (Just settledDimensions) else return ()
@@ -270,11 +271,17 @@ setTargetDimensions gsvs = do
         (False, _) -> return ()
         (True, True) -> do atomically $ do writeTVar (gsvs ^. gsvsResizedLastFrame) False
                                            writeTVar (gsvs ^. gsvsSpilloverDims) (Just spilloverDims)
+                           case (transOld == 1) of
+                             True -> setShader gsvs "res://addons/godot-haskell-plugin/TextShaderOpaque.tres"
+                             False -> return ()
         (True, False) -> do let pushX = spilloverWidth - oldSpilloverWidth
                             let pushY = spilloverHeight - oldSpilloverHeight
                             pushBackVector <- toLowLevel (V3 (-0.5 * 0.001 * (fromIntegral pushX)) (-0.5 * 0.001 * (fromIntegral pushY)) 0) :: IO GodotVector3
                             G.translate_object_local gsvs pushBackVector
                             atomically $ writeTVar (gsvs ^. gsvsSpilloverDims) (Just spilloverDims)
+                            case (transOld == 1) of
+                              True -> setShader gsvs "res://addons/godot-haskell-plugin/TextShader.tres"
+                              False -> return ()
   return ()
 
 ready :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
