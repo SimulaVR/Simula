@@ -241,10 +241,13 @@ swapXpraNixToLocal() {
 # Simula modules inside a nix-shell
 nsBuildGodot() {
  cd ./submodules/godot
- nix-shell --run "wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; \
-                  wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c; \
-                  scons -Q -j8 platform=x11 target=debug;"
- cd -
+ local runCmd="wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c; scons -Q -j8 platform=x11 target=debug"
+
+ if [ -z $1 ]; then
+   nix-shell --run "$runCmd"
+ else
+   nix-shell --run "while inotifywait -qqre modify .; do $runCmd; done"
+ fi
 }
 
 # Updates godot-haskell to latest api.json generated from devBuildGodot
@@ -260,7 +263,11 @@ nsBuildGodotHaskell() {
 
 nsBuildGodotHaskellPlugin() {
   cd ./addons/godot-haskell-plugin
-  nix-shell -Q --attr env shell.nix --run "cabal build"
+  if [ -z $1 ]; then
+    nix-shell -Q --attr env shell.nix --run "cabal build"
+  else
+    nix-shell --attr env shell.nix --run "while inotifywait -qqre modify .; do cabal build; done"
+  fi
   cd -
 }
 
