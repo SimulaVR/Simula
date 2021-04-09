@@ -279,9 +279,10 @@ setTargetDimensions gsvs = do
                             pushBackVector <- toLowLevel (V3 (-0.5 * 0.001 * (fromIntegral pushX)) (-0.5 * 0.001 * (fromIntegral pushY)) 0) :: IO GodotVector3
                             G.translate_object_local gsvs pushBackVector
                             atomically $ writeTVar (gsvs ^. gsvsSpilloverDims) (Just spilloverDims)
-                            case (transOld == 1) of
-                              True -> setShader gsvs "res://addons/godot-haskell-plugin/TextShader.tres"
-                              False -> return ()
+                            case (transOld == 1, (spilloverWidth > targetWidth || spilloverHeight > targetHeight)) of
+                              (True, False) ->  return () -- Avoid changing shader when apps first launch
+                              (True, True) -> setShader gsvs "res://addons/godot-haskell-plugin/TextShader.tres"
+                              (False, _) -> return ()
   return ()
 
 ready :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
