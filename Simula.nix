@@ -1,4 +1,5 @@
 { stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, mimic, xsel, xclip, dialog, synapse, openxr-loader, xpra}:
+{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, mimic, xsel, xclip, dialog, synapse, openxr-loader, xpra, valgrind }:
 let
     vulkan-loader-custom = if onNixOS then vulkan-loader else (callPackage ./nix/vulkan-loader.nix { });
     glibc-locales = glibcLocales;
@@ -107,6 +108,7 @@ let
       ) ./.;
 
       buildInputs = [ xpra xrdb wmctrl fontconfig glibc-locales xfce4-terminal-wrapped openxr-loader midori-wrapped ] ++ simulaPackages;
+      buildInputs = [ xpra xrdb wmctrl fontconfig glibc-locales xfce4-terminal-wrapped openxr-loader midori-wrapped valgrind ] ++ simulaPackages;
       installPhase = ''
       mkdir -p $out/bin
       ln -s ${xpra}/bin/xpra $out/bin/xpra
@@ -122,6 +124,7 @@ let
       ln -s ${rr}/bin/rr $out/bin/rr
       ln -s ${dialog}/bin/dialog $out/bin/dialog
       ln -s ${curl}/bin/curl $out/bin/curl
+      ln -s ${valgrind}/bin/valgrind $out/bin/valgrind
 
       '' + linkGHP + devBuildScript;
     };
