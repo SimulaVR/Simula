@@ -1,4 +1,3 @@
-{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, mimic, xsel, xclip, dialog, synapse, openxr-loader, xpra}:
 { stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, mimic, xsel, xclip, dialog, synapse, openxr-loader, xpra, valgrind }:
 let
     vulkan-loader-custom = if onNixOS then vulkan-loader else (callPackage ./nix/vulkan-loader.nix { });
@@ -78,7 +77,7 @@ let
     xfce4-terminal-wrapped = writeScriptBin "xfce4-terminal" ''
       #!${stdenv.shell}
       export XDG_DATA_HOME=${dejavu_fonts}/share
-      exec ${xfce.xfce4-terminal}/bin/xfce4-terminal
+      exec ${xfce.xfce4-terminal}/bin/xfce4-terminal "$@"
       '';
 
     midori-wrapped = writeScriptBin "midori" ''
@@ -108,7 +107,6 @@ let
         # && (baseNameOf path != "result")                        # "
       ) ./.;
 
-      buildInputs = [ xpra xrdb wmctrl fontconfig glibc-locales xfce4-terminal-wrapped openxr-loader midori-wrapped ] ++ simulaPackages;
       buildInputs = [ xpra xrdb wmctrl fontconfig glibc-locales xfce4-terminal-wrapped openxr-loader midori-wrapped valgrind ] ++ simulaPackages;
       installPhase = ''
       mkdir -p $out/bin
