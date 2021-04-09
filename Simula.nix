@@ -103,6 +103,7 @@ let
         && (baseNameOf (builtins.dirOf path) != "log")            # Don't let log/* files confuse cachix
         && (baseNameOf (builtins.dirOf path) != "config")         # Don't let user config file alterations confuse cachix
         && (baseNameOf (builtins.dirOf path) != "png")            # Don't let user pictures confuse cachix
+        && (baseNameOf (builtins.dirOf path) != "rr")             # Don't let rr traces confuse cachix
         # && (baseNameOf path != ".git")                          # Nix/cachix already isn't confused by this
         # && (baseNameOf path != "result")                        # "
       ) ./.;
