@@ -87,9 +87,9 @@ import Test.QuickCheck hiding ((.&.))
 import Test.Hspec.Core.Runner
 import Test.Hspec.Formatters
 
-debugLaunchApp :: GodotSimulaServer -> String -> [String] -> IO GodotSimulaViewSprite
-debugLaunchApp gss app args = do
-  appLaunch gss app []
+debugLaunchApp :: GodotSimulaServer -> String -> IO GodotSimulaViewSprite
+debugLaunchApp gss app = do
+  appLaunch gss app Nothing
   gsvs <- waitUntilAppLaunchSuccessful gss
   return gsvs
 
@@ -155,7 +155,7 @@ debugTerminateSimula gss = do
 testRightclickPopup :: GodotSimulaServer -> String -> ScreenshotBaseName -> IO ((Float, Float), (Float, Float), ScreenshotFullPath)
 testRightclickPopup gss app screenshotBase = do
   Control.Concurrent.threadDelay (2 * 1000000)
-  gsvs <- debugLaunchApp gss app []
+  gsvs <- debugLaunchApp gss app
   debugMoveCursor gsvs (300,300)
   Control.Concurrent.threadDelay (round (0.5 * 1000000))
   debugMouseClick 2 True
@@ -194,7 +194,7 @@ testAppMemory :: GodotSimulaServer -> String -> Int -> IO (Float, Float)
 testAppMemory gss app sec = do
   pid1 <- logMemPid gss
   Control.Concurrent.threadDelay (2 * 1000000)
-  gsvs <- debugLaunchApp gss app []
+  gsvs <- debugLaunchApp gss app
   Control.Concurrent.threadDelay (round (0.5 * 1000000))
   Control.Concurrent.threadDelay (5 * 1000000)
   Control.Concurrent.threadDelay (1 * 1000000)

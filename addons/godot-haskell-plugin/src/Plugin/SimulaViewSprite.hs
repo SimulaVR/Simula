@@ -63,7 +63,7 @@ instance NativeScript GodotSimulaViewSprite where
     do putStrLn "SimulaViewSprite()"
        GodotSimulaViewSprite (safeCast obj)
                       <$> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
-                      <*> atomically (newTVar (False, 0))
+                      <*> atomically (newTVar False)
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
@@ -115,19 +115,22 @@ updateSimulaViewSprite gsvs = do
   applyViewportBaseTexture gsvs
   setBoxShapeExtentsToMatchAABB gsvs
 
-  (isStartingApp, startingPositionIndex) <- (readTVarIO (gsvs ^. gsvsShouldMove))
-  case isStartingApp of
-    False -> return ()
-    True -> do
-      whenM (spriteReadyToMove gsvs) $ do
-          atomically $ writeTVar (_gsvsShouldMove gsvs) (False, 0)
-          moveToStartingPosition gsvs startingPositionIndex
-
-  -- sprite3D <- readTVarIO (gsvs ^. gsvsSprite)
-  -- opacityFloat <- G.get_opacity sprite3D
-  -- G.set_opacity sprite3D 0.5
-  -- putStrLn $ "GSVS opacity: " ++ (show opacityFloat)
-
+  whenM (spriteReadyToMove gsvs) $ do
+      simulaView <- readTVarIO (gsvs ^. gsvsView) --
+      let eitherSurface = (simulaView ^. svWlrEitherSurface)
+      gss <- readTVarIO (gsvs ^. gsvsServer)
+      pid <- case eitherSurface of
+                  Left wlrXdgSurface -> do
+                    pidInt <- G.get_pid wlrXdgSurface
+                    return $ (fromInteger $ fromIntegral pidInt)
+                  Right wlrXWaylandSurface -> do
+                    pidInt <- G.get_pid wlrXWaylandSurface
+                    return $ (fromInteger $ fromIntegral pidInt)
+      maybeLocation <- getSimulaStartingLocation pid
+      case maybeLocation of
+        Just location -> moveToStartingPosition gsvs location
+        Nothing -> return ()
+      atomically $ writeTVar (_gsvsShouldMove gsvs) False
   where -- Necessary for window manipulation to function
         setBoxShapeExtentsToMatchAABB :: GodotSimulaViewSprite -> IO ()
         setBoxShapeExtentsToMatchAABB gsvs = do
@@ -145,60 +148,41 @@ updateSimulaViewSprite gsvs = do
 
 spriteReadyToMove :: GodotSimulaViewSprite -> IO Bool
 spriteReadyToMove gsvs = do
-  (isStartingApp, startingPositionIndex) <- atomically $ readTVar (_gsvsShouldMove gsvs)
-  if isStartingApp then do meshInstance <- atomically $ readTVar (_gsvsMeshInstance gsvs)
-                           aabb <- G.get_aabb meshInstance
-                           size <- godot_aabb_get_size aabb
-                           vsize <- fromLowLevel size
-                           return (vsize > 0) -- The first frame or so, the sprite has vsize 0
+  shouldMove <- atomically $ readTVar (_gsvsShouldMove gsvs)
+  if shouldMove then do meshInstance <- atomically $ readTVar (_gsvsMeshInstance gsvs)
+                        aabb <- G.get_aabb meshInstance
+                        size <- godot_aabb_get_size aabb
+                        vsize <- fromLowLevel size
+                        return (vsize > 0) -- The first frame or so, the sprite has vsize 0
                    else return False
 
-moveToStartingPosition :: GodotSimulaViewSprite -> Int -> IO ()
-moveToStartingPosition gsvs appPositionIndex = do
+moveToStartingPosition :: GodotSimulaViewSprite -> String -> IO ()
+moveToStartingPosition gsvs appLocation = do
   gss <- readTVarIO (gsvs ^. gsvsServer)
   meshInstance <- atomically $ readTVar (gsvs ^. gsvsMeshInstance)
   aabb   <- G.get_aabb meshInstance
   size   <- Api.godot_aabb_get_size aabb >>= fromLowLevel
   let sizeX  = size ^. _x
-  case ((appPositionIndex - 1), (appPositionIndex - 1) `mod` 4) of
-    (0, _) -> do gsvsTransform <- G.get_global_transform gsvs
-                 atomically $ writeTVar (gss ^. gssStartingAppTransform) (Just gsvsTransform)
-                 moveSpriteAlongObjectZAxis gsvs 0.3
-    (_, 1) -> do startingAppTransform <- readTVarIO (gss ^. gssStartingAppTransform)
-                 case startingAppTransform of
-                   Just transform -> G.set_global_transform gsvs transform
-                   Nothing -> return ()
-                 G.translate gsvs =<< toLowLevel (V3 (-sizeX) 0 0)
-    (_, 2) -> do startingAppTransform <- readTVarIO (gss ^. gssStartingAppTransform)
-                 case startingAppTransform of
-                   Just transform -> G.set_global_transform gsvs transform
-                   Nothing -> return ()
-                 G.translate gsvs =<< toLowLevel (V3 0 (-sizeX) 0)
-    (_, 3) -> do startingAppTransform <- readTVarIO (gss ^. gssStartingAppTransform)
-                 case startingAppTransform of
-                   Just transform -> G.set_global_transform gsvs transform
-                   Nothing -> return ()
+  gsvsTransform <- G.get_global_transform gsvs
+  startingAppTransform <- readTVarIO (gss ^. gssStartingAppTransform)
+  startingAppTransform' <- case startingAppTransform of
+    Nothing -> do
+      gsvsTransform <- G.get_global_transform gsvs
+      atomically $ writeTVar (gss ^. gssStartingAppTransform) (Just gsvsTransform)
+      return gsvsTransform
+    Just startingAppTransform' -> return startingAppTransform'
+  case (appLocation) of
+    "center" -> moveSpriteAlongObjectZAxis gsvs 0.3
+    "right" -> do G.set_global_transform gsvs startingAppTransform'
+                  G.translate gsvs =<< toLowLevel (V3 (-sizeX) 0 0)
+    "bottom" -> do G.set_global_transform gsvs startingAppTransform'
+                   G.translate gsvs =<< toLowLevel (V3 0 (-sizeX) 0)
+    "left" -> do G.set_global_transform gsvs startingAppTransform'
                  G.translate gsvs =<< toLowLevel (V3 (sizeX) 0 0)
-    (_, 0) -> do startingAppTransform <- readTVarIO (gss ^. gssStartingAppTransform)
-                 case startingAppTransform of
-                   Just transform -> G.set_global_transform gsvs transform
-                   Nothing -> return ()
-                 G.translate gsvs =<< toLowLevel (V3 0 (sizeX) 0)
+    "top" -> do G.set_global_transform gsvs startingAppTransform'
+                G.translate gsvs =<< toLowLevel (V3 0 (sizeX) 0)
     _ -> return ()
   orientSpriteTowardsGaze gsvs
-
-  -- Launch next starting app, if there is one
-  gss <- readTVarIO (gsvs ^. gsvsServer)
-  sApps <- readTVarIO (gss ^. gssStartingApps)
-  let nextApp = if (sApps == []) then Nothing else Just (Data.List.head sApps)
-  case nextApp of
-    Nothing -> return ()
-    Just app -> do let tailApps = (Data.List.tail sApps)
-                   atomically $ writeTVar (gss ^. gssStartingApps) tailApps
-                   let secondApp = if tailApps == [] then Nothing else Just (Data.List.head tailApps)
-                   case secondApp of
-                     Nothing -> focus gsvs
-                     Just secondApp' -> appStrLaunch gss secondApp'
 
 -- Sets gsvs wlr_xwayland_surface size and all associated viewports to the
 -- gsvsTargetSize every frame
@@ -507,13 +491,6 @@ _handle_map gsvs _ = do
   atomically $ writeTVar (simulaView ^. svMapped) True
   atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
 
-  -- Flag the gsvs as a starting application, if it is one
-  appCounter@(appsLaunched, appsRemaining) <- readTVarIO (gss ^. gssStartingAppsCounter)
-  case appsRemaining of
-    0 -> return ()
-    _ -> do atomically $ writeTVar (_gsvsShouldMove gsvs) (True, appsLaunched + 1)
-            atomically $ writeTVar (_gssStartingAppsCounter gss) (appsLaunched + 1, appsRemaining - 1)
-
   return ()
 
 handle_unmap :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
@@ -536,12 +513,6 @@ _process self _ = do
   when mapped $ updateSimulaViewSprite self
   return ()
 
-
--- The original Simula didn't have a destroy handler at the Godot level.
--- 1. Was it leaking?
--- 2. Do Godot objects get deleted eventually anyway, even if we don't call queue_free?
--- 3. I'm assuming that `registerClass` passes a destructor for
---    GodotSimulaViewSprite that calls to `queue_free` can use.
 _handle_destroy :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 _handle_destroy gsvs [gsvsGV] = do
   putStrLn "_handle_destroy"
@@ -555,13 +526,10 @@ _handle_destroy gsvs [gsvsGV] = do
                                   False -> return ()
     Nothing -> return ()
 
-  -- Destroy
   G.queue_free gsvs -- Queue the `gsvs` for destruction
   G.set_process gsvs False -- Remove the `simulaView ↦ gsvs` mapping from the gss
   atomically $ modifyTVar' (gss ^. gssViews) (M.delete simulaView)
-    -- Old method of gsvs deletion from Simula; bring back if we face leakage issues:
-  -- Api.godot_object_destroy (safeCast gsvs)
-  deleteSurface eitherSurface
+  deleteSurface eitherSurface -- Causing issues with rr
 
   where
     deleteSurface eitherSurface =
@@ -971,10 +939,12 @@ getWlrSurfaceCoords cursorCoords@(SurfaceLocalCoordinates (cx, cy)) (wlrSurfaceF
 
 handle_new_popup :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_new_popup gsvs args@[wlrXdgSurfaceParentVariant] = do
+  putStrLn "handle_new_popup"
   return ()
 
 handle_window_menu :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_window_menu gsvsInvisible args@[wlrXdgToplevel, serial, x, y] = do
+  putStrLn "handle_new_menu"
   return ()
 
 handle_wlr_surface_new_subsurface :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()

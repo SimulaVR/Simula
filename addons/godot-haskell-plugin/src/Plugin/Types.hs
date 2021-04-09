@@ -23,7 +23,6 @@ import           Control.Monad
 import           Data.Coerce
 import           Unsafe.Coerce
 import           Control.Exception
-import           System.Directory
 
 import           Data.Typeable
 import           Godot.Gdnative.Types
@@ -178,7 +177,6 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssConfiguration         :: TVar Configuration
   , _gssKeyboardShortcuts     :: TVar KeyboardShortcuts
   , _gssKeyboardRemappings    :: TVar KeyboardRemappings
-  , _gssStartingAppsCounter   :: TVar (StartingAppsLaunched, StartingAppsRemaining)
   , _gssStartingApps          :: TVar [String]
   , _gssWorldEnvironment      :: TVar (GodotWorldEnvironment, String)
   , _gssEnvironmentTextures   :: TVar [String]
@@ -188,14 +186,14 @@ data GodotSimulaServer = GodotSimulaServer
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
 data GodotSimulaViewSprite = GodotSimulaViewSprite
   { _gsvsObj               :: GodotObject
   , _gsvsServer            :: TVar GodotSimulaServer
-  , _gsvsShouldMove        :: TVar (Bool, Int)
+  , _gsvsShouldMove        :: TVar Bool
   , _gsvsMeshInstance      :: TVar GodotMeshInstance
   , _gsvsShape             :: TVar GodotBoxShape
   , _gsvsView              :: TVar SimulaView
@@ -753,57 +751,42 @@ savePngPancake gss screenshotBaseName = do
 
 -- Run shell command with DISPLAY set to our XWayland server value (typically
 -- :2)
-appLaunch :: GodotSimulaServer -> String -> [String] -> IO ()
-appLaunch gss appStr args = do
-  -- logStr $ appStr ++ (show args)
-
-  -- We shouldn't need to set WAYLAND_DISPLAY, but do need to set Xwayland DISPLAY
+appLaunch :: GodotSimulaServer -> String -> Maybe String -> IO ProcessID
+appLaunch gss appStr maybeLocation = do
   let originalEnv = (gss ^. gssOriginalEnv)
   maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
   case (appStr, maybeXwaylandDisplay) of
-    ("nullApp", _) -> do appCounter@(appsLaunched, appsRemaining) <- readTVarIO (gss ^. gssStartingAppsCounter)
-                         atomically $ writeTVar (_gssStartingAppsCounter gss) (appsLaunched + 1, appsRemaining - 1)
-                         sApps <- readTVarIO (gss ^. gssStartingApps)
+        ("nullApp", _) -> do return $ fromInteger 0
+        ("launchHMDWebcam", _) -> launchHMDWebCam gss maybeLocation
+        ("launchTerminal", _) -> terminalLaunch gss maybeLocation
+        ("launchUsageInstructions", _) -> appLaunch gss "./result/bin/midori https://github.com/SimulaVR/Simula#usage -p" maybeLocation
+        (_, Nothing) -> putStrLn "No DISPLAY found!" >> (return $ fromInteger 0)
+        (_, (Just xwaylandDisplay)) -> do
+            let envMap = M.fromList originalEnv
+            let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
+            let envMapWithWaylandDisplay = case maybeLocation of
+                                                Just location -> M.insert "SIMULA_STARTING_LOCATION" location (M.insert "WAYLAND_DISPLAY" "simula-0" envMapWithDisplay)
+                                                Nothing -> (M.insert "WAYLAND_DISPLAY" "simula-0" envMapWithDisplay)
+            let envListWithDisplays = M.toList envMapWithWaylandDisplay
+            res <- Control.Exception.try $ createProcess (shell appStr) { env = Just envListWithDisplays, new_session = True } :: IO (Either IOException (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle))
+            pid <- case res of
+                        Left _ -> return $ fromInteger 0
+                        Right (_, _, _, processHandle) -> do maybePid <- System.Process.getPid processHandle
+                                                             case maybePid of
+                                                                  Just pid -> return pid
+                                                                  Nothing -> return $ fromInteger $ 0
+            return pid
 
-
-                         let nextApp = if (sApps == []) then Nothing else Just (Data.List.head sApps)
-                         case nextApp of
-                           Nothing -> return ()
-                           Just app -> do let tailApps = (Data.List.tail sApps)
-                                          atomically $ writeTVar (gss ^. gssStartingApps) tailApps
-                                          let secondApp = if tailApps == [] then Nothing else Just (Data.List.head tailApps)
-                                          case secondApp of
-                                            Nothing -> return ()
-                                            Just secondApp' -> appStrLaunch gss secondApp'
-
-                         return ()
-    ("launchHMDWebcam", _) -> launchHMDWebCam gss
-    ("launchTerminal", _) -> terminalLaunch gss
-    ("launchUsageInstructions", _) -> appStrLaunch gss "./result/bin/midori https://github.com/SimulaVR/Simula#usage -p"
-    (_, Nothing) -> putStrLn "No DISPLAY found!"
-    (_, (Just xwaylandDisplay)) -> do
-      let envMap = M.fromList originalEnv
-      let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
-      let envMapWithWaylandDisplay = M.insert "WAYLAND_DISPLAY" "simula-0" envMapWithDisplay
-      -- let envMapWithDisplay = M.insert "DISPLAY" ":13" envMap
-      let envListWithDisplays = M.toList envMapWithWaylandDisplay
-      res <- try $ createProcess (proc appStr args) { env = Just envListWithDisplays, new_session = True, std_out = NoStream, std_err = NoStream } :: IO (Either IOException (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle))
-      -- res <- try $ createProcess (proc appStr args) { env = Just envListWithDisplay, new_session = True } :: IO (Either IOException (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle))
-      case res of
-        Left _ -> putStrLn $ "Cannot find command: " ++ appStr
-        Right _ -> return ()
-  return ()
-
-launchHMDWebCam :: GodotSimulaServer -> IO ()
-launchHMDWebCam gss = do
+launchHMDWebCam :: GodotSimulaServer -> Maybe String -> IO ProcessID
+launchHMDWebCam gss maybeLocation = do
   maybePath <- getHMDWebCamPath
   case maybePath of
     Nothing -> do putStrLn "Cannot find HMD web cam!"
-                  appStrLaunch gss "nullApp"
-    Just path  -> appLaunch gss "./result/bin/ffplay" ["-loglevel", "quiet", "-f", "v4l2", path]
+                  appLaunch gss "nullApp" Nothing
+    Just path  -> appLaunch gss ("./result/bin/ffplay -loglevel quiet -f v4l2" ++ path) maybeLocation
     where getHMDWebCamPath :: IO (Maybe FilePath)
           getHMDWebCamPath = do
-            res <- try $ listDirectory "/dev/v4l/by-id" :: IO (Either IOException [FilePath])
+            res <- Control.Exception.try $ listDirectory "/dev/v4l/by-id" :: IO (Either IOException [FilePath])
             case res of
               Left _ -> return Nothing
               Right _ -> (listToMaybe . Data.List.map ("/dev/v4l/by-id/" ++) . sort . Data.List.filter viveOrValve) <$> listDirectory "/dev/v4l/by-id"
@@ -812,15 +795,8 @@ launchHMDWebCam gss = do
                                                                        "VIVE",  -- HTC Vive Pro
                                                                        "Valve", -- Valve Index?
                                                                        "Etron"] -- Valve Index
-
-terminalLaunch :: GodotSimulaServer -> IO ()
-terminalLaunch gss = appLaunch gss "./result/bin/xfce4-terminal" []
-
-appStrLaunch :: GodotSimulaServer -> String -> IO ()
-appStrLaunch gss appStr = do
-  let rootCmd = Data.List.head (Data.List.words appStr)
-  let args = Data.List.tail (Data.List.words appStr)
-  appLaunch gss rootCmd args
+terminalLaunch :: GodotSimulaServer -> Maybe String -> IO ProcessID
+terminalLaunch gss maybeLocation = appLaunch gss "./result/bin/xfce4-terminal" maybeLocation
 
 getTextureFromURL :: String -> IO (Maybe GodotTexture)
 getTextureFromURL urlStr = do
@@ -838,7 +814,7 @@ loadEnvironmentTextures :: Configuration -> GodotWorldEnvironment -> IO [String]
 loadEnvironmentTextures configuration worldEnvironment = do
   -- configuration <- readTVarIO (gss ^. gssConfiguration)
   let envDir = (configuration ^. environmentsDirectory)
-  dirExists <- try $ listDirectory envDir :: IO (Either IOException [FilePath])
+  dirExists <- Control.Exception.try $ listDirectory envDir :: IO (Either IOException [FilePath])
   dirs <- case dirExists of
               Left _ -> return []
               Right _ -> findAll [".png", ".jpg", ".jpeg"] <$> listDirectory envDir
@@ -988,7 +964,7 @@ saveViewportAsPngAndLaunch gsvs tex m22@(V2 (V2 ox oy) (V2 ex ey)) = do
                 gss <- readTVarIO (gsvs ^. gsvsServer)
 
                 -- Copy to clipboard
-                appLaunch gss "./result/bin/xclip" ["-selection", "clipboard", "-t", "image/png", "-i", pathStr]
+                appLaunch gss ("./result/bin/xclip -selection clipboard -t image/png -i" ++ pathStr) Nothing >> return ()
 
                 return ()
 
@@ -1160,3 +1136,43 @@ setShader gsvs tres = do
       G.set_shader shm shader
       G.set_material quadMesh (safeCast shm)
     Nothing -> error "couldn't fetch shader"
+
+getParentPid :: ProcessID -> IO (Maybe ProcessID)
+getParentPid pid = do
+  let fp = "/proc/" ++ show (toInteger pid) ++ "/stat"
+  econtents <- Control.Exception.try $ readFile fp :: IO (Either SomeException String)
+  case econtents of
+    Right xs ->
+      case Data.List.lines xs of
+        [ws] -> case Data.List.words ws of
+          (_:_:_:ppid:_) -> return . Just . read $ ppid
+    _ -> return Nothing
+
+getParentsPids :: ProcessID  -> IO [ProcessID]
+getParentsPids pid = do
+  ppid <- getParentPid pid
+  case ppid of
+    Just ppid' -> do
+      ps <- getParentsPids ppid'
+      return (ppid':ps)
+    Nothing -> return []
+
+getSimulaStartingLocation :: ProcessID -> IO (Maybe String)
+getSimulaStartingLocation pid = do
+  let fp = "/proc/" ++ show (toInteger pid) ++ "/environ"
+  econtents <- Control.Exception.try $ readFile fp :: IO (Either SomeException String)
+  let ret = case econtents of
+                  Right environ ->
+                    case ( (Data.List.isInfixOf "SIMULA_STARTING_LOCATION=center" environ)
+                        ,  (Data.List.isInfixOf "SIMULA_STARTING_LOCATION=right" environ)
+                        ,  (Data.List.isInfixOf "SIMULA_STARTING_LOCATION=bottom" environ)
+                        ,  (Data.List.isInfixOf "SIMULA_STARTING_LOCATION=left" environ)
+                        ,  (Data.List.isInfixOf "SIMULA_STARTING_LOCATION=top" environ))  of
+                        (True, _, _, _, _) -> Just "center"
+                        (_, True, _, _, _) -> Just "right"
+                        (_, _, True, _, _) -> Just "bottom"
+                        (_, _, _, True, _) -> Just "left"
+                        (_, _, _, _, True) -> Just "top"
+                        _ -> Nothing
+                  _ -> Nothing
+  return ret
