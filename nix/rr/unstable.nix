@@ -17,8 +17,7 @@ in
     src = fetchFromGitHub {
       owner = "mozilla";
       repo = "rr";
-      rev = "696f9d851b96996bb2211998c52a5feab679e165";
-      sha256 = "07xpziw8392620bnpmbdgrgdpc3nqyi94qz5dh2xbwd6946sp4j6";
-
+      rev = "856f5d2517a174ca1f08a8c42e1c6355ce6380e8";
+      sha256 = "14pi5rgfd5l0hajnixbbal10lgq005z0k4gc2vs636wyq5j8zc2v";
     };
   })
