@@ -47,7 +47,7 @@ generateSessionUUID = do exists                 <- doesFileExist "./UUID"
                          let randomUUID = fromMaybe nil maybeRandomUUID
                          let randomUUIDToString =  (Data.UUID.toString randomUUID)
                          -- unless exists          $  appendFile "UUID" randomUUIDToString
-                         writeFile "UUID"       randomUUIDToString
+                         writeFile "./config/UUID"  randomUUIDToString
                          strUUID                <- readFile "./config/UUID"
                          let maybeUUID          = Data.UUID.fromString (strUUID)
                          return                 $ case maybeUUID   of
