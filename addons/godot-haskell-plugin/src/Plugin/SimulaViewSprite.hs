@@ -490,6 +490,7 @@ _handle_map gsvs _ = do
   emitSignal gsvs "map" ([gsvs] :: [GodotSimulaViewSprite])
   atomically $ writeTVar (simulaView ^. svMapped) True
   atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
+  atomically $ writeTVar (_gsvsShouldMove gsvs) True
 
   return ()
 
