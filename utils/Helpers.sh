@@ -305,8 +305,3 @@ updateEmail() {
         clear
     fi
 }
-
-pernoscoSubmit() {
-    # `rr sources` attempts to locate libwlroots.so.0.0.0 files in `/build/wlroots/build/../`, so we use this --substitute hack so it can find them locally
-    PATH=./result/bin:$PATH nix-shell --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false" -p awscli --run "python3 ./submodules/pernosco-submit/pernosco-submit upload --title $2 --substitute=libwlroots.so.0.0.0=$(pwd)/submodules/wlroots/backend $1 ./. $PWD/submodules/wlroots"
-}
