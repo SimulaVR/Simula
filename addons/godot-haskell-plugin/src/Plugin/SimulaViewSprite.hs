@@ -498,13 +498,6 @@ handle_unmap :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_unmap self args@[wlrXWaylandSurfaceVariant] = do
   putStrLn "handle_unmap"
   handle_unmap_base self args
-  simulaView <- atomically $ readTVar (self ^. gsvsView)
-  let eitherSurface = (simulaView ^. svWlrEitherSurface)
-  case eitherSurface of
-    Left wlrXdgSurface -> do
-      toplevel    <- G.get_xdg_toplevel wlrXdgSurface :: IO GodotWlrXdgToplevel
-      G.send_close toplevel
-    Right wlrXWaylandSurface -> do G.send_close wlrXWaylandSurface -- Fixes ulauncher crashes
 
 -- Passes control entirely to updateSimulaViewSprite.
 _process :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
