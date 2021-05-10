@@ -204,6 +204,7 @@ installSimula() {
     curl https://www.wolframcloud.com/obj/george.w.singer/installMessage
     if [ -z $1 ]; then
       NIXPKGS_ALLOW_UNFREE=1 nix-build -Q default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
+      switchToNix
     # Useful for debug purposes
     elif [ $1 == "i" ]; then
       switchToNix
