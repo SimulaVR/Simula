@@ -30,7 +30,7 @@ let
     rr = callPackage ./nix/rr/unstable.nix {};
 
     devBuildFalse = ''
-      cp ./util/GetNixGL.sh $out/bin/GetNixGL.sh
+      cp ./utils/GetNixGL.sh $out/bin/GetNixGL.sh
       ln -s ${godot}/bin/godot.x11.opt.debug.64 $out/bin/godot.x11.opt.debug.64
       ln -s ${godot}/bin/godot.x11.tools.64 $out/bin/godot.x11.tools.64
       ln -s ${godot}/bin/godot.x11.opt.64 $out/bin/godot.x11.opt.64
