@@ -182,11 +182,12 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssEnvironmentTextures   :: TVar [String]
   , _gssStartingAppTransform  :: TVar (Maybe GodotTransform)
   , _gssPid                   :: String
+  , _gssStartingAppPids       :: TVar (M.Map ProcessID [String])
   }
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
@@ -775,6 +776,11 @@ appLaunch gss appStr maybeLocation = do
                                                              case maybePid of
                                                                   Just pid -> return pid
                                                                   Nothing -> return $ fromInteger $ 0
+            startingAppPids <- readTVarIO (gss ^. gssStartingAppPids)
+            case maybeLocation of
+              Nothing -> return ()
+              Just location -> do let startingAppPids' = M.insertWith (++) pid [location] startingAppPids
+                                  atomically $ writeTVar (gss ^. gssStartingAppPids) startingAppPids'
             return pid
 
 launchHMDWebCam :: GodotSimulaServer -> Maybe String -> IO ProcessID
@@ -1157,22 +1163,25 @@ getParentsPids pid = do
       return (ppid':ps)
     Nothing -> return []
 
-getSimulaStartingLocation :: ProcessID -> IO (Maybe String)
-getSimulaStartingLocation pid = do
-  let fp = "/proc/" ++ show (toInteger pid) ++ "/environ"
-  econtents <- Control.Exception.try $ readFile fp :: IO (Either SomeException String)
-  let ret = case econtents of
-                  Right environ ->
-                    case ( (Data.List.isInfixOf "SIMULA_STARTING_LOCATION=center" environ)
-                        ,  (Data.List.isInfixOf "SIMULA_STARTING_LOCATION=right" environ)
-                        ,  (Data.List.isInfixOf "SIMULA_STARTING_LOCATION=bottom" environ)
-                        ,  (Data.List.isInfixOf "SIMULA_STARTING_LOCATION=left" environ)
-                        ,  (Data.List.isInfixOf "SIMULA_STARTING_LOCATION=top" environ))  of
-                        (True, _, _, _, _) -> Just "center"
-                        (_, True, _, _, _) -> Just "right"
-                        (_, _, True, _, _) -> Just "bottom"
-                        (_, _, _, True, _) -> Just "left"
-                        (_, _, _, _, True) -> Just "top"
-                        _ -> Nothing
-                  _ -> Nothing
-  return ret
+getSimulaStartingLocationAtomically :: GodotSimulaServer -> [ProcessID] -> IO (Maybe String)
+getSimulaStartingLocationAtomically gss pids = do
+  ret <- case pids of
+              [] -> return Nothing
+              pid:pids -> atomically $ do startingAppPids <- readTVar (gss ^. gssStartingAppPids)
+                                          case (M.lookup pid startingAppPids) of
+                                            Nothing -> do
+                                              return Nothing
+                                            Just [] -> do
+                                              let startingAppPids' = M.delete pid startingAppPids
+                                              writeTVar (gss ^. gssStartingAppPids) startingAppPids'
+                                              return Nothing
+                                            Just (location:locations) -> do
+                                              let startingAppPids' = M.insert pid locations startingAppPids
+                                              writeTVar (gss ^. gssStartingAppPids) startingAppPids'
+                                              return $ (Just location)
+
+  case (pids, ret) of
+       (_, Just ret) -> return $ Just ret
+       ([], Nothing) -> return Nothing
+       (pid:pids, Nothing) -> do
+         getSimulaStartingLocationAtomically gss pids

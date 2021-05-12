@@ -54,6 +54,8 @@ import Data.List
 import qualified Data.Map.Strict as M
 import Data.Map.Ordered as MO
 
+import System.Process
+
 instance Eq GodotSimulaViewSprite where
   (==) = (==) `on` _gsvsObj
 
@@ -126,7 +128,8 @@ updateSimulaViewSprite gsvs = do
                   Right wlrXWaylandSurface -> do
                     pidInt <- G.get_pid wlrXWaylandSurface
                     return $ (fromInteger $ fromIntegral pidInt)
-      maybeLocation <- getSimulaStartingLocation pid
+      pids <- getParentsPids pid
+      maybeLocation <- getSimulaStartingLocationAtomically gss pids
       case maybeLocation of
         Just location -> moveToStartingPosition gsvs location
         Nothing -> return ()

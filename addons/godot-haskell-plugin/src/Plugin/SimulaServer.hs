@@ -665,6 +665,8 @@ initGodotSimulaServer obj = do
       pid <- getProcessID
       let gssPid' = show pid
 
+      gssStartingAppPids' <- newTVarIO M.empty :: IO (TVar (M.Map ProcessID [String]))
+
       let gss = GodotSimulaServer {
         _gssObj                   = obj                       :: GodotObject
       , _gssWaylandDisplay        = gssWaylandDisplay'        :: TVar GodotWaylandDisplay
@@ -695,6 +697,7 @@ initGodotSimulaServer obj = do
       , _gssEnvironmentTextures   = gssEnvironmentTextures'   :: TVar [String]
       , _gssStartingAppTransform  = gssStartingAppTransform'  :: TVar (Maybe GodotTransform)
       , _gssPid                   = gssPid'                   :: String
+      , _gssStartingAppPids       = gssStartingAppPids'       :: TVar (M.Map ProcessID [String])
       }
   return gss
   where getStartingAppsStr :: Maybe String -> String
