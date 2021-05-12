@@ -51,9 +51,9 @@ let
 
       # simula_local
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local
-      echo "mkdir -p log" >> $out/bin/simula
-      echo "mkdir -p config" >> $out/bin/simula
-      echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib LD_PRELOAD=./submodules/wlroots/build/libwlroots.so.0 \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m --print-fps" >> $out/bin/simula_local
+      echo "mkdir -p log" >> $out/bin/simula_local
+      echo "mkdir -p config" >> $out/bin/simula_local
+      echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib LD_PRELOAD=./submodules/wlroots/build/libwlroots.so.0 \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_local
       chmod +x $out/bin/simula_local
 
       # simula_gdb
