@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=2]
+
+[ext_resource path="res://addons/godot-openxr/OpenXRPose.gdns" type="Script" id=1]
+
+[node name="XRPose" type="Spatial"]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 1, -0.5 )
+script = ExtResource( 1 )

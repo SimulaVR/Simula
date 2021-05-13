@@ -168,7 +168,7 @@ switchToNix() {
 switchToLocal() {
     cd ./addons/godot-haskell-plugin
     rm libgodot-haskell-plugin.so
-    ln -s ./dist-newstyle/build/x86_64-linux/ghc-8.8.4/godot-haskell-plugin-0.1.0.0/f/godot-haskell-plugin/build/godot-haskell-plugin/libgodot-haskell-plugin.so libgodot-haskell-plugin.so
+    ln -s ./dist-newstyle/build/x86_64-linux/ghc-8.10.4/godot-haskell-plugin-0.1.0.0/f/godot-haskell-plugin/build/godot-haskell-plugin/libgodot-haskell-plugin.so libgodot-haskell-plugin.so
     cd -
 }
 
@@ -203,10 +203,33 @@ installSimula() {
     cachix use simula
     curl https://www.wolframcloud.com/obj/george.w.singer/installMessage
     if [ -z $1 ]; then
-      NIXPKGS_ALLOW_UNFREE=1 nix-build default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
+      NIXPKGS_ALLOW_UNFREE=1 nix-build -Q default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
+      switchToNix
+    # Useful for debug purposes
+    elif [ $1 == "i" ]; then
+      switchToNix
+      NIXPKGS_ALLOW_UNFREE=1 nix-instantiate -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
+      switchToLocal
     else
       switchToNix
-      NIXPKGS_ALLOW_UNFREE=1 nix-build -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
+      NIXPKGS_ALLOW_UNFREE=1 nix-build -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
+      switchToLocal
+    fi
+}
+
+updateSimula() {
+    checkInstallNix
+    checkInstallCachix
+    cachix use simula
+
+    if [ -z $1 ]; then
+        git pull origin master
+        NIXPKGS_ALLOW_UNFREE=1 nix-build -Q default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
+    else
+        switchToNix
+        git pull origin dev
+        NIXPKGS_ALLOW_UNFREE=1 nix-build -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
+        switchToLocal
     fi
 }
 
@@ -219,26 +242,33 @@ swapXpraNixToLocal() {
 # Simula modules inside a nix-shell
 nsBuildGodot() {
  cd ./submodules/godot
- nix-shell --run "wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; \
-                         wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c; \
-                         scons -Q -j8 platform=x11 target=debug;"
- cd -
+ local runCmd="wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c; scons -Q -j8 platform=x11 target=debug"
+
+ if [ -z $1 ]; then
+   nix-shell --run "$runCmd"
+ else
+   nix-shell --run "while inotifywait -qqre modify .; do $runCmd; done"
+ fi
 }
 
 # Updates godot-haskell to latest api.json generated from devBuildGodot
 nsBuildGodotHaskell() {
   cd ./submodules/godot
-  nix-shell --run "$(../../utils/GetNixGL.sh) ./bin/godot.x11.tools.64 --gdnative-generate-json-api ./bin/api.json"
+  nix-shell -Q --run "$(../../utils/GetNixGL.sh) ./bin/godot.x11.tools.64 --gdnative-generate-json-api ./bin/api.json"
   cd -
 
   cd ./submodules/godot-haskell-cabal
-  nix-shell --attr env release.nix --run "./updateApiJSON.sh"
+  nix-shell -Q --attr env release.nix --run "./updateApiJSON.sh"
   cd -
 }
 
 nsBuildGodotHaskellPlugin() {
   cd ./addons/godot-haskell-plugin
-  nix-shell --attr env shell.nix --run "cabal build"
+  if [ -z $1 ]; then
+    nix-shell -Q --attr env shell.nix --run "cabal build"
+  else
+    nix-shell --attr env shell.nix --run "while inotifywait -qqre modify .; do cabal build; done"
+  fi
   cd -
 }
 
@@ -249,6 +279,7 @@ nsREPLGodotHaskellPlugin() {
 
 nsBuildSimulaLocal() {
     installSimula 1
+    nsBuildWlroots
     nsBuildGodot
     nsBuildGodotHaskell
     nsBuildGodotHaskellPlugin
@@ -256,11 +287,11 @@ nsBuildSimulaLocal() {
 }
 
 nsBuildWlroots() {
-    cd ./submodules/wlroots-dev
+    cd ./submodules/wlroots
     if [ -d "./build" ]; then
-        nix-shell --run "ninja -C build"
+        nix-shell -Q --run "ninja -C build"
     else
-        nix-shell --run "meson build; ninja -C build"
+        nix-shell -Q --run "meson build; ninja -C build"
     fi
     cd -
 }
@@ -274,8 +305,4 @@ updateEmail() {
         ./result/bin/curl --data-urlencode emailStr@email https://www.wolframcloud.com/obj/george.w.singer/emailMessage
         clear
     fi
-}
-
-pernoscoSubmit() {
-    PATH=./result/bin:$PATH nix-shell --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false" -p awscli --run "python3 ./nix/pernosco-submit/pernosco-submit upload $1 ./. --title $2"
 }

@@ -1,0 +1,39 @@
+[gd_scene load_steps=8 format=2]
+
+[ext_resource path="res://addons/godot-xr-tools/misc/VR_Common_Shader_Cache.gd" type="Script" id=1]
+[ext_resource path="res://addons/godot-xr-tools/materials/teleport.tres" type="Material" id=2]
+[ext_resource path="res://addons/godot-xr-tools/materials/target.tres" type="Material" id=3]
+[ext_resource path="res://addons/godot-xr-tools/materials/capule.tres" type="Material" id=4]
+[ext_resource path="res://addons/godot-xr-tools/materials/pointer.tres" type="Material" id=5]
+[ext_resource path="res://addons/godot-xr-tools/materials/highlight.tres" type="Material" id=6]
+
+[sub_resource type="PlaneMesh" id=1]
+size = Vector2( 0.001, 0.001 )
+
+[node name="vr_common_shader_cache" type="Spatial"]
+script = ExtResource( 1 )
+
+[node name="teleport" type="MeshInstance" parent="."]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -2 )
+mesh = SubResource( 1 )
+material/0 = ExtResource( 2 )
+
+[node name="target" type="MeshInstance" parent="."]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -2 )
+mesh = SubResource( 1 )
+material/0 = ExtResource( 3 )
+
+[node name="capsule" type="MeshInstance" parent="."]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -2 )
+mesh = SubResource( 1 )
+material/0 = ExtResource( 4 )
+
+[node name="pointer" type="MeshInstance" parent="."]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -2 )
+mesh = SubResource( 1 )
+material/0 = ExtResource( 5 )
+
+[node name="highlight" type="MeshInstance" parent="."]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -2 )
+mesh = SubResource( 1 )
+material/0 = ExtResource( 6 )

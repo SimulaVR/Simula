@@ -1,0 +1,46 @@
+[gd_scene load_steps=9 format=2]
+
+[ext_resource path="res://addons/godot-xr-tools/functions/Function_Teleport.gd" type="Script" id=1]
+[ext_resource path="res://addons/godot-xr-tools/materials/teleport.tres" type="Material" id=2]
+[ext_resource path="res://addons/godot-xr-tools/materials/target.tres" type="Material" id=3]
+[ext_resource path="res://addons/godot-xr-tools/materials/capule.tres" type="Material" id=4]
+
+[sub_resource type="PlaneMesh" id=1]
+size = Vector2( 0.05, 1 )
+subdivide_depth = 40
+
+[sub_resource type="PlaneMesh" id=2]
+size = Vector2( 1, 1 )
+
+[sub_resource type="CapsuleMesh" id=3]
+radius = 0.4
+
+[sub_resource type="CapsuleShape" id=4]
+radius = 0.1
+height = 0.1
+
+[node name="Function_Teleport" type="KinematicBody"]
+input_ray_pickable = false
+collision/safe_margin = 0.01
+script = ExtResource( 1 )
+no_collision_color = Color( 0.176471, 0.313726, 0.862745, 1 )
+
+[node name="Teleport" type="MeshInstance" parent="."]
+mesh = SubResource( 1 )
+material/0 = ExtResource( 2 )
+
+[node name="Target" type="MeshInstance" parent="."]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1, -4.92359 )
+mesh = SubResource( 2 )
+material/0 = ExtResource( 3 )
+
+[node name="Player_figure" type="Position3D" parent="Target"]
+
+[node name="Capsule" type="MeshInstance" parent="Target/Player_figure"]
+transform = Transform( 1, 0, 0, 0, -4.37114e-08, -1, 0, 1, -4.37114e-08, 0, 0.9, 0 )
+mesh = SubResource( 3 )
+material/0 = ExtResource( 4 )
+
+[node name="CollisionShape" type="CollisionShape" parent="."]
+transform = Transform( 1, 0, 0, 0, -1.62921e-07, -1, 0, 1, -1.62921e-07, 0, 0, 0 )
+shape = SubResource( 4 )

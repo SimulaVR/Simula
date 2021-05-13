@@ -1,0 +1,13 @@
+cradle:
+  cabal:
+    - path: "./src"
+      component: "lib:godot-haskell-plugin"
+
+    - path: "./telemetry"
+      component: "lib:godot-haskell-plugin"
+
+    - path: "../../submodules/godot-haskell-cabal/src"
+      component: "lib:godot-haskell"
+
+    - path: "../../submodules/godot-haskell-cabal/src-generate"
+      component: "godot-haskell:lib:generate"

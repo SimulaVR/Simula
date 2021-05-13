@@ -1,24 +1,31 @@
 [submodule "godot_headers"]
 	path = godot_headers
 	url = https://github.com/GodotNativeTools/godot_headers.git
+	shallow = true
 [submodule "submodules/wlroots"]
 	path = submodules/wlroots
 	url = https://github.com/SimulaVR/wlroots
 	branch = simula
+	shallow = true
 [submodule "submodules/godot"]
 	path = submodules/godot
 	url = https://github.com/SimulaVR/godot
 	branch = 3.2-simula
+	shallow = true
 [submodule "submodules/godot-haskell"]
 	path = submodules/godot-haskell
 	url = https://github.com/SimulaVR/godot-haskell
 	branch = simula
+	shallow = true
 [submodule "environments"]
 	path = environments
 	url = https://github.com/SimulaVR/environments
+	shallow = true
 [submodule "submodules/godot-haskell-cabal"]
 	path = submodules/godot-haskell-cabal
 	url = https://github.com/SimulaVR/godot-haskell
-[submodule "submodules/wlroots-dev"]
-	path = submodules/wlroots-dev
-	url = https://github.com/SimulaVR/wlroots
+	shallow = true
+[submodule "submodules/pernosco-submit"]
+	path = submodules/pernosco-submit
+	url = https://github.com/Pernosco/pernosco-submit.git
+	shallow = true

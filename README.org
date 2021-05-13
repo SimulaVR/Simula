@@ -31,7 +31,7 @@ To install Simula on all Linux distros, run:
 
 #+BEGIN_SRC shell
 # Clone
-git clone --recursive https://github.com/SimulaVR/Simula
+git clone --depth 1 --recursive https://github.com/SimulaVR/Simula
 cd Simula
 
 # Download (or build, if downloading fails)
@@ -73,6 +73,14 @@ with ~openxr-dev.json~ encoding the location of your ~libopenxr_monado.so~:
 }
 #+END_SRC
 
+** Updating
+
+To update Simula to the current ~master~ (without losing your configuration adjustments), simply run
+
+#+BEGIN_SRC
+./source/Helpers.sh && updateSimula
+#+END_SRC
+
 ** COMMENT AppImage
 
 Simula requires ~xpra~, ~xrdb~, ~wmctrl~, and ~terminator~. We keep a bleeding edge ~AppImage~ of Simula synced to a tarball, which can be used as follows:
@@ -109,7 +117,7 @@ Windows become "active" once you look at them. Active windows receive typing eve
 | ~Super + Apostrophe~     | Send window cursor to gaze point (hold down to make cursor follow gaze)                                                       |
 | ~Super + Enter~          | Left click surface cursor at gaze point                                                                                       |
 | ~Super + Alt~            | Grab surface for movement (release to let go)                                                                                 |
-| ~Super + a~              | Launch Simula's app launcher ([[https://ulauncher.io/][ulauncher]])                                                           |
+| ~Super + a~              | Launch Simula's app launcher ([[https://launchpad.net/synapse-project][synapse]])                                             |
 | ~Super + e~              | Cycle Simula's background environment                                                                                         |
 | ~Super + f~              | Orient window towards user gaze                                                                                               |
 | ~Super + 9~              | Scale window to smaller size                                                                                                  |

@@ -1,0 +1,23 @@
+[gd_scene load_steps=4 format=2]
+
+[ext_resource path="res://addons/godot-xr-tools/assets/LeftHand.glb" type="PackedScene" id=1]
+[ext_resource path="res://addons/godot-xr-tools/assets/LeftHand.gd" type="Script" id=2]
+[ext_resource path="res://addons/godot-xr-tools/assets/LeftHandBlendTree.tres" type="AnimationNodeBlendTree" id=3]
+
+[node name="LeftHand" type="Spatial"]
+script = ExtResource( 2 )
+
+[node name="LeftHand" parent="." instance=ExtResource( 1 )]
+transform = Transform( -0.5, 0, -1.62921e-07, 0, 0.5, 0, 1.62921e-07, 0, -0.5, 0, 0, 0 )
+
+[node name="AnimationTree" type="AnimationTree" parent="."]
+tree_root = ExtResource( 3 )
+anim_player = NodePath("../LeftHand/AnimationPlayer")
+active = true
+parameters/Blend2/blend_amount = 1.0
+parameters/GripTimeScale/scale = 0.0
+parameters/IndexTimeScale/scale = 0.0
+parameters/SetGrip/seek_position = -1.0
+parameters/SetIndex/seek_position = -1.0
+
+[editable path="LeftHand"]

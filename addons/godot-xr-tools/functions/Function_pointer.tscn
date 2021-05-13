@@ -1,0 +1,37 @@
+[gd_scene load_steps=5 format=2]
+
+[ext_resource path="res://addons/godot-xr-tools/materials/pointer.tres" type="Material" id=1]
+[ext_resource path="res://addons/godot-xr-tools/functions/Function_pointer.gd" type="Script" id=2]
+
+[sub_resource type="CubeMesh" id=1]
+resource_local_to_scene = true
+size = Vector3( 0.002, 0.002, 10 )
+subdivide_depth = 20
+
+[sub_resource type="SphereMesh" id=2]
+radius = 0.05
+height = 0.1
+radial_segments = 16
+rings = 8
+
+[node name="Function_pointer" type="Spatial"]
+transform = Transform( 1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 0, 0 )
+script = ExtResource( 2 )
+collision_mask = 1048575
+
+[node name="RayCast" type="RayCast" parent="."]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0 )
+enabled = true
+cast_to = Vector3( 0, 0, -10 )
+collision_mask = 1048575
+
+[node name="Laser" type="MeshInstance" parent="."]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, -5 )
+cast_shadow = 0
+mesh = SubResource( 1 )
+material/0 = ExtResource( 1 )
+
+[node name="Target" type="MeshInstance" parent="."]
+visible = false
+mesh = SubResource( 2 )
+material/0 = ExtResource( 1 )

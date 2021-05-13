@@ -164,9 +164,8 @@ getKeyboardAction gss keyboardShortcut =
   
         shellLaunch :: GodotSimulaServer -> String -> SpriteLocation -> Bool -> IO ()
         shellLaunch gss shellCmd _ True = do
-          let rootCmd = head (words shellCmd)
-          let args = tail (words shellCmd)
-          appLaunch gss rootCmd args
+          appLaunch gss shellCmd Nothing
+          return ()
         shellLaunch _ _ _ _ = return ()
 
         textToSpeech :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
@@ -200,7 +199,8 @@ getKeyboardAction gss keyboardShortcut =
         launchHMDWebCam' :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
         launchHMDWebCam' gss _ True = do
           -- gss <- readTVarIO (gsvs ^. gsvsServer)
-          launchHMDWebCam gss
+          launchHMDWebCam gss Nothing
+          return ()
         launchHMDWebCam' _ _ _ = return ()
   
         orientWindowTowardsGaze :: SpriteLocation -> Bool -> IO ()
@@ -475,26 +475,38 @@ ready gss _ = do
 
   appendFile "log.txt" ""
 
-  -- Launch default apps
-  sApps <- readTVarIO (gss ^. gssStartingApps)
-  putStrLn $ "Launching default apps: " ++ (show sApps)
-  let firstApp = if (sApps == []) then Nothing else Just (head sApps)
-  case firstApp of
-    Nothing -> return ()
-    Just app -> do appStrLaunch gss app
-  return ()
-
   -- Adding a `WorldEnvironment` anywhere to an active scene graph
   -- overrides the default environment
   (worldEnvironment, _) <- readTVarIO (gss ^. gssWorldEnvironment)
   addChild gss worldEnvironment
+
+  -- Launch default apps
+  sApps <- readTVarIO (gss ^. gssStartingApps)
+  launchDefaultApps sApps "center"
+  putStrLn $ "Launching default apps: " ++ (show sApps)
+
   case debugModeMaybe of
     Nothing -> return ()
     Just debugModeVal  -> (forkIO $ debugFunc gss) >> return ()
-
-  return ()
-
-  -- launchXpra gss
+  where launchDefaultApps :: [String] -> String-> IO ()
+        launchDefaultApps sApps location = do
+          let firstApp = if (sApps == []) then Nothing else Just (head sApps)
+          let tailApps = tail sApps
+          pid <- case firstApp of
+                      Nothing -> return $ fromInteger 0
+                      Just app -> do pid <- appLaunch gss app (Just location)
+                                     return pid
+          case location of
+            "center" -> do
+              launchDefaultApps tailApps "right"
+            "right" -> do
+              launchDefaultApps tailApps "bottom"
+            "bottom" -> do
+              launchDefaultApps tailApps "left"
+            "left" -> do
+              launchDefaultApps tailApps "top"
+            "top" -> do
+              return ()
 
 -- | Populate the GodotSimulaServer's TVar's with Wlr types; connect some Wlr methods
 -- | to their signals. This implicitly starts the compositor.
@@ -571,7 +583,7 @@ addWlrChildren gss = do
 
 parseConfiguration :: IO (Configuration)
 parseConfiguration = do
-  config <- input auto "./config.dhall" :: IO Configuration
+  config <- input auto "./config/config.dhall" :: IO Configuration
   return config
 
 -- | We first fill the TVars with dummy state, before updating them with their
@@ -621,7 +633,6 @@ initGodotSimulaServer obj = do
 
       let sApps = getStartingAppsList (configuration ^. startingApps)
       let numberOfStartingApps = length sApps
-      gssStartingAppsCounter'    <- newTVarIO (0, numberOfStartingApps) :: IO (TVar (StartingAppsLaunched, StartingAppsRemaining))
       gssStartingApps' <- newTVarIO sApps
 
       panoramaSky      <- unsafeInstance GodotPanoramaSky "PanoramaSky"
@@ -654,6 +665,8 @@ initGodotSimulaServer obj = do
       pid <- getProcessID
       let gssPid' = show pid
 
+      gssStartingAppPids' <- newTVarIO M.empty :: IO (TVar (M.Map ProcessID [String]))
+
       let gss = GodotSimulaServer {
         _gssObj                   = obj                       :: GodotObject
       , _gssWaylandDisplay        = gssWaylandDisplay'        :: TVar GodotWaylandDisplay
@@ -679,12 +692,12 @@ initGodotSimulaServer obj = do
       , _gssConfiguration         = gssConfiguration'         :: TVar Configuration
       , _gssKeyboardShortcuts     = gssKeyboardShortcuts'     :: TVar KeyboardShortcuts
       , _gssKeyboardRemappings    = gssKeyboardRemappings'    :: TVar KeyboardRemappings
-      , _gssStartingAppsCounter   = gssStartingAppsCounter'   :: TVar (StartingAppsLaunched, StartingAppsRemaining)
       , _gssStartingApps          = gssStartingApps'          :: TVar [String]
       , _gssWorldEnvironment      = gssWorldEnvironment'      :: TVar (GodotWorldEnvironment, String)
       , _gssEnvironmentTextures   = gssEnvironmentTextures'   :: TVar [String]
       , _gssStartingAppTransform  = gssStartingAppTransform'  :: TVar (Maybe GodotTransform)
       , _gssPid                   = gssPid'                   :: String
+      , _gssStartingAppPids       = gssStartingAppPids'       :: TVar (M.Map ProcessID [String])
       }
   return gss
   where getStartingAppsStr :: Maybe String -> String
