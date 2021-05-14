@@ -92,7 +92,7 @@ let
       ln -s ${valkyrie}/bin/valkyrie $out/bin/valkyrie
 
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_valgrind
-      echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib LD_PRELOAD=./submodules/wlroots/build/libwlroots.so.0 \$(./utils/GetNixGL.sh) ./result/bin/valgrind --tool=memcheck --leak-check=yes --show-reachable=yes --track-origins=yes --keep-stacktraces=alloc-and-free --error-limit=no --num-callers=40 --xml=yes --xml-file=valgrind_output.xml ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_valgrind
+      echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib LD_PRELOAD=./submodules/wlroots/build/libwlroots.so.0 \$(./utils/GetNixGL.sh) ./result/bin/valgrind --tool=memcheck --leak-check=yes --show-reachable=yes --track-origins=yes --keep-stacktraces=alloc-and-free --error-limit=no --num-callers=40 --xml=yes --xml-file=valgrind_output_%p.xml ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_valgrind
       chmod +x $out/bin/simula_valgrind
 
       echo "./result/bin/valkyrie --view-log \$1" >> $out/bin/simula_valkyrie
