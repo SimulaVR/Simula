@@ -7,7 +7,7 @@ let
     keepDebugInfo = stdenv: stdenv //
       { mkDerivation = args: stdenv.mkDerivation (args // {
           dontStrip = true;
-          NIX_CFLAGS_COMPILE = toString (args.NIX_CFLAGS_COMPILE or "") + " -g -ggdb";
+          NIX_CFLAGS_COMPILE = toString (args.NIX_CFLAGS_COMPILE or "") + " -g -ggdb -Og";
         });
       };
     stdenvRes = if devBuild then (keepDebugInfo stdenv) else stdenv;
