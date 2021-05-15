@@ -1,4 +1,4 @@
-{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, mimic, xsel, xclip, dialog, synapse, openxr-loader, xpra, valgrind, xorg, writeShellScriptBin, python3, awscli, wayland, wayland-protocols }:
+{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, mimic, xsel, xclip, dialog, synapse, openxr-loader, xpra, valgrind, xorg, writeShellScriptBin, python3, awscli, wayland, wayland-protocols, valkyrie }:
 let
 
     /* Modify a stdenv so that it produces debug builds; that is,
@@ -81,12 +81,31 @@ let
       chmod +x $out/bin/rootston
 
       # rootston_rr_record
-      echo "_RR_TRACE_DIR=./rr PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) ${rr}/bin/rr record ./submodules/wlroots/build/rootston/rootston" >> $out/bin/rootston_rr_record
+      echo "_RR_TRACE_DIR=./rr PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) ${rr}/bin/rr record ./submodules/wlroots/build/rootston/rootston \"\$@\"" >> $out/bin/rootston_rr_record
       chmod +x $out/bin/rootston_rr_record
 
       # rootston_rr_replay
       echo "_RR_TRACE_DIR=./rr PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) ${rr}/bin/rr -M replay \"\$@\"" >> $out/bin/rootston_rr_replay
       chmod +x $out/bin/rootston_rr_replay
+
+      ln -s ${valgrind}/bin/valgrind $out/bin/valgrind
+      ln -s ${valkyrie}/bin/valkyrie $out/bin/valkyrie
+
+      echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_valgrind
+      echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib LD_PRELOAD=./submodules/wlroots/build/libwlroots.so.0 \$(./utils/GetNixGL.sh) ./result/bin/valgrind --tool=memcheck --leak-check=yes --show-reachable=yes --track-origins=yes --keep-stacktraces=alloc-and-free --error-limit=no --num-callers=40 --xml=yes --xml-file=valgrind_output_%p.xml ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_valgrind
+      chmod +x $out/bin/simula_valgrind
+
+      echo "./result/bin/valkyrie --view-log \$1" >> $out/bin/simula_valkyrie
+      chmod +x $out/bin/simula_valkyrie
+
+      mkdir -p $out/srcs/xwayland
+      tar -xvf ${xwayland-dev.src} --directory $out/srcs/xwayland --strip-components=1
+      mkdir -p $out/srcs/libxcb
+      tar -xvf ${libxcb-dev.src} --directory $out/srcs/libxcb --strip-components=1
+      mkdir -p $out/srcs/wayland
+      tar -xvf ${wayland-dev.src} --directory $out/srcs/wayland --strip-components=1
+      ln -s ${pernoscoSubmit}/bin/pernosco_submit $out/bin/pernosco_submit
+      ln -s ${rrSources}/bin/rr_sources $out/bin/rr_sources
      '';
 
     devBuildScript = if (devBuild == true) then devBuildTrue else devBuildFalse;
@@ -177,17 +196,6 @@ let
       ln -s ${rr}/bin/rr $out/bin/rr
       ln -s ${dialog}/bin/dialog $out/bin/dialog
       ln -s ${curl}/bin/curl $out/bin/curl
-      ln -s ${valgrind}/bin/valgrind $out/bin/valgrind
-
-
-      mkdir -p $out/srcs/xwayland
-      tar -xvf ${xwayland-dev.src} --directory $out/srcs/xwayland --strip-components=1
-      mkdir -p $out/srcs/libxcb
-      tar -xvf ${libxcb-dev.src} --directory $out/srcs/libxcb --strip-components=1
-      mkdir -p $out/srcs/wayland
-      tar -xvf ${wayland-dev.src} --directory $out/srcs/wayland --strip-components=1
-      ln -s ${pernoscoSubmit}/bin/pernosco_submit $out/bin/pernosco_submit
-      ln -s ${rrSources}/bin/rr_sources $out/bin/rr_sources
 
       '' + linkGHP + devBuildScript;
     };
