@@ -224,12 +224,15 @@ updateSimula() {
 
     if [ -z $1 ]; then
         git pull origin master
+        git submodule update --recursive
         NIXPKGS_ALLOW_UNFREE=1 nix-build -Q default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
+        switchToNix
     else
         switchToNix
         git pull origin dev
-        NIXPKGS_ALLOW_UNFREE=1 nix-build -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
-        switchToLocal
+        git submodule update --recursive
+        NIXPKGS_ALLOW_UNFREE=1 nix-build -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
+        switchToNix
     fi
 }
 
