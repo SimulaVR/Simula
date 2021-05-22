@@ -97,6 +97,7 @@ getKeyboardAction gss keyboardShortcut =
     "launchHMDWebCam" -> launchHMDWebCam' gss
     "orientWindowTowardsGaze" -> orientWindowTowardsGaze
     "grabWindow" -> grabWindow
+    "grabWindows" -> grabWindows gss
     "pushWindow" -> pushWindow
     "pullWindow" -> pullWindow
     "scaleWindowDown" -> scaleWindowDown
@@ -143,14 +144,23 @@ getKeyboardAction gss keyboardShortcut =
           processClickEvent' gsvs (Button False 1) coords -- BUTTON_LEFT = 1
         leftClick _ _ = return ()
 
-        grabWindow :: SpriteLocation -> Bool -> IO () 
+        grabWindow :: SpriteLocation -> Bool -> IO ()
         grabWindow (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          keyboardGrabInitiate gsvs
+          keyboardGrabInitiate (Left gsvs)
         grabWindow (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) False = do
-          keyboardGrabLetGo gsvs
+          keyboardGrabLetGo (Left gsvs)
         grabWindow _ _ = return ()
 
-        terminateWindow :: SpriteLocation -> Bool -> IO () 
+        grabWindows :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
+        grabWindows gss _ True = do
+          windowsGrabbed <- readTVarIO (gss ^. gssWindowsGrabbed)
+          case windowsGrabbed of
+            True -> return ()
+            False -> keyboardGrabInitiate (Right gss)
+        grabWindows gss _ False = do
+          keyboardGrabLetGo (Right gss)
+
+        terminateWindow :: SpriteLocation -> Bool -> IO ()
         terminateWindow (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
           simulaView <- readTVarIO (gsvs ^. gsvsView)
           let eitherSurface = (simulaView ^. svWlrEitherSurface)
@@ -667,6 +677,9 @@ initGodotSimulaServer obj = do
 
       gssStartingAppPids' <- newTVarIO M.empty :: IO (TVar (M.Map ProcessID [String]))
 
+      gssWindowsGrabbed' <- newTVarIO False
+      gssPreviousPovTransform'  <- newTVarIO Nothing
+
       let gss = GodotSimulaServer {
         _gssObj                   = obj                       :: GodotObject
       , _gssWaylandDisplay        = gssWaylandDisplay'        :: TVar GodotWaylandDisplay
@@ -698,6 +711,8 @@ initGodotSimulaServer obj = do
       , _gssStartingAppTransform  = gssStartingAppTransform'  :: TVar (Maybe GodotTransform)
       , _gssPid                   = gssPid'                   :: String
       , _gssStartingAppPids       = gssStartingAppPids'       :: TVar (M.Map ProcessID [String])
+      , _gssPreviousPovTransform  = gssPreviousPovTransform'  :: TVar (Maybe GodotTransform)
+      , _gssWindowsGrabbed        = gssWindowsGrabbed'        :: TVar Bool
       }
   return gss
   where getStartingAppsStr :: Maybe String -> String
@@ -937,24 +952,49 @@ getHMDLookAtSprite gss = do
                             return $ Just (gsvs, surfaceLocalCoords)
   return ret
 
+
 physicsProcess :: GodotSimulaServer -> [GodotVariant] -> IO ()
 physicsProcess gss _ = do
-  arvrCameraTransform <- getARVRCameraOrPancakeCameraTransform gss
-
   maybeKeyboardGrabbedGSVS <- readTVarIO (gss ^. gssKeyboardGrabbedSprite)
   maybeLookAtGSVS <- getHMDLookAtSprite gss
   gsvsActiveCursor <- readTVarIO (gss ^. gssActiveCursorGSVS)
+  maybeWindowsGrabbed <- readTVarIO (gss ^. gssWindowsGrabbed)
 
-  case (maybeKeyboardGrabbedGSVS, maybeLookAtGSVS) of
-    (Just (gsvs, dist), _) -> do setInFrontOfUser gsvs dist
-                                 orientSpriteTowardsGaze gsvs
-    (Nothing, Just (gsvs, surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)))) -> case gsvsActiveCursor of
+  case (maybeWindowsGrabbed, maybeKeyboardGrabbedGSVS, maybeLookAtGSVS) of
+    -- (True, _, _) -> do return ()
+    (True, _, _) -> do maybePreviousPovTransform <- readTVarIO (gss ^. gssPreviousPovTransform)
+                       inverseDiffTransform <- case maybePreviousPovTransform of
+                                                    Nothing -> do let idTransform = TF (identity :: M33 Float) (V3 0 0 0)
+                                                                  logPutStrLn $ "physicsProcess idTransform: " ++ (show idTransform)
+                                                                  toLowLevel idTransform
+                                                    Just prevTransform -> do prevTransformInverse <- Api.godot_transform_affine_inverse prevTransform
+                                                                             povTransform <- getARVRCameraOrPancakeCameraTransform gss
+                                                                             diffTransform <- Api.godot_transform_operator_multiply povTransform prevTransformInverse
+                                                                             -- See https://github.com/godotengine/godot-headers/blob/master/gdnative/transform.h
+                                                                             -- prevOrigin <- Api.godot_transform_get_origin prevTransform
+                                                                             -- prevBasis <- Api.godot_transform_get_basis prevTransform
+                                                                             -- origin <- Api.godot_transform_get_origin povTransform
+                                                                             -- basisasis <- Api.godot_transform_get_basis povTransform
+                                                                             inverseDiffTransform <- Api.godot_transform_affine_inverse diffTransform
+                                                                             grabWindowsTransform <- Api.godot_transform_operator_multiply inverseDiffTransform povTransform
+                                                                             diffTransform' <- fromLowLevel diffTransform
+                                                                             grabWindowsTransform' <- fromLowLevel grabWindowsTransform
+                                                                             -- logPutStrLn $ "physicsProcess diffTransform: " ++ (show diffTransform')
+                                                                             -- logPutStrLn $ "physicsProcess grabWindowsTransform: " ++ (show grabWindowsTransform')
+                                                                             logPutStrLn $ "physicsProcess inverseDiffTransform: " ++ (show grabWindowsTransform')
+                                                                             -- atomically $ writeTVar (gss ^. gssPreviousPovTransform) (Just povTransform) -- Why don't we have to update this every frame?! But it works??
+                                                                             return inverseDiffTransform
+                       setARVROriginTransform gss inverseDiffTransform
+    (False, Just (gsvs, dist), _) -> do
+      logPutStrLn $ "physicsProcess gsvs grab detected, placing in front of user and orienting towards gaze"
+      setInFrontOfUser gsvs dist
+      orientSpriteTowardsGaze gsvs
+    (False, Nothing, Just (gsvs, surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)))) -> case gsvsActiveCursor of
                                                                                             Nothing -> focus gsvs
                                                                                             Just gsvsActiveCursor' -> if (gsvs /= gsvsActiveCursor') then (focus gsvs) else return () -- (safeSetActivated gsvs True)
     _ -> return ()
 
   return ()
-
 -- Run shell command with DISPLAY set to its original (typically :1).
 shellCmd1 :: GodotSimulaServer -> String -> IO ()
 shellCmd1 gss appStr = do
@@ -987,7 +1027,7 @@ _on_simula_shortcut gss [scancodeWithModifiers', isPressed'] = do
                  True -> if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
 
   where keyboardGrabLetGo' :: Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates) -> IO ()
-        keyboardGrabLetGo' (Just (gsvs, _)) = do keyboardGrabLetGo gsvs
+        keyboardGrabLetGo' (Just (gsvs, _)) = do keyboardGrabLetGo (Left gsvs)
         keyboardGrabLetGo' _ = return ()
 
         extractMods :: Int -> [Int]

@@ -544,31 +544,6 @@ moveSpriteAlongObjectZAxis gsvs dist = do
   G.translate_object_local gsvs pushBackVector
   return ()
 
--- Sets gssKeyboardGrabbedSprite to `Just (gsvs, dist)`
-keyboardGrabInitiate :: GodotSimulaViewSprite -> IO ()
-keyboardGrabInitiate gsvs = do
-  gss <- readTVarIO (gsvs ^. gsvsServer)
-  simulaView <- readTVarIO (gsvs ^. gsvsView)
-  isInSceneGraph <- G.is_a_parent_of ((safeCast gss) :: GodotNode ) ((safeCast gsvs) :: GodotNode)
-  case isInSceneGraph of
-    False -> keyboardGrabLetGo gsvs
-    True -> do gss <- readTVarIO $ (gsvs ^. gsvsServer)
-               -- Compute dist
-               orientSpriteTowardsGaze gsvs
-               posGSVS <- (G.get_global_transform gsvs) >>= Api.godot_transform_get_origin
-               hmdTransform <- getARVRCameraOrPancakeCameraTransform gss
-               posHMD  <- Api.godot_transform_get_origin hmdTransform
-               dist <- realToFrac <$> Api.godot_vector3_distance_to posGSVS posHMD
-               -- Load state
-               atomically $ writeTVar (gss ^. gssKeyboardGrabbedSprite) (Just (gsvs, (-dist)))
-  return ()
-
--- Sets gssKeyboardGrabbedSprite to `Nothing`
-keyboardGrabLetGo :: GodotSimulaViewSprite -> IO ()
-keyboardGrabLetGo gsvs = do
-  gss <- readTVarIO $ (gsvs ^. gsvsServer)
-  atomically $ writeTVar (gss ^. gssKeyboardGrabbedSprite) Nothing
-
 setInFrontOfUser :: GodotSimulaViewSprite -> Float -> IO ()
 setInFrontOfUser gsvs zAxisDist = do
   gsvsScale <- G.get_scale (safeCast gsvs :: GodotSpatial)
@@ -839,7 +814,7 @@ handle_unmap_base self [wlrXWaylandSurfaceVariant] = do
   freeChildrenMap <- readTVarIO (gss ^. gssFreeChildren)
   wlrXWaylandSurface <- fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface
 
-  keyboardGrabLetGo self
+  keyboardGrabLetGo (Left self)
 
   G.reference wlrXWaylandSurface
   let maybeGSVSParent = M.lookup wlrXWaylandSurface freeChildrenMap

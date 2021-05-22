@@ -68,6 +68,9 @@ import Godot.Core.GodotViewport as G
 import Data.Map.Ordered as MO
 import Dhall
 
+instance Show Transform where
+  show tf = (show (_tfBasis tf)) ++ (" w/position: ") ++ (show (_tfPosition tf))
+
 instance Show GodotWlrXWaylandSurface where
   show wlrXWaylandSurface = (show (coerce wlrXWaylandSurface :: Ptr ()))
 instance Show GodotWlrXdgSurface where
@@ -183,11 +186,13 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssStartingAppTransform  :: TVar (Maybe GodotTransform)
   , _gssPid                   :: String
   , _gssStartingAppPids       :: TVar (M.Map ProcessID [String])
+  , _gssPreviousPovTransform  :: TVar (Maybe GodotTransform)
+  , _gssWindowsGrabbed        :: TVar Bool
   }
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
@@ -582,7 +587,7 @@ getARVRCameraOrPancakeCameraTransform gss = do
                     G.get_camera_transform camera
         True ->  do gssNode  <- G.get_node ((safeCast gss) :: GodotNode) nodePath
                     let arvrCamera = (coerce gssNode) :: GodotARVRCamera -- HACK: We use `coerce` instead of something more proper
-                    G.get_global_transform (arvrCamera)
+                    G.get_transform (arvrCamera)
   Api.godot_node_path_destroy nodePath
   return transform
   where getViewportCamera :: GodotSimulaServer -> IO GodotCamera
@@ -590,6 +595,29 @@ getARVRCameraOrPancakeCameraTransform gss = do
           viewport <- G.get_viewport gss :: IO GodotViewport
           camera <- G.get_camera viewport :: IO GodotCamera
           return camera
+
+
+getARVROrigin :: GodotSimulaServer -> IO (Maybe GodotSpatial)
+getARVROrigin gss = do
+  let nodePathStr = "/root/Root/VRViewport/ARVROrigin"
+  nodePath <- (toLowLevel (pack nodePathStr))
+  hasNode  <- G.has_node ((safeCast gss) :: GodotNode) nodePath
+  maybeArvrOrigin <- case hasNode of
+        False -> do
+          putStrLn "getARVROrigin failure to find node!"
+          return Nothing
+        True ->  do arvrOriginNode  <- G.get_node ((safeCast gss) :: GodotNode) nodePath
+                    let arvrOrigin = (coerce arvrOriginNode) :: GodotSpatial -- HACK: We use `coerce` instead of something more proper
+                    return (Just arvrOrigin)
+  Api.godot_node_path_destroy nodePath
+  return maybeArvrOrigin
+
+setARVROriginTransform :: GodotSimulaServer -> GodotTransform -> IO ()
+setARVROriginTransform gss godotTransform = do
+  maybeArvrOrigin <- getARVROrigin gss
+  case maybeArvrOrigin of
+    Just arvrOrigin -> G.set_transform arvrOrigin godotTransform
+    Nothing -> putStrLn "Unable to get arvr origin node to set its transform!"
 
 showGSVS :: GodotSimulaViewSprite -> IO String
 showGSVS gsvs = do
@@ -622,6 +650,11 @@ logGSVS str gsvs = do
 logStr :: String -> IO ()
 logStr string = do
   appendFile "./log/log.txt" $ string ++ "\n"
+
+logPutStrLn :: String -> IO ()
+logPutStrLn string = do
+  logStr string
+  putStrLn string
 
 -- | returns Just pid or Nothing if process has already exited
 getPid :: ProcessHandle -> IO (Maybe ProcessID)
@@ -1185,3 +1218,68 @@ getSimulaStartingLocationAtomically gss pids = do
        ([], Nothing) -> return Nothing
        (pid:pids, Nothing) -> do
          getSimulaStartingLocationAtomically gss pids
+
+keyboardGrabInitiate :: Either GodotSimulaViewSprite GodotSimulaServer -> IO ()
+keyboardGrabInitiate (Left gsvs) = do
+  logPutStrLn $ "keyboardGrabInitiate (Left gsvs)"
+  gss <- readTVarIO (gsvs ^. gsvsServer)
+  -- Ensure that we aren't keyboard grabbing all windows
+  keyboardGrabLetGo (Right gss)
+
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  isInSceneGraph <- G.is_a_parent_of ((safeCast gss) :: GodotNode ) ((safeCast gsvs) :: GodotNode)
+  case isInSceneGraph of
+    False -> keyboardGrabLetGo (Left gsvs)
+    True -> do gss <- readTVarIO $ (gsvs ^. gsvsServer)
+               -- Compute dist
+               orientSpriteTowardsGaze gsvs
+               posGSVS <- (G.get_global_transform gsvs) >>= Api.godot_transform_get_origin
+               hmdTransform <- getARVRCameraOrPancakeCameraTransform gss
+               posHMD  <- Api.godot_transform_get_origin hmdTransform
+               dist <- realToFrac <$> Api.godot_vector3_distance_to posGSVS posHMD
+               -- Load state
+               atomically $ writeTVar (gss ^. gssKeyboardGrabbedSprite) (Just (gsvs, (-dist)))
+  return ()
+keyboardGrabInitiate (Right gss) = do
+  -- Ensure that we aren't keyboard grabbing another gsvs
+  logPutStrLn $ "keyboardGrabInitiate (Right gss)"
+  atomically $ writeTVar (gss ^. gssKeyboardGrabbedSprite) Nothing
+
+  povTransform <- getARVRCameraOrPancakeCameraTransform gss
+  atomically $ writeTVar (gss ^. gssWindowsGrabbed) True
+  atomically $ writeTVar (gss ^. gssPreviousPovTransform) (Just povTransform)
+
+keyboardGrabLetGo :: Either GodotSimulaViewSprite GodotSimulaServer -> IO ()
+keyboardGrabLetGo (Left gsvs) = do
+  logPutStrLn $ "keyboardGrabLetGo (Left gsvs)"
+  gss <- readTVarIO $ (gsvs ^. gsvsServer)
+  atomically $ writeTVar (gss ^. gssKeyboardGrabbedSprite) Nothing
+keyboardGrabLetGo (Right gss) = do
+  logPutStrLn $ "keyboardGrabLetGo (Right gss)"
+  -- This code works if we want to rotate everything in one go, rather than frame-by-frame:
+  -- maybePreviousPovTransform <- readTVarIO (gss ^. gssPreviousPovTransform)
+  -- grabWindowsTransform <- case maybePreviousPovTransform of
+  --                              Nothing -> do let idTransform = TF (identity :: M33 Float) (V3 0 0 0)
+  --                                            logPutStrLn $ "physicsProcess idTransform: " ++ (show idTransform)
+  --                                            toLowLevel idTransform
+  --                              Just prevTransform -> do prevTransformInverse <- Api.godot_transform_affine_inverse prevTransform
+  --                                                       povTransform <- getARVRCameraOrPancakeCameraTransform gss
+  --                                                       diffTransform <- Api.godot_transform_operator_multiply povTransform prevTransformInverse
+  --                                                       -- See https://github.com/godotengine/godot-headers/blob/master/gdnative/transform.h
+  --                                                       -- prevOrigin <- Api.godot_transform_get_origin prevTransform
+  --                                                       -- prevBasis <- Api.godot_transform_get_basis prevTransform
+  --                                                       -- origin <- Api.godot_transform_get_origin povTransform
+  --                                                       -- basisasis <- Api.godot_transform_get_basis povTransform
+  --                                                       inverseDiffTransform <- Api.godot_transform_affine_inverse diffTransform
+  --                                                       grabWindowsTransform <- Api.godot_transform_operator_multiply inverseDiffTransform povTransform
+  --                                                       diffTransform' <- fromLowLevel diffTransform
+  --                                                       grabWindowsTransform' <- fromLowLevel grabWindowsTransform
+  --                                                       logPutStrLn $ "physicsProcess diffTransform: " ++ (show diffTransform')
+  --                                                       logPutStrLn $ "physicsProcess grabWindowsTransform: " ++ (show grabWindowsTransform')
+  --                                                       -- atomically $ writeTVar (gss ^. gssPreviousPovTransform) (Just povTransform)
+  --                                                       return inverseDiffTransform -- grabWindowsTransform
+  -- setARVROriginTransform gss grabWindowsTransform
+
+  atomically $ writeTVar (gss ^. gssPreviousPovTransform) Nothing
+  atomically $ writeTVar (gss ^. gssWindowsGrabbed) False
+
