@@ -488,7 +488,10 @@ ready gss _ = do
   -- Adding a `WorldEnvironment` anywhere to an active scene graph
   -- overrides the default environment
   (worldEnvironment, _) <- readTVarIO (gss ^. gssWorldEnvironment)
-  addChild gss worldEnvironment
+  maybeArvrOrigin <- getARVROrigin gss
+  case maybeArvrOrigin of
+    Just arvrOrigin -> addChild arvrOrigin worldEnvironment
+    Nothing -> addChild gss worldEnvironment
 
   -- Launch default apps
   sApps <- readTVarIO (gss ^. gssStartingApps)
