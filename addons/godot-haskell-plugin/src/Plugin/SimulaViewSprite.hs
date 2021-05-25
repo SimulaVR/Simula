@@ -550,7 +550,7 @@ setInFrontOfUser gsvs zAxisDist = do
   gss <- readTVarIO (gsvs ^. gsvsServer)
   rotationAxisY <- toLowLevel (V3 0 1 0) :: IO GodotVector3
   pushBackVector <- toLowLevel (V3 0 0 zAxisDist) :: IO GodotVector3
-  hmdGlobalTransform <- getARVRCameraOrPancakeCameraTransform gss
+  hmdGlobalTransform <- getARVRCameraOrPancakeCameraTransformGlobal gss
   G.set_global_transform gsvs hmdGlobalTransform
   G.translate_object_local gsvs pushBackVector
   G.rotate_object_local gsvs rotationAxisY 3.14159

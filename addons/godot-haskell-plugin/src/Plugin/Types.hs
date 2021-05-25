@@ -188,11 +188,12 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssStartingAppPids       :: TVar (M.Map ProcessID [String])
   , _gssPreviousPovTransform  :: TVar (Maybe GodotTransform)
   , _gssWindowsGrabbed        :: TVar Bool
+  , _gssWindowsGrabbedDiff    :: TVar GodotTransform
   }
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
@@ -596,28 +597,24 @@ getARVRCameraOrPancakeCameraTransform gss = do
           camera <- G.get_camera viewport :: IO GodotCamera
           return camera
 
-
-getARVROrigin :: GodotSimulaServer -> IO (Maybe GodotSpatial)
-getARVROrigin gss = do
-  let nodePathStr = "/root/Root/VRViewport/ARVROrigin"
-  nodePath <- (toLowLevel (pack nodePathStr))
-  hasNode  <- G.has_node ((safeCast gss) :: GodotNode) nodePath
-  maybeArvrOrigin <- case hasNode of
-        False -> do
-          putStrLn "getARVROrigin failure to find node!"
-          return Nothing
-        True ->  do arvrOriginNode  <- G.get_node ((safeCast gss) :: GodotNode) nodePath
-                    let arvrOrigin = (coerce arvrOriginNode) :: GodotSpatial -- HACK: We use `coerce` instead of something more proper
-                    return (Just arvrOrigin)
+getARVRCameraOrPancakeCameraTransformGlobal :: GodotSimulaServer -> IO GodotTransform
+getARVRCameraOrPancakeCameraTransformGlobal gss = do
+  let nodePathStr = "/root/Root/VRViewport/ARVROrigin/ARVRCamera"
+  nodePath <- (toLowLevel (pack nodePathStr)) :: IO GodotNodePath
+  hasNode  <- G.has_node gss (nodePath :: GodotNodePath)
+  transform <- case hasNode of
+        False -> do camera <- getViewportCamera gss
+                    G.get_camera_transform camera
+        True ->  do gssNode  <- G.get_node ((safeCast gss) :: GodotNode) nodePath
+                    let arvrCamera = (coerce gssNode) :: GodotARVRCamera -- HACK: We use `coerce` instead of something more proper
+                    G.get_global_transform (arvrCamera)
   Api.godot_node_path_destroy nodePath
-  return maybeArvrOrigin
-
-setARVROriginTransform :: GodotSimulaServer -> GodotTransform -> IO ()
-setARVROriginTransform gss godotTransform = do
-  maybeArvrOrigin <- getARVROrigin gss
-  case maybeArvrOrigin of
-    Just arvrOrigin -> G.set_transform arvrOrigin godotTransform
-    Nothing -> putStrLn "Unable to get arvr origin node to set its transform!"
+  return transform
+  where getViewportCamera :: GodotSimulaServer -> IO GodotCamera
+        getViewportCamera gss = do
+          viewport <- G.get_viewport gss :: IO GodotViewport
+          camera <- G.get_camera viewport :: IO GodotCamera
+          return camera
 
 showGSVS :: GodotSimulaViewSprite -> IO String
 showGSVS gsvs = do
@@ -918,7 +915,7 @@ orientSpriteTowardsGaze gsvs = do
     True -> do gss <- readTVarIO (gsvs ^. gsvsServer)
                upV3 <- toLowLevel (V3 0 1 0) :: IO GodotVector3
                rotationAxisY <- toLowLevel (V3 0 1 0) :: IO GodotVector3
-               targetV3 <- getARVRCameraOrPancakeCameraTransform gss >>= Api.godot_transform_get_origin -- void look_at ( Vector3 target, Vector3 up )
+               targetV3 <- getARVRCameraOrPancakeCameraTransformGlobal gss >>= Api.godot_transform_get_origin -- void look_at ( Vector3 target, Vector3 up )
                G.look_at gsvs targetV3 upV3                      -- The negative z-axis of the gsvs looks at HMD
                return ()
                -- G.rotate_object_local gsvs rotationAxisY 3.14159  -- The positive z-axis of the gsvs looks at HMD
@@ -1234,7 +1231,7 @@ keyboardGrabInitiate (Left gsvs) = do
                -- Compute dist
                orientSpriteTowardsGaze gsvs
                posGSVS <- (G.get_global_transform gsvs) >>= Api.godot_transform_get_origin
-               hmdTransform <- getARVRCameraOrPancakeCameraTransform gss
+               hmdTransform <- getARVRCameraOrPancakeCameraTransformGlobal gss
                posHMD  <- Api.godot_transform_get_origin hmdTransform
                dist <- realToFrac <$> Api.godot_vector3_distance_to posGSVS posHMD
                -- Load state
@@ -1242,44 +1239,31 @@ keyboardGrabInitiate (Left gsvs) = do
   return ()
 keyboardGrabInitiate (Right gss) = do
   -- Ensure that we aren't keyboard grabbing another gsvs
-  logPutStrLn $ "keyboardGrabInitiate (Right gss)"
-  atomically $ writeTVar (gss ^. gssKeyboardGrabbedSprite) Nothing
-
   povTransform <- getARVRCameraOrPancakeCameraTransform gss
-  atomically $ writeTVar (gss ^. gssWindowsGrabbed) True
-  atomically $ writeTVar (gss ^. gssPreviousPovTransform) (Just povTransform)
+  atomically $ do
+    writeTVar (gss ^. gssKeyboardGrabbedSprite) Nothing
+    writeTVar (gss ^. gssWindowsGrabbed) True
+    writeTVar (gss ^. gssPreviousPovTransform) (Just povTransform)
 
 keyboardGrabLetGo :: Either GodotSimulaViewSprite GodotSimulaServer -> IO ()
 keyboardGrabLetGo (Left gsvs) = do
-  logPutStrLn $ "keyboardGrabLetGo (Left gsvs)"
   gss <- readTVarIO $ (gsvs ^. gsvsServer)
   atomically $ writeTVar (gss ^. gssKeyboardGrabbedSprite) Nothing
 keyboardGrabLetGo (Right gss) = do
-  logPutStrLn $ "keyboardGrabLetGo (Right gss)"
-  -- This code works if we want to rotate everything in one go, rather than frame-by-frame:
-  -- maybePreviousPovTransform <- readTVarIO (gss ^. gssPreviousPovTransform)
-  -- grabWindowsTransform <- case maybePreviousPovTransform of
-  --                              Nothing -> do let idTransform = TF (identity :: M33 Float) (V3 0 0 0)
-  --                                            logPutStrLn $ "physicsProcess idTransform: " ++ (show idTransform)
-  --                                            toLowLevel idTransform
-  --                              Just prevTransform -> do prevTransformInverse <- Api.godot_transform_affine_inverse prevTransform
-  --                                                       povTransform <- getARVRCameraOrPancakeCameraTransform gss
-  --                                                       diffTransform <- Api.godot_transform_operator_multiply povTransform prevTransformInverse
-  --                                                       -- See https://github.com/godotengine/godot-headers/blob/master/gdnative/transform.h
-  --                                                       -- prevOrigin <- Api.godot_transform_get_origin prevTransform
-  --                                                       -- prevBasis <- Api.godot_transform_get_basis prevTransform
-  --                                                       -- origin <- Api.godot_transform_get_origin povTransform
-  --                                                       -- basisasis <- Api.godot_transform_get_basis povTransform
-  --                                                       inverseDiffTransform <- Api.godot_transform_affine_inverse diffTransform
-  --                                                       grabWindowsTransform <- Api.godot_transform_operator_multiply inverseDiffTransform povTransform
-  --                                                       diffTransform' <- fromLowLevel diffTransform
-  --                                                       grabWindowsTransform' <- fromLowLevel grabWindowsTransform
-  --                                                       logPutStrLn $ "physicsProcess diffTransform: " ++ (show diffTransform')
-  --                                                       logPutStrLn $ "physicsProcess grabWindowsTransform: " ++ (show grabWindowsTransform')
-  --                                                       -- atomically $ writeTVar (gss ^. gssPreviousPovTransform) (Just povTransform)
-  --                                                       return inverseDiffTransform -- grabWindowsTransform
-  -- setARVROriginTransform gss grabWindowsTransform
+  gssTransform <- G.get_transform gss
+  atomically $ do
+    writeTVar (gss ^. gssWindowsGrabbedDiff) gssTransform
+    writeTVar (gss ^. gssPreviousPovTransform) Nothing
+    writeTVar (gss ^. gssWindowsGrabbed) False
 
-  atomically $ writeTVar (gss ^. gssPreviousPovTransform) Nothing
-  atomically $ writeTVar (gss ^. gssWindowsGrabbed) False
-
+getWindowsGrabbedDiff :: GodotSimulaServer -> IO GodotTransform
+getWindowsGrabbedDiff gss = do
+  maybePreviousPovTransform <- readTVarIO (gss ^. gssPreviousPovTransform)
+  diffTransform  <- case maybePreviousPovTransform of
+                        Nothing -> do let idTransform = TF (identity :: M33 Float) (V3 0 0 0)
+                                      toLowLevel idTransform
+                        Just prevTransform -> do prevTransformInverse <- Api.godot_transform_affine_inverse prevTransform
+                                                 povTransform <- getARVRCameraOrPancakeCameraTransform gss
+                                                 diffTransform <- Api.godot_transform_operator_multiply povTransform prevTransformInverse
+                                                 return diffTransform
+  return diffTransform

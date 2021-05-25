@@ -488,10 +488,7 @@ ready gss _ = do
   -- Adding a `WorldEnvironment` anywhere to an active scene graph
   -- overrides the default environment
   (worldEnvironment, _) <- readTVarIO (gss ^. gssWorldEnvironment)
-  maybeArvrOrigin <- getARVROrigin gss
-  case maybeArvrOrigin of
-    Just arvrOrigin -> addChild arvrOrigin worldEnvironment
-    Nothing -> addChild gss worldEnvironment
+  addChild gss worldEnvironment
 
   -- Launch default apps
   sApps <- readTVarIO (gss ^. gssStartingApps)
@@ -682,6 +679,9 @@ initGodotSimulaServer obj = do
 
       gssWindowsGrabbed' <- newTVarIO False
       gssPreviousPovTransform'  <- newTVarIO Nothing
+      let idTransform = TF (identity :: M33 Float) (V3 0 0 0)
+      idTransform' <- toLowLevel idTransform
+      gssWindowsGrabbedDiff' <- newTVarIO idTransform'
 
       let gss = GodotSimulaServer {
         _gssObj                   = obj                       :: GodotObject
@@ -716,6 +716,7 @@ initGodotSimulaServer obj = do
       , _gssStartingAppPids       = gssStartingAppPids'       :: TVar (M.Map ProcessID [String])
       , _gssPreviousPovTransform  = gssPreviousPovTransform'  :: TVar (Maybe GodotTransform)
       , _gssWindowsGrabbed        = gssWindowsGrabbed'        :: TVar Bool
+      , _gssWindowsGrabbedDiff    = gssWindowsGrabbedDiff'    :: TVar GodotTransform
       }
   return gss
   where getStartingAppsStr :: Maybe String -> String
@@ -943,7 +944,7 @@ getHMDLookAtSprite :: GodotSimulaServer -> IO (Maybe (GodotSimulaViewSprite, Sur
 getHMDLookAtSprite gss = do
   rc <- readTVarIO (gss ^.  gssHMDRayCast)
   G.force_raycast_update rc -- Necessary to avoid crashes
-  hmdGlobalTransform <- getARVRCameraOrPancakeCameraTransform gss
+  hmdGlobalTransform <- getARVRCameraOrPancakeCameraTransformGlobal gss
   G.set_global_transform rc hmdGlobalTransform
 
   isColliding <- G.is_colliding rc
@@ -964,32 +965,12 @@ physicsProcess gss _ = do
   maybeWindowsGrabbed <- readTVarIO (gss ^. gssWindowsGrabbed)
 
   case (maybeWindowsGrabbed, maybeKeyboardGrabbedGSVS, maybeLookAtGSVS) of
-    -- (True, _, _) -> do return ()
-    (True, _, _) -> do maybePreviousPovTransform <- readTVarIO (gss ^. gssPreviousPovTransform)
-                       inverseDiffTransform <- case maybePreviousPovTransform of
-                                                    Nothing -> do let idTransform = TF (identity :: M33 Float) (V3 0 0 0)
-                                                                  logPutStrLn $ "physicsProcess idTransform: " ++ (show idTransform)
-                                                                  toLowLevel idTransform
-                                                    Just prevTransform -> do prevTransformInverse <- Api.godot_transform_affine_inverse prevTransform
-                                                                             povTransform <- getARVRCameraOrPancakeCameraTransform gss
-                                                                             diffTransform <- Api.godot_transform_operator_multiply povTransform prevTransformInverse
-                                                                             -- See https://github.com/godotengine/godot-headers/blob/master/gdnative/transform.h
-                                                                             -- prevOrigin <- Api.godot_transform_get_origin prevTransform
-                                                                             -- prevBasis <- Api.godot_transform_get_basis prevTransform
-                                                                             -- origin <- Api.godot_transform_get_origin povTransform
-                                                                             -- basisasis <- Api.godot_transform_get_basis povTransform
-                                                                             inverseDiffTransform <- Api.godot_transform_affine_inverse diffTransform
-                                                                             grabWindowsTransform <- Api.godot_transform_operator_multiply inverseDiffTransform povTransform
-                                                                             diffTransform' <- fromLowLevel diffTransform
-                                                                             grabWindowsTransform' <- fromLowLevel grabWindowsTransform
-                                                                             -- logPutStrLn $ "physicsProcess diffTransform: " ++ (show diffTransform')
-                                                                             -- logPutStrLn $ "physicsProcess grabWindowsTransform: " ++ (show grabWindowsTransform')
-                                                                             logPutStrLn $ "physicsProcess inverseDiffTransform: " ++ (show grabWindowsTransform')
-                                                                             -- atomically $ writeTVar (gss ^. gssPreviousPovTransform) (Just povTransform) -- Why don't we have to update this every frame?! But it works??
-                                                                             return inverseDiffTransform
-                       setARVROriginTransform gss inverseDiffTransform
+    (True, _, _) -> do
+      diff <- getWindowsGrabbedDiff gss
+      diffPrev <- readTVarIO (gss ^. gssWindowsGrabbedDiff)
+      diffComposed <- Api.godot_transform_operator_multiply diff diffPrev
+      G.set_transform gss diffComposed
     (False, Just (gsvs, dist), _) -> do
-      logPutStrLn $ "physicsProcess gsvs grab detected, placing in front of user and orienting towards gaze"
       setInFrontOfUser gsvs dist
       orientSpriteTowardsGaze gsvs
     (False, Nothing, Just (gsvs, surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)))) -> case gsvsActiveCursor of
@@ -1027,6 +1008,7 @@ _on_simula_shortcut gss [scancodeWithModifiers', isPressed'] = do
     Nothing -> case isPressed of
                  False -> do if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
                              keyboardGrabLetGo' maybeHMDLookAtSprite -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
+                             keyboardGrabLetGo (Right gss) -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
                  True -> if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
 
   where keyboardGrabLetGo' :: Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates) -> IO ()
