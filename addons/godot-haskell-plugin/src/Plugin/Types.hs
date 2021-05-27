@@ -1218,7 +1218,6 @@ getSimulaStartingLocationAtomically gss pids = do
 
 keyboardGrabInitiate :: Either GodotSimulaViewSprite GodotSimulaServer -> IO ()
 keyboardGrabInitiate (Left gsvs) = do
-  logPutStrLn $ "keyboardGrabInitiate (Left gsvs)"
   gss <- readTVarIO (gsvs ^. gsvsServer)
   -- Ensure that we aren't keyboard grabbing all windows
   keyboardGrabLetGo (Right gss)
