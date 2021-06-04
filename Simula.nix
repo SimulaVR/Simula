@@ -174,7 +174,7 @@ let
         && (baseNameOf (builtins.dirOf path) != "log")            # Don't let log/* files confuse cachix
         && (baseNameOf (builtins.dirOf path) != "config")         # Don't let user config file alterations confuse cachix
         && (baseNameOf (builtins.dirOf path) != "png")            # Don't let user pictures confuse cachix
-        && (baseNameOf (builtins.dirOf path) != "rr")             # Don't let rr traces confuse cachix
+        && (baseNameOf (builtins.dirOf path) != "./addons/godot-haskell-plugin/libgodot-haskell-plugin.so") # Ignore this (useful when switching to dev branch)
         # && (baseNameOf path != ".git")                          # Nix/cachix already isn't confused by this
         # && (baseNameOf path != "result")                        # "
       ) ./.;
