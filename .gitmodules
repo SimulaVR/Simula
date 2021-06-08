@@ -29,3 +29,6 @@
 	path = submodules/pernosco-submit
 	url = https://github.com/Pernosco/pernosco-submit.git
 	shallow = true
+[submodule "submodules/cabal"]
+	path = submodules/cabal
+	url = https://github.com/SimulaVR/cabal.git

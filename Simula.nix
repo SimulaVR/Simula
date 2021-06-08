@@ -24,6 +24,8 @@ let
     godot-api = "${godot}/bin/api.json";
     godot-haskell = haskellPackages.callPackage ./submodules/godot-haskell/godot-haskell.nix { api-json = godot-api; };
     godot-haskell-plugin = haskellPackages.callPackage ./addons/godot-haskell-plugin/godot-haskell-plugin.nix { devBuild = devBuild; onNixOS = onNixOS; pkgs = import ./pinned-nixpkgs.nix; godot = godot; godot-haskell = godot-haskell; };
+    haskellCallPkgNoProfile = (import ./pinned-nixpkgs.nix { }).haskellPackages.callPackage;
+    cabal-install = haskellCallPkgNoProfile ./submodules/cabal/cabal-install/cabal-install.nix { };
 
     ghc-version = ghc.version;
 
@@ -106,6 +108,9 @@ let
       tar -xvf ${wayland-dev.src} --directory $out/srcs/wayland --strip-components=1
       ln -s ${pernoscoSubmit}/bin/pernosco_submit $out/bin/pernosco_submit
       ln -s ${rrSources}/bin/rr_sources $out/bin/rr_sources
+
+      ln -s ${cabal-install}/bin/cabal $out/bin/cabal
+
      '';
 
     devBuildScript = if (devBuild == true) then devBuildTrue else devBuildFalse;
