@@ -261,14 +261,20 @@ nsBuildGodotHaskell() {
   cd -
 
   cd ./submodules/godot-haskell-cabal
-  nix-shell -Q --attr env release.nix --run "./updateApiJSON.sh"
+  if [ -z $1 ]; then
+    nix-shell -Q --attr env release.nix --run "./updateApiJSON.sh"
+  elif [ $1 == "--profile" ]; then
+    nix-shell -Q --attr env --arg profileBuild true release.nix --run "./updateApiJSON.sh"
+  fi
   cd -
 }
 
 nsBuildGodotHaskellPlugin() {
   cd ./addons/godot-haskell-plugin
   if [ -z $1 ]; then
-    nix-shell -Q --attr env shell.nix --run "cabal build"
+    nix-shell -Q --attr env shell.nix --run "../../result/bin/cabal build"
+  elif [ $1 == "--profile" ]; then
+    nix-shell -Q --attr env shell.nix --arg profileBuild true --run "../../result/bin/cabal --enable-profiling build --ghc-options=\"-fprof-auto -rtsopts -fPIC -fexternal-dynamic-refs\""
   else
     nix-shell --attr env shell.nix --run "while inotifywait -qqre modify .; do cabal build; done"
   fi
@@ -284,8 +290,8 @@ nsBuildSimulaLocal() {
     installSimula 1
     nsBuildWlroots
     nsBuildGodot
-    nsBuildGodotHaskell
-    nsBuildGodotHaskellPlugin
+    nsBuildGodotHaskell "$1"
+    nsBuildGodotHaskellPlugin "$1"
     switchToLocal
 }
 

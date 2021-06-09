@@ -1,4 +1,4 @@
-{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, mimic, xsel, xclip, dialog, synapse, openxr-loader, xpra, valgrind, xorg, writeShellScriptBin, python3, awscli, wayland, wayland-protocols, valkyrie, zstd }:
+{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, mimic, xsel, xclip, dialog, synapse, openxr-loader, xpra, valgrind, xorg, writeShellScriptBin, python3, awscli, wayland, wayland-protocols, valkyrie, zstd, profileBuild ? false, pkgs }:
 let
 
     /* Modify a stdenv so that it produces debug builds; that is,
@@ -22,10 +22,16 @@ let
     glibc-locales = glibcLocales;
     godot = callPackage ./submodules/godot/godot.nix { devBuild = devBuild; onNixOS = onNixOS; pkgs = import ./pinned-nixpkgs.nix; };
     godot-api = "${godot}/bin/api.json";
-    godot-haskell = haskellPackages.callPackage ./submodules/godot-haskell/godot-haskell.nix { api-json = godot-api; };
-    godot-haskell-plugin = haskellPackages.callPackage ./addons/godot-haskell-plugin/godot-haskell-plugin.nix { devBuild = devBuild; onNixOS = onNixOS; pkgs = import ./pinned-nixpkgs.nix; godot = godot; godot-haskell = godot-haskell; };
+
+    haskellCallPkg = if profileBuild then (pkgs.haskellPackagesPIC.callPackage) else (haskellPackages.callPackage);
     haskellCallPkgNoProfile = (import ./pinned-nixpkgs.nix { }).haskellPackages.callPackage;
-    cabal-install = haskellCallPkgNoProfile ./submodules/cabal/cabal-install/cabal-install.nix { };
+    godot-haskell-classgen = haskellCallPkgNoProfile ./submodules/godot-haskell-cabal/classgen/classgen.nix { };
+    godot-haskell = haskellCallPkg ./submodules/godot-haskell/godot-haskell.nix { api-json = godot-api; profileBuild = profileBuild; godot-haskell-classgen = godot-haskell-classgen; };
+    godot-haskell-plugin = haskellCallPkg ./addons/godot-haskell-plugin/godot-haskell-plugin.nix { devBuild = devBuild; onNixOS = onNixOS; pkgs = import ./pinned-nixpkgs.nix; godot = godot; godot-haskell = godot-haskell; profileBuild = profileBuild; };
+
+    Cabal = haskellCallPkgNoProfile ./submodules/cabal/Cabal/Cabal.nix { };
+    hackage-security = haskellPackages.hackage-security.override { Cabal = Cabal; };
+    cabal-install = haskellCallPkgNoProfile ./submodules/cabal/cabal-install/cabal-install.nix { Cabal = Cabal; hackage-security = hackage-security; };
 
     ghc-version = ghc.version;
 
@@ -57,6 +63,13 @@ let
       echo "mkdir -p config" >> $out/bin/simula_local
       echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib LD_PRELOAD=./submodules/wlroots/build/libwlroots.so.0 \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_local
       chmod +x $out/bin/simula_local
+
+      # simula_local_profile
+      echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local_profile
+      echo "mkdir -p log" >> $out/bin/simula_local_profile
+      echo "mkdir -p config" >> $out/bin/simula_local_profile
+      echo "GHCRTS='-hc -p' PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib LD_PRELOAD=./submodules/wlroots/build/libwlroots.so.0 \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_local_profile
+      chmod +x $out/bin/simula_local_profile
 
       # simula_gdb
       echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib LD_PRELOAD=./submodules/wlroots/build/libwlroots.so.0 \$(./utils/GetNixGL.sh) gdb -x ./.gdbinit ./submodules/godot/bin/godot.x11.tools.64" >> $out/bin/simula_gdb
