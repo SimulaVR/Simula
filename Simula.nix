@@ -37,6 +37,8 @@ let
 
     rr = callPackage ./nix/rr/unstable.nix {};
 
+    libleak = callPackage ./nix/libleak/libleak.nix {};
+
     devBuildFalse = ''
       cp ./utils/GetNixGL.sh $out/bin/GetNixGL.sh
       ln -s ${godot}/bin/godot.x11.opt.debug.64 $out/bin/godot.x11.opt.debug.64
@@ -70,6 +72,13 @@ let
       echo "mkdir -p config" >> $out/bin/simula_local_profile
       echo "GHCRTS='-hc -p' PROFILE=1 PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib LD_PRELOAD=./submodules/wlroots/build/libwlroots.so.0 \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_local_profile
       chmod +x $out/bin/simula_local_profile
+
+      # simula_local_libleak
+      echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local
+      echo "mkdir -p log" >> $out/bin/simula_local_libleak
+      echo "mkdir -p config" >> $out/bin/simula_local_libleak
+      echo "LEAK_AFTER=30 PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib LD_PRELOAD=\"\$(${coreutils}/bin/realpath ./submodules/wlroots/build/libwlroots.so.0) \$(${coreutils}/bin/realpath ./result/bin/libleak.so)\" \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_local_libleak
+      chmod +x $out/bin/simula_local_libleak
 
       # simula_gdb
       echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib LD_PRELOAD=./submodules/wlroots/build/libwlroots.so.0 \$(./utils/GetNixGL.sh) gdb -x ./.gdbinit ./submodules/godot/bin/godot.x11.tools.64" >> $out/bin/simula_gdb
@@ -123,6 +132,7 @@ let
       ln -s ${rrSources}/bin/rr_sources $out/bin/rr_sources
 
       ln -s ${cabal-install}/bin/cabal $out/bin/cabal
+      ln -s ${libleak}/lib/libleak.so $out/bin/libleak.so
 
      '';
 
@@ -141,7 +151,7 @@ let
       exec ${midori}/bin/midori
       '';
 
-    simulaPackages = if devBuild == true then [] else [ godot godot-haskell-plugin ];
+    simulaPackages = if devBuild == true then [ valgrind libleak ] else [ godot godot-haskell-plugin ];
     linkGHP = if devBuild == true then "" else ''
       ln -s ${godot-haskell-plugin}/lib/ghc-${ghc-version}/libgodot-haskell-plugin.so $out/bin/libgodot-haskell-plugin.so;
     '';
@@ -197,7 +207,7 @@ let
         # && (baseNameOf path != "result")                        # "
       ) ./.;
 
-      buildInputs = [ xpra xrdb wmctrl fontconfig glibc-locales xfce4-terminal-wrapped openxr-loader midori-wrapped valgrind pernoscoSubmit ] ++ simulaPackages;
+      buildInputs = [ xpra xrdb wmctrl fontconfig glibc-locales xfce4-terminal-wrapped openxr-loader midori-wrapped pernoscoSubmit ] ++ simulaPackages;
       installPhase = ''
       mkdir -p $out/bin
       mkdir -p $out/srcs

@@ -32,3 +32,6 @@
 [submodule "submodules/cabal"]
 	path = submodules/cabal
 	url = https://github.com/SimulaVR/cabal.git
+[submodule "nix/libleak"]
+	path = nix/libleak
+	url = https://github.com/SimulaVR/libleak
