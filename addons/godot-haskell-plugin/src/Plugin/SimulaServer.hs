@@ -120,6 +120,7 @@ getKeyboardAction gss keyboardShortcut =
     "toggleScreenshotMode" -> toggleScreenshotMode
     "takeScreenshotGlobal" -> takeScreenshotGlobal
     "debugLogDepthFirstSurfaces" -> debugLogDepthFirstSurfaces
+    "debugPrint" -> debugPrint
     _ -> shellLaunch gss (keyboardShortcut ^. keyAction)
 
   where moveCursor :: SpriteLocation -> Bool -> IO ()
@@ -346,6 +347,11 @@ getKeyboardAction gss keyboardShortcut =
           return ()
         cycleEnvironment _ _ _ = do
           return ()
+
+        debugPrint :: SpriteLocation -> Bool -> IO ()
+        debugPrint _ True = do
+          putStrLn "debugPrint"
+        debugPrint _ _ = return ()
 
 isMask :: Int -> Bool
 isMask keyOrMask = elem keyOrMask [ G.KEY_MASK_SHIFT
