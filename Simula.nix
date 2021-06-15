@@ -74,7 +74,7 @@ let
       chmod +x $out/bin/simula_local_profile
 
       # simula_local_libleak
-      echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local
+      echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local_libleak
       echo "mkdir -p log" >> $out/bin/simula_local_libleak
       echo "mkdir -p config" >> $out/bin/simula_local_libleak
       echo "LEAK_AFTER=30 PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib LD_PRELOAD=\"\$(${coreutils}/bin/realpath ./submodules/wlroots/build/libwlroots.so.0) \$(${coreutils}/bin/realpath ./result/bin/libleak.so)\" \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_local_libleak
