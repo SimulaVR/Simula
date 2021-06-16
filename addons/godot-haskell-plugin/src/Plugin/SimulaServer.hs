@@ -799,43 +799,6 @@ _on_WlrXdgShell_new_surface gss [wlrXdgSurfaceVariant] = do
               , _gsvsUUID           = gsvsUUID' :: Maybe UUID
               }
 
-handle_map_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
-handle_map_surface gss [gsvsVariant] = do
-  putStrLn "handle_map_surface"
-  maybeGsvs <- variantToReg gsvsVariant :: IO (Maybe GodotSimulaViewSprite)
-  case maybeGsvs of
-    Nothing -> putStrLn "Failed to cast GodotSimulaViewSprite in handle_map_surface!"
-    Just gsvs -> do -- Delay adding the sprite to the scene graph until we know XCB intends for it to be mapped
-                    putStr "Mapping surface "
-                    print (safeCast @GodotObject gsvs)
-                    G.add_child ((safeCast gss) :: GodotNode )
-                                ((safeCast gsvs) :: GodotNode)
-                                True
-
-                    cb <- newCanvasBase gsvs
-                    viewportBase <- readTVarIO (cb ^. cbViewport)
-                    atomically $ writeTVar (gsvs ^. gsvsCanvasBase) cb
-                    G.set_process cb True
-                    addChild gsvs viewportBase
-                    addChild viewportBase cb
-
-                    cs <- newCanvasSurface gsvs
-                    viewportSurface <- readTVarIO (cs ^. csViewport)
-                    atomically $ writeTVar (gsvs ^. gsvsCanvasSurface) cs
-                    G.set_process cs True
-                    addChild gsvs viewportSurface
-                    addChild viewportSurface cs
-
-                    setInFrontOfUser gsvs (-2)
-
-                    V3 1 1 1 ^* (1 + 1 * 1) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
-
-                    focus gsvs -- We're relying on this to add references to wlrSurface :/
-
-                    simulaView <- atomically $ readTVar (gsvs ^. gsvsView)
-                    atomically $ writeTVar (simulaView ^. svMapped) True
-  return ()
-
 _on_wlr_key :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_wlr_key gss [keyboardGVar, eventGVar] = do
   wlrSeat <- readTVarIO (gss ^. gssWlrSeat)

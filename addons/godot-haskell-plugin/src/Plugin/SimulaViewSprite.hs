@@ -490,10 +490,36 @@ _handle_map gsvs _ = do
 
   G.set_process gsvs True
   G.set_process_input gsvs True
-  emitSignal gsvs "map" ([gsvs] :: [GodotSimulaViewSprite])
-  atomically $ writeTVar (simulaView ^. svMapped) True
   atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
   atomically $ writeTVar (_gsvsShouldMove gsvs) True
+
+  putStr "Mapping surface "
+  print (safeCast @GodotObject gsvs)
+  G.add_child ((safeCast gss) :: GodotNode )
+              ((safeCast gsvs) :: GodotNode)
+              True
+
+  cb <- newCanvasBase gsvs
+  viewportBase <- readTVarIO (cb ^. cbViewport)
+  atomically $ writeTVar (gsvs ^. gsvsCanvasBase) cb
+  G.set_process cb True
+  addChild gsvs viewportBase
+  addChild viewportBase cb
+
+  cs <- newCanvasSurface gsvs
+  viewportSurface <- readTVarIO (cs ^. csViewport)
+  atomically $ writeTVar (gsvs ^. gsvsCanvasSurface) cs
+  G.set_process cs True
+  addChild gsvs viewportSurface
+  addChild viewportSurface cs
+
+  setInFrontOfUser gsvs (-2)
+
+  V3 1 1 1 ^* (1 + 1 * 1) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
+
+  focus gsvs -- We're relying on this to add references to wlrSurface :/
+
+  atomically $ writeTVar (simulaView ^. svMapped) True
 
   return ()
 
