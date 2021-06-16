@@ -781,7 +781,8 @@ _on_WlrXdgShell_new_surface gss [wlrXdgSurfaceVariant] = do
               G.add_child ((safeCast gss) :: GodotNode )
                           ((safeCast gsvs) :: GodotNode)
                           True
-
+              -- We G.set_activated early to prevent weird behavior (e.g. file pickers failing to spawn)
+              G.set_activated wlrXdgToplevel True
               return ()
 
 
