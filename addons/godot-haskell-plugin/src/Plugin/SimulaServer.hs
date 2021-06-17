@@ -415,7 +415,6 @@ instance NativeScript GodotSimulaServer where
     , func NoRPC "_input" Plugin.SimulaServer._input
     , func NoRPC "_on_WaylandDisplay_ready"    Plugin.SimulaServer._on_WaylandDisplay_ready
     , func NoRPC "_on_WlrXdgShell_new_surface" Plugin.SimulaServer._on_WlrXdgShell_new_surface
-    , func NoRPC "handle_map_surface" Plugin.SimulaServer.handle_map_surface
     , func NoRPC "_on_wlr_key" Plugin.SimulaServer._on_wlr_key
     , func NoRPC "_on_wlr_modifiers" Plugin.SimulaServer._on_wlr_modifiers
     , func NoRPC "_on_WlrXWayland_new_surface" Plugin.SimulaServer._on_WlrXWayland_new_surface
