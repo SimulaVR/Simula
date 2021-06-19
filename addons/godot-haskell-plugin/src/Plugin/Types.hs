@@ -9,6 +9,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DefaultSignatures #-}
 
 module Plugin.Types where
 
@@ -400,18 +401,6 @@ newNS'' constr clsName args url = do
 -- G.asClass
 -- GodotResource -> GodotNativeScript -> GodotObject -> Godot
 
--- | Unsafe helper function to determine if a Godot type is null.
-isGodotTypeNull :: (Typeable a) => a -> IO ()
-isGodotTypeNull godotValue = do
-  let isNull = ((unsafeCoerce godotValue) == nullPtr)
-  putStrLn $ (show (typeOf godotValue)) ++ ": isNull " ++ (show isNull)
-
-isGodotTypeNullErr :: (Typeable a) => a -> IO ()
-isGodotTypeNullErr godotValue = do
-  let isNull = ((unsafeCoerce godotValue) == nullPtr)
-  if isNull then error $ (show (typeOf godotValue)) ++ ": isNull True"
-            else putStrLn $ (show (typeOf godotValue)) ++ ": isNull False"
-
 deriving instance Eq GodotWlrOutput
 deriving instance Eq GodotWlrXdgSurface
 deriving instance Eq GodotWlrXWaylandSurface
@@ -744,23 +733,24 @@ fst3 (a, b, c) = a
 
 savePng :: CanvasSurface -> GodotViewportTexture -> GodotWlrSurface -> IO String
 savePng cs surfaceTexture wlrSurface = do
-  let isNull = ((unsafeCoerce surfaceTexture) == nullPtr) || ((unsafeCoerce wlrSurface) == nullPtr)
-  case isNull of
-    True -> do putStrLn "Texture is null in savePng!"
-               return ""
-    False -> do -- Get image
-                gsvs <- readTVarIO (cs ^. csGSVS)
-                surfaceTextureAsImage <- G.get_data surfaceTexture
+  let maybeSurfaceTexture = validateObject surfaceTexture
+  maybeWlrSurface <- validateSurface wlrSurface
+  case (maybeSurfaceTexture, maybeWlrSurface) of
+    (Just surfaceTexture, Just wlrSurface) -> do
+      -- Get image
+      gsvs <- readTVarIO (cs ^. csGSVS)
+      surfaceTextureAsImage <- G.get_data surfaceTexture
 
-                -- Get file path
-                frame <- readTVarIO (gsvs ^. gsvsFrameCount)
-                let pathStr = "./png/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
-                canonicalPath <- canonicalizePath pathStr
-                pathStr' <- toLowLevel (pack pathStr)
+      -- Get file path
+      frame <- readTVarIO (gsvs ^. gsvsFrameCount)
+      let pathStr = "./png/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
+      canonicalPath <- canonicalizePath pathStr
+      pathStr' <- toLowLevel (pack pathStr)
 
-                -- Save as png
-                G.save_png surfaceTextureAsImage pathStr'
-                return canonicalPath
+      -- Save as png
+      G.save_png surfaceTextureAsImage pathStr'
+      return canonicalPath
+    _ -> putStrLn "Texture is null in savePng!" >> return ""
   where getVisualServer gsvs = do
           gss <- readTVarIO (gsvs ^. gsvsServer)
           visualServer <- readTVarIO (gss ^. gssVisualServer)
@@ -1266,3 +1256,28 @@ getWindowsGrabbedDiff gss = do
                                                  diffTransform <- Api.godot_transform_operator_multiply povTransform prevTransformInverse
                                                  return diffTransform
   return diffTransform
+
+validateObject :: GodotObject :< a => a -> Maybe a
+validateObject obj = guard (unsafeCoerce ((safeCast obj) :: GodotObject) /= nullPtr) >> return obj
+
+class (GodotObject :< surface) => Validatable surface where
+  isValid :: surface -> IO Bool
+
+instance Validatable GodotWlrSurface where
+  isValid surf = G.is_valid surf
+
+instance Validatable GodotWlrSubsurface where
+  isValid surf = G.is_valid surf
+
+instance Validatable GodotWlrXWaylandSurface where
+  isValid surf = G.is_valid surf
+
+instance Validatable GodotWlrXdgSurface where
+  isValid surf = G.is_valid surf
+
+validateSurface :: (Validatable surface) => surface -> IO (Maybe surface)
+validateSurface surf = do
+  case (validateObject surf) of
+    Nothing -> return Nothing
+    Just obj -> do isValidSurface <- isValid surf
+                   return $ if isValidSurface then (Just surf) else Nothing

@@ -371,13 +371,14 @@ focus gsvs = do
                              G.keyboard_notify_enter wlrSeat wlrSurface
                              pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
                              pointerNotifyFrame wlrSeat
-    Right wlrXWaylandSurface -> do wlrSurface  <- G.get_wlr_surface wlrXWaylandSurface
-                                   case (((unsafeCoerce wlrXWaylandSurface) == nullPtr), ((unsafeCoerce wlrSurface) == nullPtr)) of
-                                     (False, False) -> do G.reference wlrSurface
-                                                          safeSetActivated gsvs True -- G.set_activated wlrXWaylandSurface True
-                                                          G.keyboard_notify_enter wlrSeat wlrSurface
-                                                          pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
-                                                          pointerNotifyFrame wlrSeat
+    Right wlrXWaylandSurface -> do maybeWlrSurface  <- G.get_wlr_surface wlrXWaylandSurface >>= validateSurface
+                                   maybeWlrXWaylandSurface <- validateSurface wlrXWaylandSurface
+                                   case (maybeWlrXWaylandSurface, maybeWlrSurface) of
+                                     (Just wlrXWaylandSurface, Just wlrSurface) -> do G.reference wlrSurface
+                                                                                      safeSetActivated gsvs True -- G.set_activated wlrXWaylandSurface True
+                                                                                      G.keyboard_notify_enter wlrSeat wlrSurface
+                                                                                      pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
+                                                                                      pointerNotifyFrame wlrSeat
                                      _ -> putStrLn $ "Unable to focus on sprite!"
 
 -- | This function isn't called unless a surface is being pointed at (by VR
@@ -429,17 +430,15 @@ processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)
 getXdgSubsurfaceAndCoords :: GodotWlrXdgSurface -> SurfaceLocalCoordinates -> IO (GodotWlrSurface, SubSurfaceLocalCoordinates)
 getXdgSubsurfaceAndCoords wlrXdgSurface cursorCoords@(SurfaceLocalCoordinates (sx, sy)) = do
   rect2@(V2 (V2 posX posY) (V2 xdgWidth xdgHeight)) <- G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
-  wlrSurfaceAtResult   <- G.surface_at  wlrXdgSurface sx sy
-  wlrSurfaceSubSurface <- G.get_surface wlrSurfaceAtResult
-  case (wlrSurfaceSubSurface == (coerce nullPtr)) of
-    True -> putStrLn "NULL!"
-    False -> do G.reference wlrSurfaceSubSurface
-                return ()
-  ssx                  <- G.get_sub_x wlrSurfaceAtResult
-  ssy                  <- G.get_sub_y wlrSurfaceAtResult
-  let ssCoordinates    = SubSurfaceLocalCoordinates (ssx, ssy)
-  wlrXdgToplevel <- G.get_xdg_toplevel wlrXdgSurface
-  return (wlrSurfaceSubSurface, SubSurfaceLocalCoordinates (ssx, ssy))
+  wlrSurfaceAtResult   <- G.surface_at wlrXdgSurface sx sy
+  maybeWlrSurfaceSubSurface <- G.get_surface wlrSurfaceAtResult >>= validateSurface
+  case maybeWlrSurfaceSubSurface of
+    Nothing -> return (coerce nullPtr, SubSurfaceLocalCoordinates (-1, -1))
+    Just wlrSurfaceSubSurface -> do G.reference wlrSurfaceSubSurface
+                                    ssx                  <- G.get_sub_x wlrSurfaceAtResult
+                                    ssy                  <- G.get_sub_y wlrSurfaceAtResult
+                                    let ssCoordinates    = SubSurfaceLocalCoordinates (ssx, ssy)
+                                    return (wlrSurfaceSubSurface, SubSurfaceLocalCoordinates (ssx, ssy))
 
 keyboardNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> IO ()
 keyboardNotifyEnter wlrSeat wlrSurface = do

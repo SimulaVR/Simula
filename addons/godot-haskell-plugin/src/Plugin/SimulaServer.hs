@@ -1065,9 +1065,10 @@ handle_wlr_compositor_new_surface gss args@[wlrSurfaceVariant] = do
 
 seat_request_cursor :: GodotSimulaServer -> [GodotVariant] -> IO ()
 seat_request_cursor gss args@[wlrSurfaceCursorVariant] = do
-  wlrSurfaceCursor <- fromGodotVariant wlrSurfaceCursorVariant :: IO GodotWlrSurface
+  maybeWlrSurfaceCursor <- (fromGodotVariant wlrSurfaceCursorVariant :: IO GodotWlrSurface) >>= validateSurface
   maybeActiveCursorGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
-  case (maybeActiveCursorGSVS, ((unsafeCoerce wlrSurfaceCursor) == nullPtr))   of
+  case (maybeActiveCursorGSVS, maybeWlrSurfaceCursor)   of
       (Nothing, _) -> putStrLn "Unable to find active cursor gsvs; unable to load cursor texture."
-      (Just gsvs, False) -> atomically $ writeTVar (gsvs ^. gsvsCursor) ((Just wlrSurfaceCursor), Nothing)
-      (Just gsvs, True) -> putStrLn "seat_request_cursor surface is NULL!"
+      (Just gsvs, Nothing) -> putStrLn "seat_request_cursor surface is NULL!"
+      (Just gsvs, Just wlrSurfaceCursor) -> atomically $ writeTVar (gsvs ^. gsvsCursor) ((Just wlrSurfaceCursor), Nothing)
+  return ()
