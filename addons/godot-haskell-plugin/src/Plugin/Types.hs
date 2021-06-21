@@ -68,6 +68,7 @@ import Godot.Core.GodotViewport as G
 
 import Data.Map.Ordered as MO
 import Dhall
+import qualified Data.Vector as V
 
 instance Show Transform where
   show tf = (show (_tfBasis tf)) ++ (" w/position: ") ++ (show (_tfPosition tf))
@@ -190,11 +191,13 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssPreviousPovTransform  :: TVar (Maybe GodotTransform)
   , _gssWindowsGrabbed        :: TVar Bool
   , _gssWindowsGrabbedDiff    :: TVar GodotTransform
+  , _gssWorkspaces            :: Vector GodotSpatial
+  , _gssWorkspace             :: TVar GodotSpatial
   }
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 

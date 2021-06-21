@@ -85,6 +85,7 @@ import Godot.Core.GodotGlobalConstants as G
 import Godot.Core.GodotInput as G
 import Dhall
 import Control.Exception
+import qualified Data.Vector as V
 
 getKeyboardAction :: GodotSimulaServer -> KeyboardShortcut -> KeyboardAction
 getKeyboardAction gss keyboardShortcut = 
@@ -121,6 +122,26 @@ getKeyboardAction gss keyboardShortcut =
     "takeScreenshotGlobal" -> takeScreenshotGlobal
     "debugLogDepthFirstSurfaces" -> debugLogDepthFirstSurfaces
     "debugPrint" -> debugPrint
+    "workspace0" -> switchToWorkspace gss 0
+    "workspace1" -> switchToWorkspace gss 1
+    "workspace2" -> switchToWorkspace gss 2
+    "workspace3" -> switchToWorkspace gss 3
+    "workspace4" -> switchToWorkspace gss 4
+    "workspace5" -> switchToWorkspace gss 5
+    "workspace6" -> switchToWorkspace gss 6
+    "workspace7" -> switchToWorkspace gss 7
+    "workspace8" -> switchToWorkspace gss 8
+    "workspace9" -> switchToWorkspace gss 9
+    "sendToWorkspace0" -> sendToWorkspace gss 0
+    "sendToWorkspace1" -> sendToWorkspace gss 1
+    "sendToWorkspace2" -> sendToWorkspace gss 2
+    "sendToWorkspace3" -> sendToWorkspace gss 3
+    "sendToWorkspace4" -> sendToWorkspace gss 4
+    "sendToWorkspace5" -> sendToWorkspace gss 5
+    "sendToWorkspace6" -> sendToWorkspace gss 6
+    "sendToWorkspace7" -> sendToWorkspace gss 7
+    "sendToWorkspace8" -> sendToWorkspace gss 8
+    "sendToWorkspace9" -> sendToWorkspace gss 9
     _ -> shellLaunch gss (keyboardShortcut ^. keyAction)
 
   where moveCursor :: SpriteLocation -> Bool -> IO ()
@@ -353,6 +374,29 @@ getKeyboardAction gss keyboardShortcut =
           putStrLn "debugPrint"
         debugPrint _ _ = return ()
 
+        switchToWorkspace :: GodotSimulaServer -> Int -> SpriteLocation -> Bool -> IO ()
+        switchToWorkspace gss workspaceNum _ True = do
+          putStrLn $ "Switching to workspace" ++ (show workspaceNum)
+          currentWorkspace <- readTVarIO (gss ^. gssWorkspace)
+          let newWorkspace = (gss ^. gssWorkspaces) V.! workspaceNum
+
+          -- Set new workspace for new gsvs to inherit from
+          atomically $ writeTVar (gss ^. gssWorkspace) newWorkspace
+
+          -- Swap workspace in scene graph
+          removeChild gss currentWorkspace
+          addChild gss newWorkspace
+        switchToWorkspace _ _ _ _ = return ()
+
+        sendToWorkspace :: GodotSimulaServer -> Int -> SpriteLocation -> Bool -> IO ()
+        sendToWorkspace gss workspaceNum (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+          putStrLn $ "Sending app to workspace" ++ (show workspaceNum)
+          currentWorkspace <- readTVarIO (gss ^. gssWorkspace)
+          let newWorkspace = (gss ^. gssWorkspaces) V.! workspaceNum
+          removeChild currentWorkspace gsvs
+          addChild newWorkspace gsvs
+        sendToWorkspace _ _ _ _ = return ()
+
 isMask :: Int -> Bool
 isMask keyOrMask = elem keyOrMask [ G.KEY_MASK_SHIFT
                                   , G.KEY_MASK_ALT
@@ -494,6 +538,9 @@ ready gss _ = do
   -- overrides the default environment
   (worldEnvironment, _) <- readTVarIO (gss ^. gssWorldEnvironment)
   addChild gss worldEnvironment
+
+  defaultWorkspace <- readTVarIO (gss ^. gssWorkspace)
+  addChild gss defaultWorkspace
 
   -- Launch default apps
   sApps <- readTVarIO (gss ^. gssStartingApps)
@@ -692,6 +739,9 @@ initGodotSimulaServer obj = do
       idTransform' <- toLowLevel idTransform
       gssWindowsGrabbedDiff' <- newTVarIO idTransform'
 
+      gssWorkspaces' <- V.replicateM 10 (unsafeInstance GodotSpatial "Spatial")
+      gssWorkspace' <- newTVarIO $ (gssWorkspaces' V.! 1)
+
       let gss = GodotSimulaServer {
         _gssObj                   = obj                       :: GodotObject
       , _gssWaylandDisplay        = gssWaylandDisplay'        :: TVar GodotWaylandDisplay
@@ -726,6 +776,8 @@ initGodotSimulaServer obj = do
       , _gssPreviousPovTransform  = gssPreviousPovTransform'  :: TVar (Maybe GodotTransform)
       , _gssWindowsGrabbed        = gssWindowsGrabbed'        :: TVar Bool
       , _gssWindowsGrabbedDiff    = gssWindowsGrabbedDiff'    :: TVar GodotTransform
+      , _gssWorkspaces            = gssWorkspaces'            :: Vector GodotSpatial
+      , _gssWorkspace             = gssWorkspace'             :: TVar GodotSpatial
       }
   return gss
   where getStartingAppsStr :: Maybe String -> String
