@@ -828,10 +828,6 @@ _on_WlrXdgShell_new_surface gss [wlrXdgSurfaceVariant] = do
               connectGodotSignal wlrSurface "commit" gsvs "handle_wlr_surface_commit" []
               connectGodotSignal wlrSurface "destroy" gsvs "handle_wlr_surface_destroy" []
 
-              -- Add the gsvs as a child to the SimulaServer
-              G.add_child ((safeCast gss) :: GodotNode )
-                          ((safeCast gsvs) :: GodotNode)
-                          True
               -- We G.set_activated early to prevent weird behavior (e.g. file pickers failing to spawn)
               G.set_activated wlrXdgToplevel True
               return ()
