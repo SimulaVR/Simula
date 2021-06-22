@@ -92,10 +92,13 @@ _process self args = do
 _draw :: CanvasSurface -> [GodotVariant] -> IO ()
 _draw cs _ = do
   gsvs <- readTVarIO (cs ^. csGSVS)
-  depthFirstSurfaces <- getDepthFirstSurfaces gsvs
-  mapM (drawWlrSurface cs) depthFirstSurfaces
-
-  return ()
+  isValid <- gsvsIsValid gsvs
+  case isValid of
+    False -> return ()
+    True -> do
+      depthFirstSurfaces <- getDepthFirstSurfaces gsvs
+      mapM (drawWlrSurface cs) depthFirstSurfaces
+      return ()
   where
     savePngCS :: (GodotWlrSurface, CanvasSurface) -> IO ()
     savePngCS arg@((wlrSurface, cs)) = do

@@ -1141,11 +1141,15 @@ getBaseDimensions gsvs = do
 
 getSpilloverDims :: GodotSimulaViewSprite -> IO (Int, Int)
 getSpilloverDims gsvs = do
-  depthFirstSurfaces <- getDepthFirstSurfaces gsvs :: IO [(GodotWlrSurface, Int, Int)]
-  spilloverDims <- mapM (getSpilloverDims gsvs) depthFirstSurfaces
-  let spilloverWidth = Data.List.maximum $ fmap fst spilloverDims
-  let spilloverHeight = Data.List.maximum $ fmap snd spilloverDims
-  return (spilloverWidth, spilloverHeight)
+  isValid <- gsvsIsValid gsvs
+  case isValid of
+    False -> return (-1, -1)
+    True -> do
+      depthFirstSurfaces <- getDepthFirstSurfaces gsvs :: IO [(GodotWlrSurface, Int, Int)]
+      spilloverDims <- mapM (getSpilloverDims gsvs) depthFirstSurfaces
+      let spilloverWidth = Data.List.maximum $ fmap fst spilloverDims
+      let spilloverHeight = Data.List.maximum $ fmap snd spilloverDims
+      return (spilloverWidth, spilloverHeight)
   where getSpilloverDims :: GodotSimulaViewSprite -> (GodotWlrSurface, Int, Int) -> IO (Int, Int)
         getSpilloverDims gsvs (wlrSurface, sx, sy) = do
           (baseWidth, baseHeight) <- getBaseDimensions gsvs
@@ -1284,3 +1288,20 @@ validateSurface surf = do
     Nothing -> return Nothing
     Just obj -> do isValidSurface <- isValid surf
                    return $ if isValidSurface then (Just surf) else Nothing
+
+gsvsIsValid :: GodotSimulaViewSprite -> IO Bool
+gsvsIsValid gsvs = do
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  let eitherSurface = (simulaView ^. svWlrEitherSurface)
+  case eitherSurface of
+    Left wlrXdgSurface -> do maybeWlrXdgSurface <- validateSurface wlrXdgSurface
+                             let isValid = case maybeWlrXdgSurface of
+                                                Just wlrXdgSurface -> True
+                                                Nothing -> False
+                             return isValid
+    Right wlrXWaylandSurface -> do maybeWlrXWaylandSurface <- validateSurface wlrXWaylandSurface
+                                   let isValid = case maybeWlrXWaylandSurface of
+                                                      Just wlrXWaylandSurface -> True
+                                                      Nothing -> False
+                                   return isValid
+
