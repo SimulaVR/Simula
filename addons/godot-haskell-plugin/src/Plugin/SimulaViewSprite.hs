@@ -841,7 +841,9 @@ handle_unmap_base self [wlrXWaylandSurfaceVariant] = do
   freeChildrenMap <- readTVarIO (gss ^. gssFreeChildren)
   wlrXWaylandSurface <- fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface
 
-  keyboardGrabLetGo (Left self)
+  keyboardGrabLetGo gss (GrabWindow undefined undefined)
+  keyboardGrabLetGo gss (GrabWindows undefined)
+  keyboardGrabLetGo gss (GrabWorkspaces undefined)
 
   G.reference wlrXWaylandSurface
   let maybeGSVSParent = M.lookup wlrXWaylandSurface freeChildrenMap

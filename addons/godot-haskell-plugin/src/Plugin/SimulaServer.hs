@@ -97,8 +97,9 @@ getKeyboardAction gss keyboardShortcut =
     "toggleGrabMode" -> toggleGrabMode'
     "launchHMDWebCam" -> launchHMDWebCam' gss
     "orientWindowTowardsGaze" -> orientWindowTowardsGaze
-    "grabWindow" -> grabWindow
+    "grabWindow" -> grabWindow gss
     "grabWindows" -> grabWindows gss
+    "grabWorkspaces" -> grabWorkspaces gss
     "pushWindow" -> pushWindow
     "pullWindow" -> pullWindow
     "scaleWindowDown" -> scaleWindowDown
@@ -166,21 +167,30 @@ getKeyboardAction gss keyboardShortcut =
           processClickEvent' gsvs (Button False 1) coords -- BUTTON_LEFT = 1
         leftClick _ _ = return ()
 
-        grabWindow :: SpriteLocation -> Bool -> IO ()
-        grabWindow (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          keyboardGrabInitiate (Left gsvs)
-        grabWindow (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) False = do
-          keyboardGrabLetGo (Left gsvs)
-        grabWindow _ _ = return ()
+        grabWindow :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
+        grabWindow gss (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+          keyboardGrabInitiate gss (GrabWindow gsvs undefined)
+        grabWindow gss (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) False = do
+          keyboardGrabLetGo gss (GrabWindow gsvs undefined)
+        grabWindow _ _ _ = return ()
 
         grabWindows :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
         grabWindows gss _ True = do
-          windowsGrabbed <- readTVarIO (gss ^. gssWindowsGrabbed)
-          case windowsGrabbed of
-            True -> return ()
-            False -> keyboardGrabInitiate (Right gss)
+          maybeGrab <- readTVarIO (gss ^. gssGrab)
+          case maybeGrab of
+            Nothing -> keyboardGrabInitiate gss (GrabWindows undefined)
+            _ -> return ()
         grabWindows gss _ False = do
-          keyboardGrabLetGo (Right gss)
+          keyboardGrabLetGo gss (GrabWindows undefined)
+
+        grabWorkspaces :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
+        grabWorkspaces gss _ True = do
+          maybeGrab <- readTVarIO (gss ^. gssGrab)
+          case maybeGrab of
+            Nothing -> keyboardGrabInitiate gss (GrabWorkspaces undefined)
+            _ -> return ()
+        grabWorkspaces gss _ False = do
+          keyboardGrabLetGo gss (GrabWorkspaces undefined)
 
         terminateWindow :: SpriteLocation -> Bool -> IO ()
         terminateWindow (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
@@ -483,6 +493,10 @@ ready gss _ = do
 
   addWlrChildren gss
 
+  gssWorkspaces' <- V.replicateM 10 (unsafeInstance GodotSpatial "Spatial")
+  gssDiffMapVal <- initializeDiffMap (safeCast gss) gssWorkspaces'
+  atomically $ writeTVar (gss ^. gssDiffMap) gssDiffMapVal
+
   wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
   wlrKeyboard <- readTVarIO (gss ^. gssWlrKeyboard)
 
@@ -733,14 +747,11 @@ initGodotSimulaServer obj = do
 
       gssStartingAppPids' <- newTVarIO M.empty :: IO (TVar (M.Map ProcessID [String]))
 
-      gssWindowsGrabbed' <- newTVarIO False
-      gssPreviousPovTransform'  <- newTVarIO Nothing
-      let idTransform = TF (identity :: M33 Float) (V3 0 0 0)
-      idTransform' <- toLowLevel idTransform
-      gssWindowsGrabbedDiff' <- newTVarIO idTransform'
+      gssGrab' <- newTVarIO Nothing
 
       gssWorkspaces' <- V.replicateM 10 (unsafeInstance GodotSpatial "Spatial")
       gssWorkspace' <- newTVarIO $ (gssWorkspaces' V.! 1)
+      gssDiffMap' <- newTVarIO $ M.empty -- Can't instantiate this until we have the gss Spatial information
 
       let gss = GodotSimulaServer {
         _gssObj                   = obj                       :: GodotObject
@@ -773,9 +784,8 @@ initGodotSimulaServer obj = do
       , _gssStartingAppTransform  = gssStartingAppTransform'  :: TVar (Maybe GodotTransform)
       , _gssPid                   = gssPid'                   :: String
       , _gssStartingAppPids       = gssStartingAppPids'       :: TVar (M.Map ProcessID [String])
-      , _gssPreviousPovTransform  = gssPreviousPovTransform'  :: TVar (Maybe GodotTransform)
-      , _gssWindowsGrabbed        = gssWindowsGrabbed'        :: TVar Bool
-      , _gssWindowsGrabbedDiff    = gssWindowsGrabbedDiff'    :: TVar GodotTransform
+      , _gssGrab                  = gssGrab'                  :: TVar (Maybe Grab)
+      , _gssDiffMap               = gssDiffMap'               :: TVar (M.Map GodotSpatial GodotTransform)
       , _gssWorkspaces            = gssWorkspaces'            :: Vector GodotSpatial
       , _gssWorkspace             = gssWorkspace'             :: TVar GodotSpatial
       }
@@ -980,26 +990,33 @@ getHMDLookAtSprite gss = do
 
 physicsProcess :: GodotSimulaServer -> [GodotVariant] -> IO ()
 physicsProcess gss _ = do
-  maybeKeyboardGrabbedGSVS <- readTVarIO (gss ^. gssKeyboardGrabbedSprite)
   maybeLookAtGSVS <- getHMDLookAtSprite gss
   gsvsActiveCursor <- readTVarIO (gss ^. gssActiveCursorGSVS)
-  maybeWindowsGrabbed <- readTVarIO (gss ^. gssWindowsGrabbed)
+  maybeGssGrab <- readTVarIO (gss ^. gssGrab)
+  case maybeGssGrab of
+    (Just (GrabWindows prevPovTransform)) -> do currentWorkspace <- readTVarIO (gss ^. gssWorkspace)
+                                                diffMap <- readTVarIO (gss ^. gssDiffMap)
+                                                diff <- getGrabDiff gss
+                                                id <- makeIdentityTransform
+                                                let diffPrev = M.findWithDefault id currentWorkspace diffMap
+                                                diffComposed <- Api.godot_transform_operator_multiply diff diffPrev
+                                                G.set_transform currentWorkspace diffComposed
+    (Just (GrabWindow gsvs dist)) -> do setInFrontOfUser gsvs dist
+                                        orientSpriteTowardsGaze gsvs
+    (Just (GrabWorkspaces prevPovTransform)) -> do currentWorkspace <- readTVarIO (gss ^. gssWorkspace)
+                                                   diffMap <- readTVarIO (gss ^. gssDiffMap)
+                                                   diff <- getGrabDiff gss
+                                                   id <- makeIdentityTransform
+                                                   let diffPrev = M.findWithDefault id (safeCast gss) diffMap
+                                                   diffComposed <- Api.godot_transform_operator_multiply diff diffPrev
+                                                   G.set_transform gss diffComposed
+    Nothing -> case maybeLookAtGSVS of
+                    Nothing -> return ()
+                    Just (gsvs, surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy))) -> do
+                        case gsvsActiveCursor of
+                              Nothing -> focus gsvs
+                              Just gsvsActiveCursor' -> if (gsvs /= gsvsActiveCursor') then (focus gsvs) else return () -- (safeSetActivated gsvs True)
 
-  case (maybeWindowsGrabbed, maybeKeyboardGrabbedGSVS, maybeLookAtGSVS) of
-    (True, _, _) -> do
-      diff <- getWindowsGrabbedDiff gss
-      diffPrev <- readTVarIO (gss ^. gssWindowsGrabbedDiff)
-      diffComposed <- Api.godot_transform_operator_multiply diff diffPrev
-      G.set_transform gss diffComposed
-    (False, Just (gsvs, dist), _) -> do
-      setInFrontOfUser gsvs dist
-      orientSpriteTowardsGaze gsvs
-    (False, Nothing, Just (gsvs, surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)))) -> case gsvsActiveCursor of
-                                                                                            Nothing -> focus gsvs
-                                                                                            Just gsvsActiveCursor' -> if (gsvs /= gsvsActiveCursor') then (focus gsvs) else return () -- (safeSetActivated gsvs True)
-    _ -> return ()
-
-  return ()
 -- Run shell command with DISPLAY set to its original (typically :1).
 shellCmd1 :: GodotSimulaServer -> String -> IO ()
 shellCmd1 gss appStr = do
@@ -1028,13 +1045,13 @@ _on_simula_shortcut gss [scancodeWithModifiers', isPressed'] = do
     Just action -> action maybeHMDLookAtSprite isPressed
     Nothing -> case isPressed of
                  False -> do if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
-                             keyboardGrabLetGo' maybeHMDLookAtSprite -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
-                             keyboardGrabLetGo (Right gss) -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
+                             keyboardGrabLetGo' gss maybeHMDLookAtSprite -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
+                             keyboardGrabLetGo gss (GrabWindows undefined) -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
                  True -> if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
 
-  where keyboardGrabLetGo' :: Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates) -> IO ()
-        keyboardGrabLetGo' (Just (gsvs, _)) = do keyboardGrabLetGo (Left gsvs)
-        keyboardGrabLetGo' _ = return ()
+  where keyboardGrabLetGo' :: GodotSimulaServer -> Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates) -> IO ()
+        keyboardGrabLetGo' gss (Just (gsvs, _)) = do keyboardGrabLetGo gss (GrabWindow gsvs undefined)
+        keyboardGrabLetGo' _ _ = return ()
 
         extractMods :: Int -> [Int]
         extractMods sc = concatMap (extractIf sc) [G.KEY_MASK_SHIFT, G.KEY_MASK_ALT, G.KEY_MASK_META, G.KEY_MASK_CTRL, G.KEY_MASK_CMD, G.KEY_MASK_KPAD, G.KEY_MASK_GROUP_SWITCH]

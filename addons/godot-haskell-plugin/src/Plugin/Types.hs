@@ -83,6 +83,9 @@ instance Show GodotWlrSurface where
 instance Ord GodotWlrXWaylandSurface where
   wlrXWaylandSurface1 `compare` wlrXWaylandSurface2 = ((coerce wlrXWaylandSurface1) :: Ptr ()) `compare` ((coerce wlrXWaylandSurface2) :: Ptr ())
 
+instance Ord GodotSpatial where
+  sp1 `compare` sp2 = ((coerce sp1) :: Ptr ()) `compare` ((coerce sp2) :: Ptr ())
+
 unfoldrM :: Monad m => (b -> m (Maybe (a, b))) -> b -> m [a]
 unfoldrM f b = f b >>= \case
   Just (a, b') -> return . (a :) =<< unfoldrM f b'
@@ -155,6 +158,9 @@ type StartingAppsRemaining = Int
 data SimulaEnvironment = Day | Night
   deriving (Eq, Show)
 
+data Grab = GrabWindow GodotSimulaViewSprite Float | GrabWindows GodotTransform | GrabWorkspaces GodotTransform
+type DiffMap = M.Map GodotSpatial GodotTransform
+
 -- We use TVar excessively since these datatypes must be retrieved from the
 -- scene graph (requiring IO)
 data GodotSimulaServer = GodotSimulaServer
@@ -188,16 +194,15 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssStartingAppTransform  :: TVar (Maybe GodotTransform)
   , _gssPid                   :: String
   , _gssStartingAppPids       :: TVar (M.Map ProcessID [String])
-  , _gssPreviousPovTransform  :: TVar (Maybe GodotTransform)
-  , _gssWindowsGrabbed        :: TVar Bool
-  , _gssWindowsGrabbedDiff    :: TVar GodotTransform
+  , _gssGrab                  :: TVar (Maybe Grab)
+  , _gssDiffMap               :: TVar (M.Map GodotSpatial GodotTransform)
   , _gssWorkspaces            :: Vector GodotSpatial
   , _gssWorkspace             :: TVar GodotSpatial
   }
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
@@ -407,6 +412,7 @@ newNS'' constr clsName args url = do
 deriving instance Eq GodotWlrOutput
 deriving instance Eq GodotWlrXdgSurface
 deriving instance Eq GodotWlrXWaylandSurface
+deriving instance Eq GodotSpatial
 
 -- Unused/untested.
 getGSVSFromEitherSurface :: GodotSimulaServer -> Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO (Maybe GodotSimulaViewSprite)
@@ -1213,16 +1219,16 @@ getSimulaStartingLocationAtomically gss pids = do
        (pid:pids, Nothing) -> do
          getSimulaStartingLocationAtomically gss pids
 
-keyboardGrabInitiate :: Either GodotSimulaViewSprite GodotSimulaServer -> IO ()
-keyboardGrabInitiate (Left gsvs) = do
+keyboardGrabInitiate :: GodotSimulaServer -> Grab -> IO ()
+keyboardGrabInitiate gss (GrabWindow gsvs _) = do
   gss <- readTVarIO (gsvs ^. gsvsServer)
-  -- Ensure that we aren't keyboard grabbing all windows
-  keyboardGrabLetGo (Right gss)
+  -- TODO: Ensure that we aren't keyboard grabbing other stuff, w/o messing up diff state
+  -- keyboardGrabLetGo (GrabWorkspaces gss)
 
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   isInSceneGraph <- G.is_a_parent_of ((safeCast gss) :: GodotNode ) ((safeCast gsvs) :: GodotNode)
   case isInSceneGraph of
-    False -> keyboardGrabLetGo (Left gsvs)
+    False -> keyboardGrabLetGo gss (GrabWindow gsvs undefined)
     True -> do gss <- readTVarIO $ (gsvs ^. gsvsServer)
                -- Compute dist
                orientSpriteTowardsGaze gsvs
@@ -1231,37 +1237,51 @@ keyboardGrabInitiate (Left gsvs) = do
                posHMD  <- Api.godot_transform_get_origin hmdTransform
                dist <- realToFrac <$> Api.godot_vector3_distance_to posGSVS posHMD
                -- Load state
-               atomically $ writeTVar (gss ^. gssKeyboardGrabbedSprite) (Just (gsvs, (-dist)))
+               atomically $ writeTVar (gss ^. gssGrab) (Just (GrabWindow gsvs (-dist)))
   return ()
-keyboardGrabInitiate (Right gss) = do
-  -- Ensure that we aren't keyboard grabbing another gsvs
+keyboardGrabInitiate gss (GrabWindows _) = do
+  -- TODO: Ensure that we aren't keyboard grabbing other workspaces, w/o messing up diff state
+  -- keyboardGrabLetGo gss GrabWorkspaces
+
   povTransform <- getARVRCameraOrPancakeCameraTransform gss
-  atomically $ do
-    writeTVar (gss ^. gssKeyboardGrabbedSprite) Nothing
-    writeTVar (gss ^. gssWindowsGrabbed) True
-    writeTVar (gss ^. gssPreviousPovTransform) (Just povTransform)
+  atomically $ writeTVar (gss ^. gssGrab) (Just (GrabWindows povTransform))
 
-keyboardGrabLetGo :: Either GodotSimulaViewSprite GodotSimulaServer -> IO ()
-keyboardGrabLetGo (Left gsvs) = do
+keyboardGrabInitiate gss (GrabWorkspaces _)  = do
+  -- TODO: Ensure that we aren't keyboard grabbing anything else, w/o messing up diff state
+  -- keyboardGrabLetGo gss (GrabWorkspaces _)
+
+  povTransform <- getARVRCameraOrPancakeCameraTransform gss
+  atomically $ writeTVar (gss ^. gssGrab) (Just (GrabWorkspaces povTransform))
+
+keyboardGrabLetGo :: GodotSimulaServer -> Grab -> IO ()
+keyboardGrabLetGo gss (GrabWindow gsvs _)  = do
   gss <- readTVarIO $ (gsvs ^. gsvsServer)
-  atomically $ writeTVar (gss ^. gssKeyboardGrabbedSprite) Nothing
-keyboardGrabLetGo (Right gss) = do
-  gssTransform <- G.get_transform gss
-  atomically $ do
-    writeTVar (gss ^. gssWindowsGrabbedDiff) gssTransform
-    writeTVar (gss ^. gssPreviousPovTransform) Nothing
-    writeTVar (gss ^. gssWindowsGrabbed) False
+  atomically $ writeTVar (gss ^. gssGrab) Nothing
+keyboardGrabLetGo gss (GrabWindows _) = do
+  currentWorkspace <- readTVarIO (gss ^. gssWorkspace)
+  currentWorkspaceTransform <- G.get_transform currentWorkspace
+  updateDiffMap gss currentWorkspace currentWorkspaceTransform
+  atomically $ writeTVar (gss ^. gssGrab) Nothing
 
-getWindowsGrabbedDiff :: GodotSimulaServer -> IO GodotTransform
-getWindowsGrabbedDiff gss = do
-  maybePreviousPovTransform <- readTVarIO (gss ^. gssPreviousPovTransform)
-  diffTransform  <- case maybePreviousPovTransform of
-                        Nothing -> do let idTransform = TF (identity :: M33 Float) (V3 0 0 0)
-                                      toLowLevel idTransform
-                        Just prevTransform -> do prevTransformInverse <- Api.godot_transform_affine_inverse prevTransform
-                                                 povTransform <- getARVRCameraOrPancakeCameraTransform gss
-                                                 diffTransform <- Api.godot_transform_operator_multiply povTransform prevTransformInverse
-                                                 return diffTransform
+keyboardGrabLetGo gss (GrabWorkspaces _) = do
+  gssTransform <- G.get_transform gss
+  updateDiffMap gss (safeCast gss) gssTransform
+  atomically $ writeTVar (gss ^. gssGrab) Nothing
+
+getGrabDiff :: GodotSimulaServer -> IO GodotTransform
+getGrabDiff gss = do
+  maybeGrab <- readTVarIO (gss ^. gssGrab)
+  diffTransform  <- case maybeGrab of
+                         Nothing -> do let idTransform = TF (identity :: M33 Float) (V3 0 0 0)
+                                       toLowLevel idTransform
+                         (Just (GrabWindows prevTransform)) -> do prevTransformInverse <- Api.godot_transform_affine_inverse prevTransform
+                                                                  povTransform <- getARVRCameraOrPancakeCameraTransform gss
+                                                                  diffTransform <- Api.godot_transform_operator_multiply povTransform prevTransformInverse
+                                                                  return diffTransform
+                         (Just (GrabWorkspaces prevTransform)) -> do prevTransformInverse <- Api.godot_transform_affine_inverse prevTransform
+                                                                     povTransform <- getARVRCameraOrPancakeCameraTransform gss
+                                                                     diffTransform <- Api.godot_transform_operator_multiply povTransform prevTransformInverse
+                                                                     return diffTransform
   return diffTransform
 
 validateObject :: GodotObject :< a => a -> Maybe a
@@ -1305,3 +1325,21 @@ gsvsIsValid gsvs = do
                                                       Nothing -> False
                                    return isValid
 
+makeIdentityTransform :: IO GodotTransform
+makeIdentityTransform = do
+  let idTransform = TF (identity :: M33 Float) (V3 0 0 0)
+  toLowLevel idTransform
+
+initializeDiffMap :: GodotSpatial -> Vector GodotSpatial -> IO DiffMap
+initializeDiffMap gssSpatial workspaces = do
+  let workspacesLst = [gssSpatial] ++ (V.toList workspaces)
+  transformLst <- Control.Monad.replicateM 11 makeIdentityTransform -- 10 workspaces + 1 gss parent node
+  let diffLst = Data.List.zip workspacesLst transformLst
+  let diffMap = M.fromList diffLst
+  return diffMap
+
+updateDiffMap :: GodotSimulaServer -> GodotSpatial -> GodotTransform -> IO ()
+updateDiffMap gss workspaceOrGss newDiff = do
+  diffMap <- readTVarIO (gss ^. gssDiffMap)
+  let updatedDiffMap = M.insert workspaceOrGss newDiff diffMap
+  atomically $ writeTVar (gss ^. gssDiffMap) updatedDiffMap
