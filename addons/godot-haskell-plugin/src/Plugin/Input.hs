@@ -522,3 +522,4 @@ getScancode "KEY_MASK_CTRL"         =  Just G.KEY_MASK_CTRL
 getScancode "KEY_MASK_CMD"          =  Just G.KEY_MASK_CMD
 getScancode "KEY_MASK_KPAD"         =  Just G.KEY_MASK_KPAD
 getScancode "KEY_MASK_GROUP_SWITCH" =  Just G.KEY_MASK_GROUP_SWITCH
+getScancode _                       =  Nothing
