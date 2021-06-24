@@ -109,8 +109,7 @@ _draw cb _ = do
   drawCursor cb gsvs
 
   -- Increment global framecount
-  frameCount <- readTVarIO (gsvs ^. gsvsFrameCount)
-  atomically $ writeTVar (gsvs ^. gsvsFrameCount) (frameCount + 1)
+  atomically $ modifyTVar' (gsvs ^. gsvsFrameCount) (+1)
 
   where
     getTransparency :: CanvasBase -> IO Double

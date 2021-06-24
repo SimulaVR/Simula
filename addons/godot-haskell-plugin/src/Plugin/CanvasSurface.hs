@@ -92,10 +92,13 @@ _process self args = do
 _draw :: CanvasSurface -> [GodotVariant] -> IO ()
 _draw cs _ = do
   gsvs <- readTVarIO (cs ^. csGSVS)
-  depthFirstSurfaces <- getDepthFirstSurfaces gsvs
-  mapM (drawWlrSurface cs) depthFirstSurfaces
-
-  return ()
+  isValid <- gsvsIsValid gsvs
+  case isValid of
+    False -> return ()
+    True -> do
+      depthFirstSurfaces <- getDepthFirstSurfaces gsvs
+      mapM (drawWlrSurface cs) depthFirstSurfaces
+      return ()
   where
     savePngCS :: (GodotWlrSurface, CanvasSurface) -> IO ()
     savePngCS arg@((wlrSurface, cs)) = do
@@ -109,16 +112,16 @@ _draw cs _ = do
       gsvs <- readTVarIO (cs ^. csGSVS)
       gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
 
-      let isNull = ((unsafeCoerce wlrSurface) == nullPtr)
-      case isNull of
-        True -> return ()
-        False -> do G.reference wlrSurface
-                    gsvsTransparency <- getTransparency cs
-                    modulateColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` gsvsTransparency) :: IO GodotColor
-                    renderPosition <- toLowLevel (V2 (fromIntegral x) (fromIntegral y))
-                    surfaceTexture <- G.get_texture wlrSurface :: IO GodotTexture
-                    G.draw_texture cs surfaceTexture renderPosition modulateColor (coerce nullPtr)
-                    G.send_frame_done wlrSurface
+      maybeWlrSurface <- validateSurface wlrSurface
+      case maybeWlrSurface of
+        Nothing -> return ()
+        Just wlrSurface -> do G.reference wlrSurface
+                              gsvsTransparency <- getTransparency cs
+                              modulateColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` gsvsTransparency) :: IO GodotColor
+                              renderPosition <- toLowLevel (V2 (fromIntegral x) (fromIntegral y))
+                              surfaceTexture <- G.get_texture wlrSurface :: IO GodotTexture
+                              G.draw_texture cs surfaceTexture renderPosition modulateColor (coerce nullPtr)
+                              G.send_frame_done wlrSurface
 
     getTransparency :: CanvasSurface -> IO Double
     getTransparency cs = do

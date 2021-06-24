@@ -85,6 +85,7 @@ import Godot.Core.GodotGlobalConstants as G
 import Godot.Core.GodotInput as G
 import Dhall
 import Control.Exception
+import qualified Data.Vector as V
 
 getKeyboardAction :: GodotSimulaServer -> KeyboardShortcut -> KeyboardAction
 getKeyboardAction gss keyboardShortcut = 
@@ -96,7 +97,9 @@ getKeyboardAction gss keyboardShortcut =
     "toggleGrabMode" -> toggleGrabMode'
     "launchHMDWebCam" -> launchHMDWebCam' gss
     "orientWindowTowardsGaze" -> orientWindowTowardsGaze
-    "grabWindow" -> grabWindow
+    "grabWindow" -> grabWindow gss
+    "grabWindows" -> grabWindows gss
+    "grabWorkspaces" -> grabWorkspaces gss
     "pushWindow" -> pushWindow
     "pullWindow" -> pullWindow
     "scaleWindowDown" -> scaleWindowDown
@@ -119,6 +122,27 @@ getKeyboardAction gss keyboardShortcut =
     "toggleScreenshotMode" -> toggleScreenshotMode
     "takeScreenshotGlobal" -> takeScreenshotGlobal
     "debugLogDepthFirstSurfaces" -> debugLogDepthFirstSurfaces
+    "debugPrint" -> debugPrint
+    "workspace0" -> switchToWorkspace gss 0
+    "workspace1" -> switchToWorkspace gss 1
+    "workspace2" -> switchToWorkspace gss 2
+    "workspace3" -> switchToWorkspace gss 3
+    "workspace4" -> switchToWorkspace gss 4
+    "workspace5" -> switchToWorkspace gss 5
+    "workspace6" -> switchToWorkspace gss 6
+    "workspace7" -> switchToWorkspace gss 7
+    "workspace8" -> switchToWorkspace gss 8
+    "workspace9" -> switchToWorkspace gss 9
+    "sendToWorkspace0" -> sendToWorkspace gss 0
+    "sendToWorkspace1" -> sendToWorkspace gss 1
+    "sendToWorkspace2" -> sendToWorkspace gss 2
+    "sendToWorkspace3" -> sendToWorkspace gss 3
+    "sendToWorkspace4" -> sendToWorkspace gss 4
+    "sendToWorkspace5" -> sendToWorkspace gss 5
+    "sendToWorkspace6" -> sendToWorkspace gss 6
+    "sendToWorkspace7" -> sendToWorkspace gss 7
+    "sendToWorkspace8" -> sendToWorkspace gss 8
+    "sendToWorkspace9" -> sendToWorkspace gss 9
     _ -> shellLaunch gss (keyboardShortcut ^. keyAction)
 
   where moveCursor :: SpriteLocation -> Bool -> IO ()
@@ -143,14 +167,32 @@ getKeyboardAction gss keyboardShortcut =
           processClickEvent' gsvs (Button False 1) coords -- BUTTON_LEFT = 1
         leftClick _ _ = return ()
 
-        grabWindow :: SpriteLocation -> Bool -> IO () 
-        grabWindow (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          keyboardGrabInitiate gsvs
-        grabWindow (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) False = do
-          keyboardGrabLetGo gsvs
-        grabWindow _ _ = return ()
+        grabWindow :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
+        grabWindow gss (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+          keyboardGrabInitiate gss (GrabWindow gsvs undefined)
+        grabWindow gss (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) False = do
+          keyboardGrabLetGo gss (GrabWindow gsvs undefined)
+        grabWindow _ _ _ = return ()
 
-        terminateWindow :: SpriteLocation -> Bool -> IO () 
+        grabWindows :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
+        grabWindows gss _ True = do
+          maybeGrab <- readTVarIO (gss ^. gssGrab)
+          case maybeGrab of
+            Nothing -> keyboardGrabInitiate gss (GrabWindows undefined)
+            _ -> return ()
+        grabWindows gss _ False = do
+          keyboardGrabLetGo gss (GrabWindows undefined)
+
+        grabWorkspaces :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
+        grabWorkspaces gss _ True = do
+          maybeGrab <- readTVarIO (gss ^. gssGrab)
+          case maybeGrab of
+            Nothing -> keyboardGrabInitiate gss (GrabWorkspaces undefined)
+            _ -> return ()
+        grabWorkspaces gss _ False = do
+          keyboardGrabLetGo gss (GrabWorkspaces undefined)
+
+        terminateWindow :: SpriteLocation -> Bool -> IO ()
         terminateWindow (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
           simulaView <- readTVarIO (gsvs ^. gsvsView)
           let eitherSurface = (simulaView ^. svWlrEitherSurface)
@@ -337,6 +379,34 @@ getKeyboardAction gss keyboardShortcut =
         cycleEnvironment _ _ _ = do
           return ()
 
+        debugPrint :: SpriteLocation -> Bool -> IO ()
+        debugPrint _ True = do
+          putStrLn "debugPrint"
+        debugPrint _ _ = return ()
+
+        switchToWorkspace :: GodotSimulaServer -> Int -> SpriteLocation -> Bool -> IO ()
+        switchToWorkspace gss workspaceNum _ True = do
+          putStrLn $ "Switching to workspace" ++ (show workspaceNum)
+          currentWorkspace <- readTVarIO (gss ^. gssWorkspace)
+          let newWorkspace = (gss ^. gssWorkspaces) V.! workspaceNum
+
+          -- Set new workspace for new gsvs to inherit from
+          atomically $ writeTVar (gss ^. gssWorkspace) newWorkspace
+
+          -- Swap workspace in scene graph
+          removeChild gss currentWorkspace
+          addChild gss newWorkspace
+        switchToWorkspace _ _ _ _ = return ()
+
+        sendToWorkspace :: GodotSimulaServer -> Int -> SpriteLocation -> Bool -> IO ()
+        sendToWorkspace gss workspaceNum (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+          putStrLn $ "Sending app to workspace" ++ (show workspaceNum)
+          currentWorkspace <- readTVarIO (gss ^. gssWorkspace)
+          let newWorkspace = (gss ^. gssWorkspaces) V.! workspaceNum
+          removeChild currentWorkspace gsvs
+          addChild newWorkspace gsvs
+        sendToWorkspace _ _ _ _ = return ()
+
 isMask :: Int -> Bool
 isMask keyOrMask = elem keyOrMask [ G.KEY_MASK_SHIFT
                                   , G.KEY_MASK_ALT
@@ -399,7 +469,6 @@ instance NativeScript GodotSimulaServer where
     , func NoRPC "_input" Plugin.SimulaServer._input
     , func NoRPC "_on_WaylandDisplay_ready"    Plugin.SimulaServer._on_WaylandDisplay_ready
     , func NoRPC "_on_WlrXdgShell_new_surface" Plugin.SimulaServer._on_WlrXdgShell_new_surface
-    , func NoRPC "handle_map_surface" Plugin.SimulaServer.handle_map_surface
     , func NoRPC "_on_wlr_key" Plugin.SimulaServer._on_wlr_key
     , func NoRPC "_on_wlr_modifiers" Plugin.SimulaServer._on_wlr_modifiers
     , func NoRPC "_on_WlrXWayland_new_surface" Plugin.SimulaServer._on_WlrXWayland_new_surface
@@ -423,6 +492,10 @@ ready gss _ = do
             return ()
 
   addWlrChildren gss
+
+  gssWorkspaces' <- V.replicateM 10 (unsafeInstance GodotSpatial "Spatial")
+  gssDiffMapVal <- initializeDiffMap (safeCast gss) gssWorkspaces'
+  atomically $ writeTVar (gss ^. gssDiffMap) gssDiffMapVal
 
   wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
   wlrKeyboard <- readTVarIO (gss ^. gssWlrKeyboard)
@@ -479,6 +552,9 @@ ready gss _ = do
   -- overrides the default environment
   (worldEnvironment, _) <- readTVarIO (gss ^. gssWorldEnvironment)
   addChild gss worldEnvironment
+
+  defaultWorkspace <- readTVarIO (gss ^. gssWorkspace)
+  addChild gss defaultWorkspace
 
   -- Launch default apps
   sApps <- readTVarIO (gss ^. gssStartingApps)
@@ -583,7 +659,11 @@ addWlrChildren gss = do
 
 parseConfiguration :: IO (Configuration)
 parseConfiguration = do
-  config <- input auto "./config/config.dhall" :: IO Configuration
+  profile <- lookupEnv "PROFILE"
+  let defaultConfiguration = Configuration {_backend = "OpenVR", _startingApps = StartingApps {_center = Just "ENV=val ./result/bin/xfce4-terminal", _right = Nothing, _bottom = Nothing, _left = Nothing, _top = Nothing}, _defaultWindowResolution = Just (900,900), _defaultWindowScale = 1.0, _keyBindings = [KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_BACKSPACE"], _keyAction = "terminateWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_ESCAPE"], _keyAction = "toggleGrabMode"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_SLASH"], _keyAction = "launchTerminal"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_APOSTROPHE"], _keyAction = "moveCursor"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_ENTER"], _keyAction = "clickLeft"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_ALT_R"], _keyAction = "grabWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_ALT_L"], _keyAction = "grabWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_A"], _keyAction = "launchAppLauncher"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_E"], _keyAction = "cycleEnvironment"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_F"], _keyAction = "orientWindowTowardsGaze"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_9"], _keyAction = "scaleWindowDown"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_0"], _keyAction = "scaleWindowUp"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MINUS"], _keyAction = "zoomOut"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_EQUAL"], _keyAction = "zoomIn"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_LEFT"], _keyAction = "contractWindowHorizontally"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_RIGHT"], _keyAction = "extendWindowHorizontally"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_UP"], _keyAction = "contractWindowVertically"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_DOWN"], _keyAction = "extendWindowVertically"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_S"], _keyAction = "resizeWindowToDefaultSize"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_COMMA"], _keyAction = "pullWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_PERIOD"], _keyAction = "pushWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_W"], _keyAction = "launchHMDWebCam"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_R"], _keyAction = "emacsclient -c"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MASK_SHIFT","KEY_ESCAPE"], _keyAction = "terminateSimula"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MASK_ALT","KEY_UP"], _keyAction = "increaseTransparency"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MASK_ALT","KEY_DOWN"], _keyAction = "decreaseTransparency"},KeyboardShortcut {_keyCombination = ["KEY_PRINT"], _keyAction = "toggleScreenshotMode"},KeyboardShortcut {_keyCombination = ["KEY_MASK_SHIFT","KEY_PRINT"], _keyAction = "takeScreenshotGlobal"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_K"], _keyAction = "firefox -new-window"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_G"], _keyAction = "google-chrome-stable --new-window news.ycombinator.com"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_J"], _keyAction = "gvim"}], _keyRemappings = [], _environmentsDirectory = "./environments", _environmentDefault = "./environments/AllSkyFree_Sky_EpicBlueSunset_Equirect.png"} --
+  config <- case profile of
+    Just value -> return defaultConfiguration
+    Nothing -> input auto "./config/config.dhall" :: IO Configuration
   return config
 
 -- | We first fill the TVars with dummy state, before updating them with their
@@ -667,6 +747,12 @@ initGodotSimulaServer obj = do
 
       gssStartingAppPids' <- newTVarIO M.empty :: IO (TVar (M.Map ProcessID [String]))
 
+      gssGrab' <- newTVarIO Nothing
+
+      gssWorkspaces' <- V.replicateM 10 (unsafeInstance GodotSpatial "Spatial")
+      gssWorkspace' <- newTVarIO $ (gssWorkspaces' V.! 1)
+      gssDiffMap' <- newTVarIO $ M.empty -- Can't instantiate this until we have the gss Spatial information
+
       let gss = GodotSimulaServer {
         _gssObj                   = obj                       :: GodotObject
       , _gssWaylandDisplay        = gssWaylandDisplay'        :: TVar GodotWaylandDisplay
@@ -698,6 +784,10 @@ initGodotSimulaServer obj = do
       , _gssStartingAppTransform  = gssStartingAppTransform'  :: TVar (Maybe GodotTransform)
       , _gssPid                   = gssPid'                   :: String
       , _gssStartingAppPids       = gssStartingAppPids'       :: TVar (M.Map ProcessID [String])
+      , _gssGrab                  = gssGrab'                  :: TVar (Maybe Grab)
+      , _gssDiffMap               = gssDiffMap'               :: TVar (M.Map GodotSpatial GodotTransform)
+      , _gssWorkspaces            = gssWorkspaces'            :: Vector GodotSpatial
+      , _gssWorkspace             = gssWorkspace'             :: TVar GodotSpatial
       }
   return gss
   where getStartingAppsStr :: Maybe String -> String
@@ -748,11 +838,8 @@ _on_WlrXdgShell_new_surface gss [wlrXdgSurfaceVariant] = do
               connectGodotSignal wlrSurface "commit" gsvs "handle_wlr_surface_commit" []
               connectGodotSignal wlrSurface "destroy" gsvs "handle_wlr_surface_destroy" []
 
-              -- Add the gsvs as a child to the SimulaServer
-              G.add_child ((safeCast gss) :: GodotNode )
-                          ((safeCast gsvs) :: GodotNode)
-                          True
-
+              -- We G.set_activated early to prevent weird behavior (e.g. file pickers failing to spawn)
+              G.set_activated wlrXdgToplevel True
               return ()
 
 
@@ -769,43 +856,6 @@ _on_WlrXdgShell_new_surface gss [wlrXdgSurfaceVariant] = do
               , _svWlrEitherSurface = (Left wlrXdgSurface) :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface
               , _gsvsUUID           = gsvsUUID' :: Maybe UUID
               }
-
-handle_map_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
-handle_map_surface gss [gsvsVariant] = do
-  putStrLn "handle_map_surface"
-  maybeGsvs <- variantToReg gsvsVariant :: IO (Maybe GodotSimulaViewSprite)
-  case maybeGsvs of
-    Nothing -> putStrLn "Failed to cast GodotSimulaViewSprite in handle_map_surface!"
-    Just gsvs -> do -- Delay adding the sprite to the scene graph until we know XCB intends for it to be mapped
-                    putStr "Mapping surface "
-                    print (safeCast @GodotObject gsvs)
-                    G.add_child ((safeCast gss) :: GodotNode )
-                                ((safeCast gsvs) :: GodotNode)
-                                True
-
-                    cb <- newCanvasBase gsvs
-                    viewportBase <- readTVarIO (cb ^. cbViewport)
-                    atomically $ writeTVar (gsvs ^. gsvsCanvasBase) cb
-                    G.set_process cb True
-                    addChild gsvs viewportBase
-                    addChild viewportBase cb
-
-                    cs <- newCanvasSurface gsvs
-                    viewportSurface <- readTVarIO (cs ^. csViewport)
-                    atomically $ writeTVar (gsvs ^. gsvsCanvasSurface) cs
-                    G.set_process cs True
-                    addChild gsvs viewportSurface
-                    addChild viewportSurface cs
-
-                    setInFrontOfUser gsvs (-2)
-
-                    V3 1 1 1 ^* (1 + 1 * 1) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
-
-                    focus gsvs -- We're relying on this to add references to wlrSurface :/
-
-                    simulaView <- atomically $ readTVar (gsvs ^. gsvsView)
-                    atomically $ writeTVar (simulaView ^. svMapped) True
-  return ()
 
 _on_wlr_key :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_wlr_key gss [keyboardGVar, eventGVar] = do
@@ -925,7 +975,7 @@ getHMDLookAtSprite :: GodotSimulaServer -> IO (Maybe (GodotSimulaViewSprite, Sur
 getHMDLookAtSprite gss = do
   rc <- readTVarIO (gss ^.  gssHMDRayCast)
   G.force_raycast_update rc -- Necessary to avoid crashes
-  hmdGlobalTransform <- getARVRCameraOrPancakeCameraTransform gss
+  hmdGlobalTransform <- getARVRCameraOrPancakeCameraTransformGlobal gss
   G.set_global_transform rc hmdGlobalTransform
 
   isColliding <- G.is_colliding rc
@@ -937,23 +987,35 @@ getHMDLookAtSprite gss = do
                             return $ Just (gsvs, surfaceLocalCoords)
   return ret
 
+
 physicsProcess :: GodotSimulaServer -> [GodotVariant] -> IO ()
 physicsProcess gss _ = do
-  arvrCameraTransform <- getARVRCameraOrPancakeCameraTransform gss
-
-  maybeKeyboardGrabbedGSVS <- readTVarIO (gss ^. gssKeyboardGrabbedSprite)
   maybeLookAtGSVS <- getHMDLookAtSprite gss
   gsvsActiveCursor <- readTVarIO (gss ^. gssActiveCursorGSVS)
-
-  case (maybeKeyboardGrabbedGSVS, maybeLookAtGSVS) of
-    (Just (gsvs, dist), _) -> do setInFrontOfUser gsvs dist
-                                 orientSpriteTowardsGaze gsvs
-    (Nothing, Just (gsvs, surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)))) -> case gsvsActiveCursor of
-                                                                                            Nothing -> focus gsvs
-                                                                                            Just gsvsActiveCursor' -> if (gsvs /= gsvsActiveCursor') then (focus gsvs) else return () -- (safeSetActivated gsvs True)
-    _ -> return ()
-
-  return ()
+  maybeGssGrab <- readTVarIO (gss ^. gssGrab)
+  case maybeGssGrab of
+    (Just (GrabWindows prevPovTransform)) -> do currentWorkspace <- readTVarIO (gss ^. gssWorkspace)
+                                                diffMap <- readTVarIO (gss ^. gssDiffMap)
+                                                diff <- getGrabDiff gss
+                                                id <- makeIdentityTransform
+                                                let diffPrev = M.findWithDefault id currentWorkspace diffMap
+                                                diffComposed <- Api.godot_transform_operator_multiply diff diffPrev
+                                                G.set_transform currentWorkspace diffComposed
+    (Just (GrabWindow gsvs dist)) -> do setInFrontOfUser gsvs dist
+                                        orientSpriteTowardsGaze gsvs
+    (Just (GrabWorkspaces prevPovTransform)) -> do currentWorkspace <- readTVarIO (gss ^. gssWorkspace)
+                                                   diffMap <- readTVarIO (gss ^. gssDiffMap)
+                                                   diff <- getGrabDiff gss
+                                                   id <- makeIdentityTransform
+                                                   let diffPrev = M.findWithDefault id (safeCast gss) diffMap
+                                                   diffComposed <- Api.godot_transform_operator_multiply diff diffPrev
+                                                   G.set_transform gss diffComposed
+    Nothing -> case maybeLookAtGSVS of
+                    Nothing -> return ()
+                    Just (gsvs, surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy))) -> do
+                        case gsvsActiveCursor of
+                              Nothing -> focus gsvs
+                              Just gsvsActiveCursor' -> if (gsvs /= gsvsActiveCursor') then (focus gsvs) else return () -- (safeSetActivated gsvs True)
 
 -- Run shell command with DISPLAY set to its original (typically :1).
 shellCmd1 :: GodotSimulaServer -> String -> IO ()
@@ -983,12 +1045,13 @@ _on_simula_shortcut gss [scancodeWithModifiers', isPressed'] = do
     Just action -> action maybeHMDLookAtSprite isPressed
     Nothing -> case isPressed of
                  False -> do if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
-                             keyboardGrabLetGo' maybeHMDLookAtSprite -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
+                             keyboardGrabLetGo' gss maybeHMDLookAtSprite -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
+                             keyboardGrabLetGo gss (GrabWindows undefined) -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
                  True -> if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
 
-  where keyboardGrabLetGo' :: Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates) -> IO ()
-        keyboardGrabLetGo' (Just (gsvs, _)) = do keyboardGrabLetGo gsvs
-        keyboardGrabLetGo' _ = return ()
+  where keyboardGrabLetGo' :: GodotSimulaServer -> Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates) -> IO ()
+        keyboardGrabLetGo' gss (Just (gsvs, _)) = do keyboardGrabLetGo gss (GrabWindow gsvs undefined)
+        keyboardGrabLetGo' _ _ = return ()
 
         extractMods :: Int -> [Int]
         extractMods sc = concatMap (extractIf sc) [G.KEY_MASK_SHIFT, G.KEY_MASK_ALT, G.KEY_MASK_META, G.KEY_MASK_CTRL, G.KEY_MASK_CMD, G.KEY_MASK_KPAD, G.KEY_MASK_GROUP_SWITCH]
@@ -1067,9 +1130,10 @@ handle_wlr_compositor_new_surface gss args@[wlrSurfaceVariant] = do
 
 seat_request_cursor :: GodotSimulaServer -> [GodotVariant] -> IO ()
 seat_request_cursor gss args@[wlrSurfaceCursorVariant] = do
-  wlrSurfaceCursor <- fromGodotVariant wlrSurfaceCursorVariant :: IO GodotWlrSurface
+  maybeWlrSurfaceCursor <- (fromGodotVariant wlrSurfaceCursorVariant :: IO GodotWlrSurface) >>= validateSurface
   maybeActiveCursorGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
-  case (maybeActiveCursorGSVS, ((unsafeCoerce wlrSurfaceCursor) == nullPtr))   of
+  case (maybeActiveCursorGSVS, maybeWlrSurfaceCursor)   of
       (Nothing, _) -> putStrLn "Unable to find active cursor gsvs; unable to load cursor texture."
-      (Just gsvs, False) -> atomically $ writeTVar (gsvs ^. gsvsCursor) ((Just wlrSurfaceCursor), Nothing)
-      (Just gsvs, True) -> putStrLn "seat_request_cursor surface is NULL!"
+      (Just gsvs, Nothing) -> putStrLn "seat_request_cursor surface is NULL!"
+      (Just gsvs, Just wlrSurfaceCursor) -> atomically $ writeTVar (gsvs ^. gsvsCursor) ((Just wlrSurfaceCursor), Nothing)
+  return ()

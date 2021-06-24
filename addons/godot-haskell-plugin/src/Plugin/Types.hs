@@ -9,6 +9,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DefaultSignatures #-}
 
 module Plugin.Types where
 
@@ -67,6 +68,10 @@ import Godot.Core.GodotViewport as G
 
 import Data.Map.Ordered as MO
 import Dhall
+import qualified Data.Vector as V
+
+instance Show Transform where
+  show tf = (show (_tfBasis tf)) ++ (" w/position: ") ++ (show (_tfPosition tf))
 
 instance Show GodotWlrXWaylandSurface where
   show wlrXWaylandSurface = (show (coerce wlrXWaylandSurface :: Ptr ()))
@@ -77,6 +82,9 @@ instance Show GodotWlrSurface where
 
 instance Ord GodotWlrXWaylandSurface where
   wlrXWaylandSurface1 `compare` wlrXWaylandSurface2 = ((coerce wlrXWaylandSurface1) :: Ptr ()) `compare` ((coerce wlrXWaylandSurface2) :: Ptr ())
+
+instance Ord GodotSpatial where
+  sp1 `compare` sp2 = ((coerce sp1) :: Ptr ()) `compare` ((coerce sp2) :: Ptr ())
 
 unfoldrM :: Monad m => (b -> m (Maybe (a, b))) -> b -> m [a]
 unfoldrM f b = f b >>= \case
@@ -150,6 +158,9 @@ type StartingAppsRemaining = Int
 data SimulaEnvironment = Day | Night
   deriving (Eq, Show)
 
+data Grab = GrabWindow GodotSimulaViewSprite Float | GrabWindows GodotTransform | GrabWorkspaces GodotTransform
+type DiffMap = M.Map GodotSpatial GodotTransform
+
 -- We use TVar excessively since these datatypes must be retrieved from the
 -- scene graph (requiring IO)
 data GodotSimulaServer = GodotSimulaServer
@@ -183,11 +194,15 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssStartingAppTransform  :: TVar (Maybe GodotTransform)
   , _gssPid                   :: String
   , _gssStartingAppPids       :: TVar (M.Map ProcessID [String])
+  , _gssGrab                  :: TVar (Maybe Grab)
+  , _gssDiffMap               :: TVar (M.Map GodotSpatial GodotTransform)
+  , _gssWorkspaces            :: Vector GodotSpatial
+  , _gssWorkspace             :: TVar GodotSpatial
   }
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
@@ -394,21 +409,10 @@ newNS'' constr clsName args url = do
 -- G.asClass
 -- GodotResource -> GodotNativeScript -> GodotObject -> Godot
 
--- | Unsafe helper function to determine if a Godot type is null.
-isGodotTypeNull :: (Typeable a) => a -> IO ()
-isGodotTypeNull godotValue = do
-  let isNull = ((unsafeCoerce godotValue) == nullPtr)
-  putStrLn $ (show (typeOf godotValue)) ++ ": isNull " ++ (show isNull)
-
-isGodotTypeNullErr :: (Typeable a) => a -> IO ()
-isGodotTypeNullErr godotValue = do
-  let isNull = ((unsafeCoerce godotValue) == nullPtr)
-  if isNull then error $ (show (typeOf godotValue)) ++ ": isNull True"
-            else putStrLn $ (show (typeOf godotValue)) ++ ": isNull False"
-
 deriving instance Eq GodotWlrOutput
 deriving instance Eq GodotWlrXdgSurface
 deriving instance Eq GodotWlrXWaylandSurface
+deriving instance Eq GodotSpatial
 
 -- Unused/untested.
 getGSVSFromEitherSurface :: GodotSimulaServer -> Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO (Maybe GodotSimulaViewSprite)
@@ -582,6 +586,25 @@ getARVRCameraOrPancakeCameraTransform gss = do
                     G.get_camera_transform camera
         True ->  do gssNode  <- G.get_node ((safeCast gss) :: GodotNode) nodePath
                     let arvrCamera = (coerce gssNode) :: GodotARVRCamera -- HACK: We use `coerce` instead of something more proper
+                    G.get_transform (arvrCamera)
+  Api.godot_node_path_destroy nodePath
+  return transform
+  where getViewportCamera :: GodotSimulaServer -> IO GodotCamera
+        getViewportCamera gss = do
+          viewport <- G.get_viewport gss :: IO GodotViewport
+          camera <- G.get_camera viewport :: IO GodotCamera
+          return camera
+
+getARVRCameraOrPancakeCameraTransformGlobal :: GodotSimulaServer -> IO GodotTransform
+getARVRCameraOrPancakeCameraTransformGlobal gss = do
+  let nodePathStr = "/root/Root/VRViewport/ARVROrigin/ARVRCamera"
+  nodePath <- (toLowLevel (pack nodePathStr)) :: IO GodotNodePath
+  hasNode  <- G.has_node gss (nodePath :: GodotNodePath)
+  transform <- case hasNode of
+        False -> do camera <- getViewportCamera gss
+                    G.get_camera_transform camera
+        True ->  do gssNode  <- G.get_node ((safeCast gss) :: GodotNode) nodePath
+                    let arvrCamera = (coerce gssNode) :: GodotARVRCamera -- HACK: We use `coerce` instead of something more proper
                     G.get_global_transform (arvrCamera)
   Api.godot_node_path_destroy nodePath
   return transform
@@ -622,6 +645,11 @@ logGSVS str gsvs = do
 logStr :: String -> IO ()
 logStr string = do
   appendFile "./log/log.txt" $ string ++ "\n"
+
+logPutStrLn :: String -> IO ()
+logPutStrLn string = do
+  logStr string
+  putStrLn string
 
 -- | returns Just pid or Nothing if process has already exited
 getPid :: ProcessHandle -> IO (Maybe ProcessID)
@@ -714,23 +742,24 @@ fst3 (a, b, c) = a
 
 savePng :: CanvasSurface -> GodotViewportTexture -> GodotWlrSurface -> IO String
 savePng cs surfaceTexture wlrSurface = do
-  let isNull = ((unsafeCoerce surfaceTexture) == nullPtr) || ((unsafeCoerce wlrSurface) == nullPtr)
-  case isNull of
-    True -> do putStrLn "Texture is null in savePng!"
-               return ""
-    False -> do -- Get image
-                gsvs <- readTVarIO (cs ^. csGSVS)
-                surfaceTextureAsImage <- G.get_data surfaceTexture
+  let maybeSurfaceTexture = validateObject surfaceTexture
+  maybeWlrSurface <- validateSurface wlrSurface
+  case (maybeSurfaceTexture, maybeWlrSurface) of
+    (Just surfaceTexture, Just wlrSurface) -> do
+      -- Get image
+      gsvs <- readTVarIO (cs ^. csGSVS)
+      surfaceTextureAsImage <- G.get_data surfaceTexture
 
-                -- Get file path
-                frame <- readTVarIO (gsvs ^. gsvsFrameCount)
-                let pathStr = "./png/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
-                canonicalPath <- canonicalizePath pathStr
-                pathStr' <- toLowLevel (pack pathStr)
+      -- Get file path
+      frame <- readTVarIO (gsvs ^. gsvsFrameCount)
+      let pathStr = "./png/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
+      canonicalPath <- canonicalizePath pathStr
+      pathStr' <- toLowLevel (pack pathStr)
 
-                -- Save as png
-                G.save_png surfaceTextureAsImage pathStr'
-                return canonicalPath
+      -- Save as png
+      G.save_png surfaceTextureAsImage pathStr'
+      return canonicalPath
+    _ -> putStrLn "Texture is null in savePng!" >> return ""
   where getVisualServer gsvs = do
           gss <- readTVarIO (gsvs ^. gsvsServer)
           visualServer <- readTVarIO (gss ^. gssVisualServer)
@@ -885,7 +914,7 @@ orientSpriteTowardsGaze gsvs = do
     True -> do gss <- readTVarIO (gsvs ^. gsvsServer)
                upV3 <- toLowLevel (V3 0 1 0) :: IO GodotVector3
                rotationAxisY <- toLowLevel (V3 0 1 0) :: IO GodotVector3
-               targetV3 <- getARVRCameraOrPancakeCameraTransform gss >>= Api.godot_transform_get_origin -- void look_at ( Vector3 target, Vector3 up )
+               targetV3 <- getARVRCameraOrPancakeCameraTransformGlobal gss >>= Api.godot_transform_get_origin -- void look_at ( Vector3 target, Vector3 up )
                G.look_at gsvs targetV3 upV3                      -- The negative z-axis of the gsvs looks at HMD
                return ()
                -- G.rotate_object_local gsvs rotationAxisY 3.14159  -- The positive z-axis of the gsvs looks at HMD
@@ -1118,11 +1147,15 @@ getBaseDimensions gsvs = do
 
 getSpilloverDims :: GodotSimulaViewSprite -> IO (Int, Int)
 getSpilloverDims gsvs = do
-  depthFirstSurfaces <- getDepthFirstSurfaces gsvs :: IO [(GodotWlrSurface, Int, Int)]
-  spilloverDims <- mapM (getSpilloverDims gsvs) depthFirstSurfaces
-  let spilloverWidth = Data.List.maximum $ fmap fst spilloverDims
-  let spilloverHeight = Data.List.maximum $ fmap snd spilloverDims
-  return (spilloverWidth, spilloverHeight)
+  isValid <- gsvsIsValid gsvs
+  case isValid of
+    False -> return (-1, -1)
+    True -> do
+      depthFirstSurfaces <- getDepthFirstSurfaces gsvs :: IO [(GodotWlrSurface, Int, Int)]
+      spilloverDims <- mapM (getSpilloverDims gsvs) depthFirstSurfaces
+      let spilloverWidth = Data.List.maximum $ fmap fst spilloverDims
+      let spilloverHeight = Data.List.maximum $ fmap snd spilloverDims
+      return (spilloverWidth, spilloverHeight)
   where getSpilloverDims :: GodotSimulaViewSprite -> (GodotWlrSurface, Int, Int) -> IO (Int, Int)
         getSpilloverDims gsvs (wlrSurface, sx, sy) = do
           (baseWidth, baseHeight) <- getBaseDimensions gsvs
@@ -1185,3 +1218,128 @@ getSimulaStartingLocationAtomically gss pids = do
        ([], Nothing) -> return Nothing
        (pid:pids, Nothing) -> do
          getSimulaStartingLocationAtomically gss pids
+
+keyboardGrabInitiate :: GodotSimulaServer -> Grab -> IO ()
+keyboardGrabInitiate gss (GrabWindow gsvs _) = do
+  gss <- readTVarIO (gsvs ^. gsvsServer)
+  -- TODO: Ensure that we aren't keyboard grabbing other stuff, w/o messing up diff state
+  -- keyboardGrabLetGo (GrabWorkspaces gss)
+
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  isInSceneGraph <- G.is_a_parent_of ((safeCast gss) :: GodotNode ) ((safeCast gsvs) :: GodotNode)
+  case isInSceneGraph of
+    False -> keyboardGrabLetGo gss (GrabWindow gsvs undefined)
+    True -> do gss <- readTVarIO $ (gsvs ^. gsvsServer)
+               -- Compute dist
+               orientSpriteTowardsGaze gsvs
+               posGSVS <- (G.get_global_transform gsvs) >>= Api.godot_transform_get_origin
+               hmdTransform <- getARVRCameraOrPancakeCameraTransformGlobal gss
+               posHMD  <- Api.godot_transform_get_origin hmdTransform
+               dist <- realToFrac <$> Api.godot_vector3_distance_to posGSVS posHMD
+               -- Load state
+               atomically $ writeTVar (gss ^. gssGrab) (Just (GrabWindow gsvs (-dist)))
+  return ()
+keyboardGrabInitiate gss (GrabWindows _) = do
+  -- TODO: Ensure that we aren't keyboard grabbing other workspaces, w/o messing up diff state
+  -- keyboardGrabLetGo gss GrabWorkspaces
+
+  povTransform <- getARVRCameraOrPancakeCameraTransform gss
+  atomically $ writeTVar (gss ^. gssGrab) (Just (GrabWindows povTransform))
+
+keyboardGrabInitiate gss (GrabWorkspaces _)  = do
+  -- TODO: Ensure that we aren't keyboard grabbing anything else, w/o messing up diff state
+  -- keyboardGrabLetGo gss (GrabWorkspaces _)
+
+  povTransform <- getARVRCameraOrPancakeCameraTransform gss
+  atomically $ writeTVar (gss ^. gssGrab) (Just (GrabWorkspaces povTransform))
+
+keyboardGrabLetGo :: GodotSimulaServer -> Grab -> IO ()
+keyboardGrabLetGo gss (GrabWindow gsvs _)  = do
+  gss <- readTVarIO $ (gsvs ^. gsvsServer)
+  atomically $ writeTVar (gss ^. gssGrab) Nothing
+keyboardGrabLetGo gss (GrabWindows _) = do
+  currentWorkspace <- readTVarIO (gss ^. gssWorkspace)
+  currentWorkspaceTransform <- G.get_transform currentWorkspace
+  updateDiffMap gss currentWorkspace currentWorkspaceTransform
+  atomically $ writeTVar (gss ^. gssGrab) Nothing
+
+keyboardGrabLetGo gss (GrabWorkspaces _) = do
+  gssTransform <- G.get_transform gss
+  updateDiffMap gss (safeCast gss) gssTransform
+  atomically $ writeTVar (gss ^. gssGrab) Nothing
+
+getGrabDiff :: GodotSimulaServer -> IO GodotTransform
+getGrabDiff gss = do
+  maybeGrab <- readTVarIO (gss ^. gssGrab)
+  diffTransform  <- case maybeGrab of
+                         Nothing -> do let idTransform = TF (identity :: M33 Float) (V3 0 0 0)
+                                       toLowLevel idTransform
+                         (Just (GrabWindows prevTransform)) -> do prevTransformInverse <- Api.godot_transform_affine_inverse prevTransform
+                                                                  povTransform <- getARVRCameraOrPancakeCameraTransform gss
+                                                                  diffTransform <- Api.godot_transform_operator_multiply povTransform prevTransformInverse
+                                                                  return diffTransform
+                         (Just (GrabWorkspaces prevTransform)) -> do prevTransformInverse <- Api.godot_transform_affine_inverse prevTransform
+                                                                     povTransform <- getARVRCameraOrPancakeCameraTransform gss
+                                                                     diffTransform <- Api.godot_transform_operator_multiply povTransform prevTransformInverse
+                                                                     return diffTransform
+  return diffTransform
+
+validateObject :: GodotObject :< a => a -> Maybe a
+validateObject obj = guard (unsafeCoerce ((safeCast obj) :: GodotObject) /= nullPtr) >> return obj
+
+class (GodotObject :< surface) => Validatable surface where
+  isValid :: surface -> IO Bool
+
+instance Validatable GodotWlrSurface where
+  isValid surf = G.is_valid surf
+
+instance Validatable GodotWlrSubsurface where
+  isValid surf = G.is_valid surf
+
+instance Validatable GodotWlrXWaylandSurface where
+  isValid surf = G.is_valid surf
+
+instance Validatable GodotWlrXdgSurface where
+  isValid surf = G.is_valid surf
+
+validateSurface :: (Validatable surface) => surface -> IO (Maybe surface)
+validateSurface surf = do
+  case (validateObject surf) of
+    Nothing -> return Nothing
+    Just obj -> do isValidSurface <- isValid surf
+                   return $ if isValidSurface then (Just surf) else Nothing
+
+gsvsIsValid :: GodotSimulaViewSprite -> IO Bool
+gsvsIsValid gsvs = do
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  let eitherSurface = (simulaView ^. svWlrEitherSurface)
+  case eitherSurface of
+    Left wlrXdgSurface -> do maybeWlrXdgSurface <- validateSurface wlrXdgSurface
+                             let isValid = case maybeWlrXdgSurface of
+                                                Just wlrXdgSurface -> True
+                                                Nothing -> False
+                             return isValid
+    Right wlrXWaylandSurface -> do maybeWlrXWaylandSurface <- validateSurface wlrXWaylandSurface
+                                   let isValid = case maybeWlrXWaylandSurface of
+                                                      Just wlrXWaylandSurface -> True
+                                                      Nothing -> False
+                                   return isValid
+
+makeIdentityTransform :: IO GodotTransform
+makeIdentityTransform = do
+  let idTransform = TF (identity :: M33 Float) (V3 0 0 0)
+  toLowLevel idTransform
+
+initializeDiffMap :: GodotSpatial -> Vector GodotSpatial -> IO DiffMap
+initializeDiffMap gssSpatial workspaces = do
+  let workspacesLst = [gssSpatial] ++ (V.toList workspaces)
+  transformLst <- Control.Monad.replicateM 11 makeIdentityTransform -- 10 workspaces + 1 gss parent node
+  let diffLst = Data.List.zip workspacesLst transformLst
+  let diffMap = M.fromList diffLst
+  return diffMap
+
+updateDiffMap :: GodotSimulaServer -> GodotSpatial -> GodotTransform -> IO ()
+updateDiffMap gss workspaceOrGss newDiff = do
+  diffMap <- readTVarIO (gss ^. gssDiffMap)
+  let updatedDiffMap = M.insert workspaceOrGss newDiff diffMap
+  atomically $ writeTVar (gss ^. gssDiffMap) updatedDiffMap

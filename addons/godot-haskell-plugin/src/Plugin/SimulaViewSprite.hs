@@ -371,13 +371,14 @@ focus gsvs = do
                              G.keyboard_notify_enter wlrSeat wlrSurface
                              pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
                              pointerNotifyFrame wlrSeat
-    Right wlrXWaylandSurface -> do wlrSurface  <- G.get_wlr_surface wlrXWaylandSurface
-                                   case (((unsafeCoerce wlrXWaylandSurface) == nullPtr), ((unsafeCoerce wlrSurface) == nullPtr)) of
-                                     (False, False) -> do G.reference wlrSurface
-                                                          safeSetActivated gsvs True -- G.set_activated wlrXWaylandSurface True
-                                                          G.keyboard_notify_enter wlrSeat wlrSurface
-                                                          pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
-                                                          pointerNotifyFrame wlrSeat
+    Right wlrXWaylandSurface -> do maybeWlrSurface  <- G.get_wlr_surface wlrXWaylandSurface >>= validateSurface
+                                   maybeWlrXWaylandSurface <- validateSurface wlrXWaylandSurface
+                                   case (maybeWlrXWaylandSurface, maybeWlrSurface) of
+                                     (Just wlrXWaylandSurface, Just wlrSurface) -> do G.reference wlrSurface
+                                                                                      safeSetActivated gsvs True -- G.set_activated wlrXWaylandSurface True
+                                                                                      G.keyboard_notify_enter wlrSeat wlrSurface
+                                                                                      pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
+                                                                                      pointerNotifyFrame wlrSeat
                                      _ -> putStrLn $ "Unable to focus on sprite!"
 
 -- | This function isn't called unless a surface is being pointed at (by VR
@@ -429,17 +430,15 @@ processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)
 getXdgSubsurfaceAndCoords :: GodotWlrXdgSurface -> SurfaceLocalCoordinates -> IO (GodotWlrSurface, SubSurfaceLocalCoordinates)
 getXdgSubsurfaceAndCoords wlrXdgSurface cursorCoords@(SurfaceLocalCoordinates (sx, sy)) = do
   rect2@(V2 (V2 posX posY) (V2 xdgWidth xdgHeight)) <- G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
-  wlrSurfaceAtResult   <- G.surface_at  wlrXdgSurface sx sy
-  wlrSurfaceSubSurface <- G.get_surface wlrSurfaceAtResult
-  case (wlrSurfaceSubSurface == (coerce nullPtr)) of
-    True -> putStrLn "NULL!"
-    False -> do G.reference wlrSurfaceSubSurface
-                return ()
-  ssx                  <- G.get_sub_x wlrSurfaceAtResult
-  ssy                  <- G.get_sub_y wlrSurfaceAtResult
-  let ssCoordinates    = SubSurfaceLocalCoordinates (ssx, ssy)
-  wlrXdgToplevel <- G.get_xdg_toplevel wlrXdgSurface
-  return (wlrSurfaceSubSurface, SubSurfaceLocalCoordinates (ssx, ssy))
+  wlrSurfaceAtResult   <- G.surface_at wlrXdgSurface sx sy
+  maybeWlrSurfaceSubSurface <- G.get_surface wlrSurfaceAtResult >>= validateSurface
+  case maybeWlrSurfaceSubSurface of
+    Nothing -> return (coerce nullPtr, SubSurfaceLocalCoordinates (-1, -1))
+    Just wlrSurfaceSubSurface -> do G.reference wlrSurfaceSubSurface
+                                    ssx                  <- G.get_sub_x wlrSurfaceAtResult
+                                    ssy                  <- G.get_sub_y wlrSurfaceAtResult
+                                    let ssCoordinates    = SubSurfaceLocalCoordinates (ssx, ssy)
+                                    return (wlrSurfaceSubSurface, SubSurfaceLocalCoordinates (ssx, ssy))
 
 keyboardNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> IO ()
 keyboardNotifyEnter wlrSeat wlrSurface = do
@@ -490,10 +489,38 @@ _handle_map gsvs _ = do
 
   G.set_process gsvs True
   G.set_process_input gsvs True
-  emitSignal gsvs "map" ([gsvs] :: [GodotSimulaViewSprite])
-  atomically $ writeTVar (simulaView ^. svMapped) True
   atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
   atomically $ writeTVar (_gsvsShouldMove gsvs) True
+
+  putStr "Mapping surface "
+  print (safeCast @GodotObject gsvs)
+  -- Add the gsvs as a child to the current workspace
+  workspace <- readTVarIO (gss ^. gssWorkspace)
+  G.add_child ((safeCast workspace) :: GodotNode)
+              ((safeCast gsvs)      :: GodotNode)
+              True
+
+  cb <- newCanvasBase gsvs
+  viewportBase <- readTVarIO (cb ^. cbViewport)
+  atomically $ writeTVar (gsvs ^. gsvsCanvasBase) cb
+  G.set_process cb True
+  addChild gsvs viewportBase
+  addChild viewportBase cb
+
+  cs <- newCanvasSurface gsvs
+  viewportSurface <- readTVarIO (cs ^. csViewport)
+  atomically $ writeTVar (gsvs ^. gsvsCanvasSurface) cs
+  G.set_process cs True
+  addChild gsvs viewportSurface
+  addChild viewportSurface cs
+
+  setInFrontOfUser gsvs (-2)
+
+  V3 1 1 1 ^* (1 + 1 * 1) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
+
+  focus gsvs -- We're relying on this to add references to wlrSurface :/
+
+  atomically $ writeTVar (simulaView ^. svMapped) True
 
   return ()
 
@@ -544,38 +571,13 @@ moveSpriteAlongObjectZAxis gsvs dist = do
   G.translate_object_local gsvs pushBackVector
   return ()
 
--- Sets gssKeyboardGrabbedSprite to `Just (gsvs, dist)`
-keyboardGrabInitiate :: GodotSimulaViewSprite -> IO ()
-keyboardGrabInitiate gsvs = do
-  gss <- readTVarIO (gsvs ^. gsvsServer)
-  simulaView <- readTVarIO (gsvs ^. gsvsView)
-  isInSceneGraph <- G.is_a_parent_of ((safeCast gss) :: GodotNode ) ((safeCast gsvs) :: GodotNode)
-  case isInSceneGraph of
-    False -> keyboardGrabLetGo gsvs
-    True -> do gss <- readTVarIO $ (gsvs ^. gsvsServer)
-               -- Compute dist
-               orientSpriteTowardsGaze gsvs
-               posGSVS <- (G.get_global_transform gsvs) >>= Api.godot_transform_get_origin
-               hmdTransform <- getARVRCameraOrPancakeCameraTransform gss
-               posHMD  <- Api.godot_transform_get_origin hmdTransform
-               dist <- realToFrac <$> Api.godot_vector3_distance_to posGSVS posHMD
-               -- Load state
-               atomically $ writeTVar (gss ^. gssKeyboardGrabbedSprite) (Just (gsvs, (-dist)))
-  return ()
-
--- Sets gssKeyboardGrabbedSprite to `Nothing`
-keyboardGrabLetGo :: GodotSimulaViewSprite -> IO ()
-keyboardGrabLetGo gsvs = do
-  gss <- readTVarIO $ (gsvs ^. gsvsServer)
-  atomically $ writeTVar (gss ^. gssKeyboardGrabbedSprite) Nothing
-
 setInFrontOfUser :: GodotSimulaViewSprite -> Float -> IO ()
 setInFrontOfUser gsvs zAxisDist = do
   gsvsScale <- G.get_scale (safeCast gsvs :: GodotSpatial)
   gss <- readTVarIO (gsvs ^. gsvsServer)
   rotationAxisY <- toLowLevel (V3 0 1 0) :: IO GodotVector3
   pushBackVector <- toLowLevel (V3 0 0 zAxisDist) :: IO GodotVector3
-  hmdGlobalTransform <- getARVRCameraOrPancakeCameraTransform gss
+  hmdGlobalTransform <- getARVRCameraOrPancakeCameraTransformGlobal gss
   G.set_global_transform gsvs hmdGlobalTransform
   G.translate_object_local gsvs pushBackVector
   G.rotate_object_local gsvs rotationAxisY 3.14159
@@ -839,7 +841,9 @@ handle_unmap_base self [wlrXWaylandSurfaceVariant] = do
   freeChildrenMap <- readTVarIO (gss ^. gssFreeChildren)
   wlrXWaylandSurface <- fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface
 
-  keyboardGrabLetGo self
+  keyboardGrabLetGo gss (GrabWindow self undefined)
+  keyboardGrabLetGo gss (GrabWindows undefined)
+  keyboardGrabLetGo gss (GrabWorkspaces undefined)
 
   G.reference wlrXWaylandSurface
   let maybeGSVSParent = M.lookup wlrXWaylandSurface freeChildrenMap

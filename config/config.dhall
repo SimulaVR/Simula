@@ -30,6 +30,8 @@ let Configuration =
                               , { _keyCombination = ["KEY_MASK_META", "KEY_ENTER"]                     , _keyAction = "clickLeft"                  }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_ALT_R"]                     , _keyAction = "grabWindow"                 }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_ALT_L"]                     , _keyAction = "grabWindow"                 }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_M"]                         , _keyAction = "grabWindows"                }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_M"]       , _keyAction = "grabWorkspaces"             }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_A"]                         , _keyAction = "launchAppLauncher"          }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_E"]                         , _keyAction = "cycleEnvironment"           }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_F"]                         , _keyAction = "orientWindowTowardsGaze"    }
@@ -51,6 +53,22 @@ let Configuration =
                               , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_ALT", "KEY_DOWN"]      , _keyAction = "decreaseTransparency"       }
                               , { _keyCombination = ["KEY_PRINT"]                                      , _keyAction = "toggleScreenshotMode"       }
                               , { _keyCombination = ["KEY_MASK_SHIFT", "KEY_PRINT"]                    , _keyAction = "takeScreenshotGlobal"       }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_1"]                         , _keyAction = "workspace1"       }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_2"]                         , _keyAction = "workspace2"       }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_3"]                         , _keyAction = "workspace3"       }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_4"]                         , _keyAction = "workspace4"       }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_5"]                         , _keyAction = "workspace5"       }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_6"]                         , _keyAction = "workspace6"       }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_7"]                         , _keyAction = "workspace7"       }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_8"]                         , _keyAction = "workspace8"       }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_1"]       , _keyAction = "sendToWorkspace1" }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_2"]       , _keyAction = "sendToWorkspace2" }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_3"]       , _keyAction = "sendToWorkspace3" }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_4"]       , _keyAction = "sendToWorkspace4" }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_5"]       , _keyAction = "sendToWorkspace5" }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_6"]       , _keyAction = "sendToWorkspace6" }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_7"]       , _keyAction = "sendToWorkspace7" }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_8"]       , _keyAction = "sendToWorkspace8" }
 
 
                                 -- Anything else is parsed as a shell command:
