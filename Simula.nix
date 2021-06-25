@@ -27,7 +27,7 @@ let
     haskellCallPkgNoProfile = (import ./pinned-nixpkgs.nix { }).haskellPackages.callPackage;
     godot-haskell-classgen = haskellCallPkgNoProfile ./submodules/godot-haskell-cabal/classgen/classgen.nix { };
     godot-haskell = haskellCallPkg ./submodules/godot-haskell/godot-haskell.nix { api-json = godot-api; profileBuild = profileBuild; godot-haskell-classgen = godot-haskell-classgen; };
-    godot-haskell-plugin = haskellCallPkg ./addons/godot-haskell-plugin/godot-haskell-plugin.nix { devBuild = devBuild; onNixOS = onNixOS; pkgs = import ./pinned-nixpkgs.nix; godot = godot; godot-haskell = godot-haskell; profileBuild = profileBuild; };
+    godot-haskell-plugin = haskellCallPkg ./addons/godot-haskell-plugin/godot-haskell-plugin.nix { devBuild = devBuild; onNixOS = onNixOS; godot = godot; godot-haskell = godot-haskell; profileBuild = profileBuild; };
 
     Cabal = haskellCallPkgNoProfile ./submodules/cabal/Cabal/Cabal.nix { };
     hackage-security = haskellPackages.hackage-security.override { Cabal = Cabal; };
