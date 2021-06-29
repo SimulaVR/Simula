@@ -226,11 +226,12 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsSpilloverDims     :: TVar (Maybe (Int, Int))
   , _gsvsResizedLastFrame  :: TVar Bool
   , _gsvsCursor            :: TVar ((Maybe GodotWlrSurface), (Maybe GodotTexture))
+  , _gsvsIsAtTargetDims    :: TVar Bool
   }
 
 instance HasBaseClass GodotSimulaViewSprite where
   type BaseClass GodotSimulaViewSprite = GodotRigidBody
-  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotRigidBody obj
+  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotRigidBody obj
 
 data CanvasBase = CanvasBase {
     _cbObject       :: GodotObject

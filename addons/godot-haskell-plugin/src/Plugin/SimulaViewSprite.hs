@@ -82,6 +82,7 @@ instance NativeScript GodotSimulaViewSprite where
                       <*> atomically (newTVar Nothing)
                       <*> atomically (newTVar False)
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
+                      <*> atomically (newTVar False)
   -- classExtends = "RigidBody"
   classMethods =
     [ func NoRPC "_input_event" inputEvent
@@ -534,8 +535,62 @@ _process :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 _process self _ = do
   simulaView <- readTVarIO (self ^. gsvsView)
   mapped <- atomically $ readTVar (simulaView ^. svMapped)
-  when mapped $ updateSimulaViewSprite self
+  isAtTargetDims <- readTVarIO (self ^. gsvsIsAtTargetDims)
+  case (isAtTargetDims, mapped) of
+    (False, True) -> do
+      isAtTargetDimsNow <- isAtTargetDimensions self
+      if isAtTargetDimsNow then (atomically $ writeTVar (self ^. gsvsIsAtTargetDims) True) else (return ())
+    (True, True) -> updateSimulaViewSprite self
+    _ -> return ()
   return ()
+  where isAtTargetDimensions :: GodotSimulaViewSprite -> IO Bool
+        isAtTargetDimensions gsvs = do
+          cb <- readTVarIO (gsvs ^. gsvsCanvasBase)
+          renderTargetBase <- readTVarIO (cb ^. cbViewport)
+          cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
+          renderTargetSurface <- readTVarIO (cs ^. csViewport)
+
+          simulaView <- readTVarIO (gsvs ^. gsvsView)
+          let eitherSurface = (simulaView ^. svWlrEitherSurface)
+          wlrSurface <- getWlrSurface eitherSurface
+
+          -- Get state
+          originalDims@(originalWidth, originalHeight) <- case eitherSurface of
+            Left wlrXdgSurface -> do
+              V2 (V2 posX posY) (V2 xdgWidth xdgHeight) <- G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+              return (round xdgWidth, round xdgHeight)
+            Right wlrXWaylandSurface -> do
+              xwHeight <- G.get_height wlrXWaylandSurface
+              xwWidth <- G.get_width wlrXWaylandSurface
+              return (xwWidth, xwHeight)
+
+          maybeTargetDims <- readTVarIO (gsvs ^. gsvsTargetSize)
+          targetDims@(SpriteDimensions (targetWidth, targetHeight)) <- case maybeTargetDims of
+                Nothing -> do
+                  atomically $ writeTVar (gsvs ^. gsvsTargetSize) (Just (SpriteDimensions (originalWidth, originalHeight)))
+                  return (SpriteDimensions originalDims)
+                Just targetDims' -> return targetDims'
+
+          -- Try to avoid forcing small popups to be large squares.
+          let settledDimensions@(settledWidth, settledHeight) = if (originalWidth > 450 || originalHeight > 450)
+                then (targetWidth, targetHeight)
+                else (originalWidth, originalHeight)
+          settledDimensions' <- toLowLevel $ (V2 (fromIntegral settledWidth) (fromIntegral settledHeight))
+
+          -- Set buffer dimensions to new target size
+          case eitherSurface of
+            Left wlrXdgSurface -> do
+              toplevel <- G.get_xdg_toplevel wlrXdgSurface :: IO GodotWlrXdgToplevel
+              G.set_size toplevel settledDimensions'
+            Right wlrXWaylandSurface -> do G.set_size wlrXWaylandSurface settledDimensions'
+
+          -- Try to avoid forcing small popups to be large squares.
+          let isSmallPopUp = if (originalWidth > 450 || originalHeight > 450)
+                then False -- isNotSmallPopup
+                else True -- isSmallPopUp
+          let isAtTargetDims = ((targetWidth == originalWidth) && (targetHeight == originalHeight))
+          return (isSmallPopUp || isAtTargetDims)
+
 
 _handle_destroy :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 _handle_destroy gsvs [gsvsGV] = do
