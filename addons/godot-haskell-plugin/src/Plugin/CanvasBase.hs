@@ -68,9 +68,9 @@ instance NativeScript CanvasBase where
                   <*> atomically (newTVar (error "Failed to initialize CanvasBase."))
   classMethods =
     [
-      func NoRPC "_process" Plugin.CanvasBase._process
-    , func NoRPC "_draw" Plugin.CanvasBase._draw
-    , func NoRPC "_ready" Plugin.CanvasBase._ready
+      func NoRPC "_process" (catchGodot Plugin.CanvasBase._process)
+    , func NoRPC "_draw" (catchGodot Plugin.CanvasBase._draw)
+    , func NoRPC "_ready" (catchGodot Plugin.CanvasBase._ready)
     ]
 
 newCanvasBase :: GodotSimulaViewSprite -> IO (CanvasBase)
@@ -148,6 +148,7 @@ _draw cb _ = do
       case (screenshotModeEnabled, maybeWlrSurfaceCursor, maybeScreenshotCursorTexture, maybeCursorTexture)  of
         (False, Just wlrSurfaceCursor, _, _) -> do
            -- Draw client provided cursor
+           validateSurfaceE wlrSurfaceCursor
            cursorTexture <- G.get_texture wlrSurfaceCursor
            cursorRenderPosition <- toLowLevel (V2 sx sy) :: IO GodotVector2
            godotColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1.0) :: IO GodotColor

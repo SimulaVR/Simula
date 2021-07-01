@@ -23,7 +23,7 @@ import           Control.Concurrent
 import           Control.Monad
 import           Data.Coerce
 import           Unsafe.Coerce
-import           Control.Exception
+import           Control.Exception.Safe
 
 import           Data.Typeable
 import           Godot.Gdnative.Types
@@ -531,8 +531,12 @@ godotPrint str = Api.godot_print =<< toLowLevel str
 getWlrSurface :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO GodotWlrSurface
 getWlrSurface eitherSurface = do
   case eitherSurface of
-    (Left wlrXdgSurface) -> G.get_wlr_surface wlrXdgSurface
-    (Right wlrXWaylandSurface) -> G.get_wlr_surface wlrXWaylandSurface
+    (Left wlrXdgSurface) -> do
+      validateSurfaceE wlrXdgSurface
+      G.get_wlr_surface wlrXdgSurface
+    (Right wlrXWaylandSurface) -> do
+      validateSurfaceE wlrXWaylandSurface
+      G.get_wlr_surface wlrXWaylandSurface
 
 
 -- | Used to supply GodotVector2 to
@@ -743,24 +747,20 @@ fst3 (a, b, c) = a
 
 savePng :: CanvasSurface -> GodotViewportTexture -> GodotWlrSurface -> IO String
 savePng cs surfaceTexture wlrSurface = do
-  let maybeSurfaceTexture = validateObject surfaceTexture
-  maybeWlrSurface <- validateSurface wlrSurface
-  case (maybeSurfaceTexture, maybeWlrSurface) of
-    (Just surfaceTexture, Just wlrSurface) -> do
-      -- Get image
-      gsvs <- readTVarIO (cs ^. csGSVS)
-      surfaceTextureAsImage <- G.get_data surfaceTexture
+  validateSurfaceE wlrSurface
+  -- Get image
+  gsvs <- readTVarIO (cs ^. csGSVS)
+  surfaceTextureAsImage <- G.get_data surfaceTexture
 
-      -- Get file path
-      frame <- readTVarIO (gsvs ^. gsvsFrameCount)
-      let pathStr = "./png/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
-      canonicalPath <- canonicalizePath pathStr
-      pathStr' <- toLowLevel (pack pathStr)
+  -- Get file path
+  frame <- readTVarIO (gsvs ^. gsvsFrameCount)
+  let pathStr = "./png/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
+  canonicalPath <- canonicalizePath pathStr
+  pathStr' <- toLowLevel (pack pathStr)
 
-      -- Save as png
-      G.save_png surfaceTextureAsImage pathStr'
-      return canonicalPath
-    _ -> putStrLn "Texture is null in savePng!" >> return ""
+  -- Save as png
+  G.save_png surfaceTextureAsImage pathStr'
+  return canonicalPath
   where getVisualServer gsvs = do
           gss <- readTVarIO (gsvs ^. gsvsServer)
           visualServer <- readTVarIO (gss ^. gssVisualServer)
@@ -799,7 +799,7 @@ appLaunch gss appStr maybeLocation = do
                                                 Just location -> M.insert "SIMULA_STARTING_LOCATION" location (M.insert "WAYLAND_DISPLAY" "simula-0" envMapWithDisplay)
                                                 Nothing -> (M.insert "WAYLAND_DISPLAY" "simula-0" envMapWithDisplay)
             let envListWithDisplays = M.toList envMapWithWaylandDisplay
-            res <- Control.Exception.try $ createProcess (shell appStr) { env = Just envListWithDisplays, new_session = True } :: IO (Either IOException (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle))
+            res <- Control.Exception.Safe.try $ createProcess (shell appStr) { env = Just envListWithDisplays, new_session = True } :: IO (Either IOException (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle))
             pid <- case res of
                         Left _ -> return $ fromInteger 0
                         Right (_, _, _, processHandle) -> do maybePid <- System.Process.getPid processHandle
@@ -822,7 +822,7 @@ launchHMDWebCam gss maybeLocation = do
     Just path  -> appLaunch gss ("./result/bin/ffplay -loglevel quiet -f v4l2" ++ path) maybeLocation
     where getHMDWebCamPath :: IO (Maybe FilePath)
           getHMDWebCamPath = do
-            res <- Control.Exception.try $ listDirectory "/dev/v4l/by-id" :: IO (Either IOException [FilePath])
+            res <- Control.Exception.Safe.try $ listDirectory "/dev/v4l/by-id" :: IO (Either IOException [FilePath])
             case res of
               Left _ -> return Nothing
               Right _ -> (listToMaybe . Data.List.map ("/dev/v4l/by-id/" ++) . sort . Data.List.filter viveOrValve) <$> listDirectory "/dev/v4l/by-id"
@@ -850,7 +850,7 @@ loadEnvironmentTextures :: Configuration -> GodotWorldEnvironment -> IO [String]
 loadEnvironmentTextures configuration worldEnvironment = do
   -- configuration <- readTVarIO (gss ^. gssConfiguration)
   let envDir = (configuration ^. environmentsDirectory)
-  dirExists <- Control.Exception.try $ listDirectory envDir :: IO (Either IOException [FilePath])
+  dirExists <- Control.Exception.Safe.try $ listDirectory envDir :: IO (Either IOException [FilePath])
   dirs <- case dirExists of
               Left _ -> return []
               Right _ -> findAll [".png", ".jpg", ".jpeg"] <$> listDirectory envDir
@@ -1013,7 +1013,7 @@ getDepthFirstSurfaces :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int
 getDepthFirstSurfaces gsvs = do
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
-  wlrSurfaceParent <- getWlrSurface eitherSurface
+  wlrSurfaceParent <- (getWlrSurface eitherSurface) >>= validateSurfaceE
   depthFirstBaseSurfaces <- getDepthFirstBaseSurfaces gsvs
   depthFirstWlrSurfaces <- getDepthFirstWlrSurfaces wlrSurfaceParent
   let depthFirstSurfaces = depthFirstBaseSurfaces ++ depthFirstWlrSurfaces
@@ -1148,15 +1148,11 @@ getBaseDimensions gsvs = do
 
 getSpilloverDims :: GodotSimulaViewSprite -> IO (Int, Int)
 getSpilloverDims gsvs = do
-  isValid <- gsvsIsValid gsvs
-  case isValid of
-    False -> return (-1, -1)
-    True -> do
-      depthFirstSurfaces <- getDepthFirstSurfaces gsvs :: IO [(GodotWlrSurface, Int, Int)]
-      spilloverDims <- mapM (getSpilloverDims gsvs) depthFirstSurfaces
-      let spilloverWidth = Data.List.maximum $ fmap fst spilloverDims
-      let spilloverHeight = Data.List.maximum $ fmap snd spilloverDims
-      return (spilloverWidth, spilloverHeight)
+  depthFirstSurfaces <- getDepthFirstSurfaces gsvs :: IO [(GodotWlrSurface, Int, Int)]
+  spilloverDims <- mapM (getSpilloverDims gsvs) depthFirstSurfaces
+  let spilloverWidth = Data.List.maximum $ fmap fst spilloverDims
+  let spilloverHeight = Data.List.maximum $ fmap snd spilloverDims
+  return (spilloverWidth, spilloverHeight)
   where getSpilloverDims :: GodotSimulaViewSprite -> (GodotWlrSurface, Int, Int) -> IO (Int, Int)
         getSpilloverDims gsvs (wlrSurface, sx, sy) = do
           (baseWidth, baseHeight) <- getBaseDimensions gsvs
@@ -1180,7 +1176,7 @@ setShader gsvs tres = do
 getParentPid :: ProcessID -> IO (Maybe ProcessID)
 getParentPid pid = do
   let fp = "/proc/" ++ show (toInteger pid) ++ "/stat"
-  econtents <- Control.Exception.try $ readFile fp :: IO (Either SomeException String)
+  econtents <- Control.Exception.Safe.try $ readFile fp :: IO (Either SomeException String)
   case econtents of
     Right xs ->
       case Data.List.lines xs of
@@ -1303,28 +1299,8 @@ instance Validatable GodotWlrXWaylandSurface where
 instance Validatable GodotWlrXdgSurface where
   isValid surf = G.is_valid surf
 
-validateSurface :: (Validatable surface) => surface -> IO (Maybe surface)
-validateSurface surf = do
-  case (validateObject surf) of
-    Nothing -> return Nothing
-    Just obj -> do isValidSurface <- isValid surf
-                   return $ if isValidSurface then (Just surf) else Nothing
-
-gsvsIsValid :: GodotSimulaViewSprite -> IO Bool
-gsvsIsValid gsvs = do
-  simulaView <- readTVarIO (gsvs ^. gsvsView)
-  let eitherSurface = (simulaView ^. svWlrEitherSurface)
-  case eitherSurface of
-    Left wlrXdgSurface -> do maybeWlrXdgSurface <- validateSurface wlrXdgSurface
-                             let isValid = case maybeWlrXdgSurface of
-                                                Just wlrXdgSurface -> True
-                                                Nothing -> False
-                             return isValid
-    Right wlrXWaylandSurface -> do maybeWlrXWaylandSurface <- validateSurface wlrXWaylandSurface
-                                   let isValid = case maybeWlrXWaylandSurface of
-                                                      Just wlrXWaylandSurface -> True
-                                                      Nothing -> False
-                                   return isValid
+instance Validatable GodotWlrXdgToplevel where
+  isValid surf = G.is_valid surf
 
 makeIdentityTransform :: IO GodotTransform
 makeIdentityTransform = do
@@ -1344,3 +1320,18 @@ updateDiffMap gss workspaceOrGss newDiff = do
   diffMap <- readTVarIO (gss ^. gssDiffMap)
   let updatedDiffMap = M.insert workspaceOrGss newDiff diffMap
   atomically $ writeTVar (gss ^. gssDiffMap) updatedDiffMap
+
+data NullPointerException = NullPointerException deriving (Eq, Show, Typeable)
+instance Exception NullPointerException
+
+validateSurfaceE :: (Validatable surface) => surface -> IO surface
+validateSurfaceE surf = do
+  case (validateObject surf) of
+    Nothing -> (throw NullPointerException)
+    Just obj -> do isValidSurface <- isValid surf
+                   ret <- if isValidSurface then (return surf) else (Control.Exception.Safe.throw NullPointerException)
+                   return ret
+
+catchGodot :: (a -> [GodotVariant] -> IO ()) -> ((a -> [GodotVariant] -> IO ()))
+catchGodot func x y = catch (func x y) (\e -> do putStrLn $ "Caught " ++ (show (e :: NullPointerException))
+                                                 return ())

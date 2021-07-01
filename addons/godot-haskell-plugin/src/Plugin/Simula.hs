@@ -48,9 +48,9 @@ instance NativeScript GodotSimula where
 
   -- classExtends = "Node"
   classMethods =
-    [ func NoRPC "_ready" Plugin.Simula.ready
-    , func NoRPC "_process" Plugin.Simula.process
-    , func NoRPC "on_button_signal" Plugin.Simula.on_button_signal
+    [ func NoRPC "_ready" (catchGodot Plugin.Simula.ready)
+    , func NoRPC "_process" (catchGodot Plugin.Simula.process)
+    , func NoRPC "on_button_signal" (catchGodot Plugin.Simula.on_button_signal)
     ]
   classSignals = []
 

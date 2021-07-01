@@ -198,9 +198,11 @@ getKeyboardAction gss keyboardShortcut =
           let eitherSurface = (simulaView ^. svWlrEitherSurface)
           case eitherSurface of
             (Left wlrXdgSurface) -> do
+              wlrXdgSurface <- validateSurfaceE wlrXdgSurface
               toplevel  <- G.get_xdg_toplevel wlrXdgSurface :: IO GodotWlrXdgToplevel
               G.send_close toplevel
             (Right wlrXWaylandSurface) -> do
+              wlrXWaylandSurface <- validateSurfaceE wlrXWaylandSurface
               G.send_close wlrXWaylandSurface
         terminateWindow _ _ = return ()
   
@@ -465,17 +467,17 @@ instance NativeScript GodotSimulaServer where
 
   -- classExtends = "Spatial"
   classMethods =
-    [ func NoRPC "_ready" Plugin.SimulaServer.ready
-    , func NoRPC "_input" Plugin.SimulaServer._input
-    , func NoRPC "_on_WaylandDisplay_ready"    Plugin.SimulaServer._on_WaylandDisplay_ready
-    , func NoRPC "_on_WlrXdgShell_new_surface" Plugin.SimulaServer._on_WlrXdgShell_new_surface
-    , func NoRPC "_on_wlr_key" Plugin.SimulaServer._on_wlr_key
-    , func NoRPC "_on_wlr_modifiers" Plugin.SimulaServer._on_wlr_modifiers
-    , func NoRPC "_on_WlrXWayland_new_surface" Plugin.SimulaServer._on_WlrXWayland_new_surface
-    , func NoRPC "_physics_process" Plugin.SimulaServer.physicsProcess
-    , func NoRPC "_on_simula_shortcut" Plugin.SimulaServer._on_simula_shortcut
-    , func NoRPC "handle_wlr_compositor_new_surface" Plugin.SimulaServer.handle_wlr_compositor_new_surface
-    , func NoRPC "seat_request_cursor" Plugin.SimulaServer.seat_request_cursor
+    [ func NoRPC "_ready" (catchGodot Plugin.SimulaServer.ready)
+    , func NoRPC "_input" (catchGodot Plugin.SimulaServer._input)
+    , func NoRPC "_on_WaylandDisplay_ready"    (catchGodot Plugin.SimulaServer._on_WaylandDisplay_ready)
+    , func NoRPC "_on_WlrXdgShell_new_surface" (catchGodot Plugin.SimulaServer._on_WlrXdgShell_new_surface)
+    , func NoRPC "_on_wlr_key" (catchGodot Plugin.SimulaServer._on_wlr_key)
+    , func NoRPC "_on_wlr_modifiers" (catchGodot Plugin.SimulaServer._on_wlr_modifiers)
+    , func NoRPC "_on_WlrXWayland_new_surface" (catchGodot Plugin.SimulaServer._on_WlrXWayland_new_surface)
+    , func NoRPC "_physics_process" (catchGodot Plugin.SimulaServer.physicsProcess)
+    , func NoRPC "_on_simula_shortcut" (catchGodot Plugin.SimulaServer._on_simula_shortcut)
+    , func NoRPC "handle_wlr_compositor_new_surface" (catchGodot Plugin.SimulaServer.handle_wlr_compositor_new_surface)
+    , func NoRPC "seat_request_cursor" (catchGodot Plugin.SimulaServer.seat_request_cursor)
     ]
 
   classSignals = []
@@ -807,12 +809,12 @@ _on_WaylandDisplay_ready gss _ = do
 _on_WlrXdgShell_new_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_WlrXdgShell_new_surface gss [wlrXdgSurfaceVariant] = do
   putStrLn "_on_WlrXdgShell_new_surface"
-  wlrXdgSurface <- fromGodotVariant wlrXdgSurfaceVariant :: IO GodotWlrXdgSurface -- Not sure if godot-haskell provides this for us
+  wlrXdgSurface <- (fromGodotVariant wlrXdgSurfaceVariant :: IO GodotWlrXdgSurface) >>= validateSurfaceE
   roleInt <- G.get_role wlrXdgSurface
   case roleInt of
       0 -> return () -- XDG_SURFACE_ROLE_NONE
       2 -> do -- XDG_SURFACE_ROLE_POPUP
-        wlrSurface <- G.get_wlr_surface wlrXdgSurface
+        wlrSurface <- G.get_wlr_surface wlrXdgSurface >>= validateSurfaceE
         maybeGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
         case maybeGSVS of
           Nothing -> putStrLn "Unable to connect xdg popup surface signals; no gssActiveCursorGSVS!"
@@ -822,8 +824,8 @@ _on_WlrXdgShell_new_surface gss [wlrXdgSurfaceVariant] = do
             -- connectGodotSignal wlrSurface "destroy" gsvs "handle_wlr_surface_destroy" []  -- arguably don't need; subsumed by xdg destroy signal
             return ()
       1 -> do -- XDG_SURFACE_ROLE_TOPLEVEL
-              wlrXdgToplevel <- G.get_xdg_toplevel wlrXdgSurface
-              wlrSurface <- G.get_wlr_surface wlrXdgSurface
+              wlrXdgToplevel <- G.get_xdg_toplevel wlrXdgSurface >>= validateSurfaceE
+              wlrSurface <- G.get_wlr_surface wlrXdgSurface >>= validateSurfaceE
               G.set_tiled wlrXdgToplevel True
               simulaView <- newSimulaView gss wlrXdgSurface
               gsvs <- newGodotSimulaViewSprite gss simulaView
@@ -873,7 +875,7 @@ _on_wlr_modifiers gss [keyboardGVar] = do
 
 _on_WlrXWayland_new_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_WlrXWayland_new_surface gss [wlrXWaylandSurfaceVariant] = do
-  wlrXWaylandSurface <- fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface
+  wlrXWaylandSurface <- (fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface) >>= validateSurfaceE
   G.reference wlrXWaylandSurface
   simulaView <- newSimulaView gss wlrXWaylandSurface
   gsvs <- newGodotSimulaViewSprite gss simulaView
@@ -1118,7 +1120,7 @@ toggleGrabMode = do
 handle_wlr_compositor_new_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
 handle_wlr_compositor_new_surface gss args@[wlrSurfaceVariant] = do
   putStrLn "handle_wlr_compositor_new_surface"
-  wlrSurface <- fromGodotVariant wlrSurfaceVariant :: IO GodotWlrSurface
+  wlrSurface <- (fromGodotVariant wlrSurfaceVariant :: IO GodotWlrSurface) >>= validateSurfaceE
   maybeGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
   case maybeGSVS of
     Nothing -> return () -- putStrLn "Unable to handle_wlr_compositor_new_surface; no gssActiveCursorGSVS!"
@@ -1130,10 +1132,9 @@ handle_wlr_compositor_new_surface gss args@[wlrSurfaceVariant] = do
 
 seat_request_cursor :: GodotSimulaServer -> [GodotVariant] -> IO ()
 seat_request_cursor gss args@[wlrSurfaceCursorVariant] = do
-  maybeWlrSurfaceCursor <- (fromGodotVariant wlrSurfaceCursorVariant :: IO GodotWlrSurface) >>= validateSurface
+  wlrSurfaceCursor <- (fromGodotVariant wlrSurfaceCursorVariant :: IO GodotWlrSurface) >>= validateSurfaceE
   maybeActiveCursorGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
-  case (maybeActiveCursorGSVS, maybeWlrSurfaceCursor)   of
-      (Nothing, _) -> putStrLn "Unable to find active cursor gsvs; unable to load cursor texture."
-      (Just gsvs, Nothing) -> putStrLn "seat_request_cursor surface is NULL!"
-      (Just gsvs, Just wlrSurfaceCursor) -> atomically $ writeTVar (gsvs ^. gsvsCursor) ((Just wlrSurfaceCursor), Nothing)
+  case maybeActiveCursorGSVS of
+      Nothing -> putStrLn "Unable to find active cursor gsvs; unable to load cursor texture."
+      Just gsvs -> atomically $ writeTVar (gsvs ^. gsvsCursor) ((Just wlrSurfaceCursor), Nothing)
   return ()

@@ -65,9 +65,9 @@ instance NativeScript CanvasSurface where
                   <*> atomically (newTVar (error "Failed to initialize CanvasSurface"))
   classMethods =
     [
-      func NoRPC "_process" Plugin.CanvasSurface._process
-    , func NoRPC "_draw" Plugin.CanvasSurface._draw
-    , func NoRPC "_ready" Plugin.CanvasSurface._ready
+      func NoRPC "_process" (catchGodot Plugin.CanvasSurface._process)
+    , func NoRPC "_draw" (catchGodot Plugin.CanvasSurface._draw)
+    , func NoRPC "_ready" (catchGodot Plugin.CanvasSurface._ready)
     ]
 
 _ready :: CanvasSurface -> [GodotVariant] -> IO ()
@@ -92,16 +92,13 @@ _process self args = do
 _draw :: CanvasSurface -> [GodotVariant] -> IO ()
 _draw cs _ = do
   gsvs <- readTVarIO (cs ^. csGSVS)
-  isValid <- gsvsIsValid gsvs
-  case isValid of
-    False -> return ()
-    True -> do
-      depthFirstSurfaces <- getDepthFirstSurfaces gsvs
-      mapM (drawWlrSurface cs) depthFirstSurfaces
-      return ()
+  depthFirstSurfaces <- getDepthFirstSurfaces gsvs
+  mapM (drawWlrSurface cs) depthFirstSurfaces
+  return ()
   where
     savePngCS :: (GodotWlrSurface, CanvasSurface) -> IO ()
     savePngCS arg@((wlrSurface, cs)) = do
+      validateSurfaceE wlrSurface
       viewportSurface <- readTVarIO (cs ^. csViewport) :: IO GodotViewport
       viewportSurfaceTexture <- (G.get_texture (viewportSurface :: GodotViewport)) :: IO GodotViewportTexture
       savePng cs viewportSurfaceTexture wlrSurface
@@ -109,19 +106,16 @@ _draw cs _ = do
 
     drawWlrSurface :: CanvasSurface -> (GodotWlrSurface, Int, Int) -> IO ()
     drawWlrSurface cs (wlrSurface, x, y) = do
+      validateSurfaceE wlrSurface
       gsvs <- readTVarIO (cs ^. csGSVS)
       gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
-
-      maybeWlrSurface <- validateSurface wlrSurface
-      case maybeWlrSurface of
-        Nothing -> return ()
-        Just wlrSurface -> do G.reference wlrSurface
-                              gsvsTransparency <- getTransparency cs
-                              modulateColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` gsvsTransparency) :: IO GodotColor
-                              renderPosition <- toLowLevel (V2 (fromIntegral x) (fromIntegral y))
-                              surfaceTexture <- G.get_texture wlrSurface :: IO GodotTexture
-                              G.draw_texture cs surfaceTexture renderPosition modulateColor (coerce nullPtr)
-                              G.send_frame_done wlrSurface
+      G.reference wlrSurface
+      gsvsTransparency <- getTransparency cs
+      modulateColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` gsvsTransparency) :: IO GodotColor
+      renderPosition <- toLowLevel (V2 (fromIntegral x) (fromIntegral y))
+      surfaceTexture <- G.get_texture wlrSurface :: IO GodotTexture
+      G.draw_texture cs surfaceTexture renderPosition modulateColor (coerce nullPtr)
+      G.send_frame_done wlrSurface
 
     getTransparency :: CanvasSurface -> IO Double
     getTransparency cs = do

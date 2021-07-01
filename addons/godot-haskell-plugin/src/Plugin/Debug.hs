@@ -317,26 +317,22 @@ debugLogDepthFirstSurfaces gsvs = do
 
         saveWlrSurfacePng :: CanvasSurface -> GodotWlrSurface -> IO String
         saveWlrSurfacePng cs wlrSurface = do
-          maybeWlrSurface <- validateSurface wlrSurface
-          case maybeWlrSurface of
-            Nothing -> do putStrLn "Texture is null in savePng!"
-                          return ""
-            Just wlrSurface -> do -- Get image
-                                  gsvs <- readTVarIO (cs ^. csGSVS)
-                                  visualServer <- getVisualServer gsvs
-                                  wlrSurfaceTexture <- G.get_texture wlrSurface
-                                  rid <- G.get_rid wlrSurfaceTexture
-                                  wlrSurfaceImage <- G.texture_get_data visualServer rid 0
+          validateSurfaceE wlrSurface
+          gsvs <- readTVarIO (cs ^. csGSVS)
+          visualServer <- getVisualServer gsvs
+          wlrSurfaceTexture <- G.get_texture wlrSurface
+          rid <- G.get_rid wlrSurfaceTexture
+          wlrSurfaceImage <- G.texture_get_data visualServer rid 0
 
-                                  -- Get file path
-                                  frame <- readTVarIO (gsvs ^. gsvsFrameCount)
-                                  let pathStr = "./png/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
-                                  canonicalPath <- canonicalizePath pathStr
-                                  pathStr' <- toLowLevel (pack pathStr)
+          -- Get file path
+          frame <- readTVarIO (gsvs ^. gsvsFrameCount)
+          let pathStr = "./png/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
+          canonicalPath <- canonicalizePath pathStr
+          pathStr' <- toLowLevel (pack pathStr)
 
-                                  -- Save as png
-                                  G.save_png wlrSurfaceImage pathStr'
-                                  return canonicalPath
+          -- Save as png
+          G.save_png wlrSurfaceImage pathStr'
+          return canonicalPath
 
         getVisualServer :: GodotSimulaViewSprite -> IO GodotVisualServer
         getVisualServer gsvs = do
