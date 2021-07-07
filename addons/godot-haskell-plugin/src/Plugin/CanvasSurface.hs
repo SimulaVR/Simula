@@ -176,8 +176,6 @@ _draw cs _ = do
                      bufferDims <- getBufferDimensions wlrSurface
                      gsvsRegion' <- fromLowLevel gsvsRegion
                      regionSurface' <- fromLowLevel regionSurface
-                     putStrLn $ "_draw: gsvsRegion: " ++ (show gsvsRegion')
-                     putStrLn $ "_draw: regionSurface: " ++ (show regionSurface')
                      G.draw_texture_rect_region cs surfaceTexture gsvsRegionIntersected regionSurface modulateColor False (coerce nullPtr) True
                    _ -> return ()
                G.send_frame_done wlrSurface
