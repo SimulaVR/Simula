@@ -83,6 +83,8 @@ instance NativeScript GodotSimulaViewSprite where
                       <*> atomically (newTVar False)
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar False)
+                      <*> atomically (newTVar [])
+                      <*> atomically (newTVar False)
   -- classExtends = "RigidBody"
   classMethods =
     [ func NoRPC "_input_event" inputEvent
@@ -267,7 +269,9 @@ setTargetDimensions gsvs = do
         (True, True) -> do atomically $ do writeTVar (gsvs ^. gsvsResizedLastFrame) False
                                            writeTVar (gsvs ^. gsvsSpilloverDims) (Just spilloverDims)
                            case (transOld == 1) of
-                             True -> setShader gsvs "res://addons/godot-haskell-plugin/TextShaderOpaque.tres"
+                             True -> do
+                               setShader gsvs "res://addons/godot-haskell-plugin/TextShaderOpaque.tres"
+                               atomically $ writeTVar (gsvs ^. gsvsIsDamaged) True
                              False -> return ()
         (True, False) -> do let pushX = spilloverWidth - oldSpilloverWidth
                             let pushY = spilloverHeight - oldSpilloverHeight
@@ -276,7 +280,8 @@ setTargetDimensions gsvs = do
                             atomically $ writeTVar (gsvs ^. gsvsSpilloverDims) (Just spilloverDims)
                             case (transOld == 1, (spilloverWidth > targetWidth || spilloverHeight > targetHeight)) of
                               (True, False) ->  return () -- Avoid changing shader when apps first launch
-                              (True, True) -> setShader gsvs "res://addons/godot-haskell-plugin/TextShader.tres"
+                              (True, True) -> do setShader gsvs "res://addons/godot-haskell-plugin/TextShader.tres"
+                                                 atomically $ writeTVar (gsvs ^. gsvsIsDamaged) True
                               (False, _) -> return ()
   return ()
 
@@ -728,6 +733,7 @@ handle_map_free_child gsvsInvisible [wlrXWaylandSurfaceVariant] = do
                                            freeChildrenMapOld <- readTVarIO (gss ^. gssFreeChildren) :: IO (M.Map GodotWlrXWaylandSurface GodotSimulaViewSprite)
                                            let freeChildrenMapNew = M.insert wlrXWaylandSurface gsvs freeChildrenMapOld
                                            atomically $ writeTVar (gss ^. gssFreeChildren) freeChildrenMapNew
+                                           atomically $ writeTVar (gsvs ^. gsvsIsDamaged) True
 
   simulaView <- readTVarIO (gsvsInvisible ^. gsvsView)
   atomically $ writeTVar (simulaView ^. svMapped) True
@@ -880,6 +886,7 @@ handle_map_child gsvsInvisible args@[wlrXWaylandSurfaceVariant] = do
                             -- G.set_xy wlrXWaylandSurface adjustedXY
                             simulaView <- readTVarIO (gsvsInvisible ^. gsvsView)
                             atomically $ writeTVar (simulaView ^. svMapped) True
+                            atomically $ writeTVar (gsvsInvisible ^. gsvsIsDamaged) True
   where
         computeSurfaceLocalCoordinates :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> IO (Maybe (Int, Int))
         computeSurfaceLocalCoordinates gsvs child = do
@@ -908,11 +915,13 @@ handle_set_parent gsvs [wlrXWaylandSurfaceVariant] = do
 handle_unmap_child :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_unmap_child self args@[wlrXWaylandSurfaceVariant] = do
   putStrLn "_handle_unmap_child"
+  atomically $ writeTVar (self ^. gsvsIsDamaged) True
   handle_unmap_base self args
 
 handle_unmap_free_child :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_unmap_free_child self args@[wlrXWaylandSurfaceVariant] = do
   putStrLn "_handle_unmap_free_child"
+  atomically $ writeTVar (self ^. gsvsIsDamaged) True
   handle_unmap_base self args
 
 handle_unmap_base :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
@@ -956,6 +965,7 @@ handle_unmap_base self [wlrXWaylandSurfaceVariant] = do
   G.set_process self False
   atomically $ writeTVar (simulaView ^. svMapped) False
   isInSceneGraph <- G.is_a_parent_of ((safeCast gss) :: GodotNode ) ((safeCast self) :: GodotNode)
+  atomically $ writeTVar (self ^. gsvsIsDamaged) True
   case isInSceneGraph of
        True -> removeChild gss self
        False -> return ()
@@ -1023,10 +1033,12 @@ getWlrSurfaceCoords cursorCoords@(SurfaceLocalCoordinates (cx, cy)) (wlrSurfaceF
 handle_new_popup :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_new_popup gsvs args@[wlrXdgSurfaceParentVariant] = do
   putStrLn "handle_new_popup"
+  atomically $ writeTVar (gsvs ^. gsvsIsDamaged) True
   return ()
 
 handle_window_menu :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_window_menu gsvsInvisible args@[wlrXdgToplevel, serial, x, y] = do
+  atomically $ writeTVar (gsvsInvisible ^. gsvsIsDamaged) True
   putStrLn "handle_new_menu"
   return ()
 
@@ -1035,6 +1047,7 @@ handle_wlr_surface_new_subsurface gsvs args@[wlrSubsurfaceVariant] = do
   putStrLn "handle_wlr_surface_new_subsurface"
   wlrSubsurface <- (fromGodotVariant wlrSubsurfaceVariant :: IO GodotWlrSubsurface) >>= validateSurfaceE
   connectGodotSignal wlrSubsurface "destroy" gsvs "handle_wlr_subsurface_destroy" []
+  atomically $ writeTVar (gsvs ^. gsvsIsDamaged) True
   return ()
 
   -- Double-connecting?
@@ -1048,6 +1061,7 @@ handle_wlr_surface_new_subsurface gsvs args@[wlrSubsurfaceVariant] = do
 
 handle_wlr_subsurface_destroy :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_wlr_subsurface_destroy gsvs args@[wlrSubsurfaceVariant] = do
+  atomically $ writeTVar (gsvs ^. gsvsIsDamaged) True
   return ()
 
 handle_wlr_surface_commit :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
@@ -1056,4 +1070,5 @@ handle_wlr_surface_commit gsvs args@[wlrSurfaceVariant] = do
 
 handle_wlr_surface_destroy :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_wlr_surface_destroy gsvs args@[wlrSurfaceVariant] = do
+  atomically $ writeTVar (gsvs ^. gsvsIsDamaged) True
   return ()

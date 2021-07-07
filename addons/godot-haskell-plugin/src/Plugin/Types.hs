@@ -227,11 +227,13 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsResizedLastFrame  :: TVar Bool
   , _gsvsCursor            :: TVar ((Maybe GodotWlrSurface), (Maybe GodotTexture))
   , _gsvsIsAtTargetDims    :: TVar Bool
+  , _gsvsDamagedRegions    :: TVar [GodotRect2]
+  , _gsvsIsDamaged         :: TVar Bool
   }
 
 instance HasBaseClass GodotSimulaViewSprite where
   type BaseClass GodotSimulaViewSprite = GodotRigidBody
-  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotRigidBody obj
+  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotRigidBody obj
 
 data CanvasBase = CanvasBase {
     _cbObject       :: GodotObject
@@ -700,7 +702,9 @@ initializeRenderTarget gsvs viewportType = do
   G.set_vflip renderTarget True
   G.set_size renderTarget pixelDimensionsOfWlrSurface
 
-  G.set_clear_mode renderTarget G.CLEAR_MODE_ALWAYS
+  case viewportType of
+    ViewportSurface -> G.set_clear_mode renderTarget G.CLEAR_MODE_NEVER
+    ViewportBase -> G.set_clear_mode renderTarget G.CLEAR_MODE_ALWAYS
   G.set_transparent_background renderTarget True
 
   return renderTarget
@@ -918,6 +922,7 @@ orientSpriteTowardsGaze gsvs = do
                targetV3 <- getARVRCameraOrPancakeCameraTransformGlobal gss >>= Api.godot_transform_get_origin -- void look_at ( Vector3 target, Vector3 up )
                G.look_at gsvs targetV3 upV3                      -- The negative z-axis of the gsvs looks at HMD
                return ()
+               atomically $ writeTVar (gsvs ^. gsvsIsDamaged) True -- Useful debugging hack to force gsvs to redraw
                -- G.rotate_object_local gsvs rotationAxisY 3.14159  -- The positive z-axis of the gsvs looks at HMD
 
 resizeGSVS :: GodotSimulaViewSprite -> ResizeMethod -> Float -> IO ()
@@ -951,6 +956,7 @@ resizeGSVS gsvs resizeMethod factor =
      atomically $ do if resizeMethod == Zoom then return () else writeTVar (gsvs ^. gsvsResizedLastFrame) True
                      writeTVar (gsvs ^. gsvsTargetSize) (Just newTargetDims)
                      writeTVar (gsvs ^. gsvsSpilloverDims) (Just (wTarget, hTarget))
+                     writeTVar (gsvs ^. gsvsIsDamaged) True
 
 defaultSizeGSVS :: GodotSimulaViewSprite -> IO ()
 defaultSizeGSVS gsvs = do
@@ -964,7 +970,8 @@ defaultSizeGSVS gsvs = do
                                                        Just windowResolution'@(x, y) ->  SpriteDimensions (fromIntegral x, fromIntegral y)
                                                        Nothing -> SpriteDimensions (900, 900)
 
-    atomically $ writeTVar (gsvs ^. gsvsTargetSize) (Just newTargetDims)
+    atomically $ do writeTVar (gsvs ^. gsvsTargetSize) (Just newTargetDims)
+                    writeTVar (gsvs ^. gsvsIsDamaged) True
 
 getQuadMesh :: GodotSimulaViewSprite -> IO GodotQuadMesh
 getQuadMesh gsvs = do
