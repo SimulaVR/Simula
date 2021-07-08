@@ -206,7 +206,7 @@ installSimula() {
       NIXPKGS_ALLOW_UNFREE=1 nix-build -Q default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
       switchToNix
     # Useful for debug purposes
-    elif [ $1 == "i" ]; then
+    elif [ "$1" = "i" ]; then
       switchToNix
       NIXPKGS_ALLOW_UNFREE=1 nix-instantiate -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
       switchToLocal
