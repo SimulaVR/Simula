@@ -252,6 +252,7 @@ nsBuildGodot() {
  else
    nix-shell --run "while inotifywait -qqre modify .; do $runCmd; done"
  fi
+ cd -
 }
 
 # Updates godot-haskell to latest api.json generated from devBuildGodot
@@ -290,6 +291,7 @@ nsBuildSimulaLocal() {
     installSimula 1
     nsBuildWlroots
     nsBuildGodot
+    patchGodotWlroots
     nsBuildGodotHaskell "$1"
     nsBuildGodotHaskellPlugin "$1"
     switchToLocal
@@ -313,5 +315,18 @@ updateEmail() {
         ./result/bin/dialog --title "SimulaVR" --backtitle "OPTIONAL: Provide email for important Simula updates & improved bug troubleshooting" --inputbox "Email: " 8 60 --output-fd 1 > ./email 2>&1
         ./result/bin/curl --data-urlencode emailStr@email https://www.wolframcloud.com/obj/george.w.singer/emailMessage
         clear
+    fi
+}
+
+#patch our Godot executable to point to our local build of wlroots
+patchGodotWlroots(){
+    PATH_TO_SIMULA_WLROOTS="`pwd`/submodules/wlroots/build/"
+    OLD_RPATH="`./result/bin/patchelf --print-rpath submodules/godot/bin/godot.x11.tools.64`"
+    if [[ $OLD_RPATH != $PATH_TO_SIMULA_WLROOTS* ]]; then #check if the current rpath contains our local simula wlroots build. If not, patchelf to add our path to the start of the executable's rpath
+        echo "Patching godot.x11.tools to point to local wlroots lib"
+        echo "Changing path to: $PATH_TO_SIMULA_WLROOTS:$OLD_RPATH"
+        ./result/bin/patchelf --set-rpath "$PATH_TO_SIMULA_WLROOTS:$OLD_RPATH" submodules/godot/bin/godot.x11.tools.64
+    else
+        echo "Not patching godot.x11.tools, already patched."
     fi
 }
