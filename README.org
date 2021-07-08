@@ -112,7 +112,7 @@ Windows become "active" once you look at them. Active windows receive typing eve
 | *Key binding.*                             | *Action*                                                                                                                      |
 |--------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------|
 | ~Super + Shift + Escape~                   | Terminate Simula                                                                                                              |
-| ~Super + Escape~                           | Toggle Simula's mouse & keyboard grab (see below)                                                                             |
+| ~Super + z~                                | Toggle Simula's mouse & keyboard grab from your host OS (see below)                                                           |
 | ~Super + /~                                | Quick launch terminal                                                                                                         |
 | ~Super + Apostrophe~                       | Send window cursor to gaze point (hold down to make cursor follow gaze)                                                       |
 | ~Super + Enter~                            | Left click surface cursor at gaze point                                                                                       |
@@ -145,7 +145,7 @@ Windows become "active" once you look at them. Active windows receive typing eve
 | ~Shift + PrtSc~                            | Take global screenshot (saved to ~./png/*.png~)                                                                               |
 | ~Super + r~                                | Reload Simula's configuration (~./config.dhall~)                                                                              |
 
-*NOTE:* In order to prevent Simula's keyboard shortcuts from conflicting with your existing window manager's shortcuts, Simula "grabs" the system keyboard and cursor to prevent input events from propagating past Simula. This creates a problem: it is then impossible for you to escape Simula once you launch it! In order to get around this, press ~Super + Escape~ to ungrab Simula, which will restore mouse and keyboard control to your normal window manager.
+*NOTE:* In order to prevent Simula's keyboard shortcuts from conflicting with your existing window manager's shortcuts, Simula "grabs" the system keyboard and cursor from your host OS to prevent input events from propagating past Simula. This creates a problem: it is then impossible for you to escape Simula once you launch it! In order to get around this, press ~Super + z~ to ungrab Simula, which will restore mouse and keyboard control to your normal window manager.
 
 ** VR Controllers
 
