@@ -1342,3 +1342,27 @@ validateSurfaceE surf = do
 catchGodot :: (a -> [GodotVariant] -> IO ()) -> ((a -> [GodotVariant] -> IO ()))
 catchGodot func x y = catch (func x y) (\e -> do putStrLn $ "Caught " ++ (show (e :: NullPointerException))
                                                  return ())
+
+data RotationMethod = Workspace | Workspaces
+
+rotateWorkspaceHorizontally :: GodotSimulaServer -> Float -> RotationMethod -> IO ()
+rotateWorkspaceHorizontally gss radians rotationMethod = do
+  -- get state
+  prevPovTransform <- getARVRCameraOrPancakeCameraTransform gss
+  povTransform <- getARVRCameraOrPancakeCameraTransform gss
+  currentWorkspace <- readTVarIO (gss ^. gssWorkspace)
+  currentWorkspaceTransform <- G.get_transform currentWorkspace
+
+  -- compute new transform
+  rotationAxisY <- toLowLevel (V3 0 1 0) :: IO GodotVector3
+  case rotationMethod of
+      Workspace -> do
+        G.rotate currentWorkspace rotationAxisY radians
+        currentWorkspaceTransform <- G.get_transform currentWorkspace
+        updateDiffMap gss currentWorkspace currentWorkspaceTransform
+      Workspaces -> do
+        G.rotate gss rotationAxisY radians
+        updateDiffMap gss (safeCast gss) currentWorkspaceTransform
+
+  -- update new diff map
+  return ()

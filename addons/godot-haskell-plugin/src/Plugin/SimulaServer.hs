@@ -143,6 +143,10 @@ getKeyboardAction gss keyboardShortcut =
     "sendToWorkspace7" -> sendToWorkspace gss 7
     "sendToWorkspace8" -> sendToWorkspace gss 8
     "sendToWorkspace9" -> sendToWorkspace gss 9
+    "rotateWorkspaceHorizontallyLeft" -> rotateWorkspaceHorizontally gss (0.15707963)
+    "rotateWorkspaceHorizontallyRight" -> rotateWorkspaceHorizontally gss (-0.15707963)
+    "rotateWorkspacesHorizontallyLeft" -> rotateWorkspacesHorizontally gss (0.15707963)
+    "rotateWorkspacesHorizontallyRight" -> rotateWorkspacesHorizontally gss (-0.15707963)
     _ -> shellLaunch gss (keyboardShortcut ^. keyAction)
 
   where moveCursor :: SpriteLocation -> Bool -> IO ()
@@ -191,6 +195,20 @@ getKeyboardAction gss keyboardShortcut =
             _ -> return ()
         grabWorkspaces gss _ False = do
           keyboardGrabLetGo gss (GrabWorkspaces undefined)
+
+        rotateWorkspaceHorizontally :: GodotSimulaServer -> Float -> SpriteLocation -> Bool -> IO ()
+        rotateWorkspaceHorizontally gss radians _ True = do
+          Plugin.Types.rotateWorkspaceHorizontally gss radians Workspace
+          return ()
+        rotateWorkspaceHorizontally gss radians _ False = do
+          return ()
+
+        rotateWorkspacesHorizontally :: GodotSimulaServer -> Float -> SpriteLocation -> Bool -> IO ()
+        rotateWorkspacesHorizontally gss radians _ True = do
+          Plugin.Types.rotateWorkspaceHorizontally gss radians Workspaces
+          return ()
+        rotateWorkspacesHorizontally gss radians _ False = do
+          return ()
 
         terminateWindow :: SpriteLocation -> Bool -> IO ()
         terminateWindow (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
