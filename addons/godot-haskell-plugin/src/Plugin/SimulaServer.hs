@@ -381,6 +381,7 @@ getKeyboardAction gss keyboardShortcut =
           textures <- loadEnvironmentTextures configuration worldEnvironment
           atomically $ writeTVar (gss ^. gssEnvironmentTextures) textures
           atomically $ writeTVar (gss ^. gssAxisScrollSpeed) (configuration ^. axisScrollSpeed)
+          atomically $ writeTVar (gss ^. gssMouseSensitivityScaler) (configuration ^. mouseSensitivityScaler)
         reloadConfig _ _ = return ()
 
         terminateSimula :: SpriteLocation -> Bool -> IO ()
@@ -681,7 +682,7 @@ addWlrChildren gss = do
 parseConfiguration :: IO (Configuration)
 parseConfiguration = do
   profile <- lookupEnv "PROFILE"
-  let defaultConfiguration = Configuration {_backend = "OpenVR", _startingApps = StartingApps {_center = Just "ENV=val ./result/bin/xfce4-terminal", _right = Nothing, _bottom = Nothing, _left = Nothing, _top = Nothing}, _defaultWindowResolution = Just (900,900), _defaultWindowScale = 1.0, _axisScrollSpeed = 0.03, _keyBindings = [KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_BACKSPACE"], _keyAction = "terminateWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_ESCAPE"], _keyAction = "toggleGrabMode"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_SLASH"], _keyAction = "launchTerminal"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_APOSTROPHE"], _keyAction = "moveCursor"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_ENTER"], _keyAction = "clickLeft"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_ALT_R"], _keyAction = "grabWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_ALT_L"], _keyAction = "grabWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_A"], _keyAction = "launchAppLauncher"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_E"], _keyAction = "cycleEnvironment"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_F"], _keyAction = "orientWindowTowardsGaze"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_9"], _keyAction = "scaleWindowDown"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_0"], _keyAction = "scaleWindowUp"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MINUS"], _keyAction = "zoomOut"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_EQUAL"], _keyAction = "zoomIn"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_LEFT"], _keyAction = "contractWindowHorizontally"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_RIGHT"], _keyAction = "extendWindowHorizontally"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_UP"], _keyAction = "contractWindowVertically"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_DOWN"], _keyAction = "extendWindowVertically"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_S"], _keyAction = "resizeWindowToDefaultSize"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_COMMA"], _keyAction = "pullWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_PERIOD"], _keyAction = "pushWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_W"], _keyAction = "launchHMDWebCam"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_R"], _keyAction = "emacsclient -c"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MASK_SHIFT","KEY_ESCAPE"], _keyAction = "terminateSimula"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MASK_ALT","KEY_UP"], _keyAction = "increaseTransparency"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MASK_ALT","KEY_DOWN"], _keyAction = "decreaseTransparency"},KeyboardShortcut {_keyCombination = ["KEY_PRINT"], _keyAction = "toggleScreenshotMode"},KeyboardShortcut {_keyCombination = ["KEY_MASK_SHIFT","KEY_PRINT"], _keyAction = "takeScreenshotGlobal"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_K"], _keyAction = "firefox -new-window"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_G"], _keyAction = "google-chrome-stable --new-window news.ycombinator.com"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_J"], _keyAction = "gvim"}], _keyRemappings = [], _environmentsDirectory = "./environments", _environmentDefault = "./environments/AllSkyFree_Sky_EpicBlueSunset_Equirect.png"} --
+  let defaultConfiguration = Configuration {_backend = "OpenVR", _startingApps = StartingApps {_center = Just "ENV=val ./result/bin/xfce4-terminal", _right = Nothing, _bottom = Nothing, _left = Nothing, _top = Nothing}, _defaultWindowResolution = Just (900,900), _defaultWindowScale = 1.0, _axisScrollSpeed = 0.03, _mouseSensitivityScaler = 1.00, _keyBindings = [KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_BACKSPACE"], _keyAction = "terminateWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_ESCAPE"], _keyAction = "toggleGrabMode"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_SLASH"], _keyAction = "launchTerminal"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_APOSTROPHE"], _keyAction = "moveCursor"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_ENTER"], _keyAction = "clickLeft"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_ALT_R"], _keyAction = "grabWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_ALT_L"], _keyAction = "grabWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_A"], _keyAction = "launchAppLauncher"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_E"], _keyAction = "cycleEnvironment"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_F"], _keyAction = "orientWindowTowardsGaze"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_9"], _keyAction = "scaleWindowDown"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_0"], _keyAction = "scaleWindowUp"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MINUS"], _keyAction = "zoomOut"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_EQUAL"], _keyAction = "zoomIn"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_LEFT"], _keyAction = "contractWindowHorizontally"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_RIGHT"], _keyAction = "extendWindowHorizontally"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_UP"], _keyAction = "contractWindowVertically"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_DOWN"], _keyAction = "extendWindowVertically"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_S"], _keyAction = "resizeWindowToDefaultSize"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_COMMA"], _keyAction = "pullWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_PERIOD"], _keyAction = "pushWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_W"], _keyAction = "launchHMDWebCam"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_R"], _keyAction = "emacsclient -c"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MASK_SHIFT","KEY_ESCAPE"], _keyAction = "terminateSimula"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MASK_ALT","KEY_UP"], _keyAction = "increaseTransparency"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MASK_ALT","KEY_DOWN"], _keyAction = "decreaseTransparency"},KeyboardShortcut {_keyCombination = ["KEY_PRINT"], _keyAction = "toggleScreenshotMode"},KeyboardShortcut {_keyCombination = ["KEY_MASK_SHIFT","KEY_PRINT"], _keyAction = "takeScreenshotGlobal"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_K"], _keyAction = "firefox -new-window"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_G"], _keyAction = "google-chrome-stable --new-window news.ycombinator.com"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_J"], _keyAction = "gvim"}], _keyRemappings = [], _environmentsDirectory = "./environments", _environmentDefault = "./environments/AllSkyFree_Sky_EpicBlueSunset_Equirect.png"} --
   config <- case profile of
     Just value -> return defaultConfiguration
     Nothing -> input auto "./config/config.dhall" :: IO Configuration
@@ -737,6 +738,8 @@ initGodotSimulaServer obj = do
       gssStartingApps' <- newTVarIO sApps
 
       gssAxisScrollSpeed' <- newTVarIO (configuration ^. axisScrollSpeed)
+
+      gssMouseSensitivityScaler' <- newTVarIO (configuration ^. mouseSensitivityScaler)
 
       panoramaSky      <- unsafeInstance GodotPanoramaSky "PanoramaSky"
       environment      <- unsafeInstance GodotEnvironment "Environment"
@@ -802,6 +805,7 @@ initGodotSimulaServer obj = do
       , _gssKeyboardShortcuts     = gssKeyboardShortcuts'     :: TVar KeyboardShortcuts
       , _gssKeyboardRemappings    = gssKeyboardRemappings'    :: TVar KeyboardRemappings
       , _gssAxisScrollSpeed       = gssAxisScrollSpeed'       :: TVar Double
+      , _gssMouseSensitivityScaler = gssMouseSensitivityScaler' :: TVar Double
       , _gssStartingApps          = gssStartingApps'          :: TVar [String]
       , _gssWorldEnvironment      = gssWorldEnvironment'      :: TVar (GodotWorldEnvironment, String)
       , _gssEnvironmentTextures   = gssEnvironmentTextures'   :: TVar [String]
@@ -936,17 +940,16 @@ _input gss [eventGV] = do
   whenM (event `isClass` "InputEventMouseMotion") $ do
      mouseRelativeGV2 <- G.get_relative event :: IO GodotVector2
      mouseRelative@(V2 dx dy) <- fromLowLevel mouseRelativeGV2
+     mouseSensitivityScaler <- readTVarIO (gss ^. gssMouseSensitivityScaler)
      case maybeActiveGSVS of
          Nothing -> return ()
-         (Just gsvs) -> do updateCursorStateRelative gsvs dx dy
+         (Just gsvs) -> do updateCursorStateRelative gsvs (dx * (realToFrac mouseSensitivityScaler)) (dy * (realToFrac mouseSensitivityScaler))
                            sendWlrootsMotion gsvs
   whenM (event `isClass` "InputEventMouseButton") $ do
     let event' = GodotInputEventMouseButton (coerce event)
     pressed <- G.is_pressed event'
     button <- G.get_button_index event'
     wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
-    --axisScrollSpeed <- (gss ^. gssAxisScrollSpeed)
-    --let axisScrollSpeed = (gss ^. gssAxisScrollSpeed)
     axisScrollSpeed <- readTVarIO (gss ^. gssAxisScrollSpeed)
     case (maybeActiveGSVS, button) of
          (Just gsvs, G.BUTTON_WHEEL_UP) -> G.pointer_notify_axis_continuous wlrSeat 0 (realToFrac axisScrollSpeed)

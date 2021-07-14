@@ -19,6 +19,7 @@ let Configuration =
 
   , _defaultWindowScale      = 1.0 : Double                -- In addition to resolution, apps can be scaled up or down by this factor upon launch
   , _axisScrollSpeed         = 0.02 : Double
+  , _mouseSensitivityScaler  = 1.00 : Double
   , _keyBindings             = [ -- For keyboard shortcuts, use keynames from
                                  -- https://github.com/SimulaVR/godot/blob/3.2-simula/core/os/keyboard.h
                                  -- For modifiers, use `KEY_MASK_*`. For everything else, use `KEY_*`.
