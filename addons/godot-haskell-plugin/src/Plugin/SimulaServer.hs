@@ -32,6 +32,7 @@ import Data.Colour
 import Data.Colour.SRGB.Linear
 
 import Godot.Core.GodotVisualServer          as G
+import Godot.Core.GodotEnvironment           as G
 import qualified Godot.Gdnative.Internal.Api as Api
 import qualified Godot.Methods               as G
 import           Godot.Nativescript
@@ -432,6 +433,8 @@ getKeyboardAction gss keyboardShortcut =
           -- Swap workspace in scene graph
           removeChild gss currentWorkspace
           addChild gss newWorkspace
+          (canvasLayer, label) <- readTVarIO (gss ^. gssHUD)
+          G.set_text label =<< (toLowLevel (pack (show workspaceNum)))
         switchToWorkspace _ _ _ _ = return ()
 
         sendToWorkspace :: GodotSimulaServer -> Int -> SpriteLocation -> Bool -> IO ()
@@ -600,6 +603,11 @@ ready gss _ = do
   case debugModeMaybe of
     Nothing -> return ()
     Just debugModeVal  -> (forkIO $ debugFunc gss) >> return ()
+
+  (canvasLayer , label) <- readTVarIO (gss ^. gssHUD)
+  addChild gss canvasLayer
+  addChild canvasLayer label
+
   where launchDefaultApps :: [String] -> String-> IO ()
         launchDefaultApps sApps location = do
           let firstApp = if (sApps == []) then Nothing else Just (head sApps)
@@ -789,6 +797,22 @@ initGodotSimulaServer obj = do
       gssWorkspace' <- newTVarIO $ (gssWorkspaces' V.! 1)
       gssDiffMap' <- newTVarIO $ M.empty -- Can't instantiate this until we have the gss Spatial information
 
+      canvasLayer <- unsafeInstance GodotCanvasLayer "CanvasLayer"
+      -- offset <- toLowLevel (V2 10 10) :: IO GodotVector2 -- Doesn't seem to work
+      -- G.set_offset canvasLayer offset
+      -- G.set_custom_viewport viewportNode -- To be used for affecting the VR viewport
+      scale <- toLowLevel (V2 2 2) :: IO GodotVector2
+      G.set_scale canvasLayer scale
+
+      label <- unsafeInstance GodotLabel "Label"
+      G.set_text label =<< (toLowLevel "1")
+
+      -- G.set_valign label G.VALIGN_CENTER -- VALIGN_TOP, VALIGN_CENTER, VALIGN_BOTTOM, VALI layer value
+      -- G.set_visible_characters label <int> -- -1 to  layer value
+      -- G.set_align layer value
+
+      gssHUD' <- newTVarIO (canvasLayer, label) :: IO (TVar HUD)
+
       let gss = GodotSimulaServer {
         _gssObj                   = obj                       :: GodotObject
       , _gssWaylandDisplay        = gssWaylandDisplay'        :: TVar GodotWaylandDisplay
@@ -824,6 +848,7 @@ initGodotSimulaServer obj = do
       , _gssDiffMap               = gssDiffMap'               :: TVar (M.Map GodotSpatial GodotTransform)
       , _gssWorkspaces            = gssWorkspaces'            :: Vector GodotSpatial
       , _gssWorkspace             = gssWorkspace'             :: TVar GodotSpatial
+      , _gssHUD                   = gssHUD'                   :: TVar HUD
       }
   return gss
   where getStartingAppsStr :: Maybe String -> String

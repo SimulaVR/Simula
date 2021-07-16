@@ -161,6 +161,8 @@ data SimulaEnvironment = Day | Night
 data Grab = GrabWindow GodotSimulaViewSprite Float | GrabWindows GodotTransform | GrabWorkspaces GodotTransform
 type DiffMap = M.Map GodotSpatial GodotTransform
 
+type HUD = (GodotCanvasLayer, GodotLabel)
+
 -- We use TVar excessively since these datatypes must be retrieved from the
 -- scene graph (requiring IO)
 data GodotSimulaServer = GodotSimulaServer
@@ -198,11 +200,12 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssDiffMap               :: TVar (M.Map GodotSpatial GodotTransform)
   , _gssWorkspaces            :: Vector GodotSpatial
   , _gssWorkspace             :: TVar GodotSpatial
+  , _gssHUD                   :: TVar HUD
   }
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
