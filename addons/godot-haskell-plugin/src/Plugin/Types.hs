@@ -133,6 +133,8 @@ data Configuration = Configuration {
 , _startingApps :: StartingApps
 , _defaultWindowResolution :: Maybe (Natural, Natural)
 , _defaultWindowScale :: Double
+, _axisScrollSpeed :: Double
+, _mouseSensitivityScaler :: Double
 , _keyBindings :: [KeyboardShortcut]
 , _keyRemappings :: [KeyboardRemapping]
 , _environmentsDirectory :: String
@@ -190,6 +192,8 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssConfiguration         :: TVar Configuration
   , _gssKeyboardShortcuts     :: TVar KeyboardShortcuts
   , _gssKeyboardRemappings    :: TVar KeyboardRemappings
+  , _gssAxisScrollSpeed       :: TVar Double
+  , _gssMouseSensitivityScaler :: TVar Double
   , _gssStartingApps          :: TVar [String]
   , _gssWorldEnvironment      :: TVar (GodotWorldEnvironment, String)
   , _gssEnvironmentTextures   :: TVar [String]
@@ -205,7 +209,7 @@ data GodotSimulaServer = GodotSimulaServer
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
