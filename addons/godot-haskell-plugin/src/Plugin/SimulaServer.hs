@@ -147,6 +147,7 @@ getKeyboardAction gss keyboardShortcut =
     "rotateWorkspaceHorizontallyRight" -> rotateWorkspaceHorizontally gss (-0.15707963)
     "rotateWorkspacesHorizontallyLeft" -> rotateWorkspacesHorizontally gss (0.15707963)
     "rotateWorkspacesHorizontallyRight" -> rotateWorkspacesHorizontally gss (-0.15707963)
+    "toggleARMode" -> toggleARMode gss
     _ -> shellLaunch gss (keyboardShortcut ^. keyAction)
 
   where moveCursor :: SpriteLocation -> Bool -> IO ()
@@ -397,6 +398,21 @@ getKeyboardAction gss keyboardShortcut =
           cycleGSSEnvironment gss
           return ()
         cycleEnvironment _ _ _ = do
+          return ()
+
+        toggleARMode :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
+        toggleARMode gss _ True = do
+          putStrLn "Toggling AR mode.."
+          (worldEnvironment, _) <- readTVarIO (gss ^. gssWorldEnvironment)
+          environment <- G.get_environment worldEnvironment
+          G.set_background environment G.BG_CAMERA_FEED
+          G.set_camera_feed_id environment 1
+          cameraServer <- getSingleton GodotCameraServer "CameraServer"
+          numCameras <- G.get_feed_count cameraServer
+          putStrLn $ "CameraServer get_feed_count: " ++ (show numCameras)
+          when (numCameras > 0) $ G.get_feed cameraServer 0 >>= \cam -> G.set_active cam True
+          return ()
+        toggleARMode _ _ _ = do
           return ()
 
         debugPrint :: SpriteLocation -> Bool -> IO ()
