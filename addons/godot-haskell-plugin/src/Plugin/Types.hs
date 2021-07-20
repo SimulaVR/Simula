@@ -205,11 +205,13 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssWorkspaces            :: Vector GodotSpatial
   , _gssWorkspace             :: TVar GodotSpatial
   , _gssHUD                   :: TVar HUD
+  , _gssScenes                :: TVar [String]
+  , _gssScene                 :: TVar (Maybe (String, GodotNode))
   }
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
@@ -888,6 +890,13 @@ getEnvironmentTexture worldEnvironment filePath = do
 instance Eq GodotTexture where
   texture1 == texture2 = ((coerce texture1) :: Ptr ()) == ((coerce texture2) :: Ptr ())
 
+next :: Eq a => Maybe a -> [a] -> Maybe a
+next _ []             = Nothing
+next Nothing    (x:_) = Just x
+next (Just e) l@(x:_) = Just $ case Data.List.dropWhile (/= e) l of
+                          (_:y:_) -> y
+                          _       -> x
+
 -- TODO: This leaks. Fix it.
 cycleGSSEnvironment :: GodotSimulaServer -> IO ()
 cycleGSSEnvironment gss = do
@@ -910,12 +919,42 @@ cycleGSSEnvironment gss = do
                                -- G.unreference @GodotReference (safeCast oldTex) -- Doesn't work here
                                Api.godot_object_destroy $ safeCast oldTex
                                return ()
-  where next :: Eq a => Maybe a -> [a] -> Maybe a
-        next _ []             = Nothing
-        next Nothing    (x:_) = Just x
-        next (Just e) l@(x:_) = Just $ case Data.List.dropWhile (/= e) l of
-                                  (_:y:_) -> y
-                                  _       -> x
+
+cycleGSSScene :: GodotSimulaServer -> IO ()
+cycleGSSScene gss = do
+  maybeCurrentScene <- readTVarIO (gss ^. gssScene)
+  scenes <- readTVarIO (gss ^. gssScenes)
+  maybeNextSceneStr <- case maybeCurrentScene of
+    Nothing -> do
+      let maybeHeadSceneStr = head' scenes
+      return $ maybeHeadSceneStr
+    Just (currentSceneStr, currentSceneNode) -> do
+      let maybeNextSceneStr = next (Just currentSceneStr) scenes
+      return maybeNextSceneStr
+  maybeNextSceneNode <- case maybeNextSceneStr of
+                             Nothing -> do putStrLn "Unable to change scenes!"
+                                           return Nothing
+                             Just nextSceneStr -> do
+                                  resourceLoader <- getSingleton Godot_ResourceLoader "ResourceLoader"
+                                  nextScenePath <- toLowLevel (pack nextSceneStr)
+                                  typeHint <- toLowLevel ""
+                                  (GodotResource nextSceneObj) <- G.load resourceLoader nextScenePath typeHint False
+                                  let nextScenePacked = GodotPackedScene nextSceneObj
+                                  nextSceneInstance <- G.instance' nextScenePacked 0
+                                  return $ Just nextSceneInstance
+  case (maybeCurrentScene, maybeNextSceneStr, maybeNextSceneNode) of
+    (Nothing, Just nextSceneStr, Just nextSceneNode) -> do
+      addChild gss nextSceneNode
+      atomically $ writeTVar (gss ^. gssScene) $ Just (nextSceneStr, nextSceneNode)
+    (Just (currentSceneStr, currentSceneNode), Just nextSceneStr, Just nextSceneNode) -> do
+      removeChild gss currentSceneNode
+      -- Delete the scene node and its children here (queue_free)
+      addChild gss nextSceneNode
+      atomically $ writeTVar (gss ^. gssScene) $ Just (nextSceneStr, nextSceneNode)
+    _ -> putStrLn "Unable to change scenes!"
+  where head' :: [a] -> Maybe a
+        head' [] = Nothing
+        head' (x:xs) = Just x
 
 orientSpriteTowardsGaze :: GodotSimulaViewSprite -> IO ()
 orientSpriteTowardsGaze gsvs = do

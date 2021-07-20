@@ -116,6 +116,7 @@ getKeyboardAction gss keyboardShortcut =
     "reloadConfig" -> reloadConfig
     "terminateSimula" -> terminateSimula
     "cycleEnvironment" -> cycleEnvironment gss
+    "cycleScene" -> cycleScene gss
     "launchAppLauncher" -> shellLaunch gss "./result/bin/synapse"
     "textToSpeech" -> textToSpeech gss
     "decreaseTransparency" -> decreaseTransparency
@@ -401,6 +402,14 @@ getKeyboardAction gss keyboardShortcut =
           cycleGSSEnvironment gss
           return ()
         cycleEnvironment _ _ _ = do
+          return ()
+
+        cycleScene :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
+        cycleScene gss _ True = do
+          putStrLn "Cycling scene.."
+          cycleGSSScene gss
+          return ()
+        cycleScene _ _ _ = do
           return ()
 
         toggleARMode :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
@@ -819,6 +828,10 @@ initGodotSimulaServer obj = do
 
       gssHUD' <- newTVarIO (canvasLayer, label) :: IO (TVar HUD)
 
+      gssScenes' <- newTVarIO [ ]
+
+      gssScene' <- newTVarIO (Nothing)
+
       let gss = GodotSimulaServer {
         _gssObj                   = obj                       :: GodotObject
       , _gssWaylandDisplay        = gssWaylandDisplay'        :: TVar GodotWaylandDisplay
@@ -857,6 +870,8 @@ initGodotSimulaServer obj = do
       , _gssWorkspaces            = gssWorkspaces'            :: Vector GodotSpatial
       , _gssWorkspace             = gssWorkspace'             :: TVar GodotSpatial
       , _gssHUD                   = gssHUD'                   :: TVar HUD
+      , _gssScenes                = gssScenes'                :: TVar [String]
+      , _gssScene                 = gssScene'                 :: TVar (Maybe (String, GodotNode))
       }
   return gss
   where getStartingAppsStr :: Maybe String -> String
