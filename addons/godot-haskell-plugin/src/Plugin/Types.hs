@@ -140,6 +140,7 @@ data Configuration = Configuration {
 , _environmentsDirectory :: String
 , _environmentDefault :: String
 -- , _defaultTransparency :: Double -- Remove until order independent transparency is implemented
+, _scenes :: [String]
 } deriving (Generic, Show)
 
 instance FromDhall KeyboardRemapping
