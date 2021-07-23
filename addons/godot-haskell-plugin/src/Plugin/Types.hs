@@ -208,11 +208,13 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssHUD                   :: TVar HUD
   , _gssScenes                :: TVar [String]
   , _gssScene                 :: TVar (Maybe (String, GodotNode))
+  , _gssInitialRotation       :: TVar Float
+  , _gssWasdMode              :: TVar Bool
   }
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
@@ -949,7 +951,7 @@ cycleGSSScene gss = do
       atomically $ writeTVar (gss ^. gssScene) $ Just (nextSceneStr, nextSceneNode)
     (Just (currentSceneStr, currentSceneNode), Just nextSceneStr, Just nextSceneNode) -> do
       removeChild gss currentSceneNode
-      -- Delete the scene node and its children here (queue_free)
+      queueFreeNodeAndChildren currentSceneNode
       addChild gss nextSceneNode
       atomically $ writeTVar (gss ^. gssScene) $ Just (nextSceneStr, nextSceneNode)
     _ -> putStrLn "Unable to change scenes!"
@@ -1413,3 +1415,117 @@ rotateWorkspaceHorizontally gss radians rotationMethod = do
 
   -- update new diff map
   return ()
+
+queueFreeNodeAndChildren :: GodotNode -> IO ()
+queueFreeNodeAndChildren node = do
+  arrayOfChildren <- G.get_children node :: IO GodotArray
+  numChildren <- Api.godot_array_size arrayOfChildren
+  arrayOfChildrenGV <- fromGodotArray arrayOfChildren :: IO [GodotVariant]
+  childrenNodesLst <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotNode]
+  mapM_ G.queue_free childrenNodesLst -- Using G.free instead of G.queue_free just causes a crash
+  Api.godot_array_destroy arrayOfChildren
+  mapM_ Api.godot_variant_destroy arrayOfChildrenGV
+  -- G.queue_free node -- Doens't work
+
+getARVRCameraOrPancakeCamera :: GodotSimulaServer -> IO GodotCamera
+getARVRCameraOrPancakeCamera gss = do
+  let nodePathStr = "/root/Root/VRViewport/ARVROrigin/ARVRCamera"
+  nodePath <- (toLowLevel (pack nodePathStr)) :: IO GodotNodePath
+  hasNode  <- G.has_node gss (nodePath :: GodotNodePath)
+  camera    <- case hasNode of
+        False -> do camera <- getViewportCamera gss
+                    return camera
+        True ->  do gssNode  <- G.get_node ((safeCast gss) :: GodotNode) nodePath
+                    let arvrCamera = (coerce gssNode) :: GodotCamera -- HACK: We use `coerce` instead of something more proper
+                    return arvrCamera
+  Api.godot_node_path_destroy nodePath
+  return camera
+  where getViewportCamera :: GodotSimulaServer -> IO GodotCamera
+        getViewportCamera gss = do
+          viewport <- G.get_viewport gss :: IO GodotViewport
+          camera <- G.get_camera viewport :: IO GodotCamera
+          return camera
+
+rotateFPSCamera :: GodotSimulaServer -> GodotInputEventMouseMotion -> IO ()
+rotateFPSCamera gss event = do
+  camera <- getARVRCameraOrPancakeCamera gss
+  let mouseSensitivity = 0.1
+  eventRelative <- G.get_relative event
+  V2 eventRelativeX eventRelativeY <- fromLowLevel eventRelative
+  V3 rotationX rotationY rotationZ <- G.get_rotation camera >>= fromLowLevel
+  let newRotationY' = (rotationY - eventRelativeX) * mouseSensitivity
+  let newRotationX' = (rotationX - eventRelativeY) * mouseSensitivity
+  let newRotationY = case ((newRotationY' > 1.5708), (newRotationY' < -1.5708)) of
+                          (True, False) -> 1.5708
+                          (False, True) -> -1.5708
+                          _ -> newRotationY'
+  let newRotationX = case ((newRotationX' > 1.5708), (newRotationX' < -1.5708)) of
+                          (True, False) -> 1.5708
+                          (False, True) -> -1.5708
+                          _ -> newRotationX'
+  G.set_rotation camera =<< toLowLevel (V3 newRotationX' newRotationY' rotationZ)
+
+processWASDMovement :: GodotSimulaServer -> Float -> IO ()
+processWASDMovement gss delta = do
+  camera <- getARVRCameraOrPancakeCamera gss
+  input <- getSingleton GodotInput "Input"
+  moveForward <- toLowLevel "move_forward"
+  moveBackward <- toLowLevel "move_backward"
+  moveLeft <- toLowLevel "move_left"
+  moveRight <- toLowLevel "move_right"
+  moveUp <- toLowLevel "move_up"
+  moveDown <- toLowLevel "move_down"
+  isMoveForward <- G.is_action_pressed input moveForward
+  isMoveBackward <- G.is_action_pressed input moveBackward
+  isMoveLeft <- G.is_action_pressed input moveLeft
+  isMoveRight <- G.is_action_pressed input moveRight
+  isMoveUp <- G.is_action_pressed input moveUp
+  isMoveDown <- G.is_action_pressed input moveDown
+  let motionX = case (isMoveForward, isMoveBackward) of
+                     (True, _) -> -1
+                     (_, True) -> 1
+                     _ -> 0
+  let motionZ = case (isMoveLeft, isMoveRight) of
+                     (True, _) -> 1
+                     (_, True) -> -1
+                     _ -> 0
+  let motionY = case (isMoveUp, isMoveDown) of
+                     (True, _) -> 1
+                     (_, True) -> -1
+                     _ -> 0
+  motion <- Api.godot_vector3_normalized =<< (toLowLevel $ V3 motionX motionY motionZ)
+  rotation@(V3 rotationX rotationY rotationZ) <- G.get_rotation camera >>= fromLowLevel
+  initialRotation <- readTVarIO (gss ^. gssInitialRotation)
+  yVector <- toLowLevel (V3 0 1 0)
+  xVector <- toLowLevel (V3 1 0 0)
+  zVector <- toLowLevel (V3 0 0 1)
+  motion1 <- Api.godot_vector3_rotated motion yVector (realToFrac (rotationY - initialRotation))
+  motion2 <- Api.godot_vector3_rotated motion1 xVector (realToFrac ((cos rotationY) * rotationX))
+  motion3 <- Api.godot_vector3_rotated motion2 zVector (realToFrac ((-sin rotationY) * rotationX))
+
+  (V3 motionXFinal motionYFinal motionZFinal) <- fromLowLevel motion3
+  translationFinal <- toLowLevel $ V3 (motionXFinal * 0.9 * delta) (motionYFinal * 0.9 * delta) (motionZFinal * 0.9 * delta)
+  G.set_translation camera translationFinal
+
+  Api.godot_string_destroy moveForward
+  Api.godot_string_destroy moveBackward
+  Api.godot_string_destroy moveLeft
+  Api.godot_string_destroy moveRight
+  Api.godot_string_destroy moveUp
+  Api.godot_string_destroy moveDown
+
+actionPress :: GodotSimulaServer -> String -> IO ()
+actionPress gss str = do
+  putStrLn $ "actionPress: " ++ (show str)
+  input <- getSingleton GodotInput "Input"
+  godotStr <- toLowLevel (pack str)
+  G.action_press input godotStr 1.0
+  Api.godot_string_destroy godotStr
+
+actionRelease :: GodotSimulaServer -> String -> IO ()
+actionRelease gss str = do
+  putStrLn $ "actionRelease: " ++ (show str)
+  input <- getSingleton GodotInput "Input"
+  godotStr <- toLowLevel (pack str)
+  G.action_release input godotStr
+  Api.godot_string_destroy godotStr

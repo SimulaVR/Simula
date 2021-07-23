@@ -150,6 +150,7 @@ getKeyboardAction gss keyboardShortcut =
     "rotateWorkspacesHorizontallyLeft" -> rotateWorkspacesHorizontally gss (0.15707963)
     "rotateWorkspacesHorizontallyRight" -> rotateWorkspacesHorizontally gss (-0.15707963)
     "toggleARMode" -> toggleARMode gss
+    "toggleWasdMode" -> toggleWasdMode gss
     _ -> shellLaunch gss (keyboardShortcut ^. keyAction)
 
   where moveCursor :: SpriteLocation -> Bool -> IO ()
@@ -432,6 +433,15 @@ getKeyboardAction gss keyboardShortcut =
           putStrLn "debugPrint"
         debugPrint _ _ = return ()
 
+        toggleWasdMode :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
+        toggleWasdMode gss _ True = do
+          putStrLn "toggleWasdMode"
+          wasdMode <- readTVarIO (gss ^. gssWasdMode)
+          case wasdMode of
+            True -> atomically $ writeTVar (gss ^. gssWasdMode) False
+            False -> atomically $ writeTVar (gss ^. gssWasdMode) True
+        toggleWasdMode _ _ _ = return ()
+
         switchToWorkspace :: GodotSimulaServer -> Int -> SpriteLocation -> Bool -> IO ()
         switchToWorkspace gss workspaceNum _ True = do
           putStrLn $ "Switching to workspace" ++ (show workspaceNum)
@@ -523,12 +533,19 @@ instance NativeScript GodotSimulaServer where
     , func NoRPC "_on_wlr_modifiers" (catchGodot Plugin.SimulaServer._on_wlr_modifiers)
     , func NoRPC "_on_WlrXWayland_new_surface" (catchGodot Plugin.SimulaServer._on_WlrXWayland_new_surface)
     , func NoRPC "_physics_process" (catchGodot Plugin.SimulaServer.physicsProcess)
+    , func NoRPC "_process" (catchGodot Plugin.SimulaServer.process)
     , func NoRPC "_on_simula_shortcut" (catchGodot Plugin.SimulaServer._on_simula_shortcut)
     , func NoRPC "handle_wlr_compositor_new_surface" (catchGodot Plugin.SimulaServer.handle_wlr_compositor_new_surface)
     , func NoRPC "seat_request_cursor" (catchGodot Plugin.SimulaServer.seat_request_cursor)
     ]
 
   classSignals = []
+
+
+process :: GodotSimulaServer -> [GodotVariant] -> IO ()
+process gss [deltaGV] = do
+  delta <- fromGodotVariant deltaGV :: IO Float
+  processWASDMovement gss delta
 
 ready :: GodotSimulaServer -> [GodotVariant] -> IO ()
 ready gss _ = do
@@ -832,6 +849,9 @@ initGodotSimulaServer obj = do
 
       gssScene' <- newTVarIO (Nothing)
 
+      gssInitialRotation' <- newTVarIO 0
+      gssWasdMode' <- newTVarIO False
+
       let gss = GodotSimulaServer {
         _gssObj                   = obj                       :: GodotObject
       , _gssWaylandDisplay        = gssWaylandDisplay'        :: TVar GodotWaylandDisplay
@@ -872,6 +892,8 @@ initGodotSimulaServer obj = do
       , _gssHUD                   = gssHUD'                   :: TVar HUD
       , _gssScenes                = gssScenes'                :: TVar [String]
       , _gssScene                 = gssScene'                 :: TVar (Maybe (String, GodotNode))
+      , _gssInitialRotation       = gssInitialRotation'       :: TVar Float
+      , _gssWasdMode              = gssWasdMode'              :: TVar Bool
       }
   return gss
   where getStartingAppsStr :: Maybe String -> String
@@ -997,10 +1019,13 @@ _input gss [eventGV] = do
      mouseRelativeGV2 <- G.get_relative event :: IO GodotVector2
      mouseRelative@(V2 dx dy) <- fromLowLevel mouseRelativeGV2
      mouseSensitivityScaler <- readTVarIO (gss ^. gssMouseSensitivityScaler)
-     case maybeActiveGSVS of
-         Nothing -> return ()
-         (Just gsvs) -> do updateCursorStateRelative gsvs (dx * (realToFrac mouseSensitivityScaler)) (dy * (realToFrac mouseSensitivityScaler))
-                           sendWlrootsMotion gsvs
+     wasdMode <- readTVarIO (gss ^. gssWasdMode)
+     case wasdMode of
+       True -> rotateFPSCamera gss event
+       False -> case maybeActiveGSVS of
+                     Nothing -> return ()
+                     (Just gsvs) -> do updateCursorStateRelative gsvs (dx * (realToFrac mouseSensitivityScaler)) (dy * (realToFrac mouseSensitivityScaler))
+                                       sendWlrootsMotion gsvs
   whenM (event `isClass` "InputEventMouseButton") $ do
     let event' = GodotInputEventMouseButton (coerce event)
     pressed <- G.is_pressed event'
@@ -1128,13 +1153,31 @@ _on_simula_shortcut gss [scancodeWithModifiers', isPressed'] = do
         (Just remappedKeycode) -> remappedKeycode
         Nothing                -> keycode
 
+  wasdMode <- readTVarIO (gss ^. gssWasdMode)
+
   case maybeKeyboardAction of
     Just action -> action maybeHMDLookAtSprite isPressed
-    Nothing -> case isPressed of
-                 False -> do if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
-                             keyboardGrabLetGo' gss maybeHMDLookAtSprite -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
-                             keyboardGrabLetGo gss (GrabWindows undefined) -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
-                 True -> if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
+    Nothing -> case (isPressed, wasdMode) of
+                 (False, False) -> do if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
+                                      keyboardGrabLetGo' gss maybeHMDLookAtSprite -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
+                                      keyboardGrabLetGo gss (GrabWindows undefined) -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
+                 (True, False) -> do if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
+                 (False, True)  -> do case keycode' of
+                                        G.KEY_W -> actionRelease gss "move_forward"
+                                        G.KEY_S -> actionRelease gss "move_backward"
+                                        G.KEY_A -> actionRelease gss "move_left"
+                                        G.KEY_D -> actionRelease gss "move_right"
+                                        G.KEY_SPACE -> actionRelease gss "move_up"
+                                        G.KEY_CONTROL_L -> actionRelease gss "move_down"
+                                        _ -> G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
+                 (True, True)  -> do case keycode' of
+                                        G.KEY_W -> actionPress gss "move_forward"
+                                        G.KEY_S -> actionPress gss "move_backward"
+                                        G.KEY_A -> actionPress gss "move_left"
+                                        G.KEY_D -> actionPress gss "move_right"
+                                        G.KEY_SPACE -> actionPress gss "move_up"
+                                        G.KEY_CONTROL_L -> actionPress gss "move_down"
+                                        _ -> G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
 
   where keyboardGrabLetGo' :: GodotSimulaServer -> Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates) -> IO ()
         keyboardGrabLetGo' gss (Just (gsvs, _)) = do keyboardGrabLetGo gss (GrabWindow gsvs undefined)
