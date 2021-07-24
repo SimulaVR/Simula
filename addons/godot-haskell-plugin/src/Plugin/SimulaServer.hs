@@ -636,6 +636,10 @@ ready gss _ = do
   addChild gss canvasLayer
   addChild canvasLayer label
 
+  camera <- getARVRCameraOrPancakeCamera gss
+  initialRotation@(V3 rotationX rotationY rotationZ) <- G.get_rotation camera >>= fromLowLevel
+  atomically $ writeTVar (gss ^. gssWasdInitialRotation) rotationY
+
   where launchDefaultApps :: [String] -> String-> IO ()
         launchDefaultApps sApps location = do
           let firstApp = if (sApps == []) then Nothing else Just (head sApps)
@@ -849,7 +853,7 @@ initGodotSimulaServer obj = do
 
       gssScene' <- newTVarIO (Nothing)
 
-      gssInitialRotation' <- newTVarIO 0
+      gssWasdInitialRotation' <- newTVarIO 0
       gssWasdMode' <- newTVarIO False
 
       let gss = GodotSimulaServer {
@@ -892,7 +896,7 @@ initGodotSimulaServer obj = do
       , _gssHUD                   = gssHUD'                   :: TVar HUD
       , _gssScenes                = gssScenes'                :: TVar [String]
       , _gssScene                 = gssScene'                 :: TVar (Maybe (String, GodotNode))
-      , _gssInitialRotation       = gssInitialRotation'       :: TVar Float
+      , _gssWasdInitialRotation   = gssWasdInitialRotation'   :: TVar Float
       , _gssWasdMode              = gssWasdMode'              :: TVar Bool
       }
   return gss

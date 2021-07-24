@@ -208,7 +208,7 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssHUD                   :: TVar HUD
   , _gssScenes                :: TVar [String]
   , _gssScene                 :: TVar (Maybe (String, GodotNode))
-  , _gssInitialRotation       :: TVar Float
+  , _gssWasdInitialRotation   :: TVar Float
   , _gssWasdMode              :: TVar Bool
   }
 
@@ -1449,21 +1449,17 @@ getARVRCameraOrPancakeCamera gss = do
 rotateFPSCamera :: GodotSimulaServer -> GodotInputEventMouseMotion -> IO ()
 rotateFPSCamera gss event = do
   camera <- getARVRCameraOrPancakeCamera gss
-  let mouseSensitivity = 0.1
+  let mouseSensitivity = 0.006
   eventRelative <- G.get_relative event
   V2 eventRelativeX eventRelativeY <- fromLowLevel eventRelative
   V3 rotationX rotationY rotationZ <- G.get_rotation camera >>= fromLowLevel
-  let newRotationY' = (rotationY - eventRelativeX) * mouseSensitivity
-  let newRotationX' = (rotationX - eventRelativeY) * mouseSensitivity
-  let newRotationY = case ((newRotationY' > 1.5708), (newRotationY' < -1.5708)) of
-                          (True, False) -> 1.5708
-                          (False, True) -> -1.5708
-                          _ -> newRotationY'
-  let newRotationX = case ((newRotationX' > 1.5708), (newRotationX' < -1.5708)) of
-                          (True, False) -> 1.5708
-                          (False, True) -> -1.5708
+  let newRotationY = rotationY - (eventRelativeX * mouseSensitivity)
+  let newRotationX' = rotationX - (-eventRelativeY * mouseSensitivity)
+  let newRotationX = case ((newRotationX' < -1.5708), (newRotationX' > 1.5708)) of
+                          (True, _) -> -1.5708
+                          (_, True) -> 1.5708
                           _ -> newRotationX'
-  G.set_rotation camera =<< toLowLevel (V3 newRotationX' newRotationY' rotationZ)
+  G.set_rotation camera =<< toLowLevel (V3 (newRotationX) (newRotationY) (rotationZ))
 
 processWASDMovement :: GodotSimulaServer -> Float -> IO ()
 processWASDMovement gss delta = do
@@ -1481,13 +1477,13 @@ processWASDMovement gss delta = do
   isMoveRight <- G.is_action_pressed input moveRight
   isMoveUp <- G.is_action_pressed input moveUp
   isMoveDown <- G.is_action_pressed input moveDown
-  let motionX = case (isMoveForward, isMoveBackward) of
+  let motionZ = case (isMoveForward, isMoveBackward) of
                      (True, _) -> -1
                      (_, True) -> 1
                      _ -> 0
-  let motionZ = case (isMoveLeft, isMoveRight) of
-                     (True, _) -> 1
-                     (_, True) -> -1
+  let motionX = case (isMoveLeft, isMoveRight) of
+                     (True, _) -> -1
+                     (_, True) -> 1
                      _ -> 0
   let motionY = case (isMoveUp, isMoveDown) of
                      (True, _) -> 1
@@ -1495,7 +1491,7 @@ processWASDMovement gss delta = do
                      _ -> 0
   motion <- Api.godot_vector3_normalized =<< (toLowLevel $ V3 motionX motionY motionZ)
   rotation@(V3 rotationX rotationY rotationZ) <- G.get_rotation camera >>= fromLowLevel
-  initialRotation <- readTVarIO (gss ^. gssInitialRotation)
+  initialRotation <- readTVarIO (gss ^. gssWasdInitialRotation)
   yVector <- toLowLevel (V3 0 1 0)
   xVector <- toLowLevel (V3 1 0 0)
   zVector <- toLowLevel (V3 0 0 1)
@@ -1504,7 +1500,9 @@ processWASDMovement gss delta = do
   motion3 <- Api.godot_vector3_rotated motion2 zVector (realToFrac ((-sin rotationY) * rotationX))
 
   (V3 motionXFinal motionYFinal motionZFinal) <- fromLowLevel motion3
-  translationFinal <- toLowLevel $ V3 (motionXFinal * 0.9 * delta) (motionYFinal * 0.9 * delta) (motionZFinal * 0.9 * delta)
+  translationOld <- G.get_translation camera >>= fromLowLevel
+  let translationSensitivity = 4
+  translationFinal <- toLowLevel $ translationOld + V3 (motionXFinal * translationSensitivity * delta) (motionYFinal * translationSensitivity * delta) (motionZFinal * translationSensitivity * delta)
   G.set_translation camera translationFinal
 
   Api.godot_string_destroy moveForward
@@ -1516,7 +1514,6 @@ processWASDMovement gss delta = do
 
 actionPress :: GodotSimulaServer -> String -> IO ()
 actionPress gss str = do
-  putStrLn $ "actionPress: " ++ (show str)
   input <- getSingleton GodotInput "Input"
   godotStr <- toLowLevel (pack str)
   G.action_press input godotStr 1.0
@@ -1524,7 +1521,6 @@ actionPress gss str = do
 
 actionRelease :: GodotSimulaServer -> String -> IO ()
 actionRelease gss str = do
-  putStrLn $ "actionRelease: " ++ (show str)
   input <- getSingleton GodotInput "Input"
   godotStr <- toLowLevel (pack str)
   G.action_release input godotStr
