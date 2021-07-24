@@ -636,9 +636,10 @@ ready gss _ = do
   addChild gss canvasLayer
   addChild canvasLayer label
 
-  camera <- getARVRCameraOrPancakeCamera gss
-  initialRotation@(V3 rotationX rotationY rotationZ) <- G.get_rotation camera >>= fromLowLevel
-  atomically $ writeTVar (gss ^. gssWasdInitialRotation) rotationY
+  -- Crashes here, but should be done when camera is ready:
+  -- camera <- getARVRCameraOrPancakeCamera gss
+  -- initialRotation@(V3 rotationX rotationY rotationZ) <- G.get_rotation camera >>= fromLowLevel
+  -- atomically $ writeTVar (gss ^. gssWasdInitialRotation) rotationY
 
   where launchDefaultApps :: [String] -> String-> IO ()
         launchDefaultApps sApps location = do
