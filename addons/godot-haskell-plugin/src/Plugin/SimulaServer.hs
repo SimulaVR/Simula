@@ -408,6 +408,8 @@ getKeyboardAction gss keyboardShortcut =
         cycleScene :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
         cycleScene gss _ True = do
           putStrLn "Cycling scene.."
+          camera <- getARVRCameraOrPancakeCamera gss
+          G.set_zfar camera 5000 -- Set large in case some scenes have faraway objects to render
           cycleGSSScene gss
           return ()
         cycleScene _ _ _ = do
