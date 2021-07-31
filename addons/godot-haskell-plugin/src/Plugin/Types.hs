@@ -164,7 +164,7 @@ data SimulaEnvironment = Day | Night
 data Grab = GrabWindow GodotSimulaViewSprite Float | GrabWindows GodotTransform | GrabWorkspaces GodotTransform
 type DiffMap = M.Map GodotSpatial GodotTransform
 
-type HUD = (GodotCanvasLayer, GodotLabel)
+type HUD = (GodotCanvasLayer, GodotRichTextLabel)
 
 -- We use TVar excessively since these datatypes must be retrieved from the
 -- scene graph (requiring IO)

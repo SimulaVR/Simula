@@ -456,8 +456,8 @@ getKeyboardAction gss keyboardShortcut =
           -- Swap workspace in scene graph
           removeChild gss currentWorkspace
           addChild gss newWorkspace
-          (canvasLayer, label) <- readTVarIO (gss ^. gssHUD)
-          G.set_text label =<< (toLowLevel (pack (show workspaceNum)))
+          (canvasLayer, rtLabel) <- readTVarIO (gss ^. gssHUD)
+          G.set_text rtLabel =<< (toLowLevel (pack (show workspaceNum)))
         switchToWorkspace _ _ _ _ = return ()
 
         sendToWorkspace :: GodotSimulaServer -> Int -> SpriteLocation -> Bool -> IO ()
@@ -634,9 +634,10 @@ ready gss _ = do
     Nothing -> return ()
     Just debugModeVal  -> (forkIO $ debugFunc gss) >> return ()
 
-  (canvasLayer , label) <- readTVarIO (gss ^. gssHUD)
+  (canvasLayer , rtLabel) <- readTVarIO (gss ^. gssHUD)
   addChild gss canvasLayer
-  addChild canvasLayer label
+  addChild canvasLayer rtLabel
+  return ()
 
   -- Crashes here, but should be done when camera is ready:
   -- camera <- getARVRCameraOrPancakeCamera gss
@@ -843,14 +844,23 @@ initGodotSimulaServer obj = do
       scale <- toLowLevel (V2 2 2) :: IO GodotVector2
       G.set_scale canvasLayer scale
 
-      label <- unsafeInstance GodotLabel "Label"
-      G.set_text label =<< (toLowLevel "1")
+      rtLabel <- unsafeInstance GodotRichTextLabel "RichTextLabel"
+      G.set_margin rtLabel 2 800
+      G.set_margin rtLabel 3 400
+      G.add_text rtLabel =<< toLowLevel "1"
+
+      -- Code pattern for adding an image to the HUD
+      -- maybeBattText <- getTextureFromURL "batt.png"
+      -- contentHeight <- G.get_content_height rtLabel
+      -- case maybeBattText of
+      --   Just battText -> G.add_image rtLabel battText 0 contentHeight -- 20 is a test
+      --   Nothing -> putStrLn "Can't add HUD texture!"
 
       -- G.set_valign label G.VALIGN_CENTER -- VALIGN_TOP, VALIGN_CENTER, VALIGN_BOTTOM, VALI layer value
       -- G.set_visible_characters label <int> -- -1 to  layer value
       -- G.set_align layer value
 
-      gssHUD' <- newTVarIO (canvasLayer, label) :: IO (TVar HUD)
+      gssHUD' <- newTVarIO (canvasLayer, rtLabel) :: IO (TVar HUD)
 
       gssScenes' <- newTVarIO (configuration ^. scenes)
 
