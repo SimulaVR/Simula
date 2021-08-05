@@ -72,6 +72,7 @@ library
     , hspec-core
     , QuickCheck
     , safe-exceptions
+    , io-streams
   exposed-modules:
       Telemetry
       Plugin
@@ -172,6 +173,7 @@ foreign-library godot-haskell-plugin
     , hspec-core
     , QuickCheck
     , safe-exceptions
+    , io-streams
 
   default-extensions:
        FlexibleContexts

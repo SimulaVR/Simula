@@ -508,7 +508,7 @@ _handle_map gsvs _ = do
   putStr "Mapping surface "
   print (safeCast @GodotObject gsvs)
   -- Add the gsvs as a child to the current workspace
-  workspace <- readTVarIO (gss ^. gssWorkspace)
+  (workspace, workspaceStr) <- readTVarIO (gss ^. gssWorkspace)
   G.add_child ((safeCast workspace) :: GodotNode)
               ((safeCast gsvs)      :: GodotNode)
               True

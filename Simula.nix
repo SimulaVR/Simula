@@ -39,6 +39,8 @@ let
 
     libleak = callPackage ./nix/libleak/libleak.nix {};
 
+    i3status = callPackage ./submodules/i3status/i3status.nix {};
+
     devBuildFalse = ''
       cp ./utils/GetNixGL.sh $out/bin/GetNixGL.sh
       ln -s ${godot}/bin/godot.x11.opt.debug.64 $out/bin/godot.x11.opt.debug.64
@@ -160,6 +162,12 @@ let
       exec ${midori}/bin/midori
       '';
 
+    i3status-wrapped = writeScriptBin "i3status" ''
+      #!${stdenv.shell}
+      export LC_ALL=C
+      exec ${i3status}/bin/i3status "$@"
+      '';
+
     simulaPackages = if devBuild == true then [ valgrind libleak ] else [ godot godot-haskell-plugin ];
     linkGHP = if devBuild == true then "" else ''
       ln -s ${godot-haskell-plugin}/lib/ghc-${ghc-version}/libgodot-haskell-plugin.so $out/bin/libgodot-haskell-plugin.so;
@@ -216,7 +224,7 @@ let
         # && (baseNameOf path != "result")                        # "
       ) ./.;
 
-      buildInputs = [ xpra xrdb wmctrl fontconfig glibc-locales xfce4-terminal-wrapped openxr-loader midori-wrapped pernoscoSubmit ] ++ simulaPackages;
+      buildInputs = [ xpra xrdb wmctrl fontconfig glibc-locales xfce4-terminal-wrapped openxr-loader midori-wrapped pernoscoSubmit i3status-wrapped ] ++ simulaPackages;
       installPhase = ''
       mkdir -p $out/bin
       mkdir -p $out/srcs
@@ -234,6 +242,7 @@ let
       ln -s ${rr}/bin/rr $out/bin/rr
       ln -s ${dialog}/bin/dialog $out/bin/dialog
       ln -s ${curl}/bin/curl $out/bin/curl
+      ln -s ${i3status-wrapped}/bin/i3status $out/bin/i3status
 
       '' + linkGHP + devBuildScript;
     };

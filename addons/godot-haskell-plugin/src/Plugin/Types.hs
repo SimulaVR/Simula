@@ -52,7 +52,10 @@ import           System.IO.Unsafe
 import           Data.Monoid
 import           Data.List
 -- import           Data.Text as T
+import           Data.Text.Encoding
 import           Data.Text
+import qualified System.Process.ByteString as B
+import qualified Data.ByteString.Char8 as B
 
 import Data.IORef
 
@@ -69,6 +72,11 @@ import Godot.Core.GodotViewport as G
 import Data.Map.Ordered as MO
 import Dhall
 import qualified Data.Vector as V
+import System.IO.Streams.Process
+import System.IO.Streams.Internal
+import qualified Data.ByteString as B
+
+
 
 instance Show Transform where
   show tf = (show (_tfBasis tf)) ++ (" w/position: ") ++ (show (_tfPosition tf))
@@ -141,6 +149,7 @@ data Configuration = Configuration {
 , _environmentDefault :: String
 -- , _defaultTransparency :: Double -- Remove until order independent transparency is implemented
 , _scenes :: [String]
+, _hudConfig :: String
 } deriving (Generic, Show)
 
 instance FromDhall KeyboardRemapping
@@ -164,7 +173,14 @@ data SimulaEnvironment = Day | Night
 data Grab = GrabWindow GodotSimulaViewSprite Float | GrabWindows GodotTransform | GrabWorkspaces GodotTransform
 type DiffMap = M.Map GodotSpatial GodotTransform
 
-type HUD = (GodotCanvasLayer, GodotRichTextLabel)
+data HUD = HUD
+  { _hudCanvasLayer :: GodotCanvasLayer
+  , _hudRtlWorkspace :: GodotRichTextLabel
+  , _hudRtlI3        :: GodotRichTextLabel
+  , _hudSvrTexture   :: GodotTexture
+  , _hudDynamicFont  :: GodotDynamicFont
+  , _hudI3Status     :: String
+  }
 
 -- We use TVar excessively since these datatypes must be retrieved from the
 -- scene graph (requiring IO)
@@ -204,7 +220,7 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssGrab                  :: TVar (Maybe Grab)
   , _gssDiffMap               :: TVar (M.Map GodotSpatial GodotTransform)
   , _gssWorkspaces            :: Vector GodotSpatial
-  , _gssWorkspace             :: TVar GodotSpatial
+  , _gssWorkspace             :: TVar (GodotSpatial, String)
   , _gssHUD                   :: TVar HUD
   , _gssScenes                :: TVar [String]
   , _gssScene                 :: TVar (Maybe (String, GodotNode))
@@ -308,6 +324,7 @@ makeLenses ''KeyboardShortcut
 makeLenses ''KeyboardRemapping
 makeLenses ''StartingApps
 makeLenses ''Configuration
+makeLenses ''HUD
 
 -- Godot helper functions (should eventually be exported to godot-extra).
 
@@ -1237,7 +1254,7 @@ getParentPid pid = do
     Right xs ->
       case Data.List.lines xs of
         [ws] -> case Data.List.words ws of
-          (_:_:_:ppid:_) -> return . Just . read $ ppid
+          (_:_:_:ppid:_) -> return . Just . Prelude.read $ ppid
     _ -> return Nothing
 
 getParentsPids :: ProcessID  -> IO [ProcessID]
@@ -1311,7 +1328,7 @@ keyboardGrabLetGo gss (GrabWindow gsvs _)  = do
   gss <- readTVarIO $ (gsvs ^. gsvsServer)
   atomically $ writeTVar (gss ^. gssGrab) Nothing
 keyboardGrabLetGo gss (GrabWindows _) = do
-  currentWorkspace <- readTVarIO (gss ^. gssWorkspace)
+  (currentWorkspace, currentWorkspaceStr) <- readTVarIO (gss ^. gssWorkspace)
   currentWorkspaceTransform <- G.get_transform currentWorkspace
   updateDiffMap gss currentWorkspace currentWorkspaceTransform
   atomically $ writeTVar (gss ^. gssGrab) Nothing
@@ -1399,7 +1416,7 @@ rotateWorkspaceHorizontally gss radians rotationMethod = do
   -- get state
   prevPovTransform <- getARVRCameraOrPancakeCameraTransform gss
   povTransform <- getARVRCameraOrPancakeCameraTransform gss
-  currentWorkspace <- readTVarIO (gss ^. gssWorkspace)
+  (currentWorkspace, currentWorkspaceStr) <- readTVarIO (gss ^. gssWorkspace)
   currentWorkspaceTransform <- G.get_transform currentWorkspace
 
   -- compute new transform
@@ -1525,3 +1542,63 @@ actionRelease gss str = do
   godotStr <- toLowLevel (pack str)
   G.action_release input godotStr
   Api.godot_string_destroy godotStr
+
+logMemPid :: GodotSimulaServer -> IO Float
+logMemPid gss = do
+  let pid = (gss ^. gssPid)
+  (_, out', _) <- System.Process.readCreateProcessWithExitCode (shell $ "ps -p " ++ pid ++ " -o rss=") ""
+  let pidMem = Prelude.read $ out' :: Float
+  -- logStr $ "PID mem: " ++ (show pidMem)
+  -- Control.Concurrent.threadDelay (1 * 1000000)
+  -- logMemPid gss
+  return (pidMem / 1000) -- return ~MB
+
+forkUpdateHUDRecursively :: GodotSimulaServer -> IO ()
+forkUpdateHUDRecursively gss = do
+  configuration <- readTVarIO (gss ^. gssConfiguration)
+  let configPath = (configuration ^. hudConfig)
+  res@(inp,out,err,pid) <- System.IO.Streams.Process.runInteractiveProcess "./result/bin/i3status" ["-c", configPath] Nothing Nothing --
+
+  forkIO $ updateHUDRecursively gss res
+  return ()
+  where updateHUDRecursively :: GodotSimulaServer -> (OutputStream B.ByteString, InputStream B.ByteString, InputStream B.ByteString, ProcessHandle) -> IO ()
+        updateHUDRecursively gss res@(inp,out,err,pid) = do
+          -- let sec = 5
+          -- threadDelay (1000 * 1000 * (sec))
+          updateWorkspaceHUD gss
+          updatei3StatusHUD gss res
+
+          updateHUDRecursively gss res
+
+updateWorkspaceHUD :: GodotSimulaServer -> IO ()
+updateWorkspaceHUD gss = do
+  (currentWorkspace, currentWorkspaceStr) <- readTVarIO (gss ^. gssWorkspace)
+  hud <- readTVarIO (gss ^. gssHUD)
+  let canvasLayer = (hud ^. hudCanvasLayer)
+  let rtLabelW = (hud ^. hudRtlWorkspace)
+  let svr = (hud ^. hudSvrTexture)
+  let dynamicFont = (hud ^. hudDynamicFont)
+  fps <- getSingleton Godot_Engine "Engine" >>= (\engine -> G.get_frames_per_second engine)
+  simulaMemoryUsage <- logMemPid gss
+
+  G.clear rtLabelW
+  G.push_font rtLabelW (safeCast dynamicFont)
+  G.append_bbcode rtLabelW =<< toLowLevel (pack currentWorkspaceStr)
+  G.append_bbcode rtLabelW =<< toLowLevel " | "
+  G.add_image rtLabelW svr 19 19
+  G.append_bbcode rtLabelW =<< toLowLevel " "
+  G.append_bbcode rtLabelW =<< toLowLevel (pack $ (show $ round fps) ++ " FPS ")
+  G.append_bbcode rtLabelW =<< toLowLevel (pack ("@ " ++ (show $ round simulaMemoryUsage) ++ " MB"))
+  G.append_bbcode rtLabelW =<< toLowLevel " |"
+  G.pop rtLabelW
+
+updatei3StatusHUD :: GodotSimulaServer -> (OutputStream B.ByteString, InputStream B.ByteString, InputStream B.ByteString, ProcessHandle) -> IO ()
+updatei3StatusHUD gss res@(inp,out,err,pid) = do
+  hud <- readTVarIO (gss ^. gssHUD)
+  maybeLine <- System.IO.Streams.Internal.read out :: IO (Maybe B.ByteString)
+  let line = Data.Maybe.fromJust maybeLine
+  let line' = Data.List.reverse $ Data.List.tail $ Data.List.tail $ Data.List.tail (Data.List.reverse (Data.List.tail (show (Data.Text.Encoding.decodeUtf8 line)))) -- Remove trailing quotes and newline
+  let hudNew = hud { _hudI3Status = line' }
+  atomically $ writeTVar (gss ^. gssHUD) hudNew
+  return ()
+

@@ -88,6 +88,10 @@ let Configuration =
   -- Environments must be local to Simula's root directory
   , _environmentsDirectory = "./environments"
   , _environmentDefault    = "./environments/AllSkyFree_Sky_EpicBlueSunset_Equirect.png"
+  -- Configuration of Simula's HUD (in i3status format).
+  -- See https://i3wm.org/docs/i3status.html
+  , _hudConfig = "./config/i3status.config"
+
   }
 
 in Configuration

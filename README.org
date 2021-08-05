@@ -169,6 +169,11 @@ Windows become "active" once you look at them. Active windows receive typing eve
 
 Simula has a headset [[https://www.youtube.com/watch?v=D5c3Hfp8Hcw][webcam view]] (binded presently to ~Super + w~) that allows you to see your mouse and keyboard from VR.
  
+** Configuration
+
+- Many things are configurable in Simula. See ~./config/config.dhall~ for a self-documenting list of things to adjust.
+- Simula also uses ~i3status~ to display system information in its HUD.  The default configuration can be found in ~./config/i3status.config~, and can be adjusted [[https://i3wm.org/docs/i3status.html][per these instructions]].
+
 ** COMMENT Recovering Simula Apps
 
 Apps launched in Simula persist across sessions via an [[https://xpra.org/][xpra]] server running on ~DISPLAY=:13~. This means that if Simula exits (perhaps by a sudden crash), all you need to do to recover your apps is to relaunch Simula.
