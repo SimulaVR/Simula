@@ -89,7 +89,7 @@ import Control.Exception
 import qualified Data.Vector as V
 
 getKeyboardAction :: GodotSimulaServer -> KeyboardShortcut -> KeyboardAction
-getKeyboardAction gss keyboardShortcut = 
+getKeyboardAction gss keyboardShortcut =
   case (keyboardShortcut ^. keyAction) of
     "moveCursor" -> moveCursor
     "clickLeft" -> leftClick
@@ -557,7 +557,7 @@ process gss [deltaGV] = do
   G.clear rtLabel
   G.push_font rtLabel (safeCast dynamicFont)
   G.push_align rtLabel 2
-  G.append_bbcode rtLabel =<< (toLowLevel (pack i3status))
+  G.append_bbcode rtLabel `withGodotString` (pack i3status)
   G.pop rtLabel
   G.pop rtLabel
 

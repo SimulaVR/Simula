@@ -23,7 +23,7 @@ import           Linear                           as D
 
 -- Godot
 import           Godot.Api                        as G
-import           Godot.Gdnative.Internal.Gdnative as G
+import           Godot.Gdnative.Internal.Gdnative as G hiding (withGodotString)
 
 -- Hiding things you shouldn't have to bother with
 import           Godot.Gdnative.Types             as G hiding (AsVariant,

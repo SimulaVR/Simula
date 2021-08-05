@@ -532,9 +532,10 @@ getSingleton constr name = do
   engine <- getEngine
   name' <- toLowLevel name
   b <- G.has_singleton engine name'
-  if b
-    then G.get_singleton engine name' >>= asClass' constr name
-    else error $ "No singleton named " ++ (Data.Text.unpack name)
+  res <- if b then G.get_singleton engine name' >>= asClass' constr name
+              else error $ "No singleton named " ++ (Data.Text.unpack name)
+  Api.godot_string_destroy name'
+  return res
 
 isClass :: GodotObject :< a => a -> Text -> IO Bool
 isClass obj clsName = do
@@ -1582,13 +1583,13 @@ updateWorkspaceHUD gss = do
 
   G.clear rtLabelW
   G.push_font rtLabelW (safeCast dynamicFont)
-  G.append_bbcode rtLabelW =<< toLowLevel (pack currentWorkspaceStr)
-  G.append_bbcode rtLabelW =<< toLowLevel " | "
+  G.append_bbcode rtLabelW `withGodotString` (pack currentWorkspaceStr)
+  G.append_bbcode rtLabelW `withGodotString` " | "
   G.add_image rtLabelW svr 19 19
-  G.append_bbcode rtLabelW =<< toLowLevel " "
-  G.append_bbcode rtLabelW =<< toLowLevel (pack $ (show $ round fps) ++ " FPS ")
-  G.append_bbcode rtLabelW =<< toLowLevel (pack ("@ " ++ (show $ round simulaMemoryUsage) ++ " MB"))
-  G.append_bbcode rtLabelW =<< toLowLevel " |"
+  G.append_bbcode rtLabelW `withGodotString` " "
+  G.append_bbcode rtLabelW `withGodotString` (pack $ (show $ round fps) ++ " FPS ")
+  G.append_bbcode rtLabelW `withGodotString` (pack ("@ " ++ (show $ round simulaMemoryUsage) ++ " MB"))
+  G.append_bbcode rtLabelW `withGodotString` " |"
   G.pop rtLabelW
 
 updatei3StatusHUD :: GodotSimulaServer -> (OutputStream B.ByteString, InputStream B.ByteString, InputStream B.ByteString, ProcessHandle) -> IO ()
@@ -1602,3 +1603,9 @@ updatei3StatusHUD gss res@(inp,out,err,pid) = do
   atomically $ writeTVar (gss ^. gssHUD) hudNew
   return ()
 
+withGodotString :: (GodotString -> IO a) -> Text -> IO a
+withGodotString action text = do
+  godotStr <- toLowLevel text
+  ret <- action godotStr
+  Api.godot_string_destroy godotStr
+  return ret
