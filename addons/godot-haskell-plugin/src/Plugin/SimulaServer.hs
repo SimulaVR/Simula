@@ -861,13 +861,13 @@ initGodotSimulaServer obj = do
       G.set_anchor_and_margin rtLabel 0 0 0 False -- MARGIN_LEFT
       G.set_anchor_and_margin rtLabel 1 0 0 False -- MARGIN_TOP
       G.set_anchor_and_margin rtLabel 2 1 0 False -- MARGIN_RIGHT
-      G.set_anchor_and_margin rtLabel 3 0 40 False -- MARGIN_BOTTOM
+      G.set_anchor_and_margin rtLabel 3 0 50 False -- MARGIN_BOTTOM
 
       rtLabelW <- unsafeInstance GodotRichTextLabel "RichTextLabel"
       G.set_anchor_and_margin rtLabelW 0 0 0 False -- MARGIN_LEFT
       G.set_anchor_and_margin rtLabelW 1 0 0 False -- MARGIN_TOP
       G.set_anchor_and_margin rtLabelW 2 1 0 False -- MARGIN_RIGHT
-      G.set_anchor_and_margin rtLabelW 3 0 40 False -- MARGIN_BOTTOM
+      G.set_anchor_and_margin rtLabelW 3 0 50 False -- MARGIN_BOTTOM
       G.set_use_bbcode rtLabel True
       G.set_use_bbcode rtLabelW True
 

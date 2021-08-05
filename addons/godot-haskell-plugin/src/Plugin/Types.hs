@@ -75,8 +75,7 @@ import qualified Data.Vector as V
 import System.IO.Streams.Process
 import System.IO.Streams.Internal
 import qualified Data.ByteString as B
-
-
+import System.IO.Streams.Text
 
 instance Show Transform where
   show tf = (show (_tfBasis tf)) ++ (" w/position: ") ++ (show (_tfPosition tf))
@@ -1595,9 +1594,10 @@ updateWorkspaceHUD gss = do
 updatei3StatusHUD :: GodotSimulaServer -> (OutputStream B.ByteString, InputStream B.ByteString, InputStream B.ByteString, ProcessHandle) -> IO ()
 updatei3StatusHUD gss res@(inp,out,err,pid) = do
   hud <- readTVarIO (gss ^. gssHUD)
-  maybeLine <- System.IO.Streams.Internal.read out :: IO (Maybe B.ByteString)
+  out' <- System.IO.Streams.Text.decodeUtf8 out
+  maybeLine <- System.IO.Streams.Internal.read out' :: IO (Maybe Text)
   let line = Data.Maybe.fromJust maybeLine
-  let line' = Data.List.reverse $ Data.List.tail $ Data.List.tail $ Data.List.tail (Data.List.reverse (Data.List.tail (show (Data.Text.Encoding.decodeUtf8 line)))) -- Remove trailing quotes and newline
+  let line' = unpack line
   let hudNew = hud { _hudI3Status = line' }
   atomically $ writeTVar (gss ^. gssHUD) hudNew
   return ()
