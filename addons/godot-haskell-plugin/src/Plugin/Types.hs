@@ -991,6 +991,17 @@ orientSpriteTowardsGaze gsvs = do
                atomically $ writeTVar (gsvs ^. gsvsIsDamaged) True -- Useful debugging hack to force gsvs to redraw
                -- G.rotate_object_local gsvs rotationAxisY 3.14159  -- The positive z-axis of the gsvs looks at HMD
 
+
+addLeapMotionScene :: GodotSimulaServer -> IO ()
+addLeapMotionScene gss = do
+  resourceLoader <- getSingleton Godot_ResourceLoader "ResourceLoader"
+  nextScenePath <- toLowLevel (pack "res://addons/gdleapmotion/scenes/leap_motion.tscn")
+  typeHint <- toLowLevel ""
+  (GodotResource nextSceneObj) <- G.load resourceLoader nextScenePath typeHint False
+  let nextScenePacked = GodotPackedScene nextSceneObj
+  nextSceneInstance <- G.instance' nextScenePacked 0
+  addChild gss nextSceneInstance
+
 resizeGSVS :: GodotSimulaViewSprite -> ResizeMethod -> Float -> IO ()
 resizeGSVS gsvs resizeMethod factor =
   do maybeOldTargetDims <- readTVarIO (gsvs ^. gsvsTargetSize)

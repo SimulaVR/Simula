@@ -151,6 +151,7 @@ getKeyboardAction gss keyboardShortcut =
     "rotateWorkspacesHorizontallyRight" -> rotateWorkspacesHorizontally gss (-0.15707963)
     "toggleARMode" -> toggleARMode gss
     "toggleWasdMode" -> toggleWasdMode gss
+    "addLeapMotion" -> addLeapMotion gss
     _ -> shellLaunch gss (keyboardShortcut ^. keyAction)
 
   where moveCursor :: SpriteLocation -> Bool -> IO ()
@@ -467,6 +468,12 @@ getKeyboardAction gss keyboardShortcut =
           removeChild currentWorkspace gsvs
           addChild newWorkspace gsvs
         sendToWorkspace _ _ _ _ = return ()
+
+        addLeapMotion :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
+        addLeapMotion gss _ True = do
+          putStrLn "Adding LEAP Motion to scene graph.."
+          addLeapMotionScene gss
+        addLeapMotion _ _ _ = return ()
 
 isMask :: Int -> Bool
 isMask keyOrMask = elem keyOrMask [ G.KEY_MASK_SHIFT

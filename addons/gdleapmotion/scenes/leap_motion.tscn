@@ -1,0 +1,15 @@
+[gd_scene load_steps=2 format=2]
+
+[ext_resource path="res://addons/gdleapmotion/gdlm_sensor.gdns" type="Script" id=1]
+
+[node name="Leap_Motion" type="Spatial" index="0"]
+
+script = ExtResource( 1 )
+arvr = false
+smooth_factor = 0.5
+keep_hands_for_frames = 240
+keep_last_hand = true
+left_hand_scene = "res://addons/gdleapmotion/scenes/left_hand.tscn"
+right_hand_scene = "res://addons/gdleapmotion/scenes/right_hand.tscn"
+
+
