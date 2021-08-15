@@ -419,14 +419,17 @@ getKeyboardAction gss keyboardShortcut =
         toggleARMode :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
         toggleARMode gss _ True = do
           putStrLn "Toggling AR mode.."
+          car <- "res://addons/godot-haskell-plugin/CanvasAR.gdns"
+            & newNS' []
+            >>= Api.godot_nativescript_get_userdata
+            >>= deRefStablePtr . castPtrToStablePtr :: IO CanvasAR
+          atomically $ writeTVar (car ^. carGSS) gss -- Possible race condition
+          atomically $ writeTVar (gss ^. gssCanvasAR) car
+
           (worldEnvironment, _) <- readTVarIO (gss ^. gssWorldEnvironment)
           environment <- G.get_environment worldEnvironment
-          G.set_background environment G.BG_CAMERA_FEED
-          G.set_camera_feed_id environment 1
-          cameraServer <- getSingleton GodotCameraServer "CameraServer"
-          numCameras <- G.get_feed_count cameraServer
-          putStrLn $ "CameraServer get_feed_count: " ++ (show numCameras)
-          when (numCameras > 0) $ G.get_feed cameraServer 0 >>= \cam -> G.set_active cam True
+          G.set_background environment G.BG_CANVAS
+          G.set_canvas_max_layer environment (-1)
           return ()
         toggleARMode _ _ _ = do
           return ()
@@ -903,6 +906,7 @@ initGodotSimulaServer obj = do
 
       gssWasdInitialRotation' <- newTVarIO 0
       gssWasdMode' <- newTVarIO False
+      gssCanvasAR' <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar CanvasAR)
 
       let gss = GodotSimulaServer {
         _gssObj                   = obj                       :: GodotObject
@@ -946,6 +950,7 @@ initGodotSimulaServer obj = do
       , _gssScene                 = gssScene'                 :: TVar (Maybe (String, GodotNode))
       , _gssWasdInitialRotation   = gssWasdInitialRotation'   :: TVar Float
       , _gssWasdMode              = gssWasdMode'              :: TVar Bool
+      , _gssCanvasAR              = gssCanvasAR'              :: TVar CanvasAR
       }
   return gss
   where getStartingAppsStr :: Maybe String -> String

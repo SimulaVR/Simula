@@ -225,11 +225,12 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssScene                 :: TVar (Maybe (String, GodotNode))
   , _gssWasdInitialRotation   :: TVar Float
   , _gssWasdMode              :: TVar Bool
+  , _gssCanvasAR              :: TVar CanvasAR
   }
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
@@ -288,6 +289,20 @@ instance HasBaseClass CanvasSurface where
 instance Eq CanvasSurface where
   (==) = (==) `on` _csObject
 
+data CanvasAR = CanvasAR {
+    _carObject :: GodotObject
+  , _carGSS :: TVar GodotSimulaServer
+  -- , _carViewport :: TVar GodotViewport
+  , _carCanvasLayer :: TVar GodotCanvasLayer
+  , _carShader :: TVar GodotShaderMaterial
+  , _carCameraFeed :: TVar GodotCameraFeed
+  , _carCameraTexture :: TVar GodotCameraTexture
+}
+
+instance HasBaseClass CanvasAR where
+  type BaseClass CanvasAR = GodotNode2D
+  super (CanvasAR obj _ _ _ _ _) = GodotNode2D obj
+
 data SimulaView = SimulaView
   { _svServer                  :: GodotSimulaServer -- Can obtain WlrSeat
   -- , _svWlrSurface              :: GodotWlrSurface -- Can obtain GodotWlrSurface from GodotWlrXdgSurface
@@ -316,6 +331,7 @@ instance Ord SimulaView where
 makeLenses ''GodotSimulaViewSprite
 makeLenses ''CanvasBase
 makeLenses ''CanvasSurface
+makeLenses ''CanvasAR
 makeLenses ''SimulaView
 makeLenses ''GodotSimulaServer
 makeLenses ''GodotPancakeCamera
