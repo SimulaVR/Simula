@@ -123,6 +123,34 @@ let
       echo "_RR_TRACE_DIR=./rr PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) ${rr}/bin/rr -M replay \"\$@\"" >> $out/bin/rootston_rr_replay
       chmod +x $out/bin/rootston_rr_replay
 
+      # demo_local
+      echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/demo_local
+      echo "mkdir -p log" >> $out/bin/demo_local
+      echo "mkdir -p config" >> $out/bin/demo_local
+      echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:${libv4l}/lib \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m --path ./submodules/Demo" >> $out/bin/demo_local
+      chmod +x $out/bin/demo_local
+
+      # demo_local_editor
+      echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/demo_local_editor
+      echo "mkdir -p log" >> $out/bin/demo_local_editor
+      echo "mkdir -p config" >> $out/bin/demo_local_editor
+      echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:${libv4l}/lib \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -e --path ./submodules/Demo" >> $out/bin/demo_local_editor
+      chmod +x $out/bin/demo_local_editor
+
+      # demo_rr_record
+      echo "_RR_TRACE_DIR=./rr PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${libv4l}/lib \$(./utils/GetNixGL.sh) ${rr}/bin/rr record -i SIGUSR1 ./submodules/godot/bin/godot.x11.tools.64 --args -m --path ./submodules/Demo" >> $out/bin/demo_rr_record
+      chmod +x $out/bin/demo_rr_record
+
+      # demo_rr_replay
+      echo "_RR_TRACE_DIR=./rr PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${libv4l}/lib \$(./utils/GetNixGL.sh) ${rr}/bin/rr -M replay \"\$@\"" >> $out/bin/demo_rr_replay
+      chmod +x $out/bin/demo_rr_replay
+
+      # demo_apitrace
+      echo "rm *.trace" >> $out/bin/demo_apitrace
+      echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) apitrace trace --api gl ./submodules/bin/godot.x11.tools.64 --path ./submodules/Demo" >> $out/bin/demo_apitrace
+      echo "apitrace dump *.trace | grep glTex > glTex.trace" >> $out/bin/demo_apitrace
+      chmod +x $out/bin/demo_apitrace
+
       ln -s ${valgrind}/bin/valgrind $out/bin/valgrind
       ln -s ${valkyrie}/bin/valkyrie $out/bin/valkyrie
 
@@ -203,6 +231,7 @@ let
       $PWD/result/srcs/wayland/egl \
       $PWD/result/srcs/libxcb/src \
       $PWD/result/srcs/xwayland/doc \
+      $PWD/submodules/Demo \
       ${wayland-dev} \
       ${wlroots-dev} \
       > pernosco.txt 2>&1
