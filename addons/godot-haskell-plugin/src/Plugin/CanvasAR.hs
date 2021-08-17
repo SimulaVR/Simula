@@ -49,7 +49,6 @@ instance NativeScript CanvasAR where
                   <*> atomically (newTVar (error "Failed to initialize CanvasAR"))
                   <*> atomically (newTVar (error "Failed to initialize CanvasAR"))
                   <*> atomically (newTVar (error "Failed to initialize CanvasAR"))
-                  <*> atomically (newTVar (error "Failed to initialize CanvasAR"))
   classMethods =
     [
       func NoRPC "_process" (catchGodot Plugin.CanvasAR._process)
@@ -59,34 +58,8 @@ instance NativeScript CanvasAR where
 
 _ready :: CanvasAR -> [GodotVariant] -> IO ()
 _ready self _ = do
-  canvasLayer <- unsafeInstance GodotCanvasLayer "CanvasLayer"
-  G.set_layer canvasLayer (-1)
-  atomically $ writeTVar (self ^. carCanvasLayer) canvasLayer
-
-  cameraServer <- getSingleton GodotCameraServer "CameraServer"
-  numCameras <- G.get_feed_count cameraServer
-  putStrLn $ "CameraServer get_feed_count: " ++ (show numCameras)
-  when (numCameras > 0) $ G.get_feed cameraServer 0 >>= \cam -> G.set_active cam True
-
-  cameraTexture <- unsafeInstance GodotCameraTexture "CameraTexture"
-  G.set_camera_feed_id cameraTexture 1
-  atomically $ writeTVar (self ^. carCameraTexture) cameraTexture
-
-  canvasShaderMaterial <- load GodotShaderMaterial "ShaderMaterial" "res://addons/godot-haskell-plugin/CanvasARShader.tres"
-  case canvasShaderMaterial of
-    Just canvasShaderMaterial -> do
-      atomically $ writeTVar (self ^. carShader ) canvasShaderMaterial
-      G.set_material self (safeCast canvasShaderMaterial)
-    _ -> error "Failed to load CanvasAR shader!"
-
-  G.set_layer canvasLayer (-1)
-
-  gss <- readTVarIO (self ^. carGSS)
-  -- carCanvasLayer <- readTVarIO (car ^. carCanvasLayer)
-  -- let carCanvasItem = (car ^. carObject)
-  addChild gss canvasLayer
-  addChild ((safeCast canvasLayer) :: GodotNode) ((safeCast self) :: GodotNode)
-
+  -- canvasShaderMaterial <- readTVarIO (self ^. carShader)
+  -- G.set_material self (safeCast canvasShaderMaterial)
   G.set_process self True
   return ()
 
@@ -101,3 +74,9 @@ _draw car _ = do
   modulateColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1.0) :: IO GodotColor
   renderPosition <- toLowLevel (V2 0 0)
   G.draw_texture car (safeCast cameraTexture) renderPosition modulateColor (coerce nullPtr)
+
+  -- For testing purposes:
+  -- let m22Rect = V2 (V2 0 0) (V2  1000 1000)
+  -- m22Rect' <- toLowLevel m22Rect
+  -- redColor <- (toLowLevel $ (rgb 1.0 0.0 0.0) `withOpacity` 0.5) :: IO GodotColor
+  -- G.draw_rect car m22Rect' redColor True 1.0 False

@@ -295,13 +295,12 @@ data CanvasAR = CanvasAR {
   -- , _carViewport :: TVar GodotViewport
   , _carCanvasLayer :: TVar GodotCanvasLayer
   , _carShader :: TVar GodotShaderMaterial
-  , _carCameraFeed :: TVar GodotCameraFeed
   , _carCameraTexture :: TVar GodotCameraTexture
 }
 
 instance HasBaseClass CanvasAR where
   type BaseClass CanvasAR = GodotNode2D
-  super (CanvasAR obj _ _ _ _ _) = GodotNode2D obj
+  super (CanvasAR obj _ _ _ _) = GodotNode2D obj
 
 data SimulaView = SimulaView
   { _svServer                  :: GodotSimulaServer -- Can obtain WlrSeat

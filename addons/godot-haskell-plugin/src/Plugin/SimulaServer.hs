@@ -419,17 +419,44 @@ getKeyboardAction gss keyboardShortcut =
         toggleARMode :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
         toggleARMode gss _ True = do
           putStrLn "Toggling AR mode.."
+
+          -- CanvasLayer
+          canvasLayer <- unsafeInstance GodotCanvasLayer "CanvasLayer"
+          G.set_layer canvasLayer (-1)
+
+          -- GodotShaderMaterial
+          -- canvasShaderMaterial' <- load GodotShaderMaterial "ShaderMaterial" "res://addons/godot-haskell-plugin/CanvasARShader.tres"
+          -- let canvasShaderMaterial = Data.Maybe.fromJust canvasShaderMaterial'
+
+          -- CameraTexture
+          cameraServer <- getSingleton GodotCameraServer "CameraServer"
+          numCameras <- G.get_feed_count cameraServer
+          when (numCameras > 0) $ G.get_feed cameraServer 0 >>= \cam -> G.set_active cam True
+          cameraTexture <- unsafeInstance GodotCameraTexture "CameraTexture"
+          G.set_camera_feed_id cameraTexture 1
+
+          -- CanvasAR
           car <- "res://addons/godot-haskell-plugin/CanvasAR.gdns"
             & newNS' []
             >>= Api.godot_nativescript_get_userdata
             >>= deRefStablePtr . castPtrToStablePtr :: IO CanvasAR
-          atomically $ writeTVar (car ^. carGSS) gss -- Possible race condition
-          atomically $ writeTVar (gss ^. gssCanvasAR) car
+          do atomically $ do writeTVar (car ^. carGSS) gss -- Possible race condition
+                             writeTVar (car ^. carCanvasLayer) canvasLayer
+                             -- writeTVar (car ^. carShader) canvasShaderMaterial
+                             writeTVar (car ^. carCameraTexture) cameraTexture
+                             writeTVar (gss ^. gssCanvasAR) car
+          -- G.set_material car (safeCast canvasShaderMaterial)
 
+          -- environment
           (worldEnvironment, _) <- readTVarIO (gss ^. gssWorldEnvironment)
           environment <- G.get_environment worldEnvironment
           G.set_background environment G.BG_CANVAS
           G.set_canvas_max_layer environment (-1)
+
+          -- Scene adjustment
+          addChild worldEnvironment canvasLayer
+          addChild canvasLayer car
+
           return ()
         toggleARMode _ _ _ = do
           return ()
