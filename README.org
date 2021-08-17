@@ -126,6 +126,7 @@ Windows become "active" once you look at them. Active windows receive typing eve
 | ~Super + 0~                                | Scale window to larger size                                                                                                   |
 | ~Super + <number between 1 and 8>~         | Switch to workspace <num>                                                                                                     |
 | ~Super + Shift + <number between 1 and 8>~ | Move window to workspace <num>                                                                                                |
+| ~Super + Shift + 0~                        | Pin window to all workspaces                                                                                                  |
 | ~Super + -~                                | Increase window resolution ("zoom out")                                                                                       |
 | ~Super + =~                                | Increase window resolution ("zoom in")                                                                                        |
 | ~Super + <right>~                          | Extend window horizontally                                                                                                    |

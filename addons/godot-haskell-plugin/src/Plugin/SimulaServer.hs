@@ -145,6 +145,7 @@ getKeyboardAction gss keyboardShortcut =
     "sendToWorkspace7" -> sendToWorkspace gss 7
     "sendToWorkspace8" -> sendToWorkspace gss 8
     "sendToWorkspace9" -> sendToWorkspace gss 9
+    "sendToWorkspacePersistent" -> sendToWorkspace gss 0
     "rotateWorkspaceHorizontallyLeft" -> rotateWorkspaceHorizontally gss (0.15707963)
     "rotateWorkspaceHorizontallyRight" -> rotateWorkspaceHorizontally gss (-0.15707963)
     "rotateWorkspacesHorizontallyLeft" -> rotateWorkspacesHorizontally gss (0.15707963)
@@ -492,11 +493,19 @@ getKeyboardAction gss keyboardShortcut =
 
         sendToWorkspace :: GodotSimulaServer -> Int -> SpriteLocation -> Bool -> IO ()
         sendToWorkspace gss workspaceNum (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          putStrLn $ "Sending app to workspace" ++ (show workspaceNum)
+          putStrLn $ "Sending app to workspace " ++ (show workspaceNum)
           (currentWorkspace, currentWorkspaceStr) <- readTVarIO (gss ^. gssWorkspace)
-          let newWorkspace = (gss ^. gssWorkspaces) V.! workspaceNum
-          removeChild currentWorkspace gsvs
-          addChild newWorkspace gsvs
+          workspacePersistent <- readTVarIO (gss ^. gssWorkspacePersistent)
+
+          isChildOfWorkspacePersistent <- G.is_a_parent_of ((safeCast workspacePersistent) :: GodotNode ) ((safeCast gsvs) :: GodotNode)
+          case isChildOfWorkspacePersistent of
+            True -> removeChild workspacePersistent gsvs
+            False -> removeChild currentWorkspace gsvs
+
+          case workspaceNum of
+            0 -> do addChild workspacePersistent gsvs
+            _ -> do let newWorkspace = (gss ^. gssWorkspaces) V.! workspaceNum
+                    addChild newWorkspace gsvs
         sendToWorkspace _ _ _ _ = return ()
 
         addLeapMotion :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
@@ -673,6 +682,8 @@ ready gss _ = do
 
   (defaultWorkspace, workspaceStr) <- readTVarIO (gss ^. gssWorkspace)
   addChild gss defaultWorkspace
+  workspacePersistent <- readTVarIO (gss ^. gssWorkspacePersistent)
+  addChild gss workspacePersistent
 
   -- Launch default apps
   sApps <- readTVarIO (gss ^. gssStartingApps)
@@ -889,6 +900,8 @@ initGodotSimulaServer obj = do
 
       gssWorkspaces' <- V.replicateM 10 (unsafeInstance GodotSpatial "Spatial")
       gssWorkspace' <- newTVarIO $ ((gssWorkspaces' V.! 1), "1")
+      workspacePersistent <- (unsafeInstance GodotSpatial "Spatial")
+      gssWorkspacePersistent' <- newTVarIO $ workspacePersistent
       gssDiffMap' <- newTVarIO $ M.empty -- Can't instantiate this until we have the gss Spatial information
 
       canvasLayer <- unsafeInstance GodotCanvasLayer "CanvasLayer"
@@ -972,6 +985,7 @@ initGodotSimulaServer obj = do
       , _gssDiffMap               = gssDiffMap'               :: TVar (M.Map GodotSpatial GodotTransform)
       , _gssWorkspaces            = gssWorkspaces'            :: Vector GodotSpatial
       , _gssWorkspace             = gssWorkspace'             :: TVar (GodotSpatial, String)
+      , _gssWorkspacePersistent   = gssWorkspacePersistent'   :: TVar GodotSpatial
       , _gssHUD                   = gssHUD'                   :: TVar HUD
       , _gssScenes                = gssScenes'                :: TVar [String]
       , _gssScene                 = gssScene'                 :: TVar (Maybe (String, GodotNode))
@@ -1197,6 +1211,11 @@ physicsProcess gss _ = do
                                                 let diffPrev = M.findWithDefault id currentWorkspace diffMap
                                                 diffComposed <- Api.godot_transform_operator_multiply diff diffPrev
                                                 G.set_transform currentWorkspace diffComposed
+
+                                                workspacePersistent <- readTVarIO (gss ^. gssWorkspacePersistent)
+                                                let diffPrevPersistent = M.findWithDefault id workspacePersistent diffMap
+                                                diffComposedPersistent <- Api.godot_transform_operator_multiply diff diffPrevPersistent
+                                                G.set_transform workspacePersistent diffComposedPersistent
     (Just (GrabWindow gsvs dist)) -> do setInFrontOfUser gsvs dist
                                         orientSpriteTowardsGaze gsvs
     (Just (GrabWorkspaces prevPovTransform)) -> do (currentWorkspace, currentWorkspaceStr) <- readTVarIO (gss ^. gssWorkspace)

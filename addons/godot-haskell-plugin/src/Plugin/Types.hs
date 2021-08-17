@@ -220,6 +220,7 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssDiffMap               :: TVar (M.Map GodotSpatial GodotTransform)
   , _gssWorkspaces            :: Vector GodotSpatial
   , _gssWorkspace             :: TVar (GodotSpatial, String)
+  , _gssWorkspacePersistent   :: TVar GodotSpatial
   , _gssHUD                   :: TVar HUD
   , _gssScenes                :: TVar [String]
   , _gssScene                 :: TVar (Maybe (String, GodotNode))
@@ -230,7 +231,7 @@ data GodotSimulaServer = GodotSimulaServer
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
@@ -1355,8 +1356,11 @@ keyboardGrabLetGo gss (GrabWindow gsvs _)  = do
   atomically $ writeTVar (gss ^. gssGrab) Nothing
 keyboardGrabLetGo gss (GrabWindows _) = do
   (currentWorkspace, currentWorkspaceStr) <- readTVarIO (gss ^. gssWorkspace)
+  workspacePersistent <- readTVarIO (gss ^. gssWorkspacePersistent)
   currentWorkspaceTransform <- G.get_transform currentWorkspace
+  workspacePersistentTransform <- G.get_transform workspacePersistent
   updateDiffMap gss currentWorkspace currentWorkspaceTransform
+  updateDiffMap gss workspacePersistent workspacePersistentTransform
   atomically $ writeTVar (gss ^. gssGrab) Nothing
 
 keyboardGrabLetGo gss (GrabWorkspaces _) = do

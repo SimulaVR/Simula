@@ -71,6 +71,7 @@ let Configuration =
                               , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_6"]       , _keyAction = "sendToWorkspace6" }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_7"]       , _keyAction = "sendToWorkspace7" }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_8"]       , _keyAction = "sendToWorkspace8" }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_0"]       , _keyAction = "sendToWorkspacePersistent" }
 
 
                                 -- Anything else is parsed as a shell command:
