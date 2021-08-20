@@ -29,6 +29,9 @@ import           Data.Typeable
 import           Godot.Gdnative.Types
 import           Godot.Nativescript
 
+import           Data.Colour
+import           Data.Colour.SRGB.Linear
+
 import           Plugin.Imports
 
 import           Godot.Core.GodotVisualServer          as G
@@ -227,11 +230,12 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssWasdInitialRotation   :: TVar Float
   , _gssWasdMode              :: TVar Bool
   , _gssCanvasAR              :: TVar CanvasAR
+  , _gssScreenRecorder        :: TVar (Maybe ProcessHandle)
   }
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
@@ -803,7 +807,8 @@ savePng cs surfaceTexture wlrSurface = do
 
   -- Get file path
   frame <- readTVarIO (gsvs ^. gsvsFrameCount)
-  let pathStr = "./png/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
+  createDirectoryIfMissing False "media"
+  let pathStr = "./media/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
   canonicalPath <- canonicalizePath pathStr
   pathStr' <- toLowLevel (pack pathStr)
 
@@ -824,7 +829,8 @@ savePngPancake gss screenshotBaseName = do
   viewportTexture <- G.get_texture viewport
   pancakeImg <- G.get_data viewportTexture
   G.flip_y pancakeImg
-  let relativePath = ("./png/" <> screenshotBaseName <> ".png")
+  createDirectoryIfMissing False "media"
+  let relativePath = ("./media/" <> screenshotBaseName <> ".png")
   fullPath <- System.Directory.canonicalizePath relativePath
   G.save_png pancakeImg =<< toLowLevel (pack relativePath)
   return fullPath
@@ -1089,7 +1095,8 @@ saveViewportAsPngAndLaunch gsvs tex m22@(V2 (V2 ox oy) (V2 ex ey)) = do
 
                 -- Get file path
                 timeStampStr <- show <$> getCurrentTime
-                let pathStr = "./png/" ++  ((Data.List.filter (/= '"') . show) timeStampStr) ++ ".png"
+                createDirectoryIfMissing False "media"
+                let pathStr = "./media/" ++  ((Data.List.filter (/= '"') . show) timeStampStr) ++ ".png"
                 pathStr' <- toLowLevel (pack pathStr)
 
                 -- Save as png
@@ -1610,6 +1617,7 @@ updateWorkspaceHUD gss = do
   let dynamicFont = (hud ^. hudDynamicFont)
   fps <- getSingleton Godot_Engine "Engine" >>= (\engine -> G.get_frames_per_second engine)
   simulaMemoryUsage <- logMemPid gss
+  screenRecorder <- readTVarIO (gss ^. gssScreenRecorder)
 
   G.clear rtLabelW
   G.push_font rtLabelW (safeCast dynamicFont)
@@ -1620,6 +1628,14 @@ updateWorkspaceHUD gss = do
   G.append_bbcode rtLabelW `withGodotString` (pack $ (show $ round fps) ++ " FPS ")
   G.append_bbcode rtLabelW `withGodotString` (pack ("@ " ++ (show $ round simulaMemoryUsage) ++ " MB"))
   G.append_bbcode rtLabelW `withGodotString` " |"
+  case screenRecorder of
+    Nothing -> return ()
+    Just ph -> do
+      redColor <- (toLowLevel $ (rgb 1.0 0.0 0.0) `withOpacity` 1.0) :: IO GodotColor
+      G.push_color rtLabelW redColor
+      G.append_bbcode rtLabelW `withGodotString` " ⚬ "
+      G.pop rtLabelW
+      return ()
   G.pop rtLabelW
 
 updatei3StatusHUD :: GodotSimulaServer -> (OutputStream B.ByteString, InputStream B.ByteString, InputStream B.ByteString, ProcessHandle) -> IO ()

@@ -55,6 +55,7 @@ let Configuration =
                               , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_ALT", "KEY_DOWN"]      , _keyAction = "decreaseTransparency"       }
                               , { _keyCombination = ["KEY_PRINT"]                                      , _keyAction = "toggleScreenshotMode"       }
                               , { _keyCombination = ["KEY_MASK_SHIFT", "KEY_PRINT"]                    , _keyAction = "takeScreenshotGlobal"       }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_PRINT"]   , _keyAction = "recordScreen"       }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_1"]                         , _keyAction = "workspace1"       }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_2"]                         , _keyAction = "workspace2"       }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_3"]                         , _keyAction = "workspace3"       }

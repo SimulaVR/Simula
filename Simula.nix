@@ -262,6 +262,7 @@ let
       ln -s ${xrdb}/bin/xrdb $out/bin/xrdb
       ln -s ${wmctrl}/bin/wmctrl $out/bin/wmctrl
       ln -s ${ffmpeg-full}/bin/ffplay $out/bin/ffplay
+      ln -s ${ffmpeg-full}/bin/ffmpeg $out/bin/ffmpeg
       ln -s ${midori-wrapped}/bin/midori $out/bin/midori
       ln -s ${synapse}/bin/synapse $out/bin/synapse
       ln -s ${xsel}/bin/xsel $out/bin/xsel

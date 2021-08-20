@@ -153,6 +153,7 @@ getKeyboardAction gss keyboardShortcut =
     "toggleARMode" -> toggleARMode gss
     "toggleWasdMode" -> toggleWasdMode gss
     "addLeapMotion" -> addLeapMotion gss
+    "recordScreen" -> recordScreen gss
     _ -> shellLaunch gss (keyboardShortcut ^. keyAction)
 
   where moveCursor :: SpriteLocation -> Bool -> IO ()
@@ -214,6 +215,32 @@ getKeyboardAction gss keyboardShortcut =
           Plugin.Types.rotateWorkspaceHorizontally gss radians Workspaces
           return ()
         rotateWorkspacesHorizontally gss radians _ False = do
+          return ()
+
+        recordScreen :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
+        recordScreen gss _ True = do
+          maybePh <- readTVarIO (gss ^. gssScreenRecorder)
+          case maybePh of
+            Nothing -> do
+              getSingleton Godot_OS "OS" >>= \os -> G.set_window_fullscreen os True
+              putStrLn "Starting screen recording.."
+              forkIO $ do timeStampStr <- show <$> getCurrentTime
+                          let videoBaseName' = "simula_screen_recording_" <> timeStampStr
+                          let videoBaseName = filter (\x -> x /= ' ') videoBaseName'
+                          createDirectoryIfMissing False "media"
+                          let relativePath = ("./media/" <> videoBaseName <> ".mkv")
+                          (_,_,_, ph) <- createProcess (proc "./result/bin/ffmpeg" ["-nostdin", "-f", "x11grab", "-framerate", "90", "-i", ":0.0", "-c:v", "libx264", "-y", "-loglevel", "quiet", relativePath])
+                          atomically $ writeTVar (gss ^. gssScreenRecorder) (Just ph)
+              return ()
+            Just ph -> do
+              putStrLn "Stopping screen recording.."
+              getSingleton Godot_OS "OS" >>= \os -> do
+                G.set_window_maximized os True -- Fails?
+                G.set_window_fullscreen os False
+              terminateProcess ph
+              atomically $ writeTVar (gss ^. gssScreenRecorder) (Nothing)
+          return ()
+        recordScreen gss _ False = do
           return ()
 
         terminateWindow :: SpriteLocation -> Bool -> IO ()
@@ -947,6 +974,7 @@ initGodotSimulaServer obj = do
       gssWasdInitialRotation' <- newTVarIO 0
       gssWasdMode' <- newTVarIO False
       gssCanvasAR' <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar CanvasAR)
+      gssScreenRecorder' <- newTVarIO (Nothing)
 
       let gss = GodotSimulaServer {
         _gssObj                   = obj                       :: GodotObject
@@ -992,6 +1020,7 @@ initGodotSimulaServer obj = do
       , _gssWasdInitialRotation   = gssWasdInitialRotation'   :: TVar Float
       , _gssWasdMode              = gssWasdMode'              :: TVar Bool
       , _gssCanvasAR              = gssCanvasAR'              :: TVar CanvasAR
+      , _gssScreenRecorder        = gssScreenRecorder'        :: TVar (Maybe ProcessHandle)
       }
   return gss
   where getStartingAppsStr :: Maybe String -> String

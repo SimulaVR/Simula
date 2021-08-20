@@ -109,42 +109,43 @@ chmod +x ./bin/godot.AppImage
 
 Windows become "active" once you look at them. Active windows receive typing events from the keyboard, and cursor events from mouse movement.  In addition, the following window-manipulation shortcuts are provided by default into Simula (these can be adjusted by changing ~./config.dhall~):
 
-| *Key binding.*                             | *Action*                                                                                                                      |
-|--------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------|
-| ~Super + Shift + Escape~                   | Terminate Simula                                                                                                              |
-| ~Super + z~                                | Toggle Simula's mouse & keyboard grab from your host OS (see below)                                                           |
-| ~Super + /~                                | Quick launch terminal                                                                                                         |
-| ~Super + Apostrophe~                       | Send window cursor to gaze point (hold down to make cursor follow gaze)                                                       |
-| ~Super + Enter~                            | Left click surface cursor at gaze point                                                                                       |
-| ~Super + Alt~                              | Grab surface for movement (release to let go)                                                                                 |
-| ~Super + m~                                | Grab all surfaces for movement (release to let go)                                                                            |
-| ~Super + Shift + m~                        | Grab all surfaces /in all workspaces at once/ for movement (release to let go)                                                |
-| ~Super + a~                                | Launch Simula's app launcher ([[https://launchpad.net/synapse-project][synapse]])                                             |
-| ~Super + e~                                | Cycle Simula's background environment                                                                                         |
-| ~Super + f~                                | Orient window towards user gaze                                                                                               |
-| ~Super + 9~                                | Scale window to smaller size                                                                                                  |
-| ~Super + 0~                                | Scale window to larger size                                                                                                   |
-| ~Super + <number between 1 and 8>~         | Switch to workspace <num>                                                                                                     |
-| ~Super + Shift + <number between 1 and 8>~ | Move window to workspace <num>                                                                                                |
-| ~Super + Shift + 0~                        | Pin window to all workspaces                                                                                                  |
-| ~Super + -~                                | Increase window resolution ("zoom out")                                                                                       |
-| ~Super + =~                                | Increase window resolution ("zoom in")                                                                                        |
-| ~Super + <right>~                          | Extend window horizontally                                                                                                    |
-| ~Super + <left>~                           | Contract window horizontally                                                                                                  |
-| ~Super + <down>~                           | Extend window vertically                                                                                                      |
-| ~Super + <up>~                             | Contract window vertically                                                                                                    |
-| ~Super + Alt + <down>~                     | Decrease window transparency                                                                                                  |
-| ~Super + Alt + <up>~                       | Increase window transparency                                                                                                  |
-| ~Super + s~                                | Resize window to take its default (typically square) dimensions                                                               |
-| ~Super + Comma~                            | Move window towards you                                                                                                       |
-| ~Super + Period~                           | Move window away from you                                                                                                     |
-| ~Super + Backspace~                        | Kill surface being looked at                                                                                                  |
-| ~Super + k~                                | Quick launch firefox (requires firefox to not already be launched on host)                                                    |
-| ~Super + g~                                | Quick launch google-chrome (requires chrome to not already be launched on host)                                               |
-| ~Super + w~                                | Launch headset webcam view                                                                                                    |
-| ~PrtSc~                                    | Toggle "screenshot" mode (drag a selection on the current window to generate a ~./png/*.png~ and copy it to the X clipboard). |
-| ~Shift + PrtSc~                            | Take global screenshot (saved to ~./png/*.png~)                                                                               |
-| ~Super + r~                                | Reload Simula's configuration (~./config.dhall~)                                                                              |
+| *Key binding.*                             | *Action*                                                                                                                        |
+|--------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------|
+| ~Super + Shift + Escape~                   | Terminate Simula                                                                                                                |
+| ~Super + z~                                | Toggle Simula's mouse & keyboard grab from your host OS (see below)                                                             |
+| ~Super + /~                                | Quick launch terminal                                                                                                           |
+| ~Super + Apostrophe~                       | Send window cursor to gaze point (hold down to make cursor follow gaze)                                                         |
+| ~Super + Enter~                            | Left click surface cursor at gaze point                                                                                         |
+| ~Super + Alt~                              | Grab surface for movement (release to let go)                                                                                   |
+| ~Super + m~                                | Grab all surfaces for movement (release to let go)                                                                              |
+| ~Super + Shift + m~                        | Grab all surfaces /in all workspaces at once/ for movement (release to let go)                                                  |
+| ~Super + a~                                | Launch Simula's app launcher ([[https://launchpad.net/synapse-project][synapse]])                                                                                          |
+| ~Super + e~                                | Cycle Simula's background environment                                                                                           |
+| ~Super + f~                                | Orient window towards user gaze                                                                                                 |
+| ~Super + 9~                                | Scale window to smaller size                                                                                                    |
+| ~Super + 0~                                | Scale window to larger size                                                                                                     |
+| ~Super + <number between 1 and 8>~         | Switch to workspace <num>                                                                                                       |
+| ~Super + Shift + <number between 1 and 8>~ | Move window to workspace <num>                                                                                                  |
+| ~Super + Shift + 0~                        | Pin window to all workspaces                                                                                                    |
+| ~Super + -~                                | Increase window resolution ("zoom out")                                                                                         |
+| ~Super + =~                                | Increase window resolution ("zoom in")                                                                                          |
+| ~Super + <right>~                          | Extend window horizontally                                                                                                      |
+| ~Super + <left>~                           | Contract window horizontally                                                                                                    |
+| ~Super + <down>~                           | Extend window vertically                                                                                                        |
+| ~Super + <up>~                             | Contract window vertically                                                                                                      |
+| ~Super + Alt + <down>~                     | Decrease window transparency                                                                                                    |
+| ~Super + Alt + <up>~                       | Increase window transparency                                                                                                    |
+| ~Super + s~                                | Resize window to take its default (typically square) dimensions                                                                 |
+| ~Super + Comma~                            | Move window towards you                                                                                                         |
+| ~Super + Period~                           | Move window away from you                                                                                                       |
+| ~Super + Backspace~                        | Kill surface being looked at                                                                                                    |
+| ~Super + k~                                | Quick launch firefox (requires firefox to not already be launched on host)                                                      |
+| ~Super + g~                                | Quick launch google-chrome (requires chrome to not already be launched on host)                                                 |
+| ~Super + w~                                | Launch headset webcam view                                                                                                      |
+| ~PrtSc~                                    | Toggle "screenshot" mode (drag a selection on the current window to generate a ~./media/*.png~ and copy it to the X clipboard). |
+| ~Shift + PrtSc~                            | Take global screenshot (saved to ~./media/*.png~)                                                                               |
+| ~Super + Shift + PrtSc~                    | Toggle video recording (saved to ~./media/*.mkv~); useful for sending bug reports.                                              |
+| ~Super + r~                                | Reload Simula's configuration (~./config.dhall~)                                                                                |
 
 *NOTE:* In order to prevent Simula's keyboard shortcuts from conflicting with your existing window manager's shortcuts, Simula "grabs" the system keyboard and cursor from your host OS to prevent input events from propagating past Simula. This creates a problem: it is then impossible for you to escape Simula once you launch it! In order to get around this, press ~Super + z~ to ungrab Simula, which will restore mouse and keyboard control to your normal window manager.
 

@@ -316,7 +316,8 @@ debugLogDepthFirstSurfaces gsvs = do
 
           -- Get file path
           frame <- readTVarIO (gsvs ^. gsvsFrameCount)
-          let pathStr = "./png/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
+          createDirectoryIfMissing False "media"
+          let pathStr = "./media/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
           canonicalPath <- canonicalizePath pathStr
           pathStr' <- toLowLevel (pack pathStr)
 
