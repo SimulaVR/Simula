@@ -1,0 +1,9 @@
+[gd_resource type="NativeScript" load_steps=2 format=2]
+
+[ext_resource path="res://addons/godot-haskell-plugin/libgodot-haskell-plugin.gdnlib" type="GDNativeLibrary" id=1]
+
+[resource]
+
+class_name = "CanvasAR"
+library = ExtResource( 1 )
+_sections_unfolded = [ "Resource" ]
