@@ -35,3 +35,6 @@
 [submodule "nix/libleak"]
 	path = nix/libleak
 	url = https://github.com/SimulaVR/libleak
+[submodule "submodules/i3status"]
+	path = submodules/i3status
+	url = https://github.com/SimulaVR/i3status
