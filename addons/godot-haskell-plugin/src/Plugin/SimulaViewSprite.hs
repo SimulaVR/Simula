@@ -602,9 +602,7 @@ _process self _ = do
               G.set_size wlrXWaylandSurface settledDimensions'
 
           -- Try to avoid forcing small popups to be large squares.
-          let isSmallPopUp = if (originalWidth < 450 || originalHeight < 450)
-                then True
-                else False
+          let isSmallPopUp = (originalWidth < 450 || originalHeight < 450)
           let isAtTargetDims = ((targetWidth == originalWidth) && (targetHeight == originalHeight))
           return (isSmallPopUp || isAtTargetDims)
 
