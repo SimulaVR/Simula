@@ -30,6 +30,7 @@ let Configuration =
                               , { _keyCombination = ["KEY_MASK_META", "KEY_SLASH"]                     , _keyAction = "launchTerminal"             }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_APOSTROPHE"]                , _keyAction = "moveCursor"                 }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_ENTER"]                     , _keyAction = "clickLeft"                  }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_ENTER"]   , _keyAction = "clickRight"                }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_ALT_R"]                     , _keyAction = "grabWindow"                 }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_ALT_L"]                     , _keyAction = "grabWindow"                 }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_M"]                         , _keyAction = "grabWindows"                }
