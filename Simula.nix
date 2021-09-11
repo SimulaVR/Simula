@@ -1,4 +1,4 @@
-{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, mimic, xsel, xclip, dialog, synapse, openxr-loader, xpra, valgrind, xorg, writeShellScriptBin, python3, awscli, wayland, wayland-protocols, valkyrie, zstd, profileBuild ? false, pkgs, patchelf, libv4l }:
+{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, mimic, xsel, xclip, dialog, synapse, openxr-loader, xpra, valgrind, xorg, writeShellScriptBin, python3, awscli, wayland, wayland-protocols, valkyrie, zstd, profileBuild ? false, pkgs, patchelf, libv4l, openssl }:
 let
 
     /* Modify a stdenv so that it produces debug builds; that is,
@@ -41,6 +41,8 @@ let
 
     i3status = callPackage ./submodules/i3status/i3status.nix {};
 
+    monado = callPackage ./submodules/monado/monado.nix {};
+
     devBuildFalse = ''
       cp ./utils/GetNixGL.sh $out/bin/GetNixGL.sh
       ln -s ${godot}/bin/godot.x11.opt.debug.64 $out/bin/godot.x11.opt.debug.64
@@ -62,6 +64,16 @@ let
 
     devBuildTrue = ''
       cp ./utils/GetNixGL.sh $out/bin/GetNixGL.sh
+
+      # simula_local_monado
+      echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local_monado
+      echo "mkdir -p log" >> $out/bin/simula_local_monado
+      echo "mkdir -p config" >> $out/bin/simula_local_monado
+      echo "pkill monado-service" >> $out/bin/simula_local_monado
+      echo "rm monado.txt && touch monado.txt" >> $out/bin/simula_local_monado
+      echo "./result/bin/monado-service > monado.txt &" >> $out/bin/simula_local_monado
+      echo "XR_RUNTIME_JSON=./share/openxr_monado.json PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:${libv4l}/lib \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_local_monado
+      chmod +x $out/bin/simula_local_monado
 
       # simula_local
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local
@@ -253,10 +265,11 @@ let
         # && (baseNameOf path != "result")                        # "
       ) ./.;
 
-      buildInputs = [ xpra xrdb wmctrl fontconfig glibc-locales xfce4-terminal-wrapped openxr-loader midori-wrapped pernoscoSubmit i3status-wrapped ] ++ simulaPackages;
+      buildInputs = [ xpra xrdb wmctrl fontconfig glibc-locales xfce4-terminal-wrapped openxr-loader midori-wrapped pernoscoSubmit i3status-wrapped monado ] ++ simulaPackages;
       installPhase = ''
       mkdir -p $out/bin
       mkdir -p $out/srcs
+      mkdir -p $out/share
       ln -s ${xpra}/bin/xpra $out/bin/xpra
       ln -s ${xfce4-terminal-wrapped}/bin/xfce4-terminal $out/bin/xfce4-terminal
       ln -s ${xrdb}/bin/xrdb $out/bin/xrdb
@@ -273,6 +286,8 @@ let
       ln -s ${dialog}/bin/dialog $out/bin/dialog
       ln -s ${curl}/bin/curl $out/bin/curl
       ln -s ${i3status-wrapped}/bin/i3status $out/bin/i3status
+      ln -s ${monado}/share/openxr/1/openxr_monado.json $out/share/openxr_monado.json
+      ln -s ${monado}/bin/monado-service $out/bin/monado-service
 
       '' + linkGHP + devBuildScript;
     };
