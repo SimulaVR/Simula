@@ -38,3 +38,6 @@
 [submodule "submodules/i3status"]
 	path = submodules/i3status
 	url = https://github.com/SimulaVR/i3status
+[submodule "submodules/monado"]
+	path = submodules/monado
+	url = https://github.com/SimulaVR/monado.git
