@@ -66,15 +66,17 @@ ready self _ = do
 
   gssSpatial <- addSimulaServerNode :: IO GodotSpatial
   maybeGSS <- asNativeScript (safeCast gssSpatial) :: IO (Maybe GodotSimulaServer)
-  openBackend <- case maybeGSS of
-    Just gss -> do gssConf <- readTVarIO (gss ^. gssConfiguration)
-                   let backend = _backend gssConf :: String
-                   case backend of
-                     "OpenVR" -> return openVR
-                     "OpenXR" -> return openXR
-                     _        -> do putStrLn "Unable to parse backend; defaulting to OpenVR"
-                                    return openVR
-    Nothing -> do return openVR
+  xrRuntimeJson <- lookupEnv "XR_RUNTIME_JSON"
+  openBackend <- case (maybeGSS, xrRuntimeJson) of
+    (Just gss, Just "") -> do gssConf <- readTVarIO (gss ^. gssConfiguration)
+                              let backend = _backend gssConf :: String
+                              case backend of
+                                "OpenVR" -> return openVR
+                                "OpenXR" -> return openXR
+                                _        -> do putStrLn "Unable to parse backend; defaulting to OpenVR"
+                                               return openVR
+    (Just gss, _) -> return openXR
+    (Nothing, _) -> do return openVR
 
   debugModeMaybe <- lookupEnv "DEBUG"
   rrModeMaybe <- lookupEnv "RUNNING_UNDER_RR"
