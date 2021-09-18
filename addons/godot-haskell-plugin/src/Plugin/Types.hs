@@ -1446,6 +1446,10 @@ catchGodot :: (a -> [GodotVariant] -> IO ()) -> ((a -> [GodotVariant] -> IO ()))
 catchGodot func x y = catch (func x y) (\e -> do putStrLn $ "Caught " ++ (show (e :: NullPointerException))
                                                  return ())
 
+catchValidateSurfaceE :: (Validatable surface) => surface -> IO surface
+catchValidateSurfaceE surface = catch (validateSurfaceE surface) (\e -> do putStrLn $ "Caught " ++ (show (e :: NullPointerException))
+                                                                           return surface)
+
 data RotationMethod = Workspace | Workspaces
 
 rotateWorkspaceHorizontally :: GodotSimulaServer -> Float -> RotationMethod -> IO ()

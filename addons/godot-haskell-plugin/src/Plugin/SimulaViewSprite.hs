@@ -87,9 +87,8 @@ instance NativeScript GodotSimulaViewSprite where
                       <*> atomically (newTVar False)
   -- classExtends = "RigidBody"
   classMethods =
-    [ func NoRPC "_input_event" inputEvent
-    , func NoRPC "_ready" ready
-
+    [ func NoRPC "_input_event" (catchGodot inputEvent)
+    , func NoRPC "_ready" (catchGodot ready)
     , func NoRPC "_handle_destroy" (catchGodot _handle_destroy)
     , func NoRPC "_handle_map" (catchGodot _handle_map)
     , func NoRPC "_process" (catchGodot Plugin.SimulaViewSprite._process)

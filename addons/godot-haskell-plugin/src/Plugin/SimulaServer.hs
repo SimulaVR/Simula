@@ -259,11 +259,11 @@ getKeyboardAction gss keyboardShortcut =
           let eitherSurface = (simulaView ^. svWlrEitherSurface)
           case eitherSurface of
             (Left wlrXdgSurface) -> do
-              wlrXdgSurface <- validateSurfaceE wlrXdgSurface
+              wlrXdgSurface <- catchValidateSurfaceE wlrXdgSurface
               toplevel  <- G.get_xdg_toplevel wlrXdgSurface :: IO GodotWlrXdgToplevel
               G.send_close toplevel
             (Right wlrXWaylandSurface) -> do
-              wlrXWaylandSurface <- validateSurfaceE wlrXWaylandSurface
+              wlrXWaylandSurface <- catchValidateSurfaceE wlrXWaylandSurface
               G.send_close wlrXWaylandSurface
         terminateWindow _ _ = return ()
   
