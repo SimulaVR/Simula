@@ -68,7 +68,7 @@ ready self _ = do
   maybeGSS <- asNativeScript (safeCast gssSpatial) :: IO (Maybe GodotSimulaServer)
   xrRuntimeJson <- lookupEnv "XR_RUNTIME_JSON"
   openBackend <- case (maybeGSS, xrRuntimeJson) of
-    (Just gss, Just "") -> do gssConf <- readTVarIO (gss ^. gssConfiguration)
+    (Just gss, Nothing) -> do gssConf <- readTVarIO (gss ^. gssConfiguration)
                               let backend = _backend gssConf :: String
                               case backend of
                                 "OpenVR" -> return openVR
