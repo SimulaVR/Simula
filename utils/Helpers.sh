@@ -255,6 +255,13 @@ nsBuildGodot() {
  cd -
 }
 
+nsCleanGodot() {
+    cd ./submodules/godot
+    local runCmd="scons --clean"
+    nix-shell --run "$runCmd"
+    cd -
+}
+
 # Updates godot-haskell to latest api.json generated from devBuildGodot
 nsBuildGodotHaskell() {
   cd ./submodules/godot
@@ -329,4 +336,8 @@ patchGodotWlroots(){
     else
         echo "Not patching godot.x11.tools, already patched."
     fi
+}
+
+zenRR() {
+   nix-shell --arg onNixOS $(checkIfNixOS) --arg devBuild true --run "sudo python3 ./utils/zen_workaround.py"
 }
