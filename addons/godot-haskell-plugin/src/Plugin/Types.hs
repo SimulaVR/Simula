@@ -1525,12 +1525,12 @@ processWASDMovement gss delta = do
   moveRight <- toLowLevel "move_right"
   moveUp <- toLowLevel "move_up"
   moveDown <- toLowLevel "move_down"
-  isMoveForward <- G.is_action_pressed input moveForward
-  isMoveBackward <- G.is_action_pressed input moveBackward
-  isMoveLeft <- G.is_action_pressed input moveLeft
-  isMoveRight <- G.is_action_pressed input moveRight
-  isMoveUp <- G.is_action_pressed input moveUp
-  isMoveDown <- G.is_action_pressed input moveDown
+  isMoveForward <- G.is_action_pressed input moveForward False
+  isMoveBackward <- G.is_action_pressed input moveBackward False
+  isMoveLeft <- G.is_action_pressed input moveLeft False 
+  isMoveRight <- G.is_action_pressed input moveRight False
+  isMoveUp <- G.is_action_pressed input moveUp False
+  isMoveDown <- G.is_action_pressed input moveDown False
   let motionZ = case (isMoveForward, isMoveBackward) of
                      (True, _) -> -1
                      (_, True) -> 1

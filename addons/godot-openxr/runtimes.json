@@ -1,0 +1,22 @@
+[
+    {
+        "name": "Monado",
+        "path": "/usr/share/openxr/1/openxr_monado.json"
+    },
+    {
+        "name": "SteamVR",
+        "path": "~/.steam/steam/steamapps/common/SteamVR/steamxr_linux64.json"
+    },
+    {
+        "name": "SteamVR",
+        "path": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\SteamVR\\steamxr_win64.json"
+    },
+    {
+        "name": "Oculus",
+        "path": "C:\\Program Files\\Oculus\\Support\\oculus-runtime\\oculus_openxr_64.json"
+    },
+    {
+        "name": "Microsoft MR",
+        "path": "C:\\WINDOWS\\system32\\MixedRealityRuntime.json"
+    }
+]

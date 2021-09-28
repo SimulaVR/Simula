@@ -1,0 +1,27 @@
+[gd_scene load_steps=7 format=2]
+
+[ext_resource path="res://addons/godot-openxr/assets/valve_hand_models/left_hand.glb" type="PackedScene" id=1]
+[ext_resource path="res://addons/godot-openxr/scenes/hand_mesh.gd" type="Script" id=2]
+[ext_resource path="res://addons/godot-openxr/config/OpenXRSkeleton.gdns" type="Script" id=3]
+[ext_resource path="res://addons/godot-openxr/config/OpenXRPose.gdns" type="Script" id=4]
+[ext_resource path="res://addons/godot-openxr/assets/valve_hand_models/textures/vr_glove_color_red.jpg" type="Texture" id=5]
+[ext_resource path="res://addons/godot-openxr/assets/valve_hand_models/textures/vr_glove_normal.png" type="Texture" id=6]
+
+[node name="LeftHand" type="Spatial"]
+script = ExtResource( 2 )
+albedo_texture = ExtResource( 5 )
+normal_texture = ExtResource( 6 )
+
+[node name="HandModel" parent="." instance=ExtResource( 1 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5, 1, -0.5 )
+script = ExtResource( 4 )
+
+[node name="Skeleton" parent="HandModel/Armature001" index="0"]
+bones/9/bound_children = [ NodePath("IndexTip") ]
+script = ExtResource( 3 )
+
+[node name="IndexTip" type="BoneAttachment" parent="HandModel/Armature001/Skeleton" index="1"]
+transform = Transform( 0.19221, -0.669965, -0.717079, 0.977075, 0.19881, 0.076153, 0.0915428, -0.715277, 0.692819, 0.0345973, 0.0355402, -0.164767 )
+bone_name = "Index_Tip_L"
+
+[editable path="HandModel"]

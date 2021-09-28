@@ -1,7 +1,7 @@
 [gd_scene load_steps=9 format=2]
 
 [ext_resource path="res://addons/godot-openxr/scenes/center_ball_material.tres" type="Material" id=1]
-[ext_resource path="res://addons/godot-openxr/scenes/hand.gd" type="Script" id=2]
+[ext_resource path="res://addons/godot-openxr/scenes/hand_nodes.gd" type="Script" id=2]
 [ext_resource path="res://addons/godot-openxr/scenes/right_hand_material.tres" type="Material" id=3]
 [ext_resource path="res://addons/godot-openxr/scenes/bone_material.tres" type="Material" id=4]
 [ext_resource path="res://addons/godot-openxr/OpenXRHand.gdns" type="Script" id=5]
