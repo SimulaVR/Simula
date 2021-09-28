@@ -106,8 +106,8 @@ instance NativeScript GodotSimulaController where
 
   -- classExtends = "ARVRController"
   classMethods =
-    [ func NoRPC "_process" Plugin.SimulaController.process
-    , func NoRPC "_physics_process" Plugin.SimulaController.physicsProcess
+    [ func NoRPC "_process" (catchGodot Plugin.SimulaController.process)
+    , func NoRPC "_physics_process" (catchGodot Plugin.SimulaController.physicsProcess)
     ]
   classSignals = []
 
