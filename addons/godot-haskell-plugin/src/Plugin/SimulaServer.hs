@@ -430,9 +430,8 @@ getKeyboardAction gss keyboardShortcut =
         terminateSimula :: SpriteLocation -> Bool -> IO ()
         terminateSimula _ True = do
           putStrLn "Terminating Simula.."
-          pid <- getProcessID
-          putStrLn $ "Terminating Simula with pid: " ++ (show pid)
-          createProcess (shell $ "kill " ++ (show pid))
+          sceneTree <- getSingleton GodotSceneTree "SceneTree"
+          G.quit sceneTree (-1)
           return ()
         terminateSimula _ _ = return ()
 
