@@ -36,7 +36,6 @@ let
     ghc-version = ghc.version;
 
     rr = callPackage ./nix/rr/unstable.nix {};
-
     libleak = callPackage ./nix/libleak/libleak.nix {};
 
     i3status = callPackage ./submodules/i3status/i3status.nix {};
@@ -69,10 +68,7 @@ let
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local_monado
       echo "mkdir -p log" >> $out/bin/simula_local_monado
       echo "mkdir -p config" >> $out/bin/simula_local_monado
-      echo "pkill monado-service" >> $out/bin/simula_local_monado
-      echo "rm monado.txt && touch monado.txt" >> $out/bin/simula_local_monado
-      echo "./result/bin/monado-service > monado.txt &" >> $out/bin/simula_local_monado
-      echo "XR_RUNTIME_JSON=./share/openxr_monado.json PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:${libv4l}/lib \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_local_monado
+      echo "XR_RUNTIME_JSON=./result/share/openxr_monado.json XRT_LOG=trace XRT_COMPOSITOR_LOG=trace PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:${libv4l}/lib \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_local_monado
       chmod +x $out/bin/simula_local_monado
 
       # simula_local
