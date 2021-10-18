@@ -75,46 +75,46 @@ let
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local
       echo "mkdir -p log" >> $out/bin/simula_local
       echo "mkdir -p config" >> $out/bin/simula_local
-      echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:${libv4l}/lib \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_local
+      echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:${libv4l}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_local
       chmod +x $out/bin/simula_local
 
       # simula_local_editor
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local_editor
       echo "mkdir -p log" >> $out/bin/simula_local_editor
       echo "mkdir -p config" >> $out/bin/simula_local_editor
-      echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:${libv4l}/lib \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -e \"\$@\"" >> $out/bin/simula_local_editor
+      echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:${libv4l}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -e \"\$@\"" >> $out/bin/simula_local_editor
       chmod +x $out/bin/simula_local_editor
 
       # simula_local_profile
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local_profile
       echo "mkdir -p log" >> $out/bin/simula_local_profile
       echo "mkdir -p config" >> $out/bin/simula_local_profile
-      echo "GHCRTS='-hc -p' PROFILE=1 PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_local_profile
+      echo "GHCRTS='-hc -p' PROFILE=1 PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_local_profile
       chmod +x $out/bin/simula_local_profile
 
       # simula_local_libleak
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local_libleak
       echo "mkdir -p log" >> $out/bin/simula_local_libleak
       echo "mkdir -p config" >> $out/bin/simula_local_libleak
-      echo "LEAK_AFTER=30 PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib LD_PRELOAD=\"\$(${coreutils}/bin/realpath) \$(${coreutils}/bin/realpath ./result/bin/libleak.so)\" \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_local_libleak
+      echo "LEAK_AFTER=30 PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 LD_PRELOAD=\"\$(${coreutils}/bin/realpath) \$(${coreutils}/bin/realpath ./result/bin/libleak.so)\" \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_local_libleak
       chmod +x $out/bin/simula_local_libleak
 
       # simula_gdb
-      echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${libv4l}/lib \$(./utils/GetNixGL.sh) gdb -x ./.gdbinit ./submodules/godot/bin/godot.x11.tools.64" >> $out/bin/simula_gdb
+      echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${libv4l}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) gdb -x ./.gdbinit ./submodules/godot/bin/godot.x11.tools.64" >> $out/bin/simula_gdb
       echo "cat gdb.txt" >> $out/bin/simula_gdb
       chmod +x $out/bin/simula_gdb
 
       # simula_rr_record
-      echo "_RR_TRACE_DIR=./rr PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${libv4l}/lib \$(./utils/GetNixGL.sh) ${rr}/bin/rr record -i SIGUSR1 ./submodules/godot/bin/godot.x11.tools.64 --args -m" >> $out/bin/simula_rr_record
+      echo "_RR_TRACE_DIR=./rr PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${libv4l}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) ${rr}/bin/rr record -i SIGUSR1 ./submodules/godot/bin/godot.x11.tools.64 --args -m" >> $out/bin/simula_rr_record
       chmod +x $out/bin/simula_rr_record
 
       # simula_rr_replay
-      echo "_RR_TRACE_DIR=./rr PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${libv4l}/lib \$(./utils/GetNixGL.sh) ${rr}/bin/rr -M replay \"\$@\"" >> $out/bin/simula_rr_replay
+      echo "_RR_TRACE_DIR=./rr PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${libv4l}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) ${rr}/bin/rr -M replay \"\$@\"" >> $out/bin/simula_rr_replay
       chmod +x $out/bin/simula_rr_replay
 
       # simula_apitrace
       echo "rm *.trace" >> $out/bin/simula_apitrace
-      echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) apitrace trace --api gl ./submodules/bin/godot.x11.tools.64" >> $out/bin/simula_apitrace
+      echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) apitrace trace --api gl ./submodules/bin/godot.x11.tools.64" >> $out/bin/simula_apitrace
       echo "apitrace dump *.trace | grep glTex > glTex.trace" >> $out/bin/simula_apitrace
       chmod +x $out/bin/simula_apitrace
 

@@ -24,13 +24,6 @@ data Telekinesis = Telekinesis
   -- ^ Last known transform of the controller, used to calculate controller motion
   }
 
-data PhysicsBodyConfig = PhysicsBodyConfig
-  { _pbcGravityScale :: Float
-  , _pbcLinearDamp   :: Float
-  , _pbcAngularDamp  :: Float
-  , _pbcMode         :: Int
-  }
-
 initTk :: (GodotSpatial :< a) => a -> GodotRayCast -> Transform -> Telekinesis
 initTk ct rc tf = Telekinesis
   { _tkController    = safeCast ct
@@ -44,10 +37,10 @@ initTk ct rc tf = Telekinesis
 
 physicsConfig :: PhysicsBodyConfig
 physicsConfig = PhysicsBodyConfig
-  { _pbcGravityScale = 0.0
-  , _pbcLinearDamp   = 0.7
-  , _pbcAngularDamp  = 0.7
-  , _pbcMode         = RigidBody.MODE_RIGID
+  { _pbcGravityScale = 0.0 -- Ignore gravity
+  , _pbcLinearDamp   = 0.7 -- Gradually slow movement
+  , _pbcAngularDamp  = 0.7 -- Gradually slow rotations
+  , _pbcMode         = RigidBody.MODE_RIGID -- Behave as a RigidBody
   }
 
 getPhysicsConfig :: GodotRigidBody -> IO PhysicsBodyConfig
@@ -135,7 +128,7 @@ manipulate isMove factor tk = do
 
 
 telekinesis :: Bool -> Bool -> Telekinesis -> IO Telekinesis
-telekinesis isLev isMove tk = do
+telekinesis isLev isMove tk = do -- isLev = isGripped; isMove = True
   _tkController tk
     &   asClass GodotARVRController "ARVRController"
     >>= \case

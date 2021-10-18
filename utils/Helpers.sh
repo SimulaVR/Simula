@@ -265,7 +265,7 @@ nsCleanGodot() {
 # Updates godot-haskell to latest api.json generated from devBuildGodot
 nsBuildGodotHaskell() {
   cd ./submodules/godot
-  nix-shell -Q --run "$(../../utils/GetNixGL.sh) ./bin/godot.x11.tools.64 --gdnative-generate-json-api ./bin/api.json"
+  nix-shell -Q --run "$(../../utils/GetNixGL.sh) LD_LIBRARY_PATH=./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 ./bin/godot.x11.tools.64 --gdnative-generate-json-api ./bin/api.json"
   cd -
 
   cd ./submodules/godot-haskell-cabal
@@ -284,7 +284,7 @@ nsBuildGodotHaskellPlugin() {
   elif [ $1 == "--profile" ]; then
     nix-shell -Q --attr env shell.nix --arg profileBuild true --run "../../result/bin/cabal --enable-profiling build --ghc-options=\"-fprof-auto -rtsopts -fPIC -fexternal-dynamic-refs\""
   else
-    nix-shell --attr env shell.nix --run "while inotifywait -qqre modify .; do cabal build; done"
+    nix-shell --attr env shell.nix --run "while inotifywait -qqre modify .; do ../../result/bin/cabal build; done"
   fi
   cd -
 }

@@ -184,6 +184,46 @@ data HUD = HUD
   , _hudI3Status     :: String
   }
 
+data PhysicsBodyConfig = PhysicsBodyConfig
+  { _pbcGravityScale :: Float
+  , _pbcLinearDamp   :: Float
+  , _pbcAngularDamp  :: Float
+  , _pbcMode         :: Int
+  }
+
+data HandTelekinesis = HandTelekinesis
+  { _htkHand              :: GodotSpatial
+  -- ^ The spatial node this is attached to
+  , _htkBody              :: Maybe (GodotRigidBody, PhysicsBodyConfig)
+  -- ^ Currently manipulated body with its original config
+  , _htkStrength          :: Float
+  -- ^ The factor for the amount of force applied
+  , _htkLastHandTransform :: Transform
+  -- ^ Last known transform of the hand (used to calculate hand motion)
+  }
+
+data HandSide = LeftHand | RightHand
+
+data HandState = NonIntersected | Intersected GodotSimulaViewSprite | Pinched GodotSimulaViewSprite | Grabbed HandTelekinesis
+
+data GodotLeapMotion = GodotLeapMotion
+  { _glmObj             :: GodotObject -- GodotGDLMSensor
+  , _glmServer          :: TVar GodotSimulaServer
+  , _glmLeftHandState   :: TVar HandState
+  , _glmRightHandState  :: TVar HandState
+  , _glmPinchFrame      :: TVar Int
+  , _glmLeftHand        :: TVar (Maybe LeapHand)
+  , _glmRightHand       :: TVar (Maybe LeapHand)
+  , _glmPinchDist       :: TVar (Maybe Float)
+  , _glmHandCount       :: TVar Int -- Haaaack
+  }
+
+data LeapHand = LeapHand {
+    _handSpatial:: TVar GodotSpatial
+  , _handArea   :: TVar GodotArea
+  , _handSphere :: TVar GodotSphereShape
+}
+
 -- We use TVar excessively since these datatypes must be retrieved from the
 -- scene graph (requiring IO)
 data GodotSimulaServer = GodotSimulaServer
@@ -231,11 +271,12 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssWasdMode              :: TVar Bool
   , _gssCanvasAR              :: TVar CanvasAR
   , _gssScreenRecorder        :: TVar (Maybe ProcessHandle)
+  , _gssLeapMotion            :: TVar GodotLeapMotion
   }
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
@@ -344,6 +385,10 @@ makeLenses ''KeyboardRemapping
 makeLenses ''StartingApps
 makeLenses ''Configuration
 makeLenses ''HUD
+makeLenses ''HandTelekinesis
+makeLenses ''GodotLeapMotion
+makeLenses ''LeapHand
+
 
 -- Godot helper functions (should eventually be exported to godot-extra).
 
@@ -1013,7 +1058,7 @@ orientSpriteTowardsGaze gsvs = do
                atomically $ writeTVar (gsvs ^. gsvsIsDamaged) True -- Useful debugging hack to force gsvs to redraw
                -- G.rotate_object_local gsvs rotationAxisY 3.14159  -- The positive z-axis of the gsvs looks at HMD
 
-
+-- Deprecated, but useful for testing purposes for a little while
 addLeapMotionScene :: GodotSimulaServer -> IO ()
 addLeapMotionScene gss = do
   resourceLoader <- getSingleton Godot_ResourceLoader "ResourceLoader"
@@ -1023,6 +1068,28 @@ addLeapMotionScene gss = do
   let nextScenePacked = GodotPackedScene nextSceneObj
   nextSceneInstance <- G.instance' nextScenePacked 0
   addChild gss nextSceneInstance
+
+instance HasBaseClass GodotLeapMotion where
+   type BaseClass GodotLeapMotion = GodotGDLMSensor
+   super (GodotLeapMotion obj _ _ _ _ _ _ _ _) = GodotGDLMSensor obj
+
+addLeapMotionModule :: GodotSimulaServer -> IO ()
+addLeapMotionModule gss = do
+   glm <- "res://addons/godot-haskell-plugin/LeapMotion.gdns"
+     & newNS' []
+     >>= Api.godot_nativescript_get_userdata
+     >>= deRefStablePtr . castPtrToStablePtr :: IO GodotLeapMotion
+   atomically $ writeTVar (glm ^. glmServer) gss -- Needed before glm is added to scene graph
+   G.set_arvr ((super glm) :: GodotGDLMSensor) False
+   G.set_smooth_factor ((super glm) :: GodotGDLMSensor) 0.5
+   G.set_keep_frames ((super glm) :: GodotGDLMSensor) 240
+   G.set_keep_last_hand ((super glm) :: GodotGDLMSensor) True
+   leftStr <- toLowLevel "res://addons/gdleapmotion/scenes/left_hand.tscn"  :: IO GodotString
+   rightStr <- toLowLevel "res://addons/gdleapmotion/scenes/right_hand.tscn"  :: IO GodotString
+   G.set_left_hand_scene ((super glm) :: GodotGDLMSensor) leftStr -- We'll still use these assets for now (which are using ./addons/gdleapmotion/scenes/hand.gd)
+   G.set_right_hand_scene ((super glm) :: GodotGDLMSensor) rightStr -- "
+   addChild gss ((safeCast glm) :: GodotSpatial)
+   atomically $ writeTVar (gss ^. gssLeapMotion) glm
 
 resizeGSVS :: GodotSimulaViewSprite -> ResizeMethod -> Float -> IO ()
 resizeGSVS gsvs resizeMethod factor =

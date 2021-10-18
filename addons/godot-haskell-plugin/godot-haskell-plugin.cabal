@@ -92,6 +92,8 @@ library
       Plugin.VR
       Plugin.Debug
       Plugin.CanvasAR
+      Plugin.LeapMotion
+      Plugin.Input.HandTelekinesis
       -- Debug.C
       -- Debug.Marshal
   default-language: Haskell2010
@@ -138,6 +140,8 @@ foreign-library godot-haskell-plugin
     Plugin.VR
     Plugin.Debug
     Plugin.CanvasAR
+    Plugin.LeapMotion
+    Plugin.Input.HandTelekinesis
     -- Debug.C
     -- Debug.Marshal
   other-modules: FLib

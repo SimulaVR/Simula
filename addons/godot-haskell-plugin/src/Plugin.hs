@@ -11,6 +11,7 @@ import           Plugin.SimulaViewSprite
 import           Plugin.Types
 import           Plugin.PancakeCamera
 import           Plugin.CanvasAR
+import           Plugin.LeapMotion
 
 
 registerClasses :: GdnativeHandle -> IO ()
@@ -24,3 +25,4 @@ registerClasses desc = do
   reg $ classInit @CanvasSurface
   reg $ classInit @GodotPancakeCamera
   reg $ classInit @CanvasAR
+  reg $ classInit @GodotLeapMotion

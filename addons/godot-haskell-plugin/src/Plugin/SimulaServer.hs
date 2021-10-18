@@ -547,7 +547,9 @@ getKeyboardAction gss keyboardShortcut =
         addLeapMotion :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
         addLeapMotion gss _ True = do
           putStrLn "Adding LEAP Motion to scene graph.."
-          addLeapMotionScene gss
+          -- addLeapMotionScene -- Deprecated
+          addLeapMotionModule gss
+          return ()
         addLeapMotion _ _ _ = return ()
 
 isMask :: Int -> Bool
@@ -739,11 +741,6 @@ ready gss _ = do
   addChild canvasLayer rtLabel
   forkUpdateHUDRecursively gss
   return ()
-
-  -- Crashes here, but should be done when camera is ready:
-  -- camera <- getARVRCameraOrPancakeCamera gss
-  -- initialRotation@(V3 rotationX rotationY rotationZ) <- G.get_rotation camera >>= fromLowLevel
-  -- atomically $ writeTVar (gss ^. gssWasdInitialRotation) rotationY
 
   where launchDefaultApps :: [String] -> String-> IO ()
         launchDefaultApps sApps location = do
@@ -984,6 +981,7 @@ initGodotSimulaServer obj = do
       gssWasdMode' <- newTVarIO False
       gssCanvasAR' <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar CanvasAR)
       gssScreenRecorder' <- newTVarIO (Nothing)
+      gssLeapMotion' <- newTVarIO (error "Failed to initialize GodotLeapMotion") :: IO (TVar GodotLeapMotion)
 
       let gss = GodotSimulaServer {
         _gssObj                   = obj                       :: GodotObject
@@ -1030,6 +1028,7 @@ initGodotSimulaServer obj = do
       , _gssWasdMode              = gssWasdMode'              :: TVar Bool
       , _gssCanvasAR              = gssCanvasAR'              :: TVar CanvasAR
       , _gssScreenRecorder        = gssScreenRecorder'        :: TVar (Maybe ProcessHandle)
+      , _gssLeapMotion        = gssLeapMotion'        :: TVar GodotLeapMotion
       }
   return gss
   where getStartingAppsStr :: Maybe String -> String

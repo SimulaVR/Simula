@@ -345,7 +345,6 @@ newGodotSimulaViewSprite gss simulaView = do
   atomically $ writeTVar (_gsvsCursorCoordinates gsvs) (SurfaceLocalCoordinates (0,0))
 
   -- Set config settings
-  keyboardShortcuts <- readTVarIO (gss ^. gssKeyboardShortcuts)
   configuration <- readTVarIO (gss ^. gssConfiguration)
   let windowScale = realToFrac (configuration ^. defaultWindowScale) :: Float
   (V3 1 1 1 ^* (windowScale)) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
