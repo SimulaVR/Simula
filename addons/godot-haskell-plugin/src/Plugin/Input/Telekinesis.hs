@@ -38,8 +38,8 @@ initTk ct rc tf = Telekinesis
 physicsConfig :: PhysicsBodyConfig
 physicsConfig = PhysicsBodyConfig
   { _pbcGravityScale = 0.0 -- Ignore gravity
-  , _pbcLinearDamp   = 0.7 -- Gradually slow movement
-  , _pbcAngularDamp  = 0.7 -- Gradually slow rotations
+  , _pbcLinearDamp   = 30.0 -- Gradually slow movement
+  , _pbcAngularDamp  = 5.0 -- Gradually slow rotations
   , _pbcMode         = RigidBody.MODE_RIGID -- Behave as a RigidBody
   }
 
