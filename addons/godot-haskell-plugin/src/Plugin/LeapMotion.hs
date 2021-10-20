@@ -307,7 +307,8 @@ twoHandScale glm gsvs1 gsvs2 = do
   let oldDist = case maybeOldDist of
                     Nothing -> newDist
                     Just oldDist -> oldDist
-  let scale = (newDist / oldDist)
+  let scale = (newDist / oldDist) ** (1.65)
+  toLowLevel (V3 scale scale scale) >>= G.scale_object_local ((safeCast gsvs1) :: GodotSpatial)
   atomically $ writeTVar (glm ^. glmPinchDist) (Just newDist) --
 
 twoHandScaleViaLeap :: GodotLeapMotion -> GodotSimulaViewSprite -> GodotSimulaViewSprite -> IO ()
