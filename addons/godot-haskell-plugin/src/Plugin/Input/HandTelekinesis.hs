@@ -10,6 +10,9 @@ import           Plugin.Input.Telekinesis
 
 initHandTk :: (GodotSpatial :< a) => a -> IO (HandTelekinesis)
 initHandTk hand = do
+  -- Useful when debugging in pancake mode to modulate impulse forces:
+  getSingleton Godot_Engine "Engine" >>= (`G.set_target_fps` 90)
+
   tf <- G.get_global_transform ((safeCast hand) :: GodotSpatial) >>= fromLowLevel
   return HandTelekinesis { _htkHand          = safeCast hand
                          , _htkBody          = Nothing
@@ -17,8 +20,8 @@ initHandTk hand = do
                          , _htkLastHandTransform = tf
                          }
 
-handGrab :: GodotRigidBody -> HandTelekinesis -> IO HandTelekinesis
-handGrab body htk = do
+handGrab :: GodotSimulaServer -> GodotRigidBody -> HandTelekinesis -> IO HandTelekinesis
+handGrab gss body htk = do
   tf  <- htk & _htkHand & G.get_global_transform >>= fromLowLevel
   -- Get current values before overwriting
   cfg <- getPhysicsConfig body
@@ -49,22 +52,20 @@ handManipulate isMove factor htk = do
           mass   <- G.get_mass body
           weight <- G.get_weight body
 
-          let
-            TF lastBs lastPos = _htkLastHandTransform htk
-            power = mass * factor * factor * _htkStrength htk :: Float
-            tScale = 0.00001 -- Too sensitive otherwise
-
-            -- Angular impulse around each axis
-            tImpX = cross (lastBs ^. _z) (bs ^. _z) ^* power * tScale
-            tImpY = cross (lastBs ^. _x) (bs ^. _x) ^* power * tScale
-            tImpZ = cross (lastBs ^. _y) (bs ^. _y) ^* power * tScale
-
-            -- Linear impulse
-            lImp = power *^ (pos - lastPos)
-
-            totalImp =
-              if isMove then norm $ tImpX + tImpY + tImpZ + lImp else 0
-            rumble = 0.001 * (weight + totalImp)
+          let TF lastBs lastPos = _htkLastHandTransform htk
+              power = mass * factor * factor * _htkStrength htk :: Float
+              tScale = 0.001 -- Too sensitive otherwise
+  
+              -- Angular impulse around each axis
+              tImpX = cross (lastBs ^. _z) (bs ^. _z) ^* power * tScale
+              tImpY = cross (lastBs ^. _x) (bs ^. _x) ^* power * tScale
+              tImpZ = cross (lastBs ^. _y) (bs ^. _y) ^* power * tScale
+  
+              -- Linear impulse
+              lImp = power *^ (pos - lastPos) 
+  
+              totalImp = if isMove then norm $ tImpX + tImpY + tImpZ + lImp else 0
+              rumble = 0.001 * (weight + totalImp)
 
           when isMove $ do
             G.apply_torque_impulse body =<< toLowLevel tImpX
@@ -78,15 +79,15 @@ handManipulate isMove factor htk = do
 
         Nothing -> return htk { _htkLastHandTransform = tf }
 
-handTryGrab :: HandTelekinesis -> GodotRigidBody -> IO HandTelekinesis
-handTryGrab htk rigidBody = htk & _htkBody & \case
+handTryGrab :: GodotSimulaServer -> HandTelekinesis -> GodotRigidBody -> IO HandTelekinesis
+handTryGrab gss htk rigidBody = htk & _htkBody & \case
           Just _  -> return htk
-          Nothing -> handGrab rigidBody htk
+          Nothing -> handGrab gss rigidBody htk
 
-handTelekinesis :: HandTelekinesis -> IO HandTelekinesis
-handTelekinesis htk = do
+handTelekinesis :: GodotSimulaServer -> HandTelekinesis -> IO HandTelekinesis
+handTelekinesis gss htk = do
   let maybeRigidBody = (htk ^. htkBody)
   case maybeRigidBody of
-    Just (rgb, pbc) -> handTryGrab htk rgb >>= handManipulate True 1
+    Just (rgb, pbc) -> handTryGrab gss htk rgb >>= handManipulate True 1
     Nothing -> do putStrLn $ "Unable to move rigid body!"
                   return htk

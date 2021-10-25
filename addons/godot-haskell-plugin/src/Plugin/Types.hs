@@ -204,7 +204,7 @@ data HandTelekinesis = HandTelekinesis
 
 data HandSide = LeftHand | RightHand
 
-data HandState = NonIntersected | Intersected GodotSimulaViewSprite | Pinched GodotSimulaViewSprite | Grabbed HandTelekinesis
+data HandState = NonIntersected | Intersected GodotSimulaViewSprite | PinchGrabbed GodotSimulaViewSprite
 
 data GodotLeapMotion = GodotLeapMotion
   { _glmObj             :: GodotObject -- GodotGDLMSensor
@@ -222,6 +222,7 @@ data LeapHand = LeapHand {
     _handSpatial:: TVar GodotSpatial
   , _handArea   :: TVar GodotArea
   , _handSphere :: TVar GodotSphereShape
+  , _handBuffer :: TVar Int
 }
 
 -- We use TVar excessively since these datatypes must be retrieved from the
@@ -272,11 +273,12 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssCanvasAR              :: TVar CanvasAR
   , _gssScreenRecorder        :: TVar (Maybe ProcessHandle)
   , _gssLeapMotion            :: TVar GodotLeapMotion
+  , _gssDampSensitivity       :: TVar DampSensitivity
   }
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
@@ -373,6 +375,14 @@ instance Ord SimulaView where
 --   | InteractiveMove
 --   | InteractiveResize
 
+data Damp = Rotation Float | Translation Float | Pinch Float
+
+data DampSensitivity = DampSensitivity {
+    _dsRotation    :: Float
+  , _dsTranslation :: Float
+  , _dsPinch       :: Float
+}
+
 makeLenses ''GodotSimulaViewSprite
 makeLenses ''CanvasBase
 makeLenses ''CanvasSurface
@@ -388,6 +398,7 @@ makeLenses ''HUD
 makeLenses ''HandTelekinesis
 makeLenses ''GodotLeapMotion
 makeLenses ''LeapHand
+makeLenses ''DampSensitivity
 
 
 -- Godot helper functions (should eventually be exported to godot-extra).

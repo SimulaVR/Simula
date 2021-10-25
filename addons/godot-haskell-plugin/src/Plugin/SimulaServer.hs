@@ -155,6 +155,12 @@ getKeyboardAction gss keyboardShortcut =
     "toggleWasdMode" -> toggleWasdMode gss
     "addLeapMotion" -> addLeapMotion gss
     "recordScreen" -> recordScreen gss
+    "decreaseDampRotation" -> damp gss (Rotation (-0.5))
+    "increaseDampRotation" -> damp gss (Rotation (0.5))
+    "decreaseDampTranslation" -> damp gss (Translation (-0.5))
+    "increaseDampTranslation" -> damp gss (Translation (0.5))
+    "decreaseScaleSensitivity" -> damp gss (Pinch (-0.5))
+    "increaseScaleSensitivity" -> damp gss (Pinch (0.5))
     _ -> shellLaunch gss (keyboardShortcut ^. keyAction)
 
   where moveCursor :: SpriteLocation -> Bool -> IO ()
@@ -552,6 +558,19 @@ getKeyboardAction gss keyboardShortcut =
           return ()
         addLeapMotion _ _ _ = return ()
 
+        damp :: GodotSimulaServer -> Damp -> SpriteLocation -> Bool -> IO ()
+        damp gss damp _ True = do
+          putStrLn "damp.."
+          case damp of
+            (Rotation amount) -> do
+              putStrLn $ "Rotation " ++ (show amount)
+            (Translation amount) -> do
+              putStrLn $ "Translation " ++ (show amount)
+            (Pinch amount) -> do
+              putStrLn $ "Pinch " ++ (show amount)
+          return ()
+        damp _ _ _ _ = return ()
+
 isMask :: Int -> Bool
 isMask keyOrMask = elem keyOrMask [ G.KEY_MASK_SHIFT
                                   , G.KEY_MASK_ALT
@@ -625,7 +644,6 @@ instance NativeScript GodotSimulaServer where
     ]
 
   classSignals = []
-
 
 process :: GodotSimulaServer -> [GodotVariant] -> IO ()
 process gss [deltaGV] = do
@@ -740,6 +758,8 @@ ready gss _ = do
   addChild canvasLayer rtLabelW
   addChild canvasLayer rtLabel
   forkUpdateHUDRecursively gss
+
+  -- addLeapMotionModule gss
   return ()
 
   where launchDefaultApps :: [String] -> String-> IO ()
@@ -983,6 +1003,13 @@ initGodotSimulaServer obj = do
       gssScreenRecorder' <- newTVarIO (Nothing)
       gssLeapMotion' <- newTVarIO (error "Failed to initialize GodotLeapMotion") :: IO (TVar GodotLeapMotion)
 
+      let defaultDampSensitivity = DampSensitivity {
+                                     _dsRotation    = 8.5
+                                   , _dsTranslation = 55.0
+                                   , _dsPinch       = 1.65
+                                   } 
+      gssDampSensitivity' <- newTVarIO (defaultDampSensitivity) :: IO (TVar DampSensitivity)
+
       let gss = GodotSimulaServer {
         _gssObj                   = obj                       :: GodotObject
       , _gssWaylandDisplay        = gssWaylandDisplay'        :: TVar GodotWaylandDisplay
@@ -1028,7 +1055,8 @@ initGodotSimulaServer obj = do
       , _gssWasdMode              = gssWasdMode'              :: TVar Bool
       , _gssCanvasAR              = gssCanvasAR'              :: TVar CanvasAR
       , _gssScreenRecorder        = gssScreenRecorder'        :: TVar (Maybe ProcessHandle)
-      , _gssLeapMotion        = gssLeapMotion'        :: TVar GodotLeapMotion
+      , _gssLeapMotion            = gssLeapMotion'            :: TVar GodotLeapMotion
+      , _gssDampSensitivity       = gssDampSensitivity'       :: TVar DampSensitivity
       }
   return gss
   where getStartingAppsStr :: Maybe String -> String

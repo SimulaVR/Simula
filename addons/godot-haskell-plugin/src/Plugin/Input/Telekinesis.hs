@@ -37,10 +37,10 @@ initTk ct rc tf = Telekinesis
 
 physicsConfig :: PhysicsBodyConfig
 physicsConfig = PhysicsBodyConfig
-  { _pbcGravityScale = 0.0 -- Ignore gravity
-  , _pbcLinearDamp   = 30.0 -- Gradually slow movement
-  , _pbcAngularDamp  = 5.0 -- Gradually slow rotations
-  , _pbcMode         = RigidBody.MODE_RIGID -- Behave as a RigidBody
+  { _pbcGravityScale = 0.0
+  , _pbcLinearDamp   = 55.0 -- Higher is slower
+  , _pbcAngularDamp  = 8.5 -- "
+  , _pbcMode         = RigidBody.MODE_RIGID
   }
 
 getPhysicsConfig :: GodotRigidBody -> IO PhysicsBodyConfig
@@ -50,6 +50,17 @@ getPhysicsConfig body =
     <*> G.get_linear_damp body
     <*> G.get_angular_damp body
     <*> G.get_mode body
+
+setPhysicsConfigGSS :: GodotSimulaServer -> GodotRigidBody -> IO ()
+setPhysicsConfigGSS gss body = do
+  ds <- readTVarIO (gss ^. gssDampSensitivity)
+  let translation = (ds ^. dsTranslation)
+  let rotation = (ds ^. dsRotation)
+  let translation = (ds ^. dsTranslation)
+  body `G.set_gravity_scale` 0.0
+  body `G.set_linear_damp` translation
+  body `G.set_angular_damp` rotation
+  body `G.set_mode` RigidBody.MODE_RIGID
 
 setPhysicsConfig :: PhysicsBodyConfig -> GodotRigidBody -> IO ()
 setPhysicsConfig config body = do

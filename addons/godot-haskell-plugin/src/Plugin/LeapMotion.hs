@@ -46,6 +46,8 @@ import Data.Typeable
 import qualified Data.Map.Strict as M
 import Plugin.Input.HandTelekinesis
 
+data BufferIncrement = Increment | Reset
+
 instance NativeScript GodotLeapMotion where
   className = "LeapMotion"
   classInit node = do
@@ -97,7 +99,7 @@ _process :: GodotLeapMotion -> [GodotVariant] -> IO ()
 _process gdlm args = do
   return ()
 
-getHandData :: GodotLeapMotion -> HandSide -> IO (Maybe (HandState, Bool, Bool, GodotSpatial))
+getHandData :: GodotLeapMotion -> HandSide -> IO (Maybe (HandState, Bool, Bool, GodotSpatial, Int))
 getHandData glm LeftHand = do
   maybeHandLeft <- readTVarIO (glm ^. glmLeftHand)
   case maybeHandLeft of
@@ -106,7 +108,8 @@ getHandData glm LeftHand = do
                         isLeftPinched <- G.get_is_pinched_left glm
                         isLeftGrabbed <- G.get_is_grabbed_left glm
                         handSpatialLeft <- readTVarIO (handLeft ^. handSpatial)
-                        return $ Just (leftHandState, isLeftPinched, isLeftGrabbed, handSpatialLeft)
+                        buffer <- readTVarIO (handLeft ^. handBuffer)
+                        return $ Just (leftHandState, isLeftPinched, isLeftGrabbed, handSpatialLeft, buffer)
 getHandData glm RightHand = do
   maybeHandRight <- readTVarIO (glm ^. glmRightHand)
   case maybeHandRight of
@@ -115,53 +118,56 @@ getHandData glm RightHand = do
                          isRightPinched <- G.get_is_pinched_right glm
                          isRightGrabbed <- G.get_is_grabbed_right glm
                          handSpatialRight <- readTVarIO (handRight ^. handSpatial)
-                         return $ Just (rightHandState, isRightPinched, isRightGrabbed, handSpatialRight)
+                         buffer <- readTVarIO (handRight ^. handBuffer)
+                         return $ Just (rightHandState, isRightPinched, isRightGrabbed, handSpatialRight, buffer)
+
+incrementHandBuffer :: GodotLeapMotion -> HandSide -> BufferIncrement -> IO ()
+incrementHandBuffer glm handSide bufferIncrement = do
+  case handSide of
+       LeftHand -> do maybeHandLeft <- readTVarIO (glm ^. glmLeftHand)
+                      case maybeHandLeft of
+                           Nothing -> return ()
+                           Just leftHand -> case bufferIncrement of
+                                                 Increment -> atomically $ modifyTVar' (leftHand ^. handBuffer) (+1)
+                                                 Reset -> atomically $ writeTVar (leftHand ^. handBuffer) 0
+       RightHand -> do maybeHandRight <- readTVarIO (glm ^. glmRightHand)
+                       case maybeHandRight of
+                            Nothing -> return ()
+                            Just rightHand -> case bufferIncrement of
+                                                   Increment -> atomically $ modifyTVar' (rightHand ^. handBuffer) (+1)
+                                                   Reset -> atomically $ writeTVar (rightHand ^. handBuffer) 0
 
 updateHandState :: GodotLeapMotion -> HandSide -> IO (Maybe HandState)
 updateHandState glm handSide = do
+ gss <- readTVarIO (glm ^. glmServer)
  maybeHandState <- getHandData glm handSide
  case maybeHandState of
       Nothing -> return Nothing
-      Just (handState, isPinched, isGrabbed, handSpatial) -> do
+      Just (handState, isPinched, isGrabbed, handSpatial, buffer) -> do
+            let isPinchGrabbed = isPinched || isGrabbed
             case handState of
-                  NonIntersected -> return (Just NonIntersected) -- Prevent gsvs manipulation unless user starts in `Intersected gsvs` state
-                  Intersected gsvs -> case (isPinched, isGrabbed) of
-                                            (True, _) -> do
-                                              return $ (Just $ Pinched gsvs)
-                                            (_, True) -> do -- Start grab
-                                                            handTk <- initHandTk handSpatial >>= handGrab (safeCast gsvs)
-                                                            return $ (Just $ Grabbed handTk)
-                                            _ -> return $ (Just $ Intersected gsvs)
-                  Pinched gsvs -> case (isPinched, isGrabbed) of
-                                        (False, False) -> do -- Release pinch
-                                                            atomically $ writeTVar (glm ^. glmPinchDist) Nothing
-                                                            return $ (Just $ Intersected gsvs)
-                                        (False, True) -> do -- Release pinch
-                                                            atomically $ writeTVar (glm ^. glmPinchDist) Nothing
-                                                            -- Shift to grab
-                                                            handTk <- initHandTk handSpatial >>= handGrab (safeCast gsvs)
-                                                            return $ (Just $ Grabbed handTk)
-                                        (True, _) -> do -- Continue pinching
-                                                        return $ (Just $ Pinched gsvs)
-                  Grabbed handTk -> case (isPinched, isGrabbed) of
-                                          (False, False) -> do -- Release Grab
-                                                              let (gsvs', pbc) = Data.Maybe.fromJust (handTk ^. htkBody)
-                                                              maybeGSVS <- asNativeScript (safeCast gsvs') :: IO (Maybe GodotSimulaViewSprite)
-                                                              let gsvs = Data.Maybe.fromJust maybeGSVS
-                                                              handLetGo handTk
-                                                              return (Just $ Intersected ((gsvs) :: GodotSimulaViewSprite))
-                                          (True, False) -> do -- Shift to pinch
-                                                              let (gsvs', pbc) = Data.Maybe.fromJust (handTk ^. htkBody)
-                                                              maybeGSVS <- asNativeScript ((safeCast gsvs') :: GodotObject) :: IO (Maybe GodotSimulaViewSprite)
-                                                              let gsvs = Data.Maybe.fromJust maybeGSVS
-                                                              handLetGo handTk
-                                                              return (Just $ Pinched ((gsvs) :: GodotSimulaViewSprite))
-                                          (_, True) -> do -- Continue grabbing
-                                                          return $ (Just $ Grabbed handTk)
+                  NonIntersected -> do
+                          return (Just NonIntersected) -- Prevent gsvs manipulation unless user starts in `Intersected gsvs` state
+                  Intersected gsvs -> do
+                          case isPinchGrabbed of
+                               True -> return $ (Just $ PinchGrabbed gsvs)
+                               False -> return $ (Just $ Intersected gsvs)
+                  PinchGrabbed gsvs -> do
+                          case (isPinchGrabbed, buffer > 300) of -- Set our "pinch-grab" buffer to an absurdly high number until our hand tracking improves
+                               (True, _) -> do incrementHandBuffer glm handSide Reset
+                                               return $ (Just $ PinchGrabbed gsvs)
 
+                               (False, False) -> do atomically $ writeTVar (glm ^. glmPinchDist) Nothing
+                                                    incrementHandBuffer glm handSide Increment
+                                                    return $ (Just $ PinchGrabbed gsvs)
+                               (False, True) -> do atomically $ writeTVar (glm ^. glmPinchDist) Nothing
+                                                   incrementHandBuffer glm handSide Reset
+                                                   return $ (Just $ Intersected gsvs)
 
 _physics_process :: GodotLeapMotion -> [GodotVariant] -> IO ()
 _physics_process glm args@[deltaGV] = do
+  gss <- readTVarIO (glm ^. glmServer)
+
   -- Get the latest hand state for this frame
   maybeLeftHandState <- updateHandState glm LeftHand
   maybeRightHandState <- updateHandState glm RightHand
@@ -173,36 +179,40 @@ _physics_process glm args@[deltaGV] = do
       case leftHandState of
         NonIntersected -> return ()
         Intersected gsvs1 -> return ()
-        Pinched gsvs1 -> return ()
-        Grabbed handTk1 -> handTelekinesis handTk1 >> return ()
+        PinchGrabbed gsvs1 -> staticGrab glm gsvs1 LeftHand
       atomically $ writeTVar (glm ^. glmLeftHandState) leftHandState
-    (Nothing, Just rightHandState)-> do
+    (Nothing, Just rightHandState) -> do
       case rightHandState of
         NonIntersected -> return ()
         Intersected gsvs2 -> return ()
-        Pinched gsvs2 -> return ()
-        Grabbed handTk2 -> handTelekinesis handTk2 >> return ()
+        PinchGrabbed gsvs2 -> staticGrab glm gsvs2 RightHand
       atomically $ writeTVar (glm ^. glmRightHandState) rightHandState
     (Just leftHandState, Just rightHandState) -> do
       case (leftHandState, rightHandState) of
-        (Pinched gsvs1, Pinched gsvs2) -> do
+        (PinchGrabbed gsvs1, PinchGrabbed gsvs2) -> do
           twoHandScale glm gsvs1 gsvs2
-          putStrLn $ "twoHandScale"
-        (Grabbed handTk1, Grabbed handTk2) -> do
-          handTelekinesis handTk1 >> return ()
-          handTelekinesis handTk2 >> return ()
-          putStrLn $ "Grab left & right"
-        (Grabbed handTk1, _) -> handTelekinesis handTk1 >> (putStrLn "Grab left")
-        (_, Grabbed handTk2) -> handTelekinesis handTk2 >> (putStrLn "Grab right")
-        (Pinched gsvs1, _) -> putStrLn "(Pinched gsvs1, _)"
-        (_, Pinched gsvs2) -> putStrLn "(_, Pinched gsvs1)"
-        (Intersected gsvs1, Intersected gsvs2) -> putStrLn $ "(Intersected gsvs1, Intersected gsvs2)"
-        (Intersected gsvs1, _) -> putStrLn $ "(Intersected gsvs1, _)"
-        (_, Intersected gsvs2) -> putStrLn $ "(_, Intersected gsvs2)"
-        _ -> putStrLn $ "Doing nothing.."
+        (PinchGrabbed gsvs1, _) -> do
+          staticGrab glm gsvs1 LeftHand
+        (_, PinchGrabbed gsvs2) -> do
+          staticGrab glm gsvs2 RightHand
+        _ -> return () -- >> putStrLn $ "Not PinchGrabbed!"
       atomically $ writeTVar (glm ^. glmLeftHandState) leftHandState
       atomically $ writeTVar (glm ^. glmRightHandState) rightHandState
 
+staticGrab :: GodotLeapMotion -> GodotSimulaViewSprite -> HandSide -> IO ()
+staticGrab glm gsvs handSide = do
+  palmTransformOrigin <- case handSide of
+                        LeftHand -> do leftHand' <- readTVarIO (glm ^. glmLeftHand) >>= (return . Data.Maybe.fromJust)
+                                       leftHand <- readTVarIO (leftHand' ^. handSpatial)
+                                       G.get_global_transform leftHand >>= Api.godot_transform_get_origin
+                        RightHand -> do rightHand' <- readTVarIO (glm ^. glmRightHand) >>= (return . Data.Maybe.fromJust)
+                                        rightHand <- readTVarIO (rightHand' ^. handSpatial)
+                                        G.get_global_transform rightHand >>= Api.godot_transform_get_origin
+  palmTransformOrigin' <- fromLowLevel palmTransformOrigin
+  (TF bs pos) <- G.get_global_transform gsvs >>= fromLowLevel
+  gsvsTransform' <- toLowLevel (TF bs palmTransformOrigin')
+  G.set_global_transform gsvs gsvsTransform'
+  orientSpriteTowardsGaze gsvs
 
 _new_hand :: GodotLeapMotion -> [GodotVariant] -> IO ()
 _new_hand glm args@[godotSpatialHand', handType'] = do
@@ -230,11 +240,13 @@ _new_hand glm args@[godotSpatialHand', handType'] = do
   handSpatialTVar <- newTVarIO godotSpatialHand
   handAreaTVar <- newTVarIO godotArea
   handSphereShapeTVar <- newTVarIO godotSphereShape
+  handBuffer' <- newTVarIO 0
 
   let newLeapHand = LeapHand {
           _handSpatial = handSpatialTVar
         , _handArea = handAreaTVar
         , _handSphere = handSphereShapeTVar
+        , _handBuffer = handBuffer'
       }
 
   case handType of
@@ -297,6 +309,10 @@ twoHandScale glm gsvs1 gsvs2 = do
   putStrLn $ "twoHandScale"
   maybeOldDist <- readTVarIO (glm ^. glmPinchDist)
 
+  gss <- readTVarIO (gsvs1 ^. gsvsServer)
+  ds <- readTVarIO (gss ^. gssDampSensitivity)
+  let pinchFactor = (ds ^. dsPinch)
+
   leftHand' <- readTVarIO (glm ^. glmLeftHand) >>= (return . Data.Maybe.fromJust)
   rightHand' <- (readTVarIO (glm ^. glmRightHand)) >>= (return . Data.Maybe.fromJust)
   leftHand <- readTVarIO (leftHand' ^. handSpatial)
@@ -307,7 +323,7 @@ twoHandScale glm gsvs1 gsvs2 = do
   let oldDist = case maybeOldDist of
                     Nothing -> newDist
                     Just oldDist -> oldDist
-  let scale = (newDist / oldDist) ** (1.65)
+  let scale = (newDist / oldDist) ** (pinchFactor)
   toLowLevel (V3 scale scale scale) >>= G.scale_object_local ((safeCast gsvs1) :: GodotSpatial)
   atomically $ writeTVar (glm ^. glmPinchDist) (Just newDist) --
 
@@ -315,6 +331,7 @@ twoHandScaleViaLeap :: GodotLeapMotion -> GodotSimulaViewSprite -> GodotSimulaVi
 twoHandScaleViaLeap glm gsvs1 gsvs2 = do
   putStrLn $ "twoHandScaleViaLeap"
   scale <- G.get_hands_scale_factor glm
+  putStrLn $ "scale: " ++ (show scale)
   toLowLevel (V3 scale scale scale) >>= G.scale_object_local ((safeCast gsvs1) :: GodotSpatial)
 
 -- TODO: Clean up state here, if needed
