@@ -265,7 +265,7 @@ nsCleanGodot() {
 # Updates godot-haskell to latest api.json generated from devBuildGodot
 nsBuildGodotHaskell() {
   cd ./submodules/godot
-  nix-shell -Q --run "$(../../utils/GetNixGL.sh) LD_LIBRARY_PATH=./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 ./bin/godot.x11.tools.64 --gdnative-generate-json-api ./bin/api.json"
+  nix-shell -Q --run "LD_LIBRARY_PATH=./modules/gdleapmotionV2/LeapSDK/lib/x64 $(../../utils/GetNixGL.sh) ./bin/godot.x11.tools.64 --gdnative-generate-json-api ./bin/api.json"
   cd -
 
   cd ./submodules/godot-haskell-cabal
