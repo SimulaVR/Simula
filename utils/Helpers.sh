@@ -296,6 +296,7 @@ nsREPLGodotHaskellPlugin() {
 
 nsBuildSimulaLocal() {
     installSimula 1
+    ./result/bin/cabal update
     nsBuildWlroots
     nsBuildGodot
     patchGodotWlroots
