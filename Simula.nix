@@ -51,7 +51,7 @@ let
       echo "source ./utils/Helpers.sh && updateEmail" >> $out/bin/simula
       echo "mkdir -p log" >> $out/bin/simula
       echo "mkdir -p config" >> $out/bin/simula
-      echo "PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib \$(./utils/GetNixGL.sh) ${godot}/bin/godot.x11.opt.debug.64 -m 2>&1 | ${coreutils}/bin/tee ./log/output.file" >> $out/bin/simula
+      echo "PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) ${godot}/bin/godot.x11.opt.debug.64 -m 2>&1 | ${coreutils}/bin/tee ./log/output.file" >> $out/bin/simula
       echo "sed -in \"s/\$USER/anon/g\" ./log/output.file" >> $out/bin/simula
       echo "echo devBuldFalse >> ./log/output.file" >> $out/bin/simula
       echo "git rev-parse HEAD >> ./log/output.file" >> $out/bin/simula
