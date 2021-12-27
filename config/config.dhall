@@ -18,16 +18,19 @@ let Configuration =
                                                            -- Set to `None { _1 : Natural, _2 : Natural }` for windows to launch with their default (typically non-square) resolutions
 
   , _defaultWindowScale      = 1.0 : Double                -- In addition to resolution, apps can be scaled up or down by this factor upon launch
+  , _axisScrollSpeed         = 0.02 : Double
+  , _mouseSensitivityScaler  = 1.00 : Double
   , _keyBindings             = [ -- For keyboard shortcuts, use keynames from
                                  -- https://github.com/SimulaVR/godot/blob/3.2-simula/core/os/keyboard.h
                                  -- For modifiers, use `KEY_MASK_*`. For everything else, use `KEY_*`.
                                  -- 
                                  -- Simula has the following special functions (explained in the README): https://github.com/SimulaVR/Simula#mouse--keyboard-controls
                                 { _keyCombination = ["KEY_MASK_META", "KEY_BACKSPACE"]                 , _keyAction = "terminateWindow"            }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_ESCAPE"]                    , _keyAction = "toggleGrabMode"             }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_Z"]                    , _keyAction = "toggleGrabMode"             }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_SLASH"]                     , _keyAction = "launchTerminal"             }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_APOSTROPHE"]                , _keyAction = "moveCursor"                 }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_ENTER"]                     , _keyAction = "clickLeft"                  }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_ENTER"]   , _keyAction = "clickRight"                }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_ALT_R"]                     , _keyAction = "grabWindow"                 }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_ALT_L"]                     , _keyAction = "grabWindow"                 }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_M"]                         , _keyAction = "grabWindows"                }
@@ -53,6 +56,7 @@ let Configuration =
                               , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_ALT", "KEY_DOWN"]      , _keyAction = "decreaseTransparency"       }
                               , { _keyCombination = ["KEY_PRINT"]                                      , _keyAction = "toggleScreenshotMode"       }
                               , { _keyCombination = ["KEY_MASK_SHIFT", "KEY_PRINT"]                    , _keyAction = "takeScreenshotGlobal"       }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_PRINT"]   , _keyAction = "recordScreen"       }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_1"]                         , _keyAction = "workspace1"       }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_2"]                         , _keyAction = "workspace2"       }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_3"]                         , _keyAction = "workspace3"       }
@@ -69,6 +73,7 @@ let Configuration =
                               , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_6"]       , _keyAction = "sendToWorkspace6" }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_7"]       , _keyAction = "sendToWorkspace7" }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_8"]       , _keyAction = "sendToWorkspace8" }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_0"]       , _keyAction = "sendToWorkspacePersistent" }
 
 
                                 -- Anything else is parsed as a shell command:
@@ -86,6 +91,10 @@ let Configuration =
   -- Environments must be local to Simula's root directory
   , _environmentsDirectory = "./environments"
   , _environmentDefault    = "./environments/AllSkyFree_Sky_EpicBlueSunset_Equirect.png"
+  , _scenes = [] : List Text
+  -- Configuration of Simula's HUD (in i3status format).
+  -- See https://i3wm.org/docs/i3status.html
+  , _hudConfig = "./config/i3status.config"
   }
 
 in Configuration

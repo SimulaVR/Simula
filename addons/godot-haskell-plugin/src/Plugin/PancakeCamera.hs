@@ -53,8 +53,8 @@ instance NativeScript GodotPancakeCamera where
     return $ GodotPancakeCamera (safeCast node)
   classMethods =
     [
-      func NoRPC "_process" Plugin.PancakeCamera._process
-    , func NoRPC "_ready" Plugin.PancakeCamera._ready
+      func NoRPC "_process" (catchGodot Plugin.PancakeCamera._process)
+    , func NoRPC "_ready" (catchGodot Plugin.PancakeCamera._ready)
     ]
 
 instance HasBaseClass GodotPancakeCamera where

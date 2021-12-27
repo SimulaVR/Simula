@@ -10,7 +10,7 @@
 [submodule "submodules/godot"]
 	path = submodules/godot
 	url = https://github.com/SimulaVR/godot
-	branch = 3.2-simula
+	branch = 3.x-simula
 	shallow = true
 [submodule "submodules/godot-haskell"]
 	path = submodules/godot-haskell
@@ -35,3 +35,9 @@
 [submodule "nix/libleak"]
 	path = nix/libleak
 	url = https://github.com/SimulaVR/libleak
+[submodule "submodules/i3status"]
+	path = submodules/i3status
+	url = https://github.com/SimulaVR/i3status
+[submodule "submodules/monado"]
+	path = submodules/monado
+	url = https://github.com/SimulaVR/monado.git

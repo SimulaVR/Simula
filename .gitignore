@@ -12,3 +12,6 @@ addons/godot-haskell-plugin/cbits/xdg-shell-protocol.c
 addons/godot-haskell-plugin/include/xdg-shell-protocol.h
 
 dist-newstyle
+
+.import
+*.import

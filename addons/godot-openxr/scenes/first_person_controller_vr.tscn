@@ -2,7 +2,7 @@
 
 [ext_resource path="res://addons/godot-openxr/scenes/first_person_controller_vr.gd" type="Script" id=1]
 [ext_resource path="res://addons/godot-openxr/scenes/controller.gd" type="Script" id=2]
-[ext_resource path="res://addons/godot-openxr/OpenXRConfig.gdns" type="Script" id=3]
+[ext_resource path="res://addons/godot-openxr/config/OpenXRConfig.gdns" type="Script" id=3]
 
 [node name="FPSController" type="ARVROrigin"]
 script = ExtResource( 1 )

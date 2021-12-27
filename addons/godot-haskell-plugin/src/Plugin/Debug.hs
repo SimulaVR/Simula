@@ -278,16 +278,6 @@ logMemRecursively = do
   Control.Concurrent.threadDelay (1 * 1000000)
   logMemRecursively
 
-logMemPid :: GodotSimulaServer -> IO Float
-logMemPid gss = do
-  let pid = (gss ^. gssPid)
-  (_, out', _) <- B.readCreateProcessWithExitCode (shell $ "ps -p " ++ pid ++ " -o rss=") ""
-  let pidMem = read $ (B.unpack out') :: Float
-  -- logStr $ "PID mem: " ++ (show pidMem)
-  -- Control.Concurrent.threadDelay (1 * 1000000)
-  -- logMemPid gss
-  return (pidMem / 1000) -- return ~MB
-
 debugLogDepthFirstSurfaces :: GodotSimulaViewSprite -> IO ()
 debugLogDepthFirstSurfaces gsvs = do
   cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
@@ -317,26 +307,23 @@ debugLogDepthFirstSurfaces gsvs = do
 
         saveWlrSurfacePng :: CanvasSurface -> GodotWlrSurface -> IO String
         saveWlrSurfacePng cs wlrSurface = do
-          maybeWlrSurface <- validateSurface wlrSurface
-          case maybeWlrSurface of
-            Nothing -> do putStrLn "Texture is null in savePng!"
-                          return ""
-            Just wlrSurface -> do -- Get image
-                                  gsvs <- readTVarIO (cs ^. csGSVS)
-                                  visualServer <- getVisualServer gsvs
-                                  wlrSurfaceTexture <- G.get_texture wlrSurface
-                                  rid <- G.get_rid wlrSurfaceTexture
-                                  wlrSurfaceImage <- G.texture_get_data visualServer rid 0
+          validateSurfaceE wlrSurface
+          gsvs <- readTVarIO (cs ^. csGSVS)
+          visualServer <- getVisualServer gsvs
+          wlrSurfaceTexture <- G.get_texture wlrSurface
+          rid <- G.get_rid wlrSurfaceTexture
+          wlrSurfaceImage <- G.texture_get_data visualServer rid 0
 
-                                  -- Get file path
-                                  frame <- readTVarIO (gsvs ^. gsvsFrameCount)
-                                  let pathStr = "./png/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
-                                  canonicalPath <- canonicalizePath pathStr
-                                  pathStr' <- toLowLevel (pack pathStr)
+          -- Get file path
+          frame <- readTVarIO (gsvs ^. gsvsFrameCount)
+          createDirectoryIfMissing False "media"
+          let pathStr = "./media/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
+          canonicalPath <- canonicalizePath pathStr
+          pathStr' <- toLowLevel (pack pathStr)
 
-                                  -- Save as png
-                                  G.save_png wlrSurfaceImage pathStr'
-                                  return canonicalPath
+          -- Save as png
+          G.save_png wlrSurfaceImage pathStr'
+          return canonicalPath
 
         getVisualServer :: GodotSimulaViewSprite -> IO GodotVisualServer
         getVisualServer gsvs = do

@@ -22,6 +22,11 @@ installNixVulkanNvidia() {
     cd -
 }
 
+if [ ! -z $NIX_GL ]; then
+    echo $NIX_GL
+    exit 0
+fi
+
 if [ -e /etc/NIXOS ]; then
     echo ""
 elif [ -z $NVIDIA_VERSION ]; then

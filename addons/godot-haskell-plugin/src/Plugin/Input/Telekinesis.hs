@@ -24,13 +24,6 @@ data Telekinesis = Telekinesis
   -- ^ Last known transform of the controller, used to calculate controller motion
   }
 
-data PhysicsBodyConfig = PhysicsBodyConfig
-  { _pbcGravityScale :: Float
-  , _pbcLinearDamp   :: Float
-  , _pbcAngularDamp  :: Float
-  , _pbcMode         :: Int
-  }
-
 initTk :: (GodotSpatial :< a) => a -> GodotRayCast -> Transform -> Telekinesis
 initTk ct rc tf = Telekinesis
   { _tkController    = safeCast ct
@@ -45,8 +38,8 @@ initTk ct rc tf = Telekinesis
 physicsConfig :: PhysicsBodyConfig
 physicsConfig = PhysicsBodyConfig
   { _pbcGravityScale = 0.0
-  , _pbcLinearDamp   = 0.7
-  , _pbcAngularDamp  = 0.7
+  , _pbcLinearDamp   = 55.0 -- Higher is slower
+  , _pbcAngularDamp  = 8.5 -- "
   , _pbcMode         = RigidBody.MODE_RIGID
   }
 
@@ -57,6 +50,17 @@ getPhysicsConfig body =
     <*> G.get_linear_damp body
     <*> G.get_angular_damp body
     <*> G.get_mode body
+
+setPhysicsConfigGSS :: GodotSimulaServer -> GodotRigidBody -> IO ()
+setPhysicsConfigGSS gss body = do
+  ds <- readTVarIO (gss ^. gssDampSensitivity)
+  let translation = (ds ^. dsTranslation)
+  let rotation = (ds ^. dsRotation)
+  let translation = (ds ^. dsTranslation)
+  body `G.set_gravity_scale` 0.0
+  body `G.set_linear_damp` translation
+  body `G.set_angular_damp` rotation
+  body `G.set_mode` RigidBody.MODE_RIGID
 
 setPhysicsConfig :: PhysicsBodyConfig -> GodotRigidBody -> IO ()
 setPhysicsConfig config body = do
@@ -135,7 +139,7 @@ manipulate isMove factor tk = do
 
 
 telekinesis :: Bool -> Bool -> Telekinesis -> IO Telekinesis
-telekinesis isLev isMove tk = do
+telekinesis isLev isMove tk = do -- isLev = isGripped; isMove = True
   _tkController tk
     &   asClass GodotARVRController "ARVRController"
     >>= \case

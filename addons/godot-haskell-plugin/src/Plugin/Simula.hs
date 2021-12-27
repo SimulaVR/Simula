@@ -48,9 +48,9 @@ instance NativeScript GodotSimula where
 
   -- classExtends = "Node"
   classMethods =
-    [ func NoRPC "_ready" Plugin.Simula.ready
-    , func NoRPC "_process" Plugin.Simula.process
-    , func NoRPC "on_button_signal" Plugin.Simula.on_button_signal
+    [ func NoRPC "_ready" (catchGodot Plugin.Simula.ready)
+    , func NoRPC "_process" (catchGodot Plugin.Simula.process)
+    , func NoRPC "on_button_signal" (catchGodot Plugin.Simula.on_button_signal)
     ]
   classSignals = []
 
@@ -66,15 +66,17 @@ ready self _ = do
 
   gssSpatial <- addSimulaServerNode :: IO GodotSpatial
   maybeGSS <- asNativeScript (safeCast gssSpatial) :: IO (Maybe GodotSimulaServer)
-  openBackend <- case maybeGSS of
-    Just gss -> do gssConf <- readTVarIO (gss ^. gssConfiguration)
-                   let backend = _backend gssConf :: String
-                   case backend of
-                     "OpenVR" -> return openVR
-                     "OpenXR" -> return openXR
-                     _        -> do putStrLn "Unable to parse backend; defaulting to OpenVR"
-                                    return openVR
-    Nothing -> do return openVR
+  xrRuntimeJson <- lookupEnv "XR_RUNTIME_JSON"
+  openBackend <- case (maybeGSS, xrRuntimeJson) of
+    (Just gss, Nothing) -> do gssConf <- readTVarIO (gss ^. gssConfiguration)
+                              let backend = _backend gssConf :: String
+                              case backend of
+                                "OpenVR" -> return openVR
+                                "OpenXR" -> return openXR
+                                _        -> do putStrLn "Unable to parse backend; defaulting to OpenVR"
+                                               return openVR
+    (Just gss, _) -> return openXR
+    (Nothing, _) -> do return openVR
 
   debugModeMaybe <- lookupEnv "DEBUG"
   rrModeMaybe <- lookupEnv "RUNNING_UNDER_RR"

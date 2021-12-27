@@ -206,7 +206,7 @@ installSimula() {
       NIXPKGS_ALLOW_UNFREE=1 nix-build -Q default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
       switchToNix
     # Useful for debug purposes
-    elif [ $1 == "i" ]; then
+    elif [ "$1" = "i" ]; then
       switchToNix
       NIXPKGS_ALLOW_UNFREE=1 nix-instantiate -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
       switchToLocal
@@ -252,12 +252,20 @@ nsBuildGodot() {
  else
    nix-shell --run "while inotifywait -qqre modify .; do $runCmd; done"
  fi
+ cd -
+}
+
+nsCleanGodot() {
+    cd ./submodules/godot
+    local runCmd="scons --clean"
+    nix-shell --run "$runCmd"
+    cd -
 }
 
 # Updates godot-haskell to latest api.json generated from devBuildGodot
 nsBuildGodotHaskell() {
   cd ./submodules/godot
-  nix-shell -Q --run "$(../../utils/GetNixGL.sh) ./bin/godot.x11.tools.64 --gdnative-generate-json-api ./bin/api.json"
+  nix-shell -Q --run "LD_LIBRARY_PATH=./modules/gdleapmotionV2/LeapSDK/lib/x64 $(../../utils/GetNixGL.sh) ./bin/godot.x11.tools.64 --gdnative-generate-json-api ./bin/api.json"
   cd -
 
   cd ./submodules/godot-haskell-cabal
@@ -276,7 +284,7 @@ nsBuildGodotHaskellPlugin() {
   elif [ $1 == "--profile" ]; then
     nix-shell -Q --attr env shell.nix --arg profileBuild true --run "../../result/bin/cabal --enable-profiling build --ghc-options=\"-fprof-auto -rtsopts -fPIC -fexternal-dynamic-refs\""
   else
-    nix-shell --attr env shell.nix --run "while inotifywait -qqre modify .; do cabal build; done"
+    nix-shell --attr env shell.nix --run "while inotifywait -qqre modify .; do ../../result/bin/cabal build; done"
   fi
   cd -
 }
@@ -288,8 +296,10 @@ nsREPLGodotHaskellPlugin() {
 
 nsBuildSimulaLocal() {
     installSimula 1
+    ./result/bin/cabal update
     nsBuildWlroots
     nsBuildGodot
+    patchGodotWlroots
     nsBuildGodotHaskell "$1"
     nsBuildGodotHaskellPlugin "$1"
     switchToLocal
@@ -314,4 +324,21 @@ updateEmail() {
         ./result/bin/curl --data-urlencode emailStr@email https://www.wolframcloud.com/obj/george.w.singer/emailMessage
         clear
     fi
+}
+
+#patch our Godot executable to point to our local build of wlroots
+patchGodotWlroots(){
+    PATH_TO_SIMULA_WLROOTS="`pwd`/submodules/wlroots/build/"
+    OLD_RPATH="`./result/bin/patchelf --print-rpath submodules/godot/bin/godot.x11.tools.64`"
+    if [[ $OLD_RPATH != $PATH_TO_SIMULA_WLROOTS* ]]; then #check if the current rpath contains our local simula wlroots build. If not, patchelf to add our path to the start of the executable's rpath
+        echo "Patching godot.x11.tools to point to local wlroots lib"
+        echo "Changing path to: $PATH_TO_SIMULA_WLROOTS:$OLD_RPATH"
+        ./result/bin/patchelf --set-rpath "$PATH_TO_SIMULA_WLROOTS:$OLD_RPATH" submodules/godot/bin/godot.x11.tools.64
+    else
+        echo "Not patching godot.x11.tools, already patched."
+    fi
+}
+
+zenRR() {
+   nix-shell --arg onNixOS $(checkIfNixOS) --arg devBuild true --run "sudo python3 ./utils/zen_workaround.py"
 }
