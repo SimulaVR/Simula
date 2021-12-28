@@ -1,4 +1,4 @@
-{ stdenv, fetchurl, pkgconfig, libpthreadstubs, libpciaccess, valgrind-light }:
+{ stdenv, fetchurl, pkgconfig, libpthreadstubs, libpciaccess, valgrind-light, lib }:
 
 stdenv.mkDerivation rec {
   name = "libdrm-2.4.96";
@@ -14,7 +14,7 @@ stdenv.mkDerivation rec {
   buildInputs = [ libpthreadstubs libpciaccess valgrind-light ];
     # libdrm as of 2.4.70 does not actually do anything with udev.
 
-  patches = stdenv.lib.optional stdenv.isDarwin ./libdrm-apple.patch;
+  patches = lib.optional stdenv.isDarwin ./libdrm-apple.patch;
 
   postPatch = ''
     for a in */*-symbol-check ; do
@@ -22,20 +22,20 @@ stdenv.mkDerivation rec {
     done
   '';
 
-  preConfigure = stdenv.lib.optionalString stdenv.isDarwin
+  preConfigure = lib.optionalString stdenv.isDarwin
     "echo : \\\${ac_cv_func_clock_gettime=\'yes\'} > config.cache";
 
   configureFlags = [ "--enable-install-test-programs" ]
-    ++ stdenv.lib.optionals (stdenv.isAarch32 || stdenv.isAarch64)
+    ++ lib.optionals (stdenv.isAarch32 || stdenv.isAarch64)
       [ "--enable-tegra-experimental-api" "--enable-etnaviv-experimental-api" ]
-    ++ stdenv.lib.optional stdenv.isDarwin "-C"
-    ++ stdenv.lib.optional (stdenv.hostPlatform != stdenv.buildPlatform) "--disable-intel"
+    ++ lib.optional stdenv.isDarwin "-C"
+    ++ lib.optional (stdenv.hostPlatform != stdenv.buildPlatform) "--disable-intel"
     ;
 
   meta = {
     homepage = https://dri.freedesktop.org/libdrm/;
     description = "Library for accessing the kernel's Direct Rendering Manager";
     license = "bsd";
-    platforms = stdenv.lib.platforms.unix;
+    platforms = lib.platforms.unix;
   };
 }
