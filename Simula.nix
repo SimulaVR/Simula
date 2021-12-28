@@ -1,4 +1,4 @@
-{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, mimic, xsel, xclip, dialog, synapse, openxr-loader, xpra, valgrind, xorg, writeShellScriptBin, python3, awscli, wayland, wayland-protocols, valkyrie, zstd, profileBuild ? false, pkgs, patchelf, libv4l, openssl }:
+{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, mimic, xsel, xclip, dialog, synapse, openxr-loader, xpra, valgrind, xorg, writeShellScriptBin, python3, awscli, wayland, wayland-protocols, valkyrie, zstd, profileBuild ? false, pkgs, patchelf, libv4l, openssl, cabal-install }:
 let
 
     /* Modify a stdenv so that it produces debug builds; that is,
@@ -29,9 +29,9 @@ let
     godot-haskell = haskellCallPkg ./submodules/godot-haskell/godot-haskell.nix { api-json = godot-api; profileBuild = profileBuild; godot-haskell-classgen = godot-haskell-classgen; };
     godot-haskell-plugin = haskellCallPkg ./addons/godot-haskell-plugin/godot-haskell-plugin.nix { devBuild = devBuild; onNixOS = onNixOS; godot = godot; godot-haskell = godot-haskell; profileBuild = profileBuild; };
 
-    Cabal = haskellCallPkgNoProfile ./submodules/cabal/Cabal/Cabal.nix { };
-    hackage-security = haskellPackages.hackage-security.override { Cabal = Cabal; };
-    cabal-install = haskellCallPkgNoProfile ./submodules/cabal/cabal-install/cabal-install.nix { Cabal = Cabal; hackage-security = hackage-security; };
+    #Cabal = haskellCallPkgNoProfile ./submodules/cabal/Cabal/Cabal.nix { };
+    #hackage-security = haskellPackages.hackage-security.override { Cabal = Cabal; };
+    #cabal-install = haskellCallPkgNoProfile ./submodules/cabal/cabal-install/cabal-install.nix { Cabal = Cabal; hackage-security = hackage-security; };
 
     ghc-version = ghc.version;
 
@@ -51,7 +51,7 @@ let
       echo "source ./utils/Helpers.sh && updateEmail" >> $out/bin/simula
       echo "mkdir -p log" >> $out/bin/simula
       echo "mkdir -p config" >> $out/bin/simula
-      echo "PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib \$(./utils/GetNixGL.sh) ${godot}/bin/godot.x11.opt.debug.64 -m 2>&1 | ${coreutils}/bin/tee ./log/output.file" >> $out/bin/simula
+      echo "PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) ${godot}/bin/godot.x11.opt.debug.64 -m 2>&1 | ${coreutils}/bin/tee ./log/output.file" >> $out/bin/simula
       echo "sed -in \"s/\$USER/anon/g\" ./log/output.file" >> $out/bin/simula
       echo "echo devBuldFalse >> ./log/output.file" >> $out/bin/simula
       echo "git rev-parse HEAD >> ./log/output.file" >> $out/bin/simula
@@ -248,10 +248,10 @@ let
     simula = stdenv.mkDerivation {
       name = "Simula";
       src = builtins.filterSource (path: type:
-           stdenv.lib.cleanSourceFilter path type                 # Necessary to avoid nix "out of memory" errors
-        && (! (stdenv.lib.hasSuffix ".import" (baseNameOf path))) # Nix shouldn't compare about *.imports and their assets
-        && (! (stdenv.lib.hasSuffix ".md5" (baseNameOf path)))    # "
-        && (! (stdenv.lib.hasSuffix ".stex" (baseNameOf path)))   # "
+           lib.cleanSourceFilter path type                 # Necessary to avoid nix "out of memory" errors
+        && (! (lib.hasSuffix ".import" (baseNameOf path))) # Nix shouldn't compare about *.imports and their assets
+        && (! (lib.hasSuffix ".md5" (baseNameOf path)))    # "
+        && (! (lib.hasSuffix ".stex" (baseNameOf path)))   # "
         && (baseNameOf (builtins.dirOf path) != ".import")        # "
         && (baseNameOf (builtins.dirOf path) != "log")            # Don't let log/* files confuse cachix
         && (baseNameOf (builtins.dirOf path) != "config")         # Don't let user config file alterations confuse cachix

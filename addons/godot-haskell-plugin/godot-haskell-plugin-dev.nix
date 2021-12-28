@@ -1,4 +1,4 @@
-{ mkDerivation, aeson, base, base64-bytestring, bytestring, clock
+{ mkDerivation, aeson, base, base64-bytestring, bytestring, clock, lib
 , colour, containers, directory, extra, http-client
 , http-client-tls, http-types, inline-c, iso8601-time, lens, linear
 , process, raw-strings-qq, stdenv, stm, text, time, unix, uuid
@@ -15,7 +15,7 @@ mkDerivation {
     stm text time unix uuid vector ordered-containers process-extras dhall hspec QuickCheck safe-exceptions io-streams
   ];
   homepage = "https://github.com/SimulaVR/Simula#readme";
-  license = stdenv.lib.licenses.asl20;
+  license = lib.licenses.asl20;
 
   doHaddock = false;
   doCheck = false;

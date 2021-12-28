@@ -1,7 +1,7 @@
 { pkgs ? import <nixpkgs> {}, stdenv, fetchFromGitHub, fetchpatch, meson, ninja, pkgconfig
 , wayland, libGL, wayland-protocols, libinput, libxkbcommon, pixman
 , xcbutilwm, libX11, libcap, xcbutilimage, xcbutilerrors, mesa_noglu
-, libpng, ffmpeg_4, libdrm
+, libpng, ffmpeg_4, libdrm, lib
 }:
 
 let
@@ -78,7 +78,7 @@ in stdenv.mkDerivation rec {
     done
   '';
 
-  meta = with stdenv.lib; {
+  meta = with lib; {
     description = "A modular Wayland compositor library";
     inherit (src.meta) homepage;
     license     = licenses.mit;

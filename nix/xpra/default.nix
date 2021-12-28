@@ -81,7 +81,7 @@ in buildPythonApplication rec {
     gappsWrapperArgs+=(
       --set XPRA_INSTALL_PREFIX "$out"
       --prefix LD_LIBRARY_PATH : ${libfakeXinerama}/lib
-      --prefix PATH : ${stdenv.lib.makeBinPath [ getopt xorgserver xauth which utillinux pulseaudio ]}
+      --prefix PATH : ${lib.makeBinPath [ getopt xorgserver xauth which utillinux pulseaudio ]}
     )
   '';
 
