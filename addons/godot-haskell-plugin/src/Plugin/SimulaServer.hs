@@ -115,7 +115,7 @@ getKeyboardAction gss keyboardShortcut =
     "zoomIn" -> zoomIn
     "terminateWindow" -> terminateWindow
     "reloadConfig" -> reloadConfig
-    "terminateSimula" -> terminateSimula
+    "terminateSimula" -> terminateSimula gss
     "cycleEnvironment" -> cycleEnvironment gss
     "cycleScene" -> cycleScene gss
     "launchAppLauncher" -> shellLaunch gss "./result/bin/synapse"
@@ -433,13 +433,13 @@ getKeyboardAction gss keyboardShortcut =
           atomically $ writeTVar (gss ^. gssMouseSensitivityScaler) (configuration ^. mouseSensitivityScaler)
         reloadConfig _ _ = return ()
 
-        terminateSimula :: SpriteLocation -> Bool -> IO ()
-        terminateSimula _ True = do
+        terminateSimula :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
+        terminateSimula gss _ True = do
           putStrLn "Terminating Simula.."
-          sceneTree <- getSingleton GodotSceneTree "SceneTree"
+          sceneTree <- G.get_tree gss
           G.quit sceneTree (-1)
           return ()
-        terminateSimula _ _ = return ()
+        terminateSimula _ _ _ = return ()
 
         cycleEnvironment :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
         cycleEnvironment gss _ True = do
