@@ -168,7 +168,7 @@ switchToNix() {
 switchToLocal() {
     cd ./addons/godot-haskell-plugin
     rm libgodot-haskell-plugin.so
-    ln -s ./dist-newstyle/build/x86_64-linux/ghc-8.10.7/godot-haskell-plugin-0.1.0.0/f/godot-haskell-plugin/build/godot-haskell-plugin/libgodot-haskell-plugin.so libgodot-haskell-plugin.so
+    ln -s  ./dist-newstyle/build/x86_64-linux/ghc-9.0.2/godot-haskell-plugin-0.1.0.0/f/godot-haskell-plugin/build/godot-haskell-plugin/libgodot-haskell-plugin.so libgodot-haskell-plugin.so
     cd -
 }
 

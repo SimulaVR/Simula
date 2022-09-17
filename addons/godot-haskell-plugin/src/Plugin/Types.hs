@@ -80,6 +80,11 @@ import System.IO.Streams.Internal
 import qualified Data.ByteString as B
 import System.IO.Streams.Text
 
+deriving instance Eq GodotWlrOutput
+deriving instance Eq GodotWlrXdgSurface
+deriving instance Eq GodotWlrXWaylandSurface
+deriving instance Eq GodotSpatial
+
 instance Show Transform where
   show tf = (show (_tfBasis tf)) ++ (" w/position: ") ++ (show (_tfPosition tf))
 
@@ -228,57 +233,58 @@ data LeapHand = LeapHand {
 -- We use TVar excessively since these datatypes must be retrieved from the
 -- scene graph (requiring IO)
 data GodotSimulaServer = GodotSimulaServer
-  { _gssObj                   :: GodotObject
-  , _gssWaylandDisplay        :: TVar GodotWaylandDisplay
-  , _gssWlrBackend            :: TVar GodotWlrBackend
-  , _gssWlrOutput             :: TVar GodotWlrOutput
-  , _gssWlrCompositor         :: TVar GodotWlrCompositor
-  , _gssWlrXdgShell           :: TVar GodotWlrXdgShell
-  , _gssWlrXWayland           :: TVar GodotWlrXWayland
-  , _gssWlrSeat               :: TVar GodotWlrSeat -- Probably make this a TVar since you have to find the node for this in the scene graph.
-  , _gssWlrDataDeviceManager  :: TVar GodotWlrDataDeviceManager
-  , _gssWlrKeyboard           :: TVar GodotWlrKeyboard -- "
-  , _gssViews                 :: TVar (M.Map SimulaView GodotSimulaViewSprite)
-  , _gssKeyboardFocusedSprite :: TVar (Maybe GodotSimulaViewSprite) -- <- Here
-  , _gssVisualServer          :: TVar GodotVisualServer
-  , _gssActiveCursorGSVS      :: TVar (Maybe GodotSimulaViewSprite)
-  , _gssCursorTexture         :: TVar (Maybe GodotTexture)
-  , _gssScreenshotCursorTexture  :: TVar (Maybe GodotTexture)
-  , _gssHMDRayCast            :: TVar (GodotRayCast)
-  , _gssKeyboardGrabbedSprite :: TVar (Maybe (GodotSimulaViewSprite, Float)) -- We encode both the gsvs and its original distance from the user
-  , _gssXWaylandDisplay       :: TVar (Maybe String) -- For appLaunch
-  , _gssOriginalEnv           :: [(String, String)]
-  , _gssFreeChildren          :: TVar (M.Map GodotWlrXWaylandSurface GodotSimulaViewSprite)
-  , _gssConfiguration         :: TVar Configuration
-  , _gssKeyboardShortcuts     :: TVar KeyboardShortcuts
-  , _gssKeyboardRemappings    :: TVar KeyboardRemappings
-  , _gssAxisScrollSpeed       :: TVar Double
-  , _gssMouseSensitivityScaler :: TVar Double
-  , _gssStartingApps          :: TVar [String]
-  , _gssWorldEnvironment      :: TVar (GodotWorldEnvironment, String)
-  , _gssEnvironmentTextures   :: TVar [String]
-  , _gssStartingAppTransform  :: TVar (Maybe GodotTransform)
-  , _gssPid                   :: String
-  , _gssStartingAppPids       :: TVar (M.Map ProcessID [String])
-  , _gssGrab                  :: TVar (Maybe Grab)
-  , _gssDiffMap               :: TVar (M.Map GodotSpatial GodotTransform)
-  , _gssWorkspaces            :: Vector GodotSpatial
-  , _gssWorkspace             :: TVar (GodotSpatial, String)
-  , _gssWorkspacePersistent   :: TVar GodotSpatial
-  , _gssHUD                   :: TVar HUD
-  , _gssScenes                :: TVar [String]
-  , _gssScene                 :: TVar (Maybe (String, GodotNode))
-  , _gssWasdInitialRotation   :: TVar Float
-  , _gssWasdMode              :: TVar Bool
-  , _gssCanvasAR              :: TVar CanvasAR
-  , _gssScreenRecorder        :: TVar (Maybe ProcessHandle)
-  , _gssLeapMotion            :: TVar GodotLeapMotion
-  , _gssDampSensitivity       :: TVar DampSensitivity
+  { _gssObj                     :: GodotObject
+  , _gssWaylandDisplay          :: TVar GodotWaylandDisplay
+  , _gssWlrBackend              :: TVar GodotWlrBackend
+  , _gssWlrOutput               :: TVar GodotWlrOutput
+  , _gssWlrCompositor           :: TVar GodotWlrCompositor
+  , _gssWlrXdgShell             :: TVar GodotWlrXdgShell
+  , _gssWlrXWayland             :: TVar GodotWlrXWayland
+  , _gssWlrSeat                 :: TVar GodotWlrSeat -- Probably make this a TVar since you have to find the node for this in the scene graph.
+  , _gssWlrDataDeviceManager    :: TVar GodotWlrDataDeviceManager
+  , _gssWlrKeyboard             :: TVar GodotWlrKeyboard -- "
+  , _gssViews                   :: TVar (M.Map SimulaView GodotSimulaViewSprite)
+  , _gssKeyboardFocusedSprite   :: TVar (Maybe GodotSimulaViewSprite) -- <- Here
+  , _gssVisualServer            :: TVar GodotVisualServer
+  , _gssActiveCursorGSVS        :: TVar (Maybe GodotSimulaViewSprite)
+  , _gssCursorTexture           :: TVar (Maybe GodotTexture)
+  , _gssScreenshotCursorTexture :: TVar (Maybe GodotTexture)
+  , _gssHMDRayCast              :: TVar (GodotRayCast)
+  , _gssKeyboardGrabbedSprite   :: TVar (Maybe (GodotSimulaViewSprite, Float)) -- We encode both the gsvs and its original distance from the user
+  , _gssXWaylandDisplay         :: TVar (Maybe String) -- For appLaunch
+  , _gssOriginalEnv             :: [(String, String)]
+  , _gssFreeChildren            :: TVar (M.Map GodotWlrXWaylandSurface GodotSimulaViewSprite)
+  , _gssConfiguration           :: TVar Configuration
+  , _gssKeyboardShortcuts       :: TVar KeyboardShortcuts
+  , _gssKeyboardRemappings      :: TVar KeyboardRemappings
+  , _gssAxisScrollSpeed         :: TVar Double
+  , _gssMouseSensitivityScaler  :: TVar Double
+  , _gssStartingApps            :: TVar [String]
+  , _gssWorldEnvironment        :: TVar (GodotWorldEnvironment, String)
+  , _gssEnvironmentTextures     :: TVar [String]
+  , _gssStartingAppTransform    :: TVar (Maybe GodotTransform)
+  , _gssPid                     :: String
+  , _gssStartingAppPids         :: TVar (M.Map ProcessID [String])
+  , _gssGrab                    :: TVar (Maybe Grab)
+  , _gssDiffMap                 :: TVar (M.Map GodotSpatial GodotTransform)
+  , _gssWorkspaces              :: Vector GodotSpatial
+  , _gssWorkspace               :: TVar (GodotSpatial, String)
+  , _gssWorkspacePersistent     :: TVar GodotSpatial
+  , _gssHUD                     :: TVar HUD
+  , _gssScenes                  :: TVar [String]
+  , _gssScene                   :: TVar (Maybe (String, GodotNode))
+  , _gssWasdInitialRotation     :: TVar Float
+  , _gssWasdMode                :: TVar Bool
+  , _gssCanvasAR                :: TVar CanvasAR
+  , _gssScreenRecorder          :: TVar (Maybe ProcessHandle)
+  , _gssLeapMotion              :: TVar GodotLeapMotion
+  , _gssDampSensitivity         :: TVar DampSensitivity
+  , _gssKeyboardModifiersActive :: TVar (Maybe Modifiers)
   }
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
+  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
@@ -515,11 +521,6 @@ newNS'' constr clsName args url = do
 -- G.new :: GodotNativeScript -> ([Variant 'GodotTy] -> IO GodotObject)
 -- G.asClass
 -- GodotResource -> GodotNativeScript -> GodotObject -> Godot
-
-deriving instance Eq GodotWlrOutput
-deriving instance Eq GodotWlrXdgSurface
-deriving instance Eq GodotWlrXWaylandSurface
-deriving instance Eq GodotSpatial
 
 -- Unused/untested.
 getGSVSFromEitherSurface :: GodotSimulaServer -> Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO (Maybe GodotSimulaViewSprite)

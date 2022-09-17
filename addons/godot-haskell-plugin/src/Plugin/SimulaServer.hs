@@ -94,6 +94,8 @@ getKeyboardAction gss keyboardShortcut =
     "moveCursor" -> moveCursor
     "clickLeft" -> leftClick
     "clickRight" -> rightClick
+    "scrollUp" -> scrollUp gss
+    "scrollDown" -> scrollDown gss
     "launchTerminal" -> shellLaunch gss "./result/bin/xfce4-terminal"
     "launchXrpa" -> launchXpra' gss
     "toggleGrabMode" -> toggleGrabMode'
@@ -178,10 +180,12 @@ getKeyboardAction gss keyboardShortcut =
 
         leftClick :: SpriteLocation -> Bool -> IO ()
         leftClick (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          updateCursorStateAbsolute gsvs sx sy
-          sendWlrootsMotion gsvs
+          putStrLn $ "leftClick True"
+          -- updateCursorStateAbsolute gsvs sx sy
+          -- sendWlrootsMotion gsvs
           processClickEvent' gsvs (Button True 1) coords -- BUTTON_LEFT = 1
         leftClick (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) False = do
+          putStrLn $ "leftClick False"
           processClickEvent' gsvs (Button False 1) coords -- BUTTON_LEFT = 1
         leftClick _ _ = return ()
 
@@ -194,6 +198,21 @@ getKeyboardAction gss keyboardShortcut =
           processClickEvent' gsvs (Button False 2) coords -- BUTTON_RIGHT = 2
         rightClick _ _ = return ()
 
+        scrollUp :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
+        scrollUp gss (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+          wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+          axisScrollSpeed <- readTVarIO (gss ^. gssAxisScrollSpeed)
+          G.pointer_notify_axis_continuous wlrSeat 0 (realToFrac axisScrollSpeed)
+        scrollUp _ _ _ = return ()
+
+        scrollDown :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
+        scrollDown gss (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+          wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+          axisScrollSpeed <- readTVarIO (gss ^. gssAxisScrollSpeed)
+          G.pointer_notify_axis_continuous wlrSeat 0 (-1.0 * (realToFrac axisScrollSpeed))
+        scrollDown _ _ _ = return ()
+
+  
         grabWindow :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
         grabWindow gss (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
           keyboardGrabInitiate gss (GrabWindow gsvs undefined)
@@ -580,6 +599,17 @@ isMask keyOrMask = elem keyOrMask [ G.KEY_MASK_SHIFT
                                   , G.KEY_MASK_KPAD
                                   , G.KEY_MASK_GROUP_SWITCH ]
 
+isMouseButton :: Int -> Bool
+isMouseButton code = elem code [ G.KEY_BUTTON_LEFT
+                               , G.KEY_BUTTON_RIGHT
+                               , G.KEY_BUTTON_MIDDLE
+                               , G.KEY_BUTTON_XBUTTON1
+                               , G.KEY_BUTTON_XBUTTON2
+                               , G.KEY_BUTTON_WHEEL_UP
+                               , G.KEY_BUTTON_WHEEL_DOWN
+                               , G.KEY_BUTTON_WHEEL_LEFT
+                               , G.KEY_BUTTON_WHEEL_RIGHT ]
+
 separateModifiersFromKeycodes :: [Int] -> ([Modifiers], [Keycode])
 separateModifiersFromKeycodes allKeys = let
   modifiers = filter isMask allKeys
@@ -648,7 +678,7 @@ instance NativeScript GodotSimulaServer where
 process :: GodotSimulaServer -> [GodotVariant] -> IO ()
 process gss [deltaGV] = do
   delta <- fromGodotVariant deltaGV :: IO Float
-  processWASDMovement gss delta
+  -- processWASDMovement gss delta
 
   -- Update i3status HUD
   hud <- readTVarIO (gss ^. gssHUD)
@@ -1010,6 +1040,8 @@ initGodotSimulaServer obj = do
                                    } 
       gssDampSensitivity' <- newTVarIO (defaultDampSensitivity) :: IO (TVar DampSensitivity)
 
+      gssKeyboardModifiersActive' <- newTVarIO (Nothing) :: IO (TVar (Maybe Modifiers))
+
       let gss = GodotSimulaServer {
         _gssObj                   = obj                       :: GodotObject
       , _gssWaylandDisplay        = gssWaylandDisplay'        :: TVar GodotWaylandDisplay
@@ -1057,6 +1089,7 @@ initGodotSimulaServer obj = do
       , _gssScreenRecorder        = gssScreenRecorder'        :: TVar (Maybe ProcessHandle)
       , _gssLeapMotion            = gssLeapMotion'            :: TVar GodotLeapMotion
       , _gssDampSensitivity       = gssDampSensitivity'       :: TVar DampSensitivity
+      , _gssKeyboardModifiersActive = gssKeyboardModifiersActive' :: TVar (Maybe Modifiers)
       }
   return gss
   where getStartingAppsStr :: Maybe String -> String
@@ -1189,27 +1222,55 @@ _input gss [eventGV] = do
                      Nothing -> return ()
                      (Just gsvs) -> do updateCursorStateRelative gsvs (dx * (realToFrac mouseSensitivityScaler)) (dy * (realToFrac mouseSensitivityScaler))
                                        sendWlrootsMotion gsvs
-  whenM (event `isClass` "InputEventMouseButton") $ do
-    let event' = GodotInputEventMouseButton (coerce event)
-    pressed <- G.is_pressed event'
-    button <- G.get_button_index event'
-    wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
-    axisScrollSpeed <- readTVarIO (gss ^. gssAxisScrollSpeed)
-    case (maybeActiveGSVS, button) of
-         (Just gsvs, G.BUTTON_WHEEL_UP) -> G.pointer_notify_axis_continuous wlrSeat 0 (realToFrac axisScrollSpeed)
+  -- whenM (event `isClass` "InputEventMouseButton") $ do
+  --   let event' = GodotInputEventMouseButton (coerce event)
+  --   pressed <- G.is_pressed event'
+  --   button <- G.get_button_index event'
+  --   wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+  --   axisScrollSpeed <- readTVarIO (gss ^. gssAxisScrollSpeed)
+  --   case (maybeActiveGSVS, button) of
+  --        (Just gsvs, G.BUTTON_WHEEL_UP) -> G.pointer_notify_axis_continuous wlrSeat 0 (realToFrac axisScrollSpeed)
     
-         (Just gsvs, G.BUTTON_WHEEL_DOWN) -> G.pointer_notify_axis_continuous wlrSeat 0 (-1.0 * (realToFrac axisScrollSpeed))
-         (Just gsvs, _) -> do
-           screenshotMode <- readTVarIO (gsvs ^. gsvsScreenshotMode)
-           case screenshotMode of
-             False -> do activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
-                         processClickEvent' gsvs (Button pressed button) activeGSVSCursorPos
-             True -> do activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
-                        case pressed of
-                          True -> do atomically $ writeTVar (gsvs ^. gsvsScreenshotCoords) (Just activeGSVSCursorPos, Nothing)
-                          False -> do screenshotCoords@(origin, end) <- readTVarIO (gsvs ^. gsvsScreenshotCoords)
-                                      atomically $ writeTVar (gsvs ^. gsvsScreenshotCoords) (origin, Just activeGSVSCursorPos)
-         (Nothing, _) -> return ()
+  --        (Just gsvs, G.BUTTON_WHEEL_DOWN) -> G.pointer_notify_axis_continuous wlrSeat 0 (-1.0 * (realToFrac axisScrollSpeed))
+  --        (Just gsvs, _) -> do
+  --          screenshotMode <- readTVarIO (gsvs ^. gsvsScreenshotMode)
+  --          case screenshotMode of
+  --            False -> do activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+  --                        processClickEvent' gsvs (Button pressed button) activeGSVSCursorPos
+  --            True -> do activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+  --                       case pressed of
+  --                         True -> do atomically $ writeTVar (gsvs ^. gsvsScreenshotCoords) (Just activeGSVSCursorPos, Nothing)
+  --                         False -> do screenshotCoords@(origin, end) <- readTVarIO (gsvs ^. gsvsScreenshotCoords)
+  --                                     atomically $ writeTVar (gsvs ^. gsvsScreenshotCoords) (origin, Just activeGSVSCursorPos)
+  --        (Nothing, _) -> return ()
+
+  let event' = GodotInputEventMouseButton (coerce event)
+  button <- G.get_button_index event'
+  pressed <- G.is_pressed event'
+  maybeModifiers <- readTVarIO (gss ^. gssKeyboardModifiersActive)
+  let modifiers = Data.Maybe.fromMaybe 0 maybeModifiers
+  -- TODO: activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+
+  case button of
+       -- G.BUTTON_LEFT -> do
+       --   screenshotMode <- readTVarIO (gsvs ^. gsvsScreenshotMode)
+       --   case screenshotMode of
+       --        False -> processKeypress gss modifiers G.KEY_BUTTON_LEFT pressed
+       --        True -> case pressed of
+       --                     True -> do atomically $ writeTVar (gsvs ^. gsvsScreenshotCoords) (Just activeGSVSCursorPos, Nothing)
+       --                     False -> do screenshotCoords@(origin, end) <- readTVarIO (gsvs ^. gsvsScreenshotCoords)
+       --                                 atomically $ writeTVar (gsvs ^. gsvsScreenshotCoords) (origin, Just activeGSVSCursorPos)
+       G.BUTTON_LEFT        -> processKeypress gss modifiers G.KEY_BUTTON_LEFT pressed
+       G.BUTTON_RIGHT       -> processKeypress gss modifiers G.KEY_BUTTON_RIGHT pressed
+       G.BUTTON_MIDDLE      -> processKeypress gss modifiers G.KEY_BUTTON_MIDDLE pressed
+       G.BUTTON_XBUTTON1    -> processKeypress gss modifiers G.KEY_BUTTON_XBUTTON1 pressed
+       G.BUTTON_XBUTTON2    -> processKeypress gss modifiers G.KEY_BUTTON_XBUTTON2 pressed
+       G.BUTTON_WHEEL_UP    -> processKeypress gss modifiers G.KEY_BUTTON_WHEEL_UP pressed
+       G.BUTTON_WHEEL_DOWN  -> processKeypress gss modifiers G.KEY_BUTTON_WHEEL_DOWN pressed
+       G.BUTTON_WHEEL_LEFT  -> processKeypress gss modifiers G.KEY_BUTTON_WHEEL_LEFT pressed
+       G.BUTTON_WHEEL_RIGHT -> processKeypress gss modifiers G.KEY_BUTTON_WHEEL_RIGHT pressed
+       _ -> putStrLn $ "Unknown button: " ++ (show button)
+  
 
 updateCursorStateRelative :: GodotSimulaViewSprite -> Float -> Float -> IO ()
 updateCursorStateRelative gsvs dx dy = do
@@ -1308,12 +1369,40 @@ _on_simula_shortcut :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_simula_shortcut gss [scancodeWithModifiers', isPressed'] = do
   scancodeWithModifiers <- fromGodotVariant scancodeWithModifiers' :: IO Int
   isPressed <- fromGodotVariant isPressed' :: IO Bool
+  let modifiers = (foldl (.|.) 0 (extractMods scancodeWithModifiers))
+  let keycode = (scancodeWithModifiers .&. G.KEY_CODE_MASK) :: Int
+  processKeypress gss modifiers keycode isPressed
+
+  -- TEST CODE
+  -- putStrLn $ "isPressed: " ++ (show isPressed)
+  -- putStrLn $ "modifiers: " ++ (show modifiers)
+  -- putStrLn $ "keycode: " ++ (show keycode)
+
+  -- let testKeys = (foldl (.|.) 0 (extractTestKeys scancodeWithModifiers))
+  -- let testKeys' = "testKeys': " ++ (show (extractTestKeys scancodeWithModifiers))
+  -- putStrLn $ "testKeys: " ++ (show testKeys)
+  -- putStrLn $ "G.KEY_A: " ++ (show (G.KEY_A))
+  -- putStrLn $ "G.KEY_B: " ++ (show (G.KEY_B))
+  -- putStrLn $ "G.KEY_BUTTON_LEFT: " ++ (show (G.KEY_BUTTON_LEFT))
+  -- putStrLn $ "G.KEY_CONTROL_L: " ++ (show (G.KEY_CONTROL_L))
+  -- putStrLn $ "G.KEY_MASK_CTRL: " ++ (show (G.KEY_MASK_CTRL))
+  
+  where extractIf sc mod = if (sc .&. mod) /= 0 then [mod] else []
+
+        extractMods :: Int -> [Int]
+        extractMods sc = concatMap (extractIf sc) [G.KEY_MASK_SHIFT, G.KEY_MASK_ALT, G.KEY_MASK_META, G.KEY_MASK_CTRL, G.KEY_MASK_CMD, G.KEY_MASK_KPAD, G.KEY_MASK_GROUP_SWITCH]
+        extractMods _ = []
+
+        extractTestKeys :: Int -> [Int]
+        extractTestKeys sc = concatMap (extractIf sc) [G.KEY_A, G.KEY_B, G.KEY_MASK_ALT] 
+
+processKeypress :: GodotSimulaServer -> Modifiers -> Keycode -> Bool -> IO ()
+processKeypress gss modifiers keycode isPressed = do
+  -- putStrLn $ "processKeypress"
   wlrKeyboard <- readTVarIO $ (gss ^. gssWlrKeyboard)
   keyboardShortcuts <- readTVarIO (gss ^. gssKeyboardShortcuts)
   keyboardRemappings <- readTVarIO (gss ^. gssKeyboardRemappings)
   maybeHMDLookAtSprite <- getHMDLookAtSprite gss
-  let modifiers = (foldl (.|.) 0 (extractMods scancodeWithModifiers))
-  let keycode = (scancodeWithModifiers .&. G.KEY_CODE_MASK) :: Int
   let maybeKeyboardAction = M.lookup (modifiers, keycode) keyboardShortcuts
   let maybeKeycodeRemapping = M.lookup keycode keyboardRemappings
 
@@ -1321,42 +1410,50 @@ _on_simula_shortcut gss [scancodeWithModifiers', isPressed'] = do
         (Just remappedKeycode) -> remappedKeycode
         Nothing                -> keycode
 
-  wasdMode <- readTVarIO (gss ^. gssWasdMode)
+  putStrLn $ "modifiers: " ++ (show modifiers)
+  -- putStrLn $ "keycode': " ++ (show keycode')
 
-  case maybeKeyboardAction of
-    Just action -> action maybeHMDLookAtSprite isPressed
-    Nothing -> case (isPressed, wasdMode) of
-                 (False, False) -> do if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
-                                      keyboardGrabLetGo' gss maybeHMDLookAtSprite -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
-                                      keyboardGrabLetGo gss (GrabWindows undefined) -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
-                 (True, False) -> do if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
-                 (False, True)  -> do case keycode' of
-                                        G.KEY_W -> actionRelease gss "move_forward"
-                                        G.KEY_S -> actionRelease gss "move_backward"
-                                        G.KEY_A -> actionRelease gss "move_left"
-                                        G.KEY_D -> actionRelease gss "move_right"
-                                        G.KEY_SPACE -> actionRelease gss "move_up"
-                                        G.KEY_CONTROL_L -> actionRelease gss "move_down"
-                                        _ -> G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
-                 (True, True)  -> do case keycode' of
-                                        G.KEY_W -> actionPress gss "move_forward"
-                                        G.KEY_S -> actionPress gss "move_backward"
-                                        G.KEY_A -> actionPress gss "move_left"
-                                        G.KEY_D -> actionPress gss "move_right"
-                                        G.KEY_SPACE -> actionPress gss "move_up"
-                                        G.KEY_CONTROL_L -> actionPress gss "move_down"
-                                        _ -> G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
+  wasdMode <- readTVarIO (gss ^. gssWasdMode)
+  let isMouseCode = isMouseButton keycode'
+
+  case (maybeKeyboardAction, isMouseCode) of
+    (Just action, _) -> do putStrLn $ "action detected"
+                           action maybeHMDLookAtSprite isPressed
+    (Nothing, False) -> case (isPressed, wasdMode) of
+                             (False, False) -> do if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
+                                                  keyboardGrabLetGo' gss maybeHMDLookAtSprite -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
+                                                  keyboardGrabLetGo gss (GrabWindows undefined) -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
+                                                  putStrLn $ "A"
+                             (True, False) -> do if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
+                             (False, True)  -> do case keycode' of
+                                                     G.KEY_W -> actionRelease gss "move_forward"
+                                                     G.KEY_S -> actionRelease gss "move_backward"
+                                                     G.KEY_A -> actionRelease gss "move_left"
+                                                     G.KEY_D -> actionRelease gss "move_right"
+                                                     G.KEY_SPACE -> actionRelease gss "move_up"
+                                                     G.KEY_CONTROL_L -> actionRelease gss "move_down"
+                                                     _ -> do
+                                                       putStrLn $ "B"
+                                                       G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
+                             (True, True)  -> do case keycode' of
+                                                     G.KEY_W -> actionPress gss "move_forward"
+                                                     G.KEY_S -> actionPress gss "move_backward"
+                                                     G.KEY_A -> actionPress gss "move_left"
+                                                     G.KEY_D -> actionPress gss "move_right"
+                                                     G.KEY_SPACE -> actionPress gss "move_up"
+                                                     G.KEY_CONTROL_L -> actionPress gss "move_down"
+                                                     _ -> do putStrLn $ "C"
+                                                             G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
+    (Nothing, True) -> putStrLn $ "Mouse code detected, so not doing anything"
+
+  atomically $ writeTVar (gss ^. gssKeyboardModifiersActive) (Just modifiers)
+
 
   where keyboardGrabLetGo' :: GodotSimulaServer -> Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates) -> IO ()
         keyboardGrabLetGo' gss (Just (gsvs, _)) = do keyboardGrabLetGo gss (GrabWindow gsvs undefined)
         keyboardGrabLetGo' _ _ = return ()
 
-        extractMods :: Int -> [Int]
-        extractMods sc = concatMap (extractIf sc) [G.KEY_MASK_SHIFT, G.KEY_MASK_ALT, G.KEY_MASK_META, G.KEY_MASK_CTRL, G.KEY_MASK_CMD, G.KEY_MASK_KPAD, G.KEY_MASK_GROUP_SWITCH]
-        extractIf sc mod = if (sc .&. mod) /= 0 then [mod] else []
-
         keyNull = 0
-extractMods _ = []
 
 launchXpra :: GodotSimulaServer -> IO ()
 launchXpra gss = do

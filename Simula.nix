@@ -12,7 +12,7 @@ let
       };
     stdenvRes = if devBuild then (keepDebugInfo stdenv) else stdenv;
 
-    xwayland-dev = callPackage ./nix/xwayland/xwayland.nix { stdenv = stdenvRes; };
+    xwayland-dev = xwayland.override { stdenv = stdenvRes; };
     libxcb-dev = xorg.libxcb.override { stdenv = stdenvRes; };
 	  wayland-dev = wayland.override { stdenv = stdenvRes; };
     wayland-protocols-dev = wayland-protocols.override { stdenv = stdenvRes; };

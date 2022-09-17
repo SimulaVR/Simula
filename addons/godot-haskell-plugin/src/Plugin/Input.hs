@@ -522,4 +522,29 @@ getScancode "KEY_MASK_CTRL"         =  Just G.KEY_MASK_CTRL
 getScancode "KEY_MASK_CMD"          =  Just G.KEY_MASK_CMD
 getScancode "KEY_MASK_KPAD"         =  Just G.KEY_MASK_KPAD
 getScancode "KEY_MASK_GROUP_SWITCH" =  Just G.KEY_MASK_GROUP_SWITCH
+
+-- Add custom codes for mouse buttons (to incorporate them into our keyboard
+-- shortcut infrastructure)
+getScancode "KEY_BUTTON_LEFT"        = Just G.KEY_BUTTON_LEFT
+getScancode "KEY_BUTTON_RIGHT"       = Just G.KEY_BUTTON_RIGHT
+getScancode "KEY_BUTTON_MIDDLE"      = Just G.KEY_BUTTON_MIDDLE
+getScancode "KEY_BUTTON_XBUTTON1"    = Just G.KEY_BUTTON_XBUTTON1
+getScancode "KEY_BUTTON_XBUTTON2"    = Just G.KEY_BUTTON_XBUTTON2
+getScancode "KEY_BUTTON_WHEEL_UP"    = Just G.KEY_BUTTON_WHEEL_UP
+getScancode "KEY_BUTTON_WHEEL_DOWN"  = Just G.KEY_BUTTON_WHEEL_DOWN
+getScancode "KEY_BUTTON_WHEEL_LEFT"  = Just G.KEY_BUTTON_WHEEL_LEFT
+getScancode "KEY_BUTTON_WHEEL_RIGHT" = Just G.KEY_BUTTON_WHEEL_RIGHT
+
 getScancode _                       =  Nothing
+
+-- See https://docs.godotengine.org/en/stable/classes/class_@globalscope.html?highlight=BUTTON_LEFT#enumerations
+getButtonScancode :: Int -> Int
+getButtonScancode G.BUTTON_LEFT        = G.KEY_BUTTON_LEFT
+getButtonScancode G.BUTTON_RIGHT       = G.KEY_BUTTON_RIGHT
+getButtonScancode G.BUTTON_MIDDLE      = G.KEY_BUTTON_MIDDLE
+getButtonScancode G.BUTTON_XBUTTON1    = G.KEY_BUTTON_XBUTTON1
+getButtonScancode G.BUTTON_XBUTTON2    = G.KEY_BUTTON_XBUTTON2
+getButtonScancode G.BUTTON_WHEEL_UP    = G.KEY_BUTTON_WHEEL_UP
+getButtonScancode G.BUTTON_WHEEL_DOWN  = G.KEY_BUTTON_WHEEL_DOWN
+getButtonScancode G.BUTTON_WHEEL_LEFT  = G.KEY_BUTTON_WHEEL_LEFT
+getButtonScancode G.BUTTON_WHEEL_RIGHT = G.KEY_BUTTON_WHEEL_RIGHT
