@@ -202,6 +202,7 @@ installSimula() {
     checkInstallCachix
     cachix use simula
     curl https://www.wolframcloud.com/obj/george.w.singer/installMessage
+    echo "Downloading nixpkgs, this will take a while."
     if [ -z $1 ]; then
       NIXPKGS_ALLOW_UNFREE=1 nix-build -Q default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
       switchToNix
