@@ -1,8 +1,6 @@
 import (builtins.fetchGit {
-  url = "https://github.com/SimulaVR/nixpkgs.git";
-  rev = "acffaa439d445bf55faa1e2b5de3cadbdc9fbda7"; # needed for NUC
-  # rev = "7110179c41e0a866b05187efcbfdac5035d5fb03";
-  ref = "refs/heads/nuc";
-  name = "nixpkgs-unstable-custom-nuc";
+  url = "https://github.com/NixOS/nixpkgs.git";
+  rev = "1e383aada51b416c6c27d4884d2e258df201bc11";
+  ref = "refs/heads/nixpkgs-unstable";
+  name = "nixpkgs-unstable";
 })
-

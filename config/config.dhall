@@ -7,12 +7,12 @@ let Configuration =
     --   "launchHMDWebcam" to launch the HMD webcam view
     --   "launchUsageInstructions" to launch Simula's usage instructions
     -- To omit launching an app in a spot, use `None Text` instead of `Some "cmd"`.
-  {   _backend = "OpenVR" -- Supported options: "OpenVR", "OpenXR"
+  {   _backend = "OpenXR" -- Supported options: "OpenVR", "OpenXR"
   ,   _startingApps = { _center = Some "./result/bin/xfce4-terminal"
-                      , _right  = Some "launchUsageInstructions"
-                      , _bottom = Some "launchHMDWebcam"
-                      , _left   = Some "launchTerminal"
-                      , _top    = Some "launchTerminal"
+                      , _right  = None Text
+                      , _bottom = None Text
+                      , _left   = None Text
+                      , _top    = None Text
                       }
   , _defaultWindowResolution = Some { _1 = 900, _2 = 900 } -- New windows default this (typically square) resolution
                                                            -- Set to `None { _1 : Natural, _2 : Natural }` for windows to launch with their default (typically non-square) resolutions
