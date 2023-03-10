@@ -1223,36 +1223,32 @@ _input gss [eventGV] = do
                      Nothing -> return ()
                      (Just gsvs) -> do updateCursorStateRelative gsvs (dx * (realToFrac mouseSensitivityScaler)) (dy * (realToFrac mouseSensitivityScaler))
                                        sendWlrootsMotion gsvs
-  -- whenM (event `isClass` "InputEventMouseButton") $ do
-  --   let event' = GodotInputEventMouseButton (coerce event)
-  --   pressed <- G.is_pressed event'
-  --   button <- G.get_button_index event'
-  --   wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
-  --   axisScrollSpeed <- readTVarIO (gss ^. gssAxisScrollSpeed)
-  --   case (maybeActiveGSVS, button) of
-  --        (Just gsvs, G.BUTTON_WHEEL_UP) -> G.pointer_notify_axis_continuous wlrSeat 0 (realToFrac axisScrollSpeed)
-    
-  --        (Just gsvs, G.BUTTON_WHEEL_DOWN) -> G.pointer_notify_axis_continuous wlrSeat 0 (-1.0 * (realToFrac axisScrollSpeed))
-  --        (Just gsvs, _) -> do
-  --          screenshotMode <- readTVarIO (gsvs ^. gsvsScreenshotMode)
-  --          case screenshotMode of
-  --            False -> do activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
-  --                        processClickEvent' gsvs (Button pressed button) activeGSVSCursorPos
-  --            True -> do activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
-  --                       case pressed of
-  --                         True -> do atomically $ writeTVar (gsvs ^. gsvsScreenshotCoords) (Just activeGSVSCursorPos, Nothing)
-  --                         False -> do screenshotCoords@(origin, end) <- readTVarIO (gsvs ^. gsvsScreenshotCoords)
-  --                                     atomically $ writeTVar (gsvs ^. gsvsScreenshotCoords) (origin, Just activeGSVSCursorPos)
-  --        (Nothing, _) -> return ()
+  whenM (event `isClass` "InputEventMouseButton") $ do
+    let event' = GodotInputEventMouseButton (coerce event)
+    pressed <- G.is_pressed event'
+    button <- G.get_button_index event'
+    wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+    axisScrollSpeed <- readTVarIO (gss ^. gssAxisScrollSpeed)
+    case (maybeActiveGSVS, button) of
+         (Just gsvs, G.BUTTON_WHEEL_UP) -> G.pointer_notify_axis_continuous wlrSeat 0 (realToFrac axisScrollSpeed)
+         (Just gsvs, G.BUTTON_WHEEL_DOWN) -> G.pointer_notify_axis_continuous wlrSeat 0 (-1.0 * (realToFrac axisScrollSpeed))
+         (Just gsvs, _) -> do
+           putStrLn $ "Mouse event button: " ++ show button
+           screenshotMode <- readTVarIO (gsvs ^. gsvsScreenshotMode)
+           case screenshotMode of
+             False -> do activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+                         processClickEvent' gsvs (Button pressed button) activeGSVSCursorPos
+             True -> do activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+                        case pressed of
+                          True -> do atomically $ writeTVar (gsvs ^. gsvsScreenshotCoords) (Just activeGSVSCursorPos, Nothing)
+                          False -> do screenshotCoords@(origin, end) <- readTVarIO (gsvs ^. gsvsScreenshotCoords)
+                                      atomically $ writeTVar (gsvs ^. gsvsScreenshotCoords) (origin, Just activeGSVSCursorPos)
+         (Nothing, _) -> return ()
 
-  let event' = GodotInputEventMouseButton (coerce event)
-  button <- G.get_button_index event'
-  pressed <- G.is_pressed event'
-  maybeModifiers <- readTVarIO (gss ^. gssKeyboardModifiersActive)
-  let modifiers = Data.Maybe.fromMaybe 0 maybeModifiers
-  -- TODO: activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+    maybeModifiers <- readTVarIO (gss ^. gssKeyboardModifiersActive)
+    let modifiers = Data.Maybe.fromMaybe 0 maybeModifiers
 
-  case button of
+    case button of
        -- G.BUTTON_LEFT -> do
        --   screenshotMode <- readTVarIO (gsvs ^. gsvsScreenshotMode)
        --   case screenshotMode of
@@ -1445,7 +1441,7 @@ processKeypress gss modifiers keycode isPressed = do
                                                      G.KEY_CONTROL_L -> actionPress gss "move_down"
                                                      _ -> do putStrLn $ "C"
                                                              G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
-    (Nothing, True) -> putStrLn $ "Mouse code detected, so not doing anything"
+    (Nothing, True) -> return ()
 
   atomically $ writeTVar (gss ^. gssKeyboardModifiersActive) (Just modifiers)
 
