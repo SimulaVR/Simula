@@ -12,7 +12,7 @@ let
       };
     stdenvRes = if devBuild then (keepDebugInfo stdenv) else stdenv;
 
-    xwayland-dev = callPackage ./nix/xwayland/xwayland.nix { stdenv = stdenvRes; };
+    xwayland-dev = xwayland.override { stdenv = stdenvRes; };
     libxcb-dev = xorg.libxcb.override { stdenv = stdenvRes; };
 	  wayland-dev = wayland.override { stdenv = stdenvRes; };
     wayland-protocols-dev = wayland-protocols.override { stdenv = stdenvRes; };
@@ -35,12 +35,9 @@ let
 
     ghc-version = ghc.version;
 
-    rr = callPackage ./nix/rr/unstable.nix {};
-    libleak = callPackage ./nix/libleak/libleak.nix {};
 
     i3status = callPackage ./submodules/i3status/i3status.nix {};
 
-    monado = callPackage ./submodules/monado/monado.nix {};
 
     devBuildFalse = ''
       cp ./utils/GetNixGL.sh $out/bin/GetNixGL.sh
@@ -64,12 +61,6 @@ let
     devBuildTrue = ''
       cp ./utils/GetNixGL.sh $out/bin/GetNixGL.sh
 
-      # simula_local_monado
-      echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local_monado
-      echo "mkdir -p log" >> $out/bin/simula_local_monado
-      echo "mkdir -p config" >> $out/bin/simula_local_monado
-      echo "XR_RUNTIME_JSON=./result/share/openxr_monado.json XRT_LOG=trace XRT_COMPOSITOR_LOG=trace PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:${libv4l}/lib \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_local_monado
-      chmod +x $out/bin/simula_local_monado
 
       # simula_local
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local
@@ -92,25 +83,13 @@ let
       echo "GHCRTS='-hc -p' PROFILE=1 PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_local_profile
       chmod +x $out/bin/simula_local_profile
 
-      # simula_local_libleak
-      echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local_libleak
-      echo "mkdir -p log" >> $out/bin/simula_local_libleak
-      echo "mkdir -p config" >> $out/bin/simula_local_libleak
-      echo "LEAK_AFTER=30 PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 LD_PRELOAD=\"\$(${coreutils}/bin/realpath) \$(${coreutils}/bin/realpath ./result/bin/libleak.so)\" \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_local_libleak
-      chmod +x $out/bin/simula_local_libleak
 
       # simula_gdb
       echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${libv4l}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) gdb -x ./.gdbinit ./submodules/godot/bin/godot.x11.tools.64" >> $out/bin/simula_gdb
       echo "cat gdb.txt" >> $out/bin/simula_gdb
       chmod +x $out/bin/simula_gdb
 
-      # simula_rr_record
-      echo "_RR_TRACE_DIR=./rr PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${libv4l}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) ${rr}/bin/rr record -i SIGUSR1 ./submodules/godot/bin/godot.x11.tools.64 --args -m" >> $out/bin/simula_rr_record
-      chmod +x $out/bin/simula_rr_record
 
-      # simula_rr_replay
-      echo "_RR_TRACE_DIR=./rr PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${libv4l}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) ${rr}/bin/rr -M replay \"\$@\"" >> $out/bin/simula_rr_replay
-      chmod +x $out/bin/simula_rr_replay
 
       # simula_apitrace
       echo "rm *.trace" >> $out/bin/simula_apitrace
@@ -123,13 +102,7 @@ let
       echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) ./submodules/wlroots/build/rootston/rootston \"\$@\"" >> $out/bin/rootston
       chmod +x $out/bin/rootston
 
-      # rootston_rr_record
-      echo "_RR_TRACE_DIR=./rr PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) ${rr}/bin/rr record ./submodules/wlroots/build/rootston/rootston \"\$@\"" >> $out/bin/rootston_rr_record
-      chmod +x $out/bin/rootston_rr_record
 
-      # rootston_rr_replay
-      echo "_RR_TRACE_DIR=./rr PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) ${rr}/bin/rr -M replay \"\$@\"" >> $out/bin/rootston_rr_replay
-      chmod +x $out/bin/rootston_rr_replay
 
       # demo_local
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/demo_local
@@ -145,13 +118,7 @@ let
       echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:${libv4l}/lib \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -e --path ./submodules/Demo" >> $out/bin/demo_local_editor
       chmod +x $out/bin/demo_local_editor
 
-      # demo_rr_record
-      echo "_RR_TRACE_DIR=./rr PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${libv4l}/lib \$(./utils/GetNixGL.sh) ${rr}/bin/rr record -i SIGUSR1 ./submodules/godot/bin/godot.x11.tools.64 --args -m --path ./submodules/Demo" >> $out/bin/demo_rr_record
-      chmod +x $out/bin/demo_rr_record
 
-      # demo_rr_replay
-      echo "_RR_TRACE_DIR=./rr PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${libv4l}/lib \$(./utils/GetNixGL.sh) ${rr}/bin/rr -M replay \"\$@\"" >> $out/bin/demo_rr_replay
-      chmod +x $out/bin/demo_rr_replay
 
       # demo_apitrace
       echo "rm *.trace" >> $out/bin/demo_apitrace
@@ -179,7 +146,6 @@ let
       ln -s ${rrSources}/bin/rr_sources $out/bin/rr_sources
 
       ln -s ${cabal-install}/bin/cabal $out/bin/cabal
-      ln -s ${libleak}/lib/libleak.so $out/bin/libleak.so
 
      '';
 
@@ -204,7 +170,7 @@ let
       exec ${i3status}/bin/i3status "$@"
       '';
 
-    simulaPackages = if devBuild == true then [ valgrind libleak ] else [ godot godot-haskell-plugin ];
+    simulaPackages = if devBuild == true then [ valgrind ] else [ godot godot-haskell-plugin ];
     linkGHP = if devBuild == true then "" else ''
       ln -s ${godot-haskell-plugin}/lib/ghc-${ghc-version}/libgodot-haskell-plugin.so $out/bin/libgodot-haskell-plugin.so;
     '';
@@ -261,7 +227,7 @@ let
         # && (baseNameOf path != "result")                        # "
       ) ./.;
 
-      buildInputs = [ xpra xrdb wmctrl fontconfig glibc-locales xfce4-terminal-wrapped openxr-loader midori-wrapped pernoscoSubmit i3status-wrapped monado ] ++ simulaPackages;
+      buildInputs = [ xpra xrdb wmctrl fontconfig glibc-locales xfce4-terminal-wrapped openxr-loader midori-wrapped pernoscoSubmit i3status-wrapped ] ++ simulaPackages;
       installPhase = ''
       mkdir -p $out/bin
       mkdir -p $out/srcs
@@ -278,12 +244,9 @@ let
       ln -s ${mimic}/bin/mimic $out/bin/mimic
       ln -s ${xclip}/bin/xclip $out/bin/xclip
       ln -s ${patchelf}/bin/patchelf $out/bin/patchelf
-      ln -s ${rr}/bin/rr $out/bin/rr
       ln -s ${dialog}/bin/dialog $out/bin/dialog
       ln -s ${curl}/bin/curl $out/bin/curl
       ln -s ${i3status-wrapped}/bin/i3status $out/bin/i3status
-      ln -s ${monado}/share/openxr/1/openxr_monado.json $out/share/openxr_monado.json
-      ln -s ${monado}/bin/monado-service $out/bin/monado-service
 
       '' + linkGHP + devBuildScript;
     };

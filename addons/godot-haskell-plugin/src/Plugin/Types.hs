@@ -80,6 +80,12 @@ import System.IO.Streams.Internal
 import qualified Data.ByteString as B
 import System.IO.Streams.Text
 
+
+deriving instance Eq GodotWlrOutput
+deriving instance Eq GodotWlrXdgSurface
+deriving instance Eq GodotWlrXWaylandSurface
+deriving instance Eq GodotSpatial
+
 instance Show Transform where
   show tf = (show (_tfBasis tf)) ++ (" w/position: ") ++ (show (_tfPosition tf))
 
@@ -516,10 +522,6 @@ newNS'' constr clsName args url = do
 -- G.asClass
 -- GodotResource -> GodotNativeScript -> GodotObject -> Godot
 
-deriving instance Eq GodotWlrOutput
-deriving instance Eq GodotWlrXdgSurface
-deriving instance Eq GodotWlrXWaylandSurface
-deriving instance Eq GodotSpatial
 
 -- Unused/untested.
 getGSVSFromEitherSurface :: GodotSimulaServer -> Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO (Maybe GodotSimulaViewSprite)

@@ -239,7 +239,7 @@ debugTerminateGSVS gsvs = do
 testPopups :: GodotSimulaServer -> IO ()
 testPopups gss = do
   let app = "firefox"
-  let config = defaultConfig { configOutputFile = Right $ "./hspec_output.txt" }
+  let config = defaultConfig -- { configOutputFile = Right $ "./hspec_output.txt" }
   (cursorCoords, popupCoords, screenshot) <- testRightclickPopup gss app app
   hspecWith config $ do
     describe "A popup initiated at cursor location (300,300)" $ do
@@ -248,7 +248,7 @@ testPopups gss = do
 
 testMemoryUsage :: GodotSimulaServer -> IO ()
 testMemoryUsage gss = do
-  let config = defaultConfig { configOutputFile = Right $ "./hspec_output.txt" }
+  let config = defaultConfig -- { configOutputFile = Right $ "./hspec_output.txt" }
   pid1 <- logMemPid gss
   Control.Concurrent.threadDelay (60 * 1000000)
   pid2 <- logMemPid gss
@@ -261,7 +261,7 @@ testMemoryUsage gss = do
 
 testMemoryUsageWithApp :: GodotSimulaServer -> String -> Int -> IO ()
 testMemoryUsageWithApp gss app sec = do
-  let config = defaultConfig { configOutputFile = Right $ "./hspec_output.txt" }
+  let config = defaultConfig -- { configOutputFile = Right $ "./hspec_output.txt" }
 
   (pid1, pid2) <- testAppMemory gss app sec
   hspecWith config $ do

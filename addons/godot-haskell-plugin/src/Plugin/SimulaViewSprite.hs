@@ -132,7 +132,7 @@ updateSimulaViewSprite gsvs = do
                     wlrXWaylandSurface <- validateSurfaceE wlrXWaylandSurface
                     pidInt <- G.get_pid wlrXWaylandSurface
                     return $ (fromInteger $ fromIntegral pidInt)
-      pids <- getParentsPids pid
+      pids <- (pid:) <$> getParentsPids pid
       maybeLocation <- getSimulaStartingLocationAtomically gss pids
       case maybeLocation of
         Just location -> moveToStartingPosition gsvs location

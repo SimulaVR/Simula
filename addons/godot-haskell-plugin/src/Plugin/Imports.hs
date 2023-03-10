@@ -34,5 +34,5 @@ import           Godot.Internal.Dispatch          as G
 -- import           Godot
 import           Godot.Nativescript
 
-import System.Clock as P
+import System.Clock as P hiding (normalize)
 import Control.Monad.Extra as P (when, whenM)

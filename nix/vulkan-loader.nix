@@ -1,5 +1,5 @@
 { stdenv, lib, fetchFromGitHub, cmake, python3, vulkan-headers, pkgconfig
-, xlibsWrapper, libxcb, libXrandr, libXext, wayland, addOpenGLRunpath, mesa_drivers }:
+, freetype, fontconfig, xorg, libxcb, libXrandr, libXext, wayland, addOpenGLRunpath, mesa_drivers }:
 
 stdenv.mkDerivation rec {
   pname = "vulkan-loader";
@@ -13,7 +13,7 @@ stdenv.mkDerivation rec {
   };
 
   nativeBuildInputs = [ pkgconfig ];
-  buildInputs = [ cmake python3 xlibsWrapper libxcb libXrandr libXext wayland ];
+  buildInputs = [ cmake python3 freetype fontconfig xorg.xorgproto xorg.libX11 xorg.libXt xorg.libXft xorg.libXext xorg.libSM xorg.libICE libxcb libXrandr libXext wayland ];
   enableParallelBuilding = true;
 
   preConfigure = ''

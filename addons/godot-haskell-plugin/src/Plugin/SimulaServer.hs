@@ -647,8 +647,10 @@ instance NativeScript GodotSimulaServer where
 
 process :: GodotSimulaServer -> [GodotVariant] -> IO ()
 process gss [deltaGV] = do
+
+  wasdMode <- readTVarIO (gss ^. gssWasdMode)
   delta <- fromGodotVariant deltaGV :: IO Float
-  processWASDMovement gss delta
+  when wasdMode $ processWASDMovement gss delta
 
   -- Update i3status HUD
   hud <- readTVarIO (gss ^. gssHUD)
@@ -725,9 +727,10 @@ ready gss _ = do
     _ -> do (_, windows', _) <- B.readCreateProcessWithExitCode (shell "./result/bin/wmctrl -lp") ""
             let windows = (B.unpack windows')
             let rightWindows = filter (\line -> isInfixOf (show pid) line) (lines windows)
-            let simulaWindow = (head . words . head) rightWindows
-            createProcess ((shell $ "./result/bin/wmctrl -ia " ++ simulaWindow) { env = Just [("DISPLAY", oldDisplay)] })
-            return ()
+            when (length rightWindows > 0 && length (words $ head rightWindows) > 0) $ do
+              let simulaWindow = (head . words . head) rightWindows
+              createProcess ((shell $ "./result/bin/wmctrl -ia " ++ simulaWindow) { env = Just [("DISPLAY", oldDisplay)] })
+              return ()
 
   appendFile "log.txt" ""
 
