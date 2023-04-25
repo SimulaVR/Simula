@@ -9,10 +9,10 @@ let Configuration =
     -- To omit launching an app in a spot, use `None Text` instead of `Some "cmd"`.
   {   _backend = "OpenXR" -- Supported options: "OpenVR", "OpenXR"
   ,   _startingApps = { _center = Some "./result/bin/xfce4-terminal"
-                      , _right  = None Text
-                      , _bottom = None Text
-                      , _left   = None Text
-                      , _top    = None Text
+                      , _right  = Some "launchUsageInstructions"
+                      , _bottom = Some "launchHMDWebcam"
+                      , _left   = Some "launchTerminal"
+                      , _top    = Some "launchTerminal"
                       }
   , _defaultWindowResolution = Some { _1 = 900, _2 = 900 } -- New windows default this (typically square) resolution
                                                            -- Set to `None { _1 : Natural, _2 : Natural }` for windows to launch with their default (typically non-square) resolutions
@@ -44,6 +44,8 @@ let Configuration =
                               , { _keyCombination = ["KEY_MASK_META", "KEY_EQUAL"]                     , _keyAction = "zoomIn"                     }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_LEFT"]                      , _keyAction = "contractWindowHorizontally" }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_RIGHT"]                     , _keyAction = "extendWindowHorizontally"   }
+			      , { _keyCombination = ["KEY_MASK_META", "KEY_O"]         , _keyAction = "rotateWorkspaceHorizontallyLeft" }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_U"]        , _keyAction = "rotateWorkspaceHorizontallyRight"   }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_UP"]                        , _keyAction = "contractWindowVertically"   }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_DOWN"]                      , _keyAction = "extendWindowVertically"     }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_S"]                         , _keyAction = "resizeWindowToDefaultSize"  } -- Resizes window to `_defaultWindowResolution`
