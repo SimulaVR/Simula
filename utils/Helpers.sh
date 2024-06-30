@@ -297,7 +297,7 @@ nsREPLGodotHaskellPlugin() {
 
 nsBuildSimulaLocal() {
     installSimula 1
-    ./result/bin/cabal update
+    PATH=./result/bin:$PATH GHC_PACKAGE_PATH=$(readlink -f $(which ./result/bin/ghc)) cabal update
     nsBuildWlroots
     nsBuildGodot
     patchGodotWlroots

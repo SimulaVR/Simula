@@ -35,7 +35,6 @@ let
 
     ghc-version = ghc.version;
 
-
     i3status = callPackage ./submodules/i3status/i3status.nix {};
 
 
@@ -146,7 +145,7 @@ let
       ln -s ${rrSources}/bin/rr_sources $out/bin/rr_sources
 
       ln -s ${cabal-install}/bin/cabal $out/bin/cabal
-
+      ln -s ${ghc}/bin/ghc $out/bin/ghc
      '';
 
     devBuildScript = if (devBuild == true) then devBuildTrue else devBuildFalse;
@@ -227,7 +226,7 @@ let
         # && (baseNameOf path != "result")                        # "
       ) ./.;
 
-      buildInputs = [ xpra xrdb wmctrl fontconfig glibc-locales xfce4-terminal-wrapped openxr-loader midori-wrapped pernoscoSubmit i3status-wrapped ] ++ simulaPackages;
+      buildInputs = [ xpra xrdb wmctrl fontconfig glibc-locales xfce4-terminal-wrapped openxr-loader midori-wrapped pernoscoSubmit i3status-wrapped cabal-install ghc ] ++ simulaPackages;
       installPhase = ''
       mkdir -p $out/bin
       mkdir -p $out/srcs
