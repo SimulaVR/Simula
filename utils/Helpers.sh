@@ -168,7 +168,7 @@ switchToNix() {
 switchToLocal() {
     cd ./addons/godot-haskell-plugin
     rm libgodot-haskell-plugin.so
-    path=$(nix-shell -Q --attr env shell.nix --run "../../result/bin/cabal list-bin flib:godot-haskell-plugin")
+    path=$(nix-shell -Q shell.nix --run "../../result/bin/cabal list-bin flib:godot-haskell-plugin")
     ln -s "$path" libgodot-haskell-plugin.so
     cd -
 }
@@ -246,7 +246,7 @@ swapXpraNixToLocal() {
 # Simula modules inside a nix-shell
 nsBuildGodot() {
  cd ./submodules/godot
- local runCmd="wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c; scons -Q -j8 platform=x11 target=debug"
+ local runCmd="wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c; scons -Q -j8 platform=x11 target=debug warnings=no"; 
 
  if [ -z $1 ]; then
    nix-shell --run "$runCmd"
@@ -271,9 +271,9 @@ nsBuildGodotHaskell() {
 
   cd ./submodules/godot-haskell-cabal
   if [ -z $1 ]; then
-    nix-shell -Q --attr env release.nix --run "./updateApiJSON.sh"
+    nix-shell -Q release.nix --run "./updateApiJSON.sh"
   elif [ $1 == "--profile" ]; then
-    nix-shell -Q --attr env --arg profileBuild true release.nix --run "./updateApiJSON.sh"
+    nix-shell -Q --arg profileBuild true release.nix --run "./updateApiJSON.sh"
   fi
   cd -
 }
@@ -281,20 +281,21 @@ nsBuildGodotHaskell() {
 nsBuildGodotHaskellPlugin() {
   cd ./addons/godot-haskell-plugin
   if [ -z $1 ]; then
-    nix-shell -Q --attr env shell.nix --run "../../result/bin/cabal build"
+    nix-shell -Q shell.nix --run "../../result/bin/cabal build"
   elif [ $1 == "--profile" ]; then
-    nix-shell -Q --attr env shell.nix --arg profileBuild true --run "../../result/bin/cabal --enable-profiling build --ghc-options=\"-fprof-auto -rtsopts -fPIC -fexternal-dynamic-refs\""
+    nix-shell -Q shell.nix --arg profileBuild true --run "../../result/bin/cabal --enable-profiling build --ghc-options=\"-fprof-auto -rtsopts -fPIC -fexternal-dynamic-refs\""
   else
-    nix-shell --attr env shell.nix --run "while inotifywait -qqre modify .; do ../../result/bin/cabal build; done"
+    nix-shell shell.nix --run "while inotifywait -qqre modify .; do ../../result/bin/cabal build; done"
   fi
   cd -
 }
 
 nsREPLGodotHaskellPlugin() {
     cd ./addons/godot-haskell-plugin
-    nix-shell --attr env shell.nix --run "cabal repl"
+    nix-shell shell.nix --run "cabal repl"
 }
 
+# Takes optional argument for a profile build
 nsBuildSimulaLocal() {
     installSimula 1
     PATH=./result/bin:$PATH cabal update
