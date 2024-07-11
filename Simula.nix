@@ -1,4 +1,4 @@
-{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, mimic, xsel, xclip, dialog, synapse, openxr-loader, xpra, valgrind, xorg, writeShellScriptBin, python3, awscli, wayland, wayland-protocols, valkyrie, zstd, profileBuild ? false, pkgs, patchelf, libv4l, openssl, cabal-install }:
+{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, mimic, xsel, xclip, dialog, synapse, openxr-loader, xpra, valgrind, xorg, writeShellScriptBin, python3, awscli, wayland, wayland-protocols, zstd, profileBuild ? false, pkgs, patchelf, libv4l, openssl, cabal-install }:
 let
 
     /* Modify a stdenv so that it produces debug builds; that is,
@@ -11,13 +11,19 @@ let
         });
       };
     stdenvRes = if devBuild then (keepDebugInfo stdenv) else stdenv;
-
-    xwayland-dev = xwayland.override { stdenv = stdenvRes; };
-    libxcb-dev = xorg.libxcb.override { stdenv = stdenvRes; };
-	  wayland-dev = wayland.override { stdenv = stdenvRes; };
-    wayland-protocols-dev = wayland-protocols.override { stdenv = stdenvRes; };
+    xwayland-dev = xwayland.overrideAttrs (oldAttrs: {
+      stdenv = stdenvRes;
+    });
+    libxcb-dev = xorg.libxcb.overrideAttrs (oldAttrs: {
+      stdenv = stdenvRes;
+    });
+    wayland-dev = wayland.overrideAttrs (oldAttrs: {
+      stdenv = stdenvRes;
+    });
+    wayland-protocols-dev = wayland-protocols.overrideAttrs (oldAttrs: {
+      stdenv = stdenvRes;
+    });
     wlroots-dev = callPackage ./submodules/wlroots/wlroots.nix { stdenv = stdenvRes; };
-
     vulkan-loader-custom = if onNixOS then vulkan-loader else (callPackage ./nix/vulkan-loader.nix { });
     glibc-locales = glibcLocales;
     godot = callPackage ./submodules/godot/godot.nix { devBuild = devBuild; onNixOS = onNixOS; pkgs = import ./pinned-nixpkgs.nix; };
@@ -29,14 +35,9 @@ let
     godot-haskell = haskellCallPkg ./submodules/godot-haskell/godot-haskell.nix { api-json = godot-api; profileBuild = profileBuild; godot-haskell-classgen = godot-haskell-classgen; };
     godot-haskell-plugin = haskellCallPkg ./addons/godot-haskell-plugin/godot-haskell-plugin.nix { devBuild = devBuild; onNixOS = onNixOS; godot = godot; godot-haskell = godot-haskell; profileBuild = profileBuild; };
 
-    #Cabal = haskellCallPkgNoProfile ./submodules/cabal/Cabal/Cabal.nix { };
-    #hackage-security = haskellPackages.hackage-security.override { Cabal = Cabal; };
-    #cabal-install = haskellCallPkgNoProfile ./submodules/cabal/cabal-install/cabal-install.nix { Cabal = Cabal; hackage-security = hackage-security; };
-
     ghc-version = ghc.version;
 
     i3status = callPackage ./submodules/i3status/i3status.nix {};
-
 
     devBuildFalse = ''
       cp ./utils/GetNixGL.sh $out/bin/GetNixGL.sh
@@ -126,14 +127,14 @@ let
       chmod +x $out/bin/demo_apitrace
 
       ln -s ${valgrind}/bin/valgrind $out/bin/valgrind
-      ln -s ${valkyrie}/bin/valkyrie $out/bin/valkyrie
+      # ln -s $_{valkyrie}/bin/valkyrie $out/bin/valkyrie # <- valgrind no longer provided by nixpkgs
 
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_valgrind
       echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib \$(./utils/GetNixGL.sh) ./result/bin/valgrind --tool=memcheck --leak-check=yes --show-reachable=yes --track-origins=yes --keep-stacktraces=alloc-and-free --error-limit=no --num-callers=40 --xml=yes --xml-file=valgrind_output_%p.xml ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_valgrind
       chmod +x $out/bin/simula_valgrind
 
-      echo "./result/bin/valkyrie --view-log \$1" >> $out/bin/simula_valkyrie
-      chmod +x $out/bin/simula_valkyrie
+      # echo "./result/bin/valkyrie --view-log \$1" >> $out/bin/simula_valkyrie
+      # chmod +x $out/bin/simula_valkyrie
 
       mkdir -p $out/srcs/xwayland
       tar -xvf ${xwayland-dev.src} --directory $out/srcs/xwayland --strip-components=1
