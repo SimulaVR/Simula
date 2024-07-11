@@ -46,7 +46,7 @@ source ./utils/Helpers.sh && installSimula
 On NixOS systems, you must ensure
 
 #+BEGIN_SRC 
-nix.trustedUsers = [ "root" "<your_user_name>"];
+nix.settings.trusted-users = [ "root" "<your_user_name>"];
 #+END_SRC
 
 is added to your ~configuration.nix~, or the install command above will be unable to download Simula from our cache, instead falling back to a manual build (which takes 1hr+).
