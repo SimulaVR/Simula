@@ -242,6 +242,18 @@ swapXpraNixToLocal() {
     sudo ln -s $(which xpra) ./result/bin/xpra
 }
 
+nsBuildMonado() {
+  cd ./submodules/monado
+  nix-shell shell.nix --run nsBuildMonadoIncremental
+  cd -
+}
+
+nsCleanMonado() {
+  cd ./submodules/monado
+  nix-shell shell.nix --run rmBuilds
+  cd -
+}
+
 # Experimental nsBuild* functions allow Simula developers to locally build
 # Simula modules inside a nix-shell
 nsBuildGodot() {
@@ -299,6 +311,7 @@ nsREPLGodotHaskellPlugin() {
 nsBuildSimulaLocal() {
     installSimula 1
     PATH=./result/bin:$PATH cabal update
+    nsBuildMonado
     nsBuildWlroots
     nsBuildGodot
     patchGodotWlroots

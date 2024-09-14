@@ -61,8 +61,20 @@ let
     devBuildTrue = ''
       cp ./utils/GetNixGL.sh $out/bin/GetNixGL.sh
 
+      # monado_local
+      echo "pkill monado-service" >> $out/bin/monado_local
+      echo "export SIMULA_CONFIG_PATH=./config/simula_monado_config.json" >> $out/bin/monado_local
+      echo "export XR_RUNTIME_JSON=./config/active_runtime.json" >> $out/bin/monado_local
+      echo "export XRT_COMPOSITOR_LOG=debug" >> $out/bin/monado_local
+      echo "export XRT_COMPOSITOR_SCALE_PERCENTAGE=100" >> $out/bin/monado_local
+      echo "./submodules/monado/build/src/xrt/targets/service/monado-service 2>&1 | tee .monado.log" >> $out/bin/monado_local
+      chmod +x $out/bin/monado_local
 
       # simula_local
+      echo "export SIMULA_CONFIG_PATH=./config/simula_monado_config.json" >> $out/bin/simula_local
+      echo "export XR_RUNTIME_JSON=./config/active_runtime.json" >> $out/bin/simula_local
+      echo "export XRT_COMPOSITOR_LOG=debug" >> $out/bin/simula_local
+      echo "export XRT_COMPOSITOR_SCALE_PERCENTAGE=100" >> $out/bin/simula_local
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local
       echo "mkdir -p log" >> $out/bin/simula_local
       echo "mkdir -p config" >> $out/bin/simula_local
@@ -70,6 +82,10 @@ let
       chmod +x $out/bin/simula_local
 
       # simula_local_editor
+      echo "export SIMULA_CONFIG_PATH=./config/simula_monado_config.json" >> $out/bin/simula_local_editor
+      echo "export XR_RUNTIME_JSON=./config/active_runtime.json" >> $out/bin/simula_local_editor
+      echo "export XRT_COMPOSITOR_LOG=debug" >> $out/bin/simula_local_editor
+      echo "export XRT_COMPOSITOR_SCALE_PERCENTAGE=10" >> $out/bin/simula_local_editor
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local_editor
       echo "mkdir -p log" >> $out/bin/simula_local_editor
       echo "mkdir -p config" >> $out/bin/simula_local_editor
@@ -77,6 +93,10 @@ let
       chmod +x $out/bin/simula_local_editor
 
       # simula_local_profile
+      echo "export SIMULA_CONFIG_PATH=./config/simula_monado_config.json" >> $out/bin/simula_local_profile
+      echo "export XR_RUNTIME_JSON=./config/active_runtime.json" >> $out/bin/simula_local_profile
+      echo "export XRT_COMPOSITOR_LOG=debug" >> $out/bin/simula_local_profile
+      echo "export XRT_COMPOSITOR_SCALE_PERCENTAGE=100" >> $out/bin/simula_local_profile
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local_profile
       echo "mkdir -p log" >> $out/bin/simula_local_profile
       echo "mkdir -p config" >> $out/bin/simula_local_profile
@@ -85,13 +105,19 @@ let
 
 
       # simula_gdb
+      echo "export SIMULA_CONFIG_PATH=./config/simula_monado_config.json" >> $out/bin/simula_gdb
+      echo "export XR_RUNTIME_JSON=./config/active_runtime.json" >> $out/bin/simula_gdb
+      echo "export XRT_COMPOSITOR_LOG=debug" >> $out/bin/simula_gdb
+      echo "export XRT_COMPOSITOR_SCALE_PERCENTAGE=100" >> $out/bin/simula_gdb
       echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${libv4l}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) gdb -x ./.gdbinit ./submodules/godot/bin/godot.x11.tools.64" >> $out/bin/simula_gdb
       echo "cat gdb.txt" >> $out/bin/simula_gdb
       chmod +x $out/bin/simula_gdb
 
-
-
       # simula_apitrace
+      echo "export SIMULA_CONFIG_PATH=./config/simula_monado_config.json" >> $out/bin/simula_apitrace
+      echo "export XR_RUNTIME_JSON=./config/active_runtime.json" >> $out/bin/simula_apitrace
+      echo "export XRT_COMPOSITOR_LOG=debug" >> $out/bin/simula_apitrace
+      echo "export XRT_COMPOSITOR_SCALE_PERCENTAGE=100" >> $out/bin/simula_apitrace
       echo "rm *.trace" >> $out/bin/simula_apitrace
       echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) apitrace trace --api gl ./submodules/bin/godot.x11.tools.64" >> $out/bin/simula_apitrace
       echo "apitrace dump *.trace | grep glTex > glTex.trace" >> $out/bin/simula_apitrace
@@ -101,8 +127,6 @@ let
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/rootston
       echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) ./submodules/wlroots/build/rootston/rootston \"\$@\"" >> $out/bin/rootston
       chmod +x $out/bin/rootston
-
-
 
       # demo_local
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/demo_local
@@ -118,8 +142,6 @@ let
       echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:${libv4l}/lib \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -e --path ./submodules/Demo" >> $out/bin/demo_local_editor
       chmod +x $out/bin/demo_local_editor
 
-
-
       # demo_apitrace
       echo "rm *.trace" >> $out/bin/demo_apitrace
       echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib \$(./utils/GetNixGL.sh) apitrace trace --api gl ./submodules/bin/godot.x11.tools.64 --path ./submodules/Demo" >> $out/bin/demo_apitrace
@@ -130,6 +152,10 @@ let
       # ln -s $_{valkyrie}/bin/valkyrie $out/bin/valkyrie # <- valgrind no longer provided by nixpkgs
 
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_valgrind
+      echo "export SIMULA_CONFIG_PATH=./config/simula_monado_config.json" >> $out/bin/simula_valgrind
+      echo "export XR_RUNTIME_JSON=./config/active_runtime.json" >> $out/bin/simula_valgrind
+      echo "export XRT_COMPOSITOR_LOG=debug" >> $out/bin/simula_valgrind
+      echo "export XRT_COMPOSITOR_SCALE_PERCENTAGE=100" >> $out/bin/simula_valgrind
       echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib \$(./utils/GetNixGL.sh) ./result/bin/valgrind --tool=memcheck --leak-check=yes --show-reachable=yes --track-origins=yes --keep-stacktraces=alloc-and-free --error-limit=no --num-callers=40 --xml=yes --xml-file=valgrind_output_%p.xml ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_valgrind
       chmod +x $out/bin/simula_valgrind
 

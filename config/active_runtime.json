@@ -1,0 +1,6 @@
+{
+    "file_format_version": "1.0.0",
+    "runtime": {
+        "library_path": "../submodules/monado/build/src/xrt/targets/openxr/libopenxr_monado.so"
+    }
+}
