@@ -119,6 +119,10 @@ Windows become "active" once you look at them. Active windows receive typing eve
 | ~Super + Shift + Enter~                    | Right click surface cursor at gaze point                                                                                   |
 | ~Super + Alt~                              | Grab surface for movement (release to let go)                                                                                   |
 | ~Super + m~                                | Grab all surfaces for movement (release to let go)                                                                              |
+| ~Super + u~                                | Rotate workspace right by a set amount  
+			    |
+| ~Super + o~                                | Rotate workspace left by a set amount  
+                            |
 | ~Super + Shift + m~                        | Grab all surfaces /in all workspaces at once/ for movement (release to let go)                                                  |
 | ~Super + a~                                | Launch Simula's app launcher ([[https://launchpad.net/synapse-project][synapse]])                                               |
 | ~Super + e~                                | Cycle Simula's background environment                                                                                           |
