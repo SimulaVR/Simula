@@ -8,7 +8,7 @@ let Configuration =
     --   "launchUsageInstructions" to launch Simula's usage instructions
     -- To omit launching an app in a spot, use `None Text` instead of `Some "cmd"`.
   {   _backend = "OpenXR" -- Supported options: "OpenVR", "OpenXR"
-  ,   _startingApps = { _center = Some "./result/bin/xfce4-terminal"
+  ,   _startingApps = { _center = Some "launchTerminal"
                       , _right  = None Text
                       , _bottom = None Text
                       , _left   = None Text

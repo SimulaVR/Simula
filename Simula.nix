@@ -35,28 +35,86 @@ let
     godot-haskell = haskellCallPkg ./submodules/godot-haskell/godot-haskell.nix { api-json = godot-api; profileBuild = profileBuild; godot-haskell-classgen = godot-haskell-classgen; };
     godot-haskell-plugin = haskellCallPkg ./addons/godot-haskell-plugin/godot-haskell-plugin.nix { devBuild = devBuild; onNixOS = onNixOS; godot = godot; godot-haskell = godot-haskell; profileBuild = profileBuild; };
 
+    monado = callPackage ./submodules/monado/monado.nix { gst-plugins-base = pkgs.gst_all_1.gst-plugins-base; gstreamer = pkgs.gst_all_1.gstreamer; };
+
     ghc-version = ghc.version;
 
     i3status = callPackage ./submodules/i3status/i3status.nix {};
 
     devBuildFalse = ''
-      cp ./utils/GetNixGL.sh $out/bin/GetNixGL.sh
       ln -s ${godot}/bin/godot.x11.opt.debug.64 $out/bin/godot.x11.opt.debug.64
       ln -s ${godot}/bin/godot.x11.tools.64 $out/bin/godot.x11.tools.64
       ln -s ${godot}/bin/godot.x11.opt.64 $out/bin/godot.x11.opt.64
-      echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula
-      echo "source ./utils/Helpers.sh && updateEmail" >> $out/bin/simula
-      echo "mkdir -p log" >> $out/bin/simula
-      echo "mkdir -p config" >> $out/bin/simula
-      echo "PATH=${xwayland}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) ${godot}/bin/godot.x11.opt.debug.64 -m 2>&1 | ${coreutils}/bin/tee ./log/output.file" >> $out/bin/simula
-      echo "sed -in \"s/\$USER/anon/g\" ./log/output.file" >> $out/bin/simula
-      echo "echo devBuldFalse >> ./log/output.file" >> $out/bin/simula
-      echo "git rev-parse HEAD >> ./log/output.file" >> $out/bin/simula
-      echo "touch ./config/email && cat ./config/email >> ./log/output.file" >> $out/bin/simula
-      echo "${curl}/bin/curl --data-urlencode errorMsg@./log/output.file https://www.wolframcloud.com/obj/george.w.singer/errorMessage" >> $out/bin/simula
+
+      cat << EOF >> $out/bin/simula
+      #!${stdenv.shell}
+      export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive
+      export XDG_DATA_HOME=''${XDG_DATA_HOME:-\$HOME/.local/share}
+      export XDG_CONFIG_HOME=''${XDG_CONFIG_HOME:-\$HOME/.config}
+      export XDG_CACHE_HOME=''${XDG_CACHE_HOME:-\$HOME/.cache}
+
+      export SIMULA_DATA_DIR="\$XDG_DATA_HOME/Simula"
+      export SIMULA_CONFIG_DIR="\$XDG_CONFIG_HOME/Simula"
+      export SIMULA_CACHE_DIR="\$XDG_CACHE_HOME/Simula"
+
+      mkdir -p "\$SIMULA_DATA_DIR/log"
+      mkdir -p "\$SIMULA_CONFIG_DIR"
+      mkdir -p "\$SIMULA_CACHE_DIR"
+      export SIMULA_LOG_DIR="\$SIMULA_DATA_DIR/log"
+      export SIMULA_APP_DIR="$out/bin"
+
+      # Copy over default config files if they don't already exist
+      if [ ! -f "\$SIMULA_CONFIG_DIR/i3status.config" ]; then
+        cp $out/config/i3status.config "\$SIMULA_CONFIG_DIR/i3status.config"
+      fi
+
+      if [ ! -f "\$SIMULA_CONFIG_DIR/config.dhall" ]; then
+        cp $out/config/config.dhall "\$SIMULA_CONFIG_DIR/config.dhall"
+      fi
+
+      echo "SIMULA_DATA_DIR: \$SIMULA_DATA_DIR"
+      echo "SIMULA_CONFIG_DIR: \$SIMULA_CONFIG_DIR"
+      echo "SIMULA_CACHE_DIR: \$SIMULA_CACHE_DIR"
+      echo "SIMULA_LOG_DIR: \$SIMULA_LOG_DIR"
+      echo "SIMULA_APP_DIR: \$SIMULA_APP_DIR"
+
+      source $out/utils/Helpers.sh
+      updateEmail
+      (
+        cd $out || exit 1
+        source $out/utils/Helpers.sh
+        PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:${libv4l}/lib:$out/submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$($out/utils/GetNixGL.sh) ${godot}/bin/godot.x11.opt.debug.64 -m 2>&1 | ${coreutils}/bin/tee "\$SIMULA_DATA_DIR/log/output.file"
+      )
+
+      sed -i "s/\$USER/anon/g" "\$SIMULA_DATA_DIR/log/output.file"
+      echo "devBuildFalse" >> "\$SIMULA_DATA_DIR/log/output.file"
+      git rev-parse HEAD >> "\$SIMULA_DATA_DIR/log/output.file"
+      cat "\$SIMULA_CONFIG_DIR/email" >> "\$SIMULA_DATA_DIR/log/output.file"
+      ${curl}/bin/curl --data-urlencode errorMsg@\$SIMULA_DATA_DIR/log/output.file https://www.wolframcloud.com/obj/george.w.singer/errorMessage
+      EOF
+
       chmod +x $out/bin/simula
 
-     '';
+      chmod +x $out/bin/simula
+
+
+      # simula-monado-service
+      export SIMULA_DATA_DIR="\$XDG_DATA_HOME/Simula"
+      export SIMULA_CONFIG_DIR="\$XDG_CONFIG_HOME/Simula"
+      export SIMULA_CACHE_DIR="\$XDG_CACHE_HOME/Simula"
+
+      mkdir -p "\$SIMULA_DATA_DIR/log"
+      mkdir -p "\$SIMULA_CONFIG_DIR"
+      mkdir -p "\$SIMULA_CACHE_DIR"
+
+      echo "pkill monado-service" >> $out/bin/simula-monado-service
+      echo "export SIMULA_CONFIG_PATH=$out/config/simula_monado_config.json" >> $out/bin/simula-monado-service
+      echo "export XR_RUNTIME_JSON=$out/config/active_runtime.json" >> $out/bin/simula-monado-service
+      echo "export XRT_COMPOSITOR_LOG=debug" >> $out/bin/simula-monado-service
+      echo "export XRT_COMPOSITOR_SCALE_PERCENTAGE=100" >> $out/bin/simula-monado-service
+      echo "${monado}/bin/monado-service 2>&1 | tee \$SIMULA_DATA_DIR/log/monado.log" >> $out/bin/simula-monado-service
+      chmod +x $out/bin/simula-monado-service
+    '';
 
     devBuildTrue = ''
       cp ./utils/GetNixGL.sh $out/bin/GetNixGL.sh
@@ -71,33 +129,77 @@ let
       chmod +x $out/bin/monado_local
 
       # simula_local
+      echo "export XDG_DATA_HOME=''${XDG_DATA_HOME:-\$HOME/.local/share}" >> $out/bin/simula_local
+      echo "export XDG_CONFIG_HOME=''${XDG_CONFIG_HOME:-\$HOME/.config}" >> $out/bin/simula_local
+      echo "export XDG_CACHE_HOME=''${XDG_CACHE_HOME:-\$HOME/.cache}" >> $out/bin/simula_local
+
+      echo "export SIMULA_DATA_DIR="\$XDG_DATA_HOME/Simula"" >> $out/bin/simula_local
+      echo "export SIMULA_CONFIG_DIR="\$XDG_CONFIG_HOME/Simula"" >> $out/bin/simula_local
+      echo "export SIMULA_CACHE_DIR="\$XDG_CACHE_HOME/Simula"" >> $out/bin/simula_local
+
+      echo "mkdir -p "\$SIMULA_DATA_DIR/log"" >> $out/bin/simula_local
+      echo "mkdir -p "\$SIMULA_CONFIG_DIR"" >> $out/bin/simula_local
+      echo "mkdir -p "\$SIMULA_CACHE_DIR"" >> $out/bin/simula_local
+      echo "export SIMULA_LOG_DIR="\$SIMULA_DATA_DIR/log"" >> $out/bin/simula_local
+      echo "export SIMULA_APP_DIR="$out/bin"" >> $out/bin/simula_local
+
       echo "export SIMULA_CONFIG_PATH=./config/simula_monado_config.json" >> $out/bin/simula_local
       echo "export XR_RUNTIME_JSON=./config/active_runtime.json" >> $out/bin/simula_local
       echo "export XRT_COMPOSITOR_LOG=debug" >> $out/bin/simula_local
       echo "export XRT_COMPOSITOR_SCALE_PERCENTAGE=100" >> $out/bin/simula_local
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local
+      echo "export SIMULA_APP_DIR=$out/bin" >> $out/bin/simula_local
       echo "mkdir -p log" >> $out/bin/simula_local
       echo "mkdir -p config" >> $out/bin/simula_local
-      echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:${libv4l}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_local
+      echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:${libv4l}/lib:$out/submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_local
       chmod +x $out/bin/simula_local
 
       # simula_local_editor
+      echo "export XDG_DATA_HOME=''${XDG_DATA_HOME:-\$HOME/.local/share}" >> $out/bin/simula_local_editor
+      echo "export XDG_CONFIG_HOME=''${XDG_CONFIG_HOME:-\$HOME/.config}" >> $out/bin/simula_local_editor
+      echo "export XDG_CACHE_HOME=''${XDG_CACHE_HOME:-\$HOME/.cache}" >> $out/bin/simula_local_editor
+
+      echo "export SIMULA_DATA_DIR="\$XDG_DATA_HOME/Simula"" >> $out/bin/simula_local_editor
+      echo "export SIMULA_CONFIG_DIR="\$XDG_CONFIG_HOME/Simula"" >> $out/bin/simula_local_editor
+      echo "export SIMULA_CACHE_DIR="\$XDG_CACHE_HOME/Simula"" >> $out/bin/simula_local_editor
+
+      echo "mkdir -p "\$SIMULA_DATA_DIR/log"" >> $out/bin/simula_local_editor
+      echo "mkdir -p "\$SIMULA_CONFIG_DIR"" >> $out/bin/simula_local_editor
+      echo "mkdir -p "\$SIMULA_CACHE_DIR"" >> $out/bin/simula_local_editor
+      echo "export SIMULA_LOG_DIR="\$SIMULA_DATA_DIR/log"" >> $out/bin/simula_local_editor
+      echo "export SIMULA_APP_DIR="$out/bin"" >> $out/bin/simula_local_editor
       echo "export SIMULA_CONFIG_PATH=./config/simula_monado_config.json" >> $out/bin/simula_local_editor
       echo "export XR_RUNTIME_JSON=./config/active_runtime.json" >> $out/bin/simula_local_editor
       echo "export XRT_COMPOSITOR_LOG=debug" >> $out/bin/simula_local_editor
       echo "export XRT_COMPOSITOR_SCALE_PERCENTAGE=10" >> $out/bin/simula_local_editor
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local_editor
+      echo "export SIMULA_APP_DIR=$out/bin" >> $out/bin/simula_local_editor
       echo "mkdir -p log" >> $out/bin/simula_local_editor
       echo "mkdir -p config" >> $out/bin/simula_local_editor
       echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:${libv4l}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -e \"\$@\"" >> $out/bin/simula_local_editor
       chmod +x $out/bin/simula_local_editor
 
       # simula_local_profile
+      echo "export XDG_DATA_HOME=''${XDG_DATA_HOME:-\$HOME/.local/share}" >> $out/bin/simula_local_profile
+      echo "export XDG_CONFIG_HOME=''${XDG_CONFIG_HOME:-\$HOME/.config}" >> $out/bin/simula_local_profile
+      echo "export XDG_CACHE_HOME=''${XDG_CACHE_HOME:-\$HOME/.cache}" >> $out/bin/simula_local_profile
+
+      echo "export SIMULA_DATA_DIR="\$XDG_DATA_HOME/Simula"" >> $out/bin/simula_local_profile
+      echo "export SIMULA_CONFIG_DIR="\$XDG_CONFIG_HOME/Simula"" >> $out/bin/simula_local_profile
+      echo "export SIMULA_CACHE_DIR="\$XDG_CACHE_HOME/Simula"" >> $out/bin/simula_local_profile
+
+      echo "mkdir -p "\$SIMULA_DATA_DIR/log"" >> $out/bin/simula_local_profile
+      echo "mkdir -p "\$SIMULA_CONFIG_DIR"" >> $out/bin/simula_local_profile
+      echo "mkdir -p "\$SIMULA_CACHE_DIR"" >> $out/bin/simula_local_profile
+      echo "export SIMULA_LOG_DIR="\$SIMULA_DATA_DIR/log"" >> $out/bin/simula_local_profile
+      echo "export SIMULA_APP_DIR="$out/bin"" >> $out/bin/simula_local_profile
       echo "export SIMULA_CONFIG_PATH=./config/simula_monado_config.json" >> $out/bin/simula_local_profile
       echo "export XR_RUNTIME_JSON=./config/active_runtime.json" >> $out/bin/simula_local_profile
       echo "export XRT_COMPOSITOR_LOG=debug" >> $out/bin/simula_local_profile
       echo "export XRT_COMPOSITOR_SCALE_PERCENTAGE=100" >> $out/bin/simula_local_profile
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_local_profile
+      echo "export SIMULA_APP_DIR=$out/bin" >> $out/bin/simula_local_profile
+
       echo "mkdir -p log" >> $out/bin/simula_local_profile
       echo "mkdir -p config" >> $out/bin/simula_local_profile
       echo "GHCRTS='-hc -p' PROFILE=1 PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_local_profile
@@ -105,19 +207,47 @@ let
 
 
       # simula_gdb
+      echo "export XDG_DATA_HOME=''${XDG_DATA_HOME:-\$HOME/.local/share}" >> $out/bin/simula_gdb
+      echo "export XDG_CONFIG_HOME=''${XDG_CONFIG_HOME:-\$HOME/.config}" >> $out/bin/simula_gdb
+      echo "export XDG_CACHE_HOME=''${XDG_CACHE_HOME:-\$HOME/.cache}" >> $out/bin/simula_gdb
+
+      echo "export SIMULA_DATA_DIR="\$XDG_DATA_HOME/Simula"" >> $out/bin/simula_gdb
+      echo "export SIMULA_CONFIG_DIR="\$XDG_CONFIG_HOME/Simula"" >> $out/bin/simula_gdb
+      echo "export SIMULA_CACHE_DIR="\$XDG_CACHE_HOME/Simula"" >> $out/bin/simula_gdb
+
+      echo "mkdir -p "\$SIMULA_DATA_DIR/log"" >> $out/bin/simula_gdb
+      echo "mkdir -p "\$SIMULA_CONFIG_DIR"" >> $out/bin/simula_gdb
+      echo "mkdir -p "\$SIMULA_CACHE_DIR"" >> $out/bin/simula_gdb
+      echo "export SIMULA_LOG_DIR="\$SIMULA_DATA_DIR/log"" >> $out/bin/simula_gdb
+      echo "export SIMULA_APP_DIR="$out/bin"" >> $out/bin/simula_gdb
       echo "export SIMULA_CONFIG_PATH=./config/simula_monado_config.json" >> $out/bin/simula_gdb
       echo "export XR_RUNTIME_JSON=./config/active_runtime.json" >> $out/bin/simula_gdb
       echo "export XRT_COMPOSITOR_LOG=debug" >> $out/bin/simula_gdb
       echo "export XRT_COMPOSITOR_SCALE_PERCENTAGE=100" >> $out/bin/simula_gdb
       echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${libv4l}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) gdb -x ./.gdbinit ./submodules/godot/bin/godot.x11.tools.64" >> $out/bin/simula_gdb
+      echo "export SIMULA_APP_DIR=$out/bin" >> $out/bin/simula_gdb
       echo "cat gdb.txt" >> $out/bin/simula_gdb
       chmod +x $out/bin/simula_gdb
 
       # simula_apitrace
+      echo "export XDG_DATA_HOME=''${XDG_DATA_HOME:-\$HOME/.local/share}" >> $out/bin/simula_apitrace
+      echo "export XDG_CONFIG_HOME=''${XDG_CONFIG_HOME:-\$HOME/.config}" >> $out/bin/simula_apitrace
+      echo "export XDG_CACHE_HOME=''${XDG_CACHE_HOME:-\$HOME/.cache}" >> $out/bin/simula_apitrace
+
+      echo "export SIMULA_DATA_DIR="\$XDG_DATA_HOME/Simula"" >> $out/bin/simula_apitrace
+      echo "export SIMULA_CONFIG_DIR="\$XDG_CONFIG_HOME/Simula"" >> $out/bin/simula_apitrace
+      echo "export SIMULA_CACHE_DIR="\$XDG_CACHE_HOME/Simula"" >> $out/bin/simula_apitrace
+
+      echo "mkdir -p "\$SIMULA_DATA_DIR/log"" >> $out/bin/simula_apitrace
+      echo "mkdir -p "\$SIMULA_CONFIG_DIR"" >> $out/bin/simula_apitrace
+      echo "mkdir -p "\$SIMULA_CACHE_DIR"" >> $out/bin/simula_apitrace
+      echo "export SIMULA_LOG_DIR="\$SIMULA_DATA_DIR/log"" >> $out/bin/simula_apitrace
+      echo "export SIMULA_APP_DIR="$out/bin"" >> $out/bin/simula_apitrace
       echo "export SIMULA_CONFIG_PATH=./config/simula_monado_config.json" >> $out/bin/simula_apitrace
       echo "export XR_RUNTIME_JSON=./config/active_runtime.json" >> $out/bin/simula_apitrace
       echo "export XRT_COMPOSITOR_LOG=debug" >> $out/bin/simula_apitrace
       echo "export XRT_COMPOSITOR_SCALE_PERCENTAGE=100" >> $out/bin/simula_apitrace
+      echo "export SIMULA_APP_DIR=$out/bin" >> $out/bin/simula_apitrace
       echo "rm *.trace" >> $out/bin/simula_apitrace
       echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:./submodules/godot/modules/gdleapmotionV2/LeapSDK/lib/UnityAssets/Plugins/x86_64 \$(./utils/GetNixGL.sh) apitrace trace --api gl ./submodules/bin/godot.x11.tools.64" >> $out/bin/simula_apitrace
       echo "apitrace dump *.trace | grep glTex > glTex.trace" >> $out/bin/simula_apitrace
@@ -148,8 +278,22 @@ let
       echo "apitrace dump *.trace | grep glTex > glTex.trace" >> $out/bin/demo_apitrace
       chmod +x $out/bin/demo_apitrace
 
+      # simula_valgrind
       ln -s ${valgrind}/bin/valgrind $out/bin/valgrind
       # ln -s $_{valkyrie}/bin/valkyrie $out/bin/valkyrie # <- valgrind no longer provided by nixpkgs
+      echo "export XDG_DATA_HOME=''${XDG_DATA_HOME:-\$HOME/.local/share}" >> $out/bin/simula_valgrind
+      echo "export XDG_CONFIG_HOME=''${XDG_CONFIG_HOME:-\$HOME/.config}" >> $out/bin/simula_valgrind
+      echo "export XDG_CACHE_HOME=''${XDG_CACHE_HOME:-\$HOME/.cache}" >> $out/bin/simula_valgrind
+
+      echo "export SIMULA_DATA_DIR="\$XDG_DATA_HOME/Simula"" >> $out/bin/simula_valgrind
+      echo "export SIMULA_CONFIG_DIR="\$XDG_CONFIG_HOME/Simula"" >> $out/bin/simula_valgrind
+      echo "export SIMULA_CACHE_DIR="\$XDG_CACHE_HOME/Simula"" >> $out/bin/simula_valgrind
+
+      echo "mkdir -p "\$SIMULA_DATA_DIR/log"" >> $out/bin/simula_valgrind
+      echo "mkdir -p "\$SIMULA_CONFIG_DIR"" >> $out/bin/simula_valgrind
+      echo "mkdir -p "\$SIMULA_CACHE_DIR"" >> $out/bin/simula_valgrind
+      echo "export SIMULA_LOG_DIR="\$SIMULA_DATA_DIR/log"" >> $out/bin/simula_valgrind
+      echo "export SIMULA_APP_DIR="$out/bin"" >> $out/bin/simula_valgrind
 
       echo "export LOCALE_ARCHIVE=${glibc-locales}/lib/locale/locale-archive" >> $out/bin/simula_valgrind
       echo "export SIMULA_CONFIG_PATH=./config/simula_monado_config.json" >> $out/bin/simula_valgrind
@@ -157,6 +301,7 @@ let
       echo "export XRT_COMPOSITOR_LOG=debug" >> $out/bin/simula_valgrind
       echo "export XRT_COMPOSITOR_SCALE_PERCENTAGE=100" >> $out/bin/simula_valgrind
       echo "PATH=${xwayland-dev}/bin:${xkbcomp}/bin:\$PATH LD_LIBRARY_PATH=${SDL2}/lib:${vulkan-loader-custom}/lib:${openxr-loader}/lib \$(./utils/GetNixGL.sh) ./result/bin/valgrind --tool=memcheck --leak-check=yes --show-reachable=yes --track-origins=yes --keep-stacktraces=alloc-and-free --error-limit=no --num-callers=40 --xml=yes --xml-file=valgrind_output_%p.xml ./submodules/godot/bin/godot.x11.tools.64 -m" >> $out/bin/simula_valgrind
+      echo "export SIMULA_APP_DIR=$out/bin" >> $out/bin/simula_valgrind
       chmod +x $out/bin/simula_valgrind
 
       # echo "./result/bin/valkyrie --view-log \$1" >> $out/bin/simula_valkyrie
@@ -173,7 +318,7 @@ let
 
       ln -s ${cabal-install}/bin/cabal $out/bin/cabal
       ln -s ${ghc}/bin/ghc $out/bin/ghc
-     '';
+      '';
 
     devBuildScript = if (devBuild == true) then devBuildTrue else devBuildFalse;
 
@@ -198,8 +343,13 @@ let
 
     simulaPackages = if devBuild == true then [ valgrind ] else [ godot godot-haskell-plugin ];
     linkGHP = if devBuild == true then "" else ''
-      ln -s ${godot-haskell-plugin}/lib/ghc-${ghc-version}/libgodot-haskell-plugin.so $out/bin/libgodot-haskell-plugin.so;
+      ln -s ${godot-haskell-plugin}/lib/ghc-${ghc-version}/lib/libgodot-haskell-plugin.so $out/bin/libgodot-haskell-plugin.so;
+      ln -s ${godot-haskell-plugin}/lib/ghc-${ghc-version}/lib/libgodot-haskell-plugin.so $out/addons/godot-haskell-plugin/libgodot-haskell-plugin.so
     '';
+      # ln -s $out/bin/libgodot-haskell-plugin.so $out/addons/godot-haskell-plugin/libgodot-haskell-plugin.so;
+      # ln -s ${godot-haskell-plugin}/lib/ghc-${ghc-version}/lib/libgodot-haskell-plugin.so $out/addons/godot-haskell-plugin/libgodot-haskell-plugin.so
+      # rm $out/addons/godot-haskell-plugin/libgodot-haskell-plugin.so
+      # ln -s ${godot-haskell-plugin}/lib/ghc-${ghc-version}/lib/libgodot-haskell-plugin.so $out/result/bin/libgodot-haskell-plugin.so;
 
     rrSources = writeShellScriptBin "rr_sources" ''
       RR_LOG=all:debug ./result/bin/rr sources \
@@ -239,25 +389,24 @@ let
 
     simula = stdenv.mkDerivation {
       name = "Simula";
-      src = builtins.filterSource (path: type:
-           lib.cleanSourceFilter path type                 # Necessary to avoid nix "out of memory" errors
-        && (! (lib.hasSuffix ".import" (baseNameOf path))) # Nix shouldn't compare about *.imports and their assets
-        && (! (lib.hasSuffix ".md5" (baseNameOf path)))    # "
-        && (! (lib.hasSuffix ".stex" (baseNameOf path)))   # "
-        && (baseNameOf (builtins.dirOf path) != ".import")        # "
-        && (baseNameOf (builtins.dirOf path) != "log")            # Don't let log/* files confuse cachix
-        && (baseNameOf (builtins.dirOf path) != "config")         # Don't let user config file alterations confuse cachix
-        && (baseNameOf (builtins.dirOf path) != "png")            # Don't let user pictures confuse cachix
-        && (baseNameOf (builtins.dirOf path) != "./addons/godot-haskell-plugin/libgodot-haskell-plugin.so") # Ignore this (useful when switching to dev branch)
-        # && (baseNameOf path != ".git")                          # Nix/cachix already isn't confused by this
-        # && (baseNameOf path != "result")                        # "
-      ) ./.;
+      src = fetchGit {
+        url = builtins.toString ./.;
+        submodules = true;
+        allRefs = true;
+      };
 
       buildInputs = [ xpra xrdb wmctrl fontconfig glibc-locales xfce4-terminal-wrapped openxr-loader midori-wrapped pernoscoSubmit i3status-wrapped cabal-install ghc ] ++ simulaPackages;
       installPhase = ''
+      mkdir -p $out
+
+      cp -R $src/* $out/ # Copy over Simula files so we can launch it from the nix store
+      cp $src/.Xdefaults $out/ || echo "Failed to copy .Xdefaults" # Hack: for some reason this file has trouble copying unless we do it explicitly?
+      chmod -R u+w $out # Allows us to create the libgodot-haskell-plugin.so symlink
+
       mkdir -p $out/bin
       mkdir -p $out/srcs
       mkdir -p $out/share
+
       ln -s ${xpra}/bin/xpra $out/bin/xpra
       ln -s ${xfce4-terminal-wrapped}/bin/xfce4-terminal $out/bin/xfce4-terminal
       ln -s ${xrdb}/bin/xrdb $out/bin/xrdb

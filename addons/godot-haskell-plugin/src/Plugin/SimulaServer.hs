@@ -24,6 +24,7 @@ import System.Posix.Types
 import System.Posix.Signals
 import System.Directory
 import System.Exit
+import System.FilePath
 import System.Timeout
 import           Data.Bits
 import           Linear
@@ -88,6 +89,8 @@ import Dhall
 import Control.Exception
 import qualified Data.Vector as V
 
+import qualified Data.Text as T
+
 getKeyboardAction :: GodotSimulaServer -> KeyboardShortcut -> KeyboardAction
 getKeyboardAction gss keyboardShortcut =
   case (keyboardShortcut ^. keyAction) of
@@ -96,7 +99,7 @@ getKeyboardAction gss keyboardShortcut =
     "clickRight" -> rightClick
     "scrollUp" -> scrollUp gss
     "scrollDown" -> scrollDown gss
-    "launchTerminal" -> shellLaunch gss "./result/bin/xfce4-terminal"
+    "launchTerminal" -> shellLaunch gss "xfce4-terminal"
     "launchXrpa" -> launchXpra' gss
     "toggleGrabMode" -> toggleGrabMode'
     "launchHMDWebCam" -> launchHMDWebCam' gss
@@ -120,7 +123,7 @@ getKeyboardAction gss keyboardShortcut =
     "terminateSimula" -> terminateSimula gss
     "cycleEnvironment" -> cycleEnvironment gss
     "cycleScene" -> cycleScene gss
-    "launchAppLauncher" -> shellLaunch gss "./result/bin/synapse"
+    "launchAppLauncher" -> shellLaunch gss "synapse"
     "textToSpeech" -> textToSpeech gss
     "decreaseTransparency" -> decreaseTransparency
     "increaseTransparency" -> increaseTransparency
@@ -259,13 +262,18 @@ getKeyboardAction gss keyboardShortcut =
             Nothing -> do
               getSingleton Godot_OS "OS" >>= \os -> G.set_window_fullscreen os True
               putStrLn "Starting screen recording.."
-              forkIO $ do timeStampStr <- show <$> getCurrentTime
-                          let videoBaseName' = "simula_screen_recording_" <> timeStampStr
-                          let videoBaseName = filter (\x -> x /= ' ') videoBaseName'
-                          createDirectoryIfMissing False "media"
-                          let relativePath = ("./media/" <> videoBaseName <> ".mkv")
-                          (_,_,_, ph) <- createProcess (proc "./result/bin/ffmpeg" ["-nostdin", "-f", "x11grab", "-framerate", "90", "-i", ":0.0", "-c:v", "libx264", "-y", "-loglevel", "quiet", relativePath])
-                          atomically $ writeTVar (gss ^. gssScreenRecorder) (Just ph)
+              forkIO $ do 
+                timeStampStr <- show <$> getCurrentTime
+                let videoBaseName' = "simula_screen_recording_" <> timeStampStr
+                let videoBaseName = filter (\x -> x /= ' ') videoBaseName'
+                maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
+                let dataDir = fromMaybe "./media" maybeDataDir
+                createDirectoryIfMissing False dataDir
+                let relativePath = (dataDir ++ "/" ++ videoBaseName ++ ".mkv")
+                maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
+                let appDir = fromMaybe "./result/bin" maybeAppDir
+                (_,_,_, ph) <- createProcess (proc (appDir ++ "/ffmpeg") ["-nostdin", "-f", "x11grab", "-framerate", "90", "-i", ":0.0", "-c:v", "libx264", "-y", "-loglevel", "quiet", relativePath])
+                atomically $ writeTVar (gss ^. gssScreenRecorder) (Just ph)
               return ()
             Just ph -> do
               putStrLn "Stopping screen recording.."
@@ -273,7 +281,7 @@ getKeyboardAction gss keyboardShortcut =
                 G.set_window_maximized os True -- Fails?
                 G.set_window_fullscreen os False
               terminateProcess ph
-              atomically $ writeTVar (gss ^. gssScreenRecorder) (Nothing)
+              atomically $ writeTVar (gss ^. gssScreenRecorder) Nothing
           return ()
         recordScreen gss _ False = do
           return ()
@@ -302,6 +310,8 @@ getKeyboardAction gss keyboardShortcut =
         textToSpeech gss _ True = do
           let originalEnv = (gss ^. gssOriginalEnv)
           maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
+          maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
+          let appDir = fromMaybe "./result/bin" maybeAppDir
           case maybeXwaylandDisplay of
             Nothing -> putStrLn "No DISPLAY found!"
             (Just xwaylandDisplay) -> do
@@ -309,9 +319,9 @@ getKeyboardAction gss keyboardShortcut =
               let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
               let envListWithDisplay = M.toList envMapWithDisplay
 
-              (_, output', _) <- B.readCreateProcessWithExitCode ((shell "./result/bin/xsel -p") { env = Just envListWithDisplay, new_session = True }) ""
+              (_, output', _) <- B.readCreateProcessWithExitCode ((shell (appDir ++ "/xsel -p")) { env = Just envListWithDisplay, new_session = True }) ""
               let output = (B.unpack output')
-              createProcess (proc "./result/bin/mimic" ["-pw", "--setf", "duration_stretch=0.68", "-t", output]) { env = Just envListWithDisplay, new_session = True } :: IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+              createProcess (proc (appDir ++ "/mimic") ["-pw", "--setf", "duration_stretch=0.68", "-t", output]) { env = Just envListWithDisplay, new_session = True } :: IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
               return ()
         textToSpeech _ _ _ = return ()
   
@@ -697,11 +707,14 @@ ready :: GodotSimulaServer -> [GodotVariant] -> IO ()
 ready gss _ = do
   debugModeMaybe <- lookupEnv "DEBUG"
   rrModeMaybe <- lookupEnv "RUNNING_UNDER_RR"
+  maybeLogDir <- lookupEnv "SIMULA_LOG_DIR"
+  let logDir = fromMaybe "." maybeLogDir
   -- Delete log file
   case rrModeMaybe of
     Just "1" -> return ()
-    _ -> do readProcess "touch" ["./log.txt"] []
-            readProcess "rm" ["./log.txt"] []
+    _ -> do putStrLn "Running Simula without RR"
+            readProcess "touch" [logDir ++ "/log.txt"] []
+            readProcess "rm" [logDir ++ "/log.txt"] []
             return ()
 
   addWlrChildren gss
@@ -748,19 +761,21 @@ ready gss _ = do
   getSingleton GodotInput "Input" >>= \inp -> G.set_mouse_mode inp G.MOUSE_MODE_CAPTURED
   pid <- getProcessID
 
-  createProcess (shell "./result/bin/xrdb -merge .Xdefaults") { env = Just [("DISPLAY", newDisplay)] }
+  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
+  let appDir = fromMaybe "./result/bin" maybeAppDir
+  let simulaNixDir = takeDirectory appDir
+  let command = appDir ++ "/xrdb -merge " ++ simulaNixDir ++ "/.Xdefaults"
+  createProcess (shell command) { env = Just [("DISPLAY", newDisplay)] }
 
   case rrModeMaybe of
     Just "1" -> return ()
-    _ -> do (_, windows', _) <- B.readCreateProcessWithExitCode (shell "./result/bin/wmctrl -lp") ""
+    _ -> do (_, windows', _) <- B.readCreateProcessWithExitCode (shell (appDir ++ "/wmctrl -lp")) ""
             let windows = (B.unpack windows')
             let rightWindows = filter (\line -> isInfixOf (show pid) line) (lines windows)
             when (length rightWindows > 0 && length (words $ head rightWindows) > 0)$ do
               let simulaWindow = (head . words . head) rightWindows
-              createProcess ((shell $ "./result/bin/wmctrl -ia " ++ simulaWindow) { env = Just [("DISPLAY", oldDisplay)] })
+              createProcess ((shell $ appDir ++ "/wmctrl -ia " ++ simulaWindow) { env = Just [("DISPLAY", oldDisplay)] })
               return ()
-
-  appendFile "log.txt" ""
 
   -- Adding a `WorldEnvironment` anywhere to an active scene graph
   -- overrides the default environment
@@ -790,7 +805,6 @@ ready gss _ = do
   addChild canvasLayer rtLabel
   forkUpdateHUDRecursively gss
 
-  -- addLeapMotionModule gss
   return ()
 
   where launchDefaultApps :: [String] -> String-> IO ()
@@ -886,15 +900,91 @@ addWlrChildren gss = do
           socketName' <- toLowLevel (pack socketName)
           G.set_socket_name waylandDisplay socketName'
 
-parseConfiguration :: IO (Configuration)
+parseConfiguration :: IO Configuration
 parseConfiguration = do
   profile <- lookupEnv "PROFILE"
-  let defaultConfiguration = Configuration {_backend = "OpenVR", _startingApps = StartingApps {_center = Just "ENV=val ./result/bin/xfce4-terminal", _right = Nothing, _bottom = Nothing, _left = Nothing, _top = Nothing}, _defaultWindowResolution = Just (900,900), _defaultWindowScale = 1.0, _axisScrollSpeed = 0.03, _mouseSensitivityScaler = 1.00, _keyBindings = [KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_BACKSPACE"], _keyAction = "terminateWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_ESCAPE"], _keyAction = "toggleGrabMode"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_SLASH"], _keyAction = "launchTerminal"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_APOSTROPHE"], _keyAction = "moveCursor"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_ENTER"], _keyAction = "clickLeft"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MASK_SHIFT","KEY_ENTER"], _keyAction = "clickRight"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_ALT_R"], _keyAction = "grabWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_ALT_L"], _keyAction = "grabWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_A"], _keyAction = "launchAppLauncher"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_E"], _keyAction = "cycleEnvironment"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_F"], _keyAction = "orientWindowTowardsGaze"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_9"], _keyAction = "scaleWindowDown"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_0"], _keyAction = "scaleWindowUp"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MINUS"], _keyAction = "zoomOut"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_EQUAL"], _keyAction = "zoomIn"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_LEFT"], _keyAction = "contractWindowHorizontally"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_RIGHT"], _keyAction = "extendWindowHorizontally"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_UP"], _keyAction = "contractWindowVertically"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_DOWN"], _keyAction = "extendWindowVertically"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_S"], _keyAction = "resizeWindowToDefaultSize"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_COMMA"], _keyAction = "pullWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_PERIOD"], _keyAction = "pushWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_W"], _keyAction = "launchHMDWebCam"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_R"], _keyAction = "emacsclient -c"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MASK_SHIFT","KEY_ESCAPE"], _keyAction = "terminateSimula"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MASK_ALT","KEY_UP"], _keyAction = "increaseTransparency"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MASK_ALT","KEY_DOWN"], _keyAction = "decreaseTransparency"},KeyboardShortcut {_keyCombination = ["KEY_PRINT"], _keyAction = "toggleScreenshotMode"},KeyboardShortcut {_keyCombination = ["KEY_MASK_SHIFT","KEY_PRINT"], _keyAction = "takeScreenshotGlobal"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_K"], _keyAction = "firefox -new-window"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_G"], _keyAction = "google-chrome-stable --new-window news.ycombinator.com"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_J"], _keyAction = "gvim"}], _keyRemappings = [], _environmentsDirectory = "./environments", _environmentDefault = "./environments/AllSkyFree_Sky_EpicBlueSunset_Equirect.png", _scenes = [], _hudConfig = "./config/i3status.config"} --
-  config <- case profile of
-    Just value -> return defaultConfiguration
-    Nothing -> input auto "./config/config.dhall" :: IO Configuration
-  return config
+  maybeConfigDir <- lookupEnv "SIMULA_CONFIG_DIR"
+  maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
+  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
 
+  putStrLn $ "DEBUG: PROFILE = " ++ show profile
+  putStrLn $ "DEBUG: SIMULA_CONFIG_DIR = " ++ show maybeConfigDir
+  putStrLn $ "DEBUG: SIMULA_DATA_DIR = " ++ show maybeDataDir
+  putStrLn $ "DEBUG: SIMULA_APP_DIR = " ++ show maybeAppDir
+  
+  
+  let configDir = fromMaybe "./config/Simula" maybeConfigDir
+      dataDir = fromMaybe "./." maybeDataDir
+      appDir = fromMaybe "./result/bin" maybeAppDir
+      localDir = "./."
+      simulaNixDir = takeDirectory appDir
+
+      defaultConfiguration = Configuration 
+        { _backend = "OpenVR"
+        , _startingApps = StartingApps 
+            -- { _center = Just $ "ENV=val " ++ appDir ++ "/xfce4-terminal"
+            { _center = Nothing
+            , _right = Nothing
+            , _bottom = Nothing
+            , _left = Nothing
+            , _top = Nothing
+            }
+        , _defaultWindowResolution = Just (900, 900)
+        , _defaultWindowScale = 1.0
+        , _axisScrollSpeed = 0.03
+        , _mouseSensitivityScaler = 1.00
+        , _keyBindings = 
+            [ KeyboardShortcut ["KEY_MASK_META", "KEY_BACKSPACE"] "terminateWindow"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_ESCAPE"] "toggleGrabMode"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_SLASH"] "launchTerminal"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_APOSTROPHE"] "moveCursor"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_ENTER"] "clickLeft"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_ENTER"] "clickRight"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_ALT_R"] "grabWindow"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_ALT_L"] "grabWindow"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_A"] "launchAppLauncher"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_E"] "cycleEnvironment"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_F"] "orientWindowTowardsGaze"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_9"] "scaleWindowDown"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_0"] "scaleWindowUp"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_MINUS"] "zoomOut"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_EQUAL"] "zoomIn"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_LEFT"] "contractWindowHorizontally"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_RIGHT"] "extendWindowHorizontally"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_UP"] "contractWindowVertically"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_DOWN"] "extendWindowVertically"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_S"] "resizeWindowToDefaultSize"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_COMMA"] "pullWindow"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_PERIOD"] "pushWindow"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_W"] "launchHMDWebCam"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_R"] "emacsclient -c"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_ESCAPE"] "terminateSimula"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_MASK_ALT", "KEY_UP"] "increaseTransparency"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_MASK_ALT", "KEY_DOWN"] "decreaseTransparency"
+            , KeyboardShortcut ["KEY_PRINT"] "toggleScreenshotMode"
+            , KeyboardShortcut ["KEY_MASK_SHIFT", "KEY_PRINT"] "takeScreenshotGlobal"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_K"] "firefox -new-window"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_G"] "google-chrome-stable --new-window news.ycombinator.com"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_J"] "gvim"
+            ]
+        , _keyRemappings = []
+        , _environmentsDirectory = simulaNixDir ++ "/environments"
+        , _environmentDefault = simulaNixDir ++ "/environments/AllSkyFree_Sky_EpicBlueSunset_Equirect.png"
+        , _scenes = []
+        , _hudConfig = configDir ++ "/i3status.config"
+        }
+      
+  config <- case profile of
+    Just _ -> return defaultConfiguration
+    Nothing -> do
+      let configPath = configDir ++ "/config.dhall"
+      configExists <- doesFileExist configPath
+      if configExists
+        then input auto (T.pack configPath)
+        else return defaultConfiguration
+  
+  return config
+  
 -- | We first fill the TVars with dummy state, before updating them with their
 -- | real values in `ready`.
 initGodotSimulaServer :: GodotObject -> IO (GodotSimulaServer)
@@ -1359,7 +1449,9 @@ physicsProcess gss _ = do
 shellCmd1 :: GodotSimulaServer -> String -> IO ()
 shellCmd1 gss appStr = do
   let originalEnv = (gss ^. gssOriginalEnv)
-  createProcess (shell appStr) { env = Just originalEnv }
+  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
+  let appDir = fromMaybe "./result/bin" maybeAppDir
+  createProcess (shell (appDir ++ "/" ++ appStr)) { env = Just originalEnv }
   return ()
 
 _on_simula_shortcut :: GodotSimulaServer -> [GodotVariant] -> IO ()
@@ -1456,6 +1548,8 @@ launchXpra :: GodotSimulaServer -> IO ()
 launchXpra gss = do
   let originalEnv = (gss ^. gssOriginalEnv)
   maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
+  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
+  let appDir = fromMaybe "./result/bin" maybeAppDir
   case maybeXwaylandDisplay of
     Nothing -> putStrLn "No DISPLAY found!"
     (Just xwaylandDisplay) -> do
@@ -1463,24 +1557,25 @@ launchXpra gss = do
       let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
       let envListWithDisplay = M.toList envMapWithDisplay
 
-      (_,output',_) <- B.readCreateProcessWithExitCode (shell "./result/bin/xpra list") ""
+      (_,output',_) <- B.readCreateProcessWithExitCode (shell (appDir ++ "/xpra list")) ""
       let output = B.unpack output'
       let isXpraAlreadyLive = isInfixOf ":13" output
       case isXpraAlreadyLive of
-        False -> do createSessionLeader "./result/bin/xpra" ["--fake-xinerama=no", "start", "--start", "./result/bin/xfce4-terminal", ":13"] (Just envListWithDisplay)
-                    waitForXpraRecursively
+        False -> do createSessionLeader (appDir ++ "/xpra") ["--fake-xinerama=no", "start", "--start", appDir ++ "/xfce4-terminal", ":13"] (Just envListWithDisplay)
+                    waitForXpraRecursively appDir
         True -> do putStrLn "xpra is already running!"
-      createSessionLeader "./result/bin/xpra" ["attach", ":13"] (Just envListWithDisplay)
+      createSessionLeader (appDir ++ "/xpra") ["attach", ":13"] (Just envListWithDisplay)
       return ()
-      where waitForXpraRecursively = do
-              (_,output',_) <- B.readCreateProcessWithExitCode (shell "./result/bin/xpra list") ""
-              let output = B.unpack output'
-              putStrLn $ "Output is: " ++ output
-              let isXpraAlreadyLive = isInfixOf ":13" output
-              case isXpraAlreadyLive of
-                False -> do putStrLn $ "Waiting for xpra server.."
-                            waitForXpraRecursively
-                True -> do putStrLn "xpra server found!"
+
+  where waitForXpraRecursively appDir = do
+          (_,output',_) <- B.readCreateProcessWithExitCode (shell (appDir ++ "/xpra list")) ""
+          let output = B.unpack output'
+          putStrLn $ "Output is: " ++ output
+          let isXpraAlreadyLive = isInfixOf ":13" output
+          case isXpraAlreadyLive of
+            False -> do putStrLn $ "Waiting for xpra server.."
+                        waitForXpraRecursively appDir
+            True -> do putStrLn "xpra server found!"
 
 createSessionLeader :: FilePath -> [String] -> Maybe [(String, String)] -> IO (ProcessID, ProcessGroupID)
 createSessionLeader exe args env = do

@@ -19,6 +19,7 @@ import           Linear.V3
 
 import           Data.Time.Clock
 import           Data.Maybe
+import           System.Environment (lookupEnv)
 import           Control.Concurrent
 import           Control.Monad
 import           Data.Coerce
@@ -757,7 +758,9 @@ logGSVS str gsvs = do
 
 logStr :: String -> IO ()
 logStr string = do
-  appendFile "./log/log.txt" $ string ++ "\n"
+  maybeLogDir <- lookupEnv "SIMULA_LOG_DIR"
+  let logDir = fromMaybe "." maybeLogDir
+  appendFile (logDir ++ "/log.txt") $ string ++ "\n"
 
 logPutStrLn :: String -> IO ()
 logPutStrLn string = do
@@ -858,24 +861,19 @@ fst3 (a, b, c) = a
 savePng :: CanvasSurface -> GodotViewportTexture -> GodotWlrSurface -> IO String
 savePng cs surfaceTexture wlrSurface = do
   validateSurfaceE wlrSurface
-  -- Get image
   gsvs <- readTVarIO (cs ^. csGSVS)
   surfaceTextureAsImage <- G.get_data surfaceTexture
 
-  -- Get file path
   frame <- readTVarIO (gsvs ^. gsvsFrameCount)
-  createDirectoryIfMissing False "media"
-  let pathStr = "./media/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
+  maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
+  let dataDir = fromMaybe "." maybeDataDir
+  createDirectoryIfMissing False (dataDir ++ "/media")
+  let pathStr = dataDir ++ "/media/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
   canonicalPath <- canonicalizePath pathStr
   pathStr' <- toLowLevel (pack pathStr)
 
-  -- Save as png
   G.save_png surfaceTextureAsImage pathStr'
   return canonicalPath
-  where getVisualServer gsvs = do
-          gss <- readTVarIO (gsvs ^. gsvsServer)
-          visualServer <- readTVarIO (gss ^. gssVisualServer)
-          return visualServer
 
 type ScreenshotBaseName = String
 type ScreenshotFullPath = String
@@ -886,8 +884,10 @@ savePngPancake gss screenshotBaseName = do
   viewportTexture <- G.get_texture viewport
   pancakeImg <- G.get_data viewportTexture
   G.flip_y pancakeImg
-  createDirectoryIfMissing False "media"
-  let relativePath = ("./media/" <> screenshotBaseName <> ".png")
+  maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
+  let dataDir = fromMaybe "." maybeDataDir
+  createDirectoryIfMissing False (dataDir ++ "/media")
+  let relativePath = (dataDir ++ "/media/" <> screenshotBaseName <> ".png")
   fullPath <- System.Directory.canonicalizePath relativePath
   G.save_png pancakeImg =<< toLowLevel (pack relativePath)
   return fullPath
@@ -898,40 +898,45 @@ appLaunch :: GodotSimulaServer -> String -> Maybe String -> IO ProcessID
 appLaunch gss appStr maybeLocation = do
   let originalEnv = (gss ^. gssOriginalEnv)
   maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
+  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
+  let appDir = fromMaybe "./result/bin" maybeAppDir
   case (appStr, maybeXwaylandDisplay) of
-        ("nullApp", _) -> do return $ fromInteger 0
-        ("launchHMDWebcam", _) -> launchHMDWebCam gss maybeLocation
-        ("launchTerminal", _) -> terminalLaunch gss maybeLocation
-        ("launchUsageInstructions", _) -> appLaunch gss "./result/bin/midori https://github.com/SimulaVR/Simula#usage -p" maybeLocation
-        (_, Nothing) -> putStrLn "No DISPLAY found!" >> (return $ fromInteger 0)
-        (_, (Just xwaylandDisplay)) -> do
-            let envMap = M.fromList originalEnv
-            let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
-            let envMapWithWaylandDisplay = case maybeLocation of
-                                                Just location -> M.insert "SIMULA_STARTING_LOCATION" location (M.insert "WAYLAND_DISPLAY" "simula-0" envMapWithDisplay)
-                                                Nothing -> (M.insert "WAYLAND_DISPLAY" "simula-0" envMapWithDisplay)
-            let envListWithDisplays = M.toList envMapWithWaylandDisplay
-            res <- Control.Exception.Safe.try $ createProcess (shell appStr) { env = Just envListWithDisplays, new_session = True } :: IO (Either IOException (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle))
-            pid <- case res of
-                        Left _ -> return $ fromInteger 0
-                        Right (_, _, _, processHandle) -> do maybePid <- System.Process.getPid processHandle
-                                                             case maybePid of
-                                                                  Just pid -> return pid
-                                                                  Nothing -> return $ fromInteger $ 0
-            startingAppPids <- readTVarIO (gss ^. gssStartingAppPids)
-            case maybeLocation of
-              Nothing -> return ()
-              Just location -> do let startingAppPids' = M.insertWith (++) pid [location] startingAppPids
-                                  atomically $ writeTVar (gss ^. gssStartingAppPids) startingAppPids'
-            return pid
+    ("nullApp", _) -> return $ fromInteger 0
+    ("launchHMDWebcam", _) -> launchHMDWebCam gss maybeLocation
+    ("launchTerminal", _) -> terminalLaunch gss maybeLocation
+    ("launchUsageInstructions", _) -> appLaunch gss "midori https://github.com/SimulaVR/Simula#usage -p" maybeLocation
+    (_, Nothing) -> putStrLn "No DISPLAY found!" >> (return $ fromInteger 0)
+    (_, (Just xwaylandDisplay)) -> do
+      let envMap = M.fromList originalEnv
+      let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
+      let envMapWithWaylandDisplay = case maybeLocation of
+            Just location -> M.insert "SIMULA_STARTING_LOCATION" location (M.insert "WAYLAND_DISPLAY" "simula-0" envMapWithDisplay)
+            Nothing -> (M.insert "WAYLAND_DISPLAY" "simula-0" envMapWithDisplay)
+      let envListWithDisplays = M.toList envMapWithWaylandDisplay
+      res <- Control.Exception.Safe.try $ createProcess (shell appStr) { env = Just envListWithDisplays, new_session = True } :: IO (Either IOException (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle))
+      pid <- case res of
+                  Left _ -> return $ fromInteger 0
+                  Right (_, _, _, processHandle) -> do maybePid <- System.Process.getPid processHandle
+                                                       case maybePid of
+                                                            Just pid -> return pid
+                                                            Nothing -> return $ fromInteger $ 0
+      startingAppPids <- readTVarIO (gss ^. gssStartingAppPids)
+      case maybeLocation of
+        Nothing -> return ()
+        Just location -> do let startingAppPids' = M.insertWith (++) pid [location] startingAppPids
+                            atomically $ writeTVar (gss ^. gssStartingAppPids) startingAppPids'
+      return pid
+
 
 launchHMDWebCam :: GodotSimulaServer -> Maybe String -> IO ProcessID
 launchHMDWebCam gss maybeLocation = do
   maybePath <- getHMDWebCamPath
+  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
+  let appDir = fromMaybe "./result/bin" maybeAppDir
   case maybePath of
     Nothing -> do putStrLn "Cannot find HMD web cam!"
                   appLaunch gss "nullApp" Nothing
-    Just path  -> appLaunch gss ("./result/bin/ffplay -loglevel quiet -f v4l2" ++ path) maybeLocation
+    Just path  -> appLaunch gss (appDir ++ "/ffplay -loglevel quiet -f v4l2" ++ path) maybeLocation
     where getHMDWebCamPath :: IO (Maybe FilePath)
           getHMDWebCamPath = do
             res <- Control.Exception.Safe.try $ listDirectory "/dev/v4l/by-id" :: IO (Either IOException [FilePath])
@@ -943,8 +948,12 @@ launchHMDWebCam gss maybeLocation = do
                                                                        "VIVE",  -- HTC Vive Pro
                                                                        "Valve", -- Valve Index?
                                                                        "Etron"] -- Valve Index
+                            
 terminalLaunch :: GodotSimulaServer -> Maybe String -> IO ProcessID
-terminalLaunch gss maybeLocation = appLaunch gss "./result/bin/xfce4-terminal" maybeLocation
+terminalLaunch gss maybeLocation = do
+  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
+  let appDir = fromMaybe "./result/bin" maybeAppDir
+  appLaunch gss (appDir ++ "/xfce4-terminal") maybeLocation
 
 getTextureFromURL :: String -> IO (Maybe GodotTexture)
 getTextureFromURL urlStr = do
@@ -1169,26 +1178,30 @@ saveViewportAsPngAndLaunch gsvs tex m22@(V2 (V2 ox oy) (V2 ex ey)) = do
   let isNull = ((unsafeCoerce tex) == nullPtr)
   case isNull of
     True -> putStrLn "Texture is null in saveViewportAsPngAndLaunch!"
-    False -> do -- Get image
-                texAsImage <- G.get_data tex
+    False -> do
+      -- Get image
+      texAsImage <- G.get_data tex
 
-                -- Get file path
-                timeStampStr <- show <$> getCurrentTime
-                createDirectoryIfMissing False "media"
-                let pathStr = "./media/" ++  ((Data.List.filter (/= '"') . show) timeStampStr) ++ ".png"
-                pathStr' <- toLowLevel (pack pathStr)
+      -- Get file path
+      timeStampStr <- show <$> getCurrentTime
+      maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
+      let dataDir = fromMaybe "./media" maybeDataDir
+      createDirectoryIfMissing False dataDir
+      let pathStr = dataDir ++ "/" ++  ((Data.List.filter (/= '"') . show) timeStampStr) ++ ".png"
+      pathStr' <- toLowLevel (pack pathStr)
 
-                -- Save as png
-                rect <- toLowLevel m22
-                rectImage <- G.get_rect texAsImage rect
-                System.Directory.createDirectoryIfMissing True "png"
-                G.save_png rectImage pathStr'
-                gss <- readTVarIO (gsvs ^. gsvsServer)
+      -- Save as png
+      rect <- toLowLevel m22
+      rectImage <- G.get_rect texAsImage rect
+      G.save_png rectImage pathStr'
+      gss <- readTVarIO (gsvs ^. gsvsServer)
 
-                -- Copy to clipboard
-                appLaunch gss ("./result/bin/xclip -selection clipboard -t image/png -i" ++ pathStr) Nothing >> return ()
+      -- Copy to clipboard
+      maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
+      let appDir = fromMaybe "./result/bin" maybeAppDir
+      appLaunch gss (appDir ++ "/xclip -selection clipboard -t image/png -i " ++ pathStr) Nothing >> return ()
 
-                return ()
+      return ()
 
 fromGodotArray :: GodotArray -> IO [GodotVariant]
 fromGodotArray vs = do
@@ -1673,7 +1686,9 @@ forkUpdateHUDRecursively :: GodotSimulaServer -> IO ()
 forkUpdateHUDRecursively gss = do
   configuration <- readTVarIO (gss ^. gssConfiguration)
   let configPath = (configuration ^. hudConfig)
-  res@(inp,out,err,pid) <- System.IO.Streams.Process.runInteractiveProcess "./result/bin/i3status" ["-c", configPath] Nothing Nothing --
+  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
+  let appDir = fromMaybe "./result/bin" maybeAppDir
+  res@(inp,out,err,pid) <- System.IO.Streams.Process.runInteractiveProcess (appDir ++ "/i3status") ["-c", configPath] Nothing Nothing
 
   forkIO $ updateHUDRecursively gss res
   return ()

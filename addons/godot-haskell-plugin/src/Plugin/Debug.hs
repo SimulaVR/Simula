@@ -87,6 +87,8 @@ import Test.QuickCheck hiding ((.&.))
 import Test.Hspec.Core.Runner
 import Test.Hspec.Formatters
 
+import System.FilePath ((</>))
+
 debugLaunchApp :: GodotSimulaServer -> String -> IO GodotSimulaViewSprite
 debugLaunchApp gss app = do
   appLaunch gss app Nothing
@@ -161,7 +163,12 @@ testRightclickPopup gss app screenshotBase = do
   debugMouseClick 2 True
   debugMouseClick 2 False
   Control.Concurrent.threadDelay (5 * 1000000)
-  screenshotFullPath <- savePngPancake gss screenshotBase
+  
+  maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
+  let dataDir = fromMaybe "./.local/share/Simula" maybeDataDir
+  createDirectoryIfMissing True (dataDir </> "screenshots")
+  let screenshotPath = dataDir </> "screenshots" </> screenshotBase
+  screenshotFullPath <- savePngPancake gss screenshotPath
 
   SurfaceLocalCoordinates (cx, cy) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
@@ -183,13 +190,12 @@ testRightclickPopup gss app screenshotBase = do
                                              (_, True) -> return $ depthFirstSurfaces !! 1
                                              _ -> return $ depthFirstSurfaces !! 0
 
-  -- debugTerminateGSVS gsvs -- Suffers from threading issues; use pkill instead
   Control.Concurrent.threadDelay (1 * 1000000)
   debugLogDepthFirstSurfaces gsvs
   Control.Concurrent.threadDelay (2 * 1000000)
   createProcess (shell $ "pkill " ++ app)
   return ((cx, cy), (fromIntegral px, fromIntegral py), screenshotFullPath)
-
+  
 testAppMemory :: GodotSimulaServer -> String -> Int -> IO (Float, Float)
 testAppMemory gss app sec = do
   pid1 <- logMemPid gss
@@ -292,12 +298,17 @@ debugLogDepthFirstSurfaces gsvs = do
   depthFirstWlrSurfaces <- getDepthFirstWlrSurfaces wlrSurfaceParent
   let depthFirstSurfaces = depthFirstBaseSurfaces ++ depthFirstWlrSurfaces
 
-  logStr $ "===debugLogDepthFirstSurfaces frame: " ++ (show frame) ++ " ==="
-  logStr $ "depthFirstSurfaces:" ++ (show $ length depthFirstSurfaces)
-  logStr $ "  depthFirstBaseSurfaces:" ++ (show $ length depthFirstBaseSurfaces)
-  logStr $ "  " ++ (show depthFirstBaseSurfaces)
-  logStr $ "  depthFirstWlrSurfaces:" ++ (show $ length depthFirstWlrSurfaces)
-  logStr $ "  " ++ (show depthFirstWlrSurfaces)
+  maybeLogDir <- lookupEnv "SIMULA_LOG_DIR"
+  let logDir = fromMaybe "./log" maybeLogDir
+  createDirectoryIfMissing True logDir
+  let logFile = logDir </> "debug_log.txt"
+
+  appendFile logFile $ "===debugLogDepthFirstSurfaces frame: " ++ (show frame) ++ " ===\n"
+  appendFile logFile $ "depthFirstSurfaces:" ++ (show $ length depthFirstSurfaces) ++ "\n"
+  appendFile logFile $ "  depthFirstBaseSurfaces:" ++ (show $ length depthFirstBaseSurfaces) ++ "\n"
+  appendFile logFile $ "  " ++ (show depthFirstBaseSurfaces) ++ "\n"
+  appendFile logFile $ "  depthFirstWlrSurfaces:" ++ (show $ length depthFirstWlrSurfaces) ++ "\n"
+  appendFile logFile $ "  " ++ (show depthFirstWlrSurfaces) ++ "\n"
 
   mapM_ (logWlrSurface cs) depthFirstSurfaces
 
@@ -319,8 +330,11 @@ debugLogDepthFirstSurfaces gsvs = do
 
           -- Get file path
           frame <- readTVarIO (gsvs ^. gsvsFrameCount)
-          createDirectoryIfMissing False "media"
-          let pathStr = "./media/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
+          maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
+          let dataDir = fromMaybe "./.local/share/Simula" maybeDataDir
+          createDirectoryIfMissing True (dataDir </> "media")
+          let fileName = (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
+          let pathStr = dataDir </> "media" </> fileName
           canonicalPath <- canonicalizePath pathStr
           pathStr' <- toLowLevel (pack pathStr)
 
@@ -333,7 +347,7 @@ debugLogDepthFirstSurfaces gsvs = do
           gss <- readTVarIO (gsvs ^. gsvsServer)
           visualServer <- readTVarIO (gss ^. gssVisualServer)
           return visualServer
-
+          
 debugFunc :: GodotSimulaServer -> IO ()
 debugFunc gss = do
   (catch :: IO a -> (System.Exit.ExitCode -> IO a) -> IO a) (do -- testPopups gss
