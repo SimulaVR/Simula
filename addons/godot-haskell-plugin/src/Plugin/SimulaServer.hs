@@ -688,7 +688,7 @@ instance NativeScript GodotSimulaServer where
 process :: GodotSimulaServer -> [GodotVariant] -> IO ()
 process gss [deltaGV] = do
   delta <- fromGodotVariant deltaGV :: IO Float
-  -- processWASDMovement gss delta
+  processWASDMovement gss delta
 
   -- Update i3status HUD
   hud <- readTVarIO (gss ^. gssHUD)
