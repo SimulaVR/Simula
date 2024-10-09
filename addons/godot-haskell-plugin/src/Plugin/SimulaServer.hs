@@ -688,7 +688,8 @@ instance NativeScript GodotSimulaServer where
 process :: GodotSimulaServer -> [GodotVariant] -> IO ()
 process gss [deltaGV] = do
   delta <- fromGodotVariant deltaGV :: IO Float
-  processWASDMovement gss delta
+  wasdMode <- readTVarIO (gss ^. gssWasdMode)
+  when wasdMode $ processWASDMovement gss delta
 
   -- Update i3status HUD
   hud <- readTVarIO (gss ^. gssHUD)
@@ -1512,7 +1513,6 @@ processKeypress gss modifiers keycode isPressed = do
                              (False, False) -> do if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
                                                   keyboardGrabLetGo' gss maybeHMDLookAtSprite -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
                                                   keyboardGrabLetGo gss (GrabWindows undefined) -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
-                                                  putStrLn $ "A"
                              (True, False) -> do if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
                              (False, True)  -> do case keycode' of
                                                      G.KEY_W -> actionRelease gss "move_forward"
@@ -1522,7 +1522,6 @@ processKeypress gss modifiers keycode isPressed = do
                                                      G.KEY_SPACE -> actionRelease gss "move_up"
                                                      G.KEY_CONTROL_L -> actionRelease gss "move_down"
                                                      _ -> do
-                                                       putStrLn $ "B"
                                                        G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
                              (True, True)  -> do case keycode' of
                                                      G.KEY_W -> actionPress gss "move_forward"
@@ -1531,8 +1530,7 @@ processKeypress gss modifiers keycode isPressed = do
                                                      G.KEY_D -> actionPress gss "move_right"
                                                      G.KEY_SPACE -> actionPress gss "move_up"
                                                      G.KEY_CONTROL_L -> actionPress gss "move_down"
-                                                     _ -> do putStrLn $ "C"
-                                                             G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
+                                                     _ -> do G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
     (Nothing, True) -> return ()
 
   atomically $ writeTVar (gss ^. gssKeyboardModifiersActive) (Just modifiers)
