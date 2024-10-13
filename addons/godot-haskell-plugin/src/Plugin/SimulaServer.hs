@@ -691,7 +691,7 @@ process gss [deltaGV] = do
   wasdMode <- readTVarIO (gss ^. gssWasdMode)
   when wasdMode $ processWASDMovement gss delta
 
-  -- Update i3status HUD
+  -- Update Simula HUD
   hud <- readTVarIO (gss ^. gssHUD)
   let canvasLayer = (hud ^. hudCanvasLayer)
   let rtLabel = (hud ^. hudRtlI3)
@@ -810,6 +810,7 @@ ready gss _ = do
 
   where launchDefaultApps :: [String] -> String-> IO ()
         launchDefaultApps sApps location = do
+          putStrLn $ "Launching app in location: " ++ location
           let firstApp = if (sApps == []) then Nothing else Just (head sApps)
           let tailApps = tail sApps
           pid <- case firstApp of
@@ -972,7 +973,7 @@ parseConfiguration = do
         , _environmentsDirectory = simulaNixDir ++ "/environments"
         , _environmentDefault = simulaNixDir ++ "/environments/AllSkyFree_Sky_EpicBlueSunset_Equirect.png"
         , _scenes = []
-        , _hudConfig = configDir ++ "/i3status.config"
+        , _hudConfig = configDir ++ "/HUD.config"
         }
       
   config <- case profile of
