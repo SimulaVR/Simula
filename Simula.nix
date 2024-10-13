@@ -70,8 +70,8 @@ let
       export SIMULA_APP_DIR="$out/bin"
 
       # Copy over default config files if they don't already exist
-      if [ ! -f "\$SIMULA_CONFIG_DIR/i3status.config" ]; then
-        cp $out/config/i3status.config "\$SIMULA_CONFIG_DIR/i3status.config"
+      if [ ! -f "\$SIMULA_CONFIG_DIR/HUD.config" ]; then
+        cp $out/config/HUD.config "\$SIMULA_CONFIG_DIR/HUD.config"
       fi
 
       if [ ! -f "\$SIMULA_CONFIG_DIR/config.dhall" ]; then
