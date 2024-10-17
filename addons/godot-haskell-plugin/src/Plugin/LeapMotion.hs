@@ -85,7 +85,7 @@ _ready glm args = do
 
   -- Enable visible collision regions for easier debugging
   putStrLn $ "Engaging Godot debug collisions.."
-  sceneTree <- G.get_tree gss -- getSingleton GodotSceneTree "SceneTree"
+  sceneTree <- G.get_tree gss
   G.set_debug_collisions_hint sceneTree True
 
   -- Push the leap tree back a bit so that hands spawn already intersected with

@@ -24,6 +24,7 @@ import System.Posix.Types
 import System.Posix.Signals
 import System.Directory
 import System.Exit
+import System.FilePath
 import System.Timeout
 import           Data.Bits
 import           Linear
@@ -88,13 +89,17 @@ import Dhall
 import Control.Exception
 import qualified Data.Vector as V
 
+import qualified Data.Text as T
+
 getKeyboardAction :: GodotSimulaServer -> KeyboardShortcut -> KeyboardAction
 getKeyboardAction gss keyboardShortcut =
   case (keyboardShortcut ^. keyAction) of
     "moveCursor" -> moveCursor
     "clickLeft" -> leftClick
     "clickRight" -> rightClick
-    "launchTerminal" -> shellLaunch gss "./result/bin/xfce4-terminal"
+    "scrollUp" -> scrollUp gss
+    "scrollDown" -> scrollDown gss
+    "launchTerminal" -> shellLaunch gss "xfce4-terminal"
     "launchXrpa" -> launchXpra' gss
     "toggleGrabMode" -> toggleGrabMode'
     "launchHMDWebCam" -> launchHMDWebCam' gss
@@ -115,10 +120,10 @@ getKeyboardAction gss keyboardShortcut =
     "zoomIn" -> zoomIn
     "terminateWindow" -> terminateWindow
     "reloadConfig" -> reloadConfig
-    "terminateSimula" -> terminateSimula
+    "terminateSimula" -> terminateSimula gss
     "cycleEnvironment" -> cycleEnvironment gss
     "cycleScene" -> cycleScene gss
-    "launchAppLauncher" -> shellLaunch gss "./result/bin/synapse"
+    "launchAppLauncher" -> shellLaunch gss "synapse"
     "textToSpeech" -> textToSpeech gss
     "decreaseTransparency" -> decreaseTransparency
     "increaseTransparency" -> increaseTransparency
@@ -178,10 +183,12 @@ getKeyboardAction gss keyboardShortcut =
 
         leftClick :: SpriteLocation -> Bool -> IO ()
         leftClick (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          updateCursorStateAbsolute gsvs sx sy
-          sendWlrootsMotion gsvs
+          putStrLn $ "leftClick True"
+          -- updateCursorStateAbsolute gsvs sx sy
+          -- sendWlrootsMotion gsvs
           processClickEvent' gsvs (Button True 1) coords -- BUTTON_LEFT = 1
         leftClick (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) False = do
+          putStrLn $ "leftClick False"
           processClickEvent' gsvs (Button False 1) coords -- BUTTON_LEFT = 1
         leftClick _ _ = return ()
 
@@ -194,6 +201,21 @@ getKeyboardAction gss keyboardShortcut =
           processClickEvent' gsvs (Button False 2) coords -- BUTTON_RIGHT = 2
         rightClick _ _ = return ()
 
+        scrollUp :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
+        scrollUp gss (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+          wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+          axisScrollSpeed <- readTVarIO (gss ^. gssAxisScrollSpeed)
+          G.pointer_notify_axis_continuous wlrSeat 0 (realToFrac axisScrollSpeed)
+        scrollUp _ _ _ = return ()
+
+        scrollDown :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
+        scrollDown gss (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+          wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+          axisScrollSpeed <- readTVarIO (gss ^. gssAxisScrollSpeed)
+          G.pointer_notify_axis_continuous wlrSeat 0 (-1.0 * (realToFrac axisScrollSpeed))
+        scrollDown _ _ _ = return ()
+
+  
         grabWindow :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
         grabWindow gss (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
           keyboardGrabInitiate gss (GrabWindow gsvs undefined)
@@ -240,13 +262,18 @@ getKeyboardAction gss keyboardShortcut =
             Nothing -> do
               getSingleton Godot_OS "OS" >>= \os -> G.set_window_fullscreen os True
               putStrLn "Starting screen recording.."
-              forkIO $ do timeStampStr <- show <$> getCurrentTime
-                          let videoBaseName' = "simula_screen_recording_" <> timeStampStr
-                          let videoBaseName = filter (\x -> x /= ' ') videoBaseName'
-                          createDirectoryIfMissing False "media"
-                          let relativePath = ("./media/" <> videoBaseName <> ".mkv")
-                          (_,_,_, ph) <- createProcess (proc "./result/bin/ffmpeg" ["-nostdin", "-f", "x11grab", "-framerate", "90", "-i", ":0.0", "-c:v", "libx264", "-y", "-loglevel", "quiet", relativePath])
-                          atomically $ writeTVar (gss ^. gssScreenRecorder) (Just ph)
+              forkIO $ do 
+                timeStampStr <- show <$> getCurrentTime
+                let videoBaseName' = "simula_screen_recording_" <> timeStampStr
+                let videoBaseName = filter (\x -> x /= ' ') videoBaseName'
+                maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
+                let dataDir = fromMaybe "./media" maybeDataDir
+                createDirectoryIfMissing False dataDir
+                let relativePath = (dataDir ++ "/" ++ videoBaseName ++ ".mkv")
+                maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
+                let appDir = fromMaybe "./result/bin" maybeAppDir
+                (_,_,_, ph) <- createProcess (proc (appDir ++ "/ffmpeg") ["-nostdin", "-f", "x11grab", "-framerate", "90", "-i", ":0.0", "-c:v", "libx264", "-y", "-loglevel", "quiet", relativePath])
+                atomically $ writeTVar (gss ^. gssScreenRecorder) (Just ph)
               return ()
             Just ph -> do
               putStrLn "Stopping screen recording.."
@@ -254,7 +281,7 @@ getKeyboardAction gss keyboardShortcut =
                 G.set_window_maximized os True -- Fails?
                 G.set_window_fullscreen os False
               terminateProcess ph
-              atomically $ writeTVar (gss ^. gssScreenRecorder) (Nothing)
+              atomically $ writeTVar (gss ^. gssScreenRecorder) Nothing
           return ()
         recordScreen gss _ False = do
           return ()
@@ -283,6 +310,8 @@ getKeyboardAction gss keyboardShortcut =
         textToSpeech gss _ True = do
           let originalEnv = (gss ^. gssOriginalEnv)
           maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
+          maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
+          let appDir = fromMaybe "./result/bin" maybeAppDir
           case maybeXwaylandDisplay of
             Nothing -> putStrLn "No DISPLAY found!"
             (Just xwaylandDisplay) -> do
@@ -290,9 +319,9 @@ getKeyboardAction gss keyboardShortcut =
               let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
               let envListWithDisplay = M.toList envMapWithDisplay
 
-              (_, output', _) <- B.readCreateProcessWithExitCode ((shell "./result/bin/xsel -p") { env = Just envListWithDisplay, new_session = True }) ""
+              (_, output', _) <- B.readCreateProcessWithExitCode ((shell (appDir ++ "/xsel -p")) { env = Just envListWithDisplay, new_session = True }) ""
               let output = (B.unpack output')
-              createProcess (proc "./result/bin/mimic" ["-pw", "--setf", "duration_stretch=0.68", "-t", output]) { env = Just envListWithDisplay, new_session = True } :: IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+              createProcess (proc (appDir ++ "/mimic") ["-pw", "--setf", "duration_stretch=0.68", "-t", output]) { env = Just envListWithDisplay, new_session = True } :: IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
               return ()
         textToSpeech _ _ _ = return ()
   
@@ -433,13 +462,13 @@ getKeyboardAction gss keyboardShortcut =
           atomically $ writeTVar (gss ^. gssMouseSensitivityScaler) (configuration ^. mouseSensitivityScaler)
         reloadConfig _ _ = return ()
 
-        terminateSimula :: SpriteLocation -> Bool -> IO ()
-        terminateSimula _ True = do
+        terminateSimula :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
+        terminateSimula gss _ True = do
           putStrLn "Terminating Simula.."
-          sceneTree <- getSingleton GodotSceneTree "SceneTree"
+          sceneTree <- G.get_tree gss
           G.quit sceneTree (-1)
           return ()
-        terminateSimula _ _ = return ()
+        terminateSimula _ _ _ = return ()
 
         cycleEnvironment :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
         cycleEnvironment gss _ True = do
@@ -580,6 +609,17 @@ isMask keyOrMask = elem keyOrMask [ G.KEY_MASK_SHIFT
                                   , G.KEY_MASK_KPAD
                                   , G.KEY_MASK_GROUP_SWITCH ]
 
+isMouseButton :: Int -> Bool
+isMouseButton code = elem code [ G.KEY_BUTTON_LEFT
+                               , G.KEY_BUTTON_RIGHT
+                               , G.KEY_BUTTON_MIDDLE
+                               , G.KEY_BUTTON_XBUTTON1
+                               , G.KEY_BUTTON_XBUTTON2
+                               , G.KEY_BUTTON_WHEEL_UP
+                               , G.KEY_BUTTON_WHEEL_DOWN
+                               , G.KEY_BUTTON_WHEEL_LEFT
+                               , G.KEY_BUTTON_WHEEL_RIGHT ]
+
 separateModifiersFromKeycodes :: [Int] -> ([Modifiers], [Keycode])
 separateModifiersFromKeycodes allKeys = let
   modifiers = filter isMask allKeys
@@ -650,9 +690,10 @@ process gss [deltaGV] = do
 
   wasdMode <- readTVarIO (gss ^. gssWasdMode)
   delta <- fromGodotVariant deltaGV :: IO Float
+  wasdMode <- readTVarIO (gss ^. gssWasdMode)
   when wasdMode $ processWASDMovement gss delta
 
-  -- Update i3status HUD
+  -- Update Simula HUD
   hud <- readTVarIO (gss ^. gssHUD)
   let canvasLayer = (hud ^. hudCanvasLayer)
   let rtLabel = (hud ^. hudRtlI3)
@@ -669,11 +710,14 @@ ready :: GodotSimulaServer -> [GodotVariant] -> IO ()
 ready gss _ = do
   debugModeMaybe <- lookupEnv "DEBUG"
   rrModeMaybe <- lookupEnv "RUNNING_UNDER_RR"
+  maybeLogDir <- lookupEnv "SIMULA_LOG_DIR"
+  let logDir = fromMaybe "." maybeLogDir
   -- Delete log file
   case rrModeMaybe of
     Just "1" -> return ()
-    _ -> do readProcess "touch" ["./log.txt"] []
-            readProcess "rm" ["./log.txt"] []
+    _ -> do putStrLn "Running Simula without RR"
+            readProcess "touch" [logDir ++ "/log.txt"] []
+            readProcess "rm" [logDir ++ "/log.txt"] []
             return ()
 
   addWlrChildren gss
@@ -720,19 +764,21 @@ ready gss _ = do
   getSingleton GodotInput "Input" >>= \inp -> G.set_mouse_mode inp G.MOUSE_MODE_CAPTURED
   pid <- getProcessID
 
-  createProcess (shell "./result/bin/xrdb -merge .Xdefaults") { env = Just [("DISPLAY", newDisplay)] }
+  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
+  let appDir = fromMaybe "./result/bin" maybeAppDir
+  let simulaNixDir = takeDirectory appDir
+  let command = appDir ++ "/xrdb -merge " ++ simulaNixDir ++ "/.Xdefaults"
+  createProcess (shell command) { env = Just [("DISPLAY", newDisplay)] }
 
   case rrModeMaybe of
     Just "1" -> return ()
-    _ -> do (_, windows', _) <- B.readCreateProcessWithExitCode (shell "./result/bin/wmctrl -lp") ""
+    _ -> do (_, windows', _) <- B.readCreateProcessWithExitCode (shell (appDir ++ "/wmctrl -lp")) ""
             let windows = (B.unpack windows')
             let rightWindows = filter (\line -> isInfixOf (show pid) line) (lines windows)
-            when (length rightWindows > 0 && length (words $ head rightWindows) > 0) $ do
+            when (length rightWindows > 0 && length (words $ head rightWindows) > 0)$ do
               let simulaWindow = (head . words . head) rightWindows
-              createProcess ((shell $ "./result/bin/wmctrl -ia " ++ simulaWindow) { env = Just [("DISPLAY", oldDisplay)] })
+              createProcess ((shell $ appDir ++ "/wmctrl -ia " ++ simulaWindow) { env = Just [("DISPLAY", oldDisplay)] })
               return ()
-
-  appendFile "log.txt" ""
 
   -- Adding a `WorldEnvironment` anywhere to an active scene graph
   -- overrides the default environment
@@ -762,11 +808,11 @@ ready gss _ = do
   addChild canvasLayer rtLabel
   forkUpdateHUDRecursively gss
 
-  -- addLeapMotionModule gss
   return ()
 
   where launchDefaultApps :: [String] -> String-> IO ()
         launchDefaultApps sApps location = do
+          putStrLn $ "Launching app in location: " ++ location
           let firstApp = if (sApps == []) then Nothing else Just (head sApps)
           let tailApps = tail sApps
           pid <- case firstApp of
@@ -858,15 +904,91 @@ addWlrChildren gss = do
           socketName' <- toLowLevel (pack socketName)
           G.set_socket_name waylandDisplay socketName'
 
-parseConfiguration :: IO (Configuration)
+parseConfiguration :: IO Configuration
 parseConfiguration = do
   profile <- lookupEnv "PROFILE"
-  let defaultConfiguration = Configuration {_backend = "OpenVR", _startingApps = StartingApps {_center = Just "ENV=val ./result/bin/xfce4-terminal", _right = Nothing, _bottom = Nothing, _left = Nothing, _top = Nothing}, _defaultWindowResolution = Just (900,900), _defaultWindowScale = 1.0, _axisScrollSpeed = 0.03, _mouseSensitivityScaler = 1.00, _keyBindings = [KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_BACKSPACE"], _keyAction = "terminateWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_ESCAPE"], _keyAction = "toggleGrabMode"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_SLASH"], _keyAction = "launchTerminal"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_APOSTROPHE"], _keyAction = "moveCursor"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_ENTER"], _keyAction = "clickLeft"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MASK_SHIFT","KEY_ENTER"], _keyAction = "clickRight"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_ALT_R"], _keyAction = "grabWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_ALT_L"], _keyAction = "grabWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_A"], _keyAction = "launchAppLauncher"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_E"], _keyAction = "cycleEnvironment"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_F"], _keyAction = "orientWindowTowardsGaze"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_9"], _keyAction = "scaleWindowDown"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_0"], _keyAction = "scaleWindowUp"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MINUS"], _keyAction = "zoomOut"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_EQUAL"], _keyAction = "zoomIn"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_LEFT"], _keyAction = "contractWindowHorizontally"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_RIGHT"], _keyAction = "extendWindowHorizontally"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_UP"], _keyAction = "contractWindowVertically"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_DOWN"], _keyAction = "extendWindowVertically"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_S"], _keyAction = "resizeWindowToDefaultSize"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_COMMA"], _keyAction = "pullWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_PERIOD"], _keyAction = "pushWindow"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_W"], _keyAction = "launchHMDWebCam"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_R"], _keyAction = "emacsclient -c"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MASK_SHIFT","KEY_ESCAPE"], _keyAction = "terminateSimula"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MASK_ALT","KEY_UP"], _keyAction = "increaseTransparency"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_MASK_ALT","KEY_DOWN"], _keyAction = "decreaseTransparency"},KeyboardShortcut {_keyCombination = ["KEY_PRINT"], _keyAction = "toggleScreenshotMode"},KeyboardShortcut {_keyCombination = ["KEY_MASK_SHIFT","KEY_PRINT"], _keyAction = "takeScreenshotGlobal"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_K"], _keyAction = "firefox -new-window"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_G"], _keyAction = "google-chrome-stable --new-window news.ycombinator.com"},KeyboardShortcut {_keyCombination = ["KEY_MASK_META","KEY_J"], _keyAction = "gvim"}], _keyRemappings = [], _environmentsDirectory = "./environments", _environmentDefault = "./environments/AllSkyFree_Sky_EpicBlueSunset_Equirect.png", _scenes = [], _hudConfig = "./config/i3status.config"} --
-  config <- case profile of
-    Just value -> return defaultConfiguration
-    Nothing -> input auto "./config/config.dhall" :: IO Configuration
-  return config
+  maybeConfigDir <- lookupEnv "SIMULA_CONFIG_DIR"
+  maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
+  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
 
+  putStrLn $ "DEBUG: PROFILE = " ++ show profile
+  putStrLn $ "DEBUG: SIMULA_CONFIG_DIR = " ++ show maybeConfigDir
+  putStrLn $ "DEBUG: SIMULA_DATA_DIR = " ++ show maybeDataDir
+  putStrLn $ "DEBUG: SIMULA_APP_DIR = " ++ show maybeAppDir
+  
+  
+  let configDir = fromMaybe "./config/Simula" maybeConfigDir
+      dataDir = fromMaybe "./." maybeDataDir
+      appDir = fromMaybe "./result/bin" maybeAppDir
+      localDir = "./."
+      simulaNixDir = takeDirectory appDir
+
+      defaultConfiguration = Configuration 
+        { _backend = "OpenVR"
+        , _startingApps = StartingApps 
+            -- { _center = Just $ "ENV=val " ++ appDir ++ "/xfce4-terminal"
+            { _center = Nothing
+            , _right = Nothing
+            , _bottom = Nothing
+            , _left = Nothing
+            , _top = Nothing
+            }
+        , _defaultWindowResolution = Just (900, 900)
+        , _defaultWindowScale = 1.0
+        , _axisScrollSpeed = 0.03
+        , _mouseSensitivityScaler = 1.00
+        , _keyBindings = 
+            [ KeyboardShortcut ["KEY_MASK_META", "KEY_BACKSPACE"] "terminateWindow"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_ESCAPE"] "toggleGrabMode"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_SLASH"] "launchTerminal"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_APOSTROPHE"] "moveCursor"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_ENTER"] "clickLeft"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_ENTER"] "clickRight"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_ALT_R"] "grabWindow"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_ALT_L"] "grabWindow"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_A"] "launchAppLauncher"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_E"] "cycleEnvironment"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_F"] "orientWindowTowardsGaze"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_9"] "scaleWindowDown"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_0"] "scaleWindowUp"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_MINUS"] "zoomOut"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_EQUAL"] "zoomIn"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_LEFT"] "contractWindowHorizontally"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_RIGHT"] "extendWindowHorizontally"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_UP"] "contractWindowVertically"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_DOWN"] "extendWindowVertically"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_S"] "resizeWindowToDefaultSize"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_COMMA"] "pullWindow"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_PERIOD"] "pushWindow"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_W"] "launchHMDWebCam"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_R"] "emacsclient -c"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_ESCAPE"] "terminateSimula"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_MASK_ALT", "KEY_UP"] "increaseTransparency"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_MASK_ALT", "KEY_DOWN"] "decreaseTransparency"
+            , KeyboardShortcut ["KEY_PRINT"] "toggleScreenshotMode"
+            , KeyboardShortcut ["KEY_MASK_SHIFT", "KEY_PRINT"] "takeScreenshotGlobal"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_K"] "firefox -new-window"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_G"] "google-chrome-stable --new-window news.ycombinator.com"
+            , KeyboardShortcut ["KEY_MASK_META", "KEY_J"] "gvim"
+            ]
+        , _keyRemappings = []
+        , _environmentsDirectory = simulaNixDir ++ "/environments"
+        , _environmentDefault = simulaNixDir ++ "/environments/AllSkyFree_Sky_EpicBlueSunset_Equirect.png"
+        , _scenes = []
+        , _hudConfig = configDir ++ "/HUD.config"
+        }
+      
+  config <- case profile of
+    Just _ -> return defaultConfiguration
+    Nothing -> do
+      let configPath = configDir ++ "/config.dhall"
+      configExists <- doesFileExist configPath
+      if configExists
+        then input auto (T.pack configPath)
+        else return defaultConfiguration
+  
+  return config
+  
 -- | We first fill the TVars with dummy state, before updating them with their
 -- | real values in `ready`.
 initGodotSimulaServer :: GodotObject -> IO (GodotSimulaServer)
@@ -1013,6 +1135,8 @@ initGodotSimulaServer obj = do
                                    } 
       gssDampSensitivity' <- newTVarIO (defaultDampSensitivity) :: IO (TVar DampSensitivity)
 
+      gssKeyboardModifiersActive' <- newTVarIO (Nothing) :: IO (TVar (Maybe Modifiers))
+
       let gss = GodotSimulaServer {
         _gssObj                   = obj                       :: GodotObject
       , _gssWaylandDisplay        = gssWaylandDisplay'        :: TVar GodotWaylandDisplay
@@ -1060,6 +1184,7 @@ initGodotSimulaServer obj = do
       , _gssScreenRecorder        = gssScreenRecorder'        :: TVar (Maybe ProcessHandle)
       , _gssLeapMotion            = gssLeapMotion'            :: TVar GodotLeapMotion
       , _gssDampSensitivity       = gssDampSensitivity'       :: TVar DampSensitivity
+      , _gssKeyboardModifiersActive = gssKeyboardModifiersActive' :: TVar (Maybe Modifiers)
       }
   return gss
   where getStartingAppsStr :: Maybe String -> String
@@ -1200,9 +1325,9 @@ _input gss [eventGV] = do
     axisScrollSpeed <- readTVarIO (gss ^. gssAxisScrollSpeed)
     case (maybeActiveGSVS, button) of
          (Just gsvs, G.BUTTON_WHEEL_UP) -> G.pointer_notify_axis_continuous wlrSeat 0 (realToFrac axisScrollSpeed)
-    
          (Just gsvs, G.BUTTON_WHEEL_DOWN) -> G.pointer_notify_axis_continuous wlrSeat 0 (-1.0 * (realToFrac axisScrollSpeed))
          (Just gsvs, _) -> do
+           putStrLn $ "Mouse event button: " ++ show button
            screenshotMode <- readTVarIO (gsvs ^. gsvsScreenshotMode)
            case screenshotMode of
              False -> do activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
@@ -1213,6 +1338,30 @@ _input gss [eventGV] = do
                           False -> do screenshotCoords@(origin, end) <- readTVarIO (gsvs ^. gsvsScreenshotCoords)
                                       atomically $ writeTVar (gsvs ^. gsvsScreenshotCoords) (origin, Just activeGSVSCursorPos)
          (Nothing, _) -> return ()
+
+    maybeModifiers <- readTVarIO (gss ^. gssKeyboardModifiersActive)
+    let modifiers = Data.Maybe.fromMaybe 0 maybeModifiers
+
+    case button of
+       -- G.BUTTON_LEFT -> do
+       --   screenshotMode <- readTVarIO (gsvs ^. gsvsScreenshotMode)
+       --   case screenshotMode of
+       --        False -> processKeypress gss modifiers G.KEY_BUTTON_LEFT pressed
+       --        True -> case pressed of
+       --                     True -> do atomically $ writeTVar (gsvs ^. gsvsScreenshotCoords) (Just activeGSVSCursorPos, Nothing)
+       --                     False -> do screenshotCoords@(origin, end) <- readTVarIO (gsvs ^. gsvsScreenshotCoords)
+       --                                 atomically $ writeTVar (gsvs ^. gsvsScreenshotCoords) (origin, Just activeGSVSCursorPos)
+       G.BUTTON_LEFT        -> processKeypress gss modifiers G.KEY_BUTTON_LEFT pressed
+       G.BUTTON_RIGHT       -> processKeypress gss modifiers G.KEY_BUTTON_RIGHT pressed
+       G.BUTTON_MIDDLE      -> processKeypress gss modifiers G.KEY_BUTTON_MIDDLE pressed
+       G.BUTTON_XBUTTON1    -> processKeypress gss modifiers G.KEY_BUTTON_XBUTTON1 pressed
+       G.BUTTON_XBUTTON2    -> processKeypress gss modifiers G.KEY_BUTTON_XBUTTON2 pressed
+       G.BUTTON_WHEEL_UP    -> processKeypress gss modifiers G.KEY_BUTTON_WHEEL_UP pressed
+       G.BUTTON_WHEEL_DOWN  -> processKeypress gss modifiers G.KEY_BUTTON_WHEEL_DOWN pressed
+       G.BUTTON_WHEEL_LEFT  -> processKeypress gss modifiers G.KEY_BUTTON_WHEEL_LEFT pressed
+       G.BUTTON_WHEEL_RIGHT -> processKeypress gss modifiers G.KEY_BUTTON_WHEEL_RIGHT pressed
+       _ -> putStrLn $ "Unknown button: " ++ (show button)
+  
 
 updateCursorStateRelative :: GodotSimulaViewSprite -> Float -> Float -> IO ()
 updateCursorStateRelative gsvs dx dy = do
@@ -1304,19 +1453,49 @@ physicsProcess gss _ = do
 shellCmd1 :: GodotSimulaServer -> String -> IO ()
 shellCmd1 gss appStr = do
   let originalEnv = (gss ^. gssOriginalEnv)
-  createProcess (shell appStr) { env = Just originalEnv }
+  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
+  let appDir = fromMaybe "./result/bin" maybeAppDir
+  createProcess (shell (appDir ++ "/" ++ appStr)) { env = Just originalEnv }
   return ()
 
 _on_simula_shortcut :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_simula_shortcut gss [scancodeWithModifiers', isPressed'] = do
   scancodeWithModifiers <- fromGodotVariant scancodeWithModifiers' :: IO Int
   isPressed <- fromGodotVariant isPressed' :: IO Bool
+  let modifiers = (foldl (.|.) 0 (extractMods scancodeWithModifiers))
+  let keycode = (scancodeWithModifiers .&. G.KEY_CODE_MASK) :: Int
+  processKeypress gss modifiers keycode isPressed
+
+  -- TEST CODE
+  -- putStrLn $ "isPressed: " ++ (show isPressed)
+  -- putStrLn $ "modifiers: " ++ (show modifiers)
+  -- putStrLn $ "keycode: " ++ (show keycode)
+
+  -- let testKeys = (foldl (.|.) 0 (extractTestKeys scancodeWithModifiers))
+  -- let testKeys' = "testKeys': " ++ (show (extractTestKeys scancodeWithModifiers))
+  -- putStrLn $ "testKeys: " ++ (show testKeys)
+  -- putStrLn $ "G.KEY_A: " ++ (show (G.KEY_A))
+  -- putStrLn $ "G.KEY_B: " ++ (show (G.KEY_B))
+  -- putStrLn $ "G.KEY_BUTTON_LEFT: " ++ (show (G.KEY_BUTTON_LEFT))
+  -- putStrLn $ "G.KEY_CONTROL_L: " ++ (show (G.KEY_CONTROL_L))
+  -- putStrLn $ "G.KEY_MASK_CTRL: " ++ (show (G.KEY_MASK_CTRL))
+  
+  where extractIf sc mod = if (sc .&. mod) /= 0 then [mod] else []
+
+        extractMods :: Int -> [Int]
+        extractMods sc = concatMap (extractIf sc) [G.KEY_MASK_SHIFT, G.KEY_MASK_ALT, G.KEY_MASK_META, G.KEY_MASK_CTRL, G.KEY_MASK_CMD, G.KEY_MASK_KPAD, G.KEY_MASK_GROUP_SWITCH]
+        extractMods _ = []
+
+        extractTestKeys :: Int -> [Int]
+        extractTestKeys sc = concatMap (extractIf sc) [G.KEY_A, G.KEY_B, G.KEY_MASK_ALT] 
+
+processKeypress :: GodotSimulaServer -> Modifiers -> Keycode -> Bool -> IO ()
+processKeypress gss modifiers keycode isPressed = do
+  -- putStrLn $ "processKeypress"
   wlrKeyboard <- readTVarIO $ (gss ^. gssWlrKeyboard)
   keyboardShortcuts <- readTVarIO (gss ^. gssKeyboardShortcuts)
   keyboardRemappings <- readTVarIO (gss ^. gssKeyboardRemappings)
   maybeHMDLookAtSprite <- getHMDLookAtSprite gss
-  let modifiers = (foldl (.|.) 0 (extractMods scancodeWithModifiers))
-  let keycode = (scancodeWithModifiers .&. G.KEY_CODE_MASK) :: Int
   let maybeKeyboardAction = M.lookup (modifiers, keycode) keyboardShortcuts
   let maybeKeycodeRemapping = M.lookup keycode keyboardRemappings
 
@@ -1324,47 +1503,54 @@ _on_simula_shortcut gss [scancodeWithModifiers', isPressed'] = do
         (Just remappedKeycode) -> remappedKeycode
         Nothing                -> keycode
 
-  wasdMode <- readTVarIO (gss ^. gssWasdMode)
+  putStrLn $ "modifiers: " ++ (show modifiers)
+  -- putStrLn $ "keycode': " ++ (show keycode')
 
-  case maybeKeyboardAction of
-    Just action -> action maybeHMDLookAtSprite isPressed
-    Nothing -> case (isPressed, wasdMode) of
-                 (False, False) -> do if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
-                                      keyboardGrabLetGo' gss maybeHMDLookAtSprite -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
-                                      keyboardGrabLetGo gss (GrabWindows undefined) -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
-                 (True, False) -> do if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
-                 (False, True)  -> do case keycode' of
-                                        G.KEY_W -> actionRelease gss "move_forward"
-                                        G.KEY_S -> actionRelease gss "move_backward"
-                                        G.KEY_A -> actionRelease gss "move_left"
-                                        G.KEY_D -> actionRelease gss "move_right"
-                                        G.KEY_SPACE -> actionRelease gss "move_up"
-                                        G.KEY_CONTROL_L -> actionRelease gss "move_down"
-                                        _ -> G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
-                 (True, True)  -> do case keycode' of
-                                        G.KEY_W -> actionPress gss "move_forward"
-                                        G.KEY_S -> actionPress gss "move_backward"
-                                        G.KEY_A -> actionPress gss "move_left"
-                                        G.KEY_D -> actionPress gss "move_right"
-                                        G.KEY_SPACE -> actionPress gss "move_up"
-                                        G.KEY_CONTROL_L -> actionPress gss "move_down"
-                                        _ -> G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
+  wasdMode <- readTVarIO (gss ^. gssWasdMode)
+  let isMouseCode = isMouseButton keycode'
+
+  case (maybeKeyboardAction, isMouseCode) of
+    (Just action, _) -> do putStrLn $ "action detected"
+                           action maybeHMDLookAtSprite isPressed
+    (Nothing, False) -> case (isPressed, wasdMode) of
+                             (False, False) -> do if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
+                                                  keyboardGrabLetGo' gss maybeHMDLookAtSprite -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
+                                                  keyboardGrabLetGo gss (GrabWindows undefined) -- HACK: Avoid windows getting stuck when modifiers are disengaged before keys
+                             (True, False) -> do if (keycode' == keyNull) then return () else G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
+                             (False, True)  -> do case keycode' of
+                                                     G.KEY_W -> actionRelease gss "move_forward"
+                                                     G.KEY_S -> actionRelease gss "move_backward"
+                                                     G.KEY_A -> actionRelease gss "move_left"
+                                                     G.KEY_D -> actionRelease gss "move_right"
+                                                     G.KEY_SPACE -> actionRelease gss "move_up"
+                                                     G.KEY_CONTROL_L -> actionRelease gss "move_down"
+                                                     _ -> do
+                                                       G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
+                             (True, True)  -> do case keycode' of
+                                                     G.KEY_W -> actionPress gss "move_forward"
+                                                     G.KEY_S -> actionPress gss "move_backward"
+                                                     G.KEY_A -> actionPress gss "move_left"
+                                                     G.KEY_D -> actionPress gss "move_right"
+                                                     G.KEY_SPACE -> actionPress gss "move_up"
+                                                     G.KEY_CONTROL_L -> actionPress gss "move_down"
+                                                     _ -> do G.send_wlr_event_keyboard_key wlrKeyboard keycode' isPressed
+    (Nothing, True) -> return ()
+
+  atomically $ writeTVar (gss ^. gssKeyboardModifiersActive) (Just modifiers)
+
 
   where keyboardGrabLetGo' :: GodotSimulaServer -> Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates) -> IO ()
         keyboardGrabLetGo' gss (Just (gsvs, _)) = do keyboardGrabLetGo gss (GrabWindow gsvs undefined)
         keyboardGrabLetGo' _ _ = return ()
 
-        extractMods :: Int -> [Int]
-        extractMods sc = concatMap (extractIf sc) [G.KEY_MASK_SHIFT, G.KEY_MASK_ALT, G.KEY_MASK_META, G.KEY_MASK_CTRL, G.KEY_MASK_CMD, G.KEY_MASK_KPAD, G.KEY_MASK_GROUP_SWITCH]
-        extractIf sc mod = if (sc .&. mod) /= 0 then [mod] else []
-
         keyNull = 0
-extractMods _ = []
 
 launchXpra :: GodotSimulaServer -> IO ()
 launchXpra gss = do
   let originalEnv = (gss ^. gssOriginalEnv)
   maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
+  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
+  let appDir = fromMaybe "./result/bin" maybeAppDir
   case maybeXwaylandDisplay of
     Nothing -> putStrLn "No DISPLAY found!"
     (Just xwaylandDisplay) -> do
@@ -1372,24 +1558,25 @@ launchXpra gss = do
       let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
       let envListWithDisplay = M.toList envMapWithDisplay
 
-      (_,output',_) <- B.readCreateProcessWithExitCode (shell "./result/bin/xpra list") ""
+      (_,output',_) <- B.readCreateProcessWithExitCode (shell (appDir ++ "/xpra list")) ""
       let output = B.unpack output'
       let isXpraAlreadyLive = isInfixOf ":13" output
       case isXpraAlreadyLive of
-        False -> do createSessionLeader "./result/bin/xpra" ["--fake-xinerama=no", "start", "--start", "./result/bin/xfce4-terminal", ":13"] (Just envListWithDisplay)
-                    waitForXpraRecursively
+        False -> do createSessionLeader (appDir ++ "/xpra") ["--fake-xinerama=no", "start", "--start", appDir ++ "/xfce4-terminal", ":13"] (Just envListWithDisplay)
+                    waitForXpraRecursively appDir
         True -> do putStrLn "xpra is already running!"
-      createSessionLeader "./result/bin/xpra" ["attach", ":13"] (Just envListWithDisplay)
+      createSessionLeader (appDir ++ "/xpra") ["attach", ":13"] (Just envListWithDisplay)
       return ()
-      where waitForXpraRecursively = do
-              (_,output',_) <- B.readCreateProcessWithExitCode (shell "./result/bin/xpra list") ""
-              let output = B.unpack output'
-              putStrLn $ "Output is: " ++ output
-              let isXpraAlreadyLive = isInfixOf ":13" output
-              case isXpraAlreadyLive of
-                False -> do putStrLn $ "Waiting for xpra server.."
-                            waitForXpraRecursively
-                True -> do putStrLn "xpra server found!"
+
+  where waitForXpraRecursively appDir = do
+          (_,output',_) <- B.readCreateProcessWithExitCode (shell (appDir ++ "/xpra list")) ""
+          let output = B.unpack output'
+          putStrLn $ "Output is: " ++ output
+          let isXpraAlreadyLive = isInfixOf ":13" output
+          case isXpraAlreadyLive of
+            False -> do putStrLn $ "Waiting for xpra server.."
+                        waitForXpraRecursively appDir
+            True -> do putStrLn "xpra server found!"
 
 createSessionLeader :: FilePath -> [String] -> Maybe [(String, String)] -> IO (ProcessID, ProcessGroupID)
 createSessionLeader exe args env = do

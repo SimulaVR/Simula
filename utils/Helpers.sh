@@ -1,185 +1,6 @@
 # The following functions assume they are called from project root.
 
-installUbuntuDependencies() {
- sudo apt-get install build-essential \
-                      haskell-stack \
-                      libasound2-dev \
-                      libcap-dev \
-                      libdrm-dev \
-                      libegl1-mesa-dev \
-                      libelogind-dev \
-                      libfreetype6-dev \
-                      libgbm-dev \
-                      libgl1-mesa-dev \
-                      libgles2 \
-                      libgles2-mesa-dev \
-                      libgudev-1.0-dev \
-                      libinput-dev \
-                      libpixman-1-dev \
-                      libpulse-dev \
-                      libssl-dev \
-                      libsystemd-dev \
-                      libudev-dev \
-                      libwayland-dev \
-                      libx11-dev \
-                      libx11-xcb-dev \
-                      libxcb-composite0-dev \
-                      libxcb-image0-dev \
-                      libxcb-render-util0-dev \
-                      libxcb-render0-dev \
-                      libxcb-xfixes0-dev \
-                      libxcb-xinput-dev \
-                      libxcursor-dev \
-                      libxkbcommon-dev \
-                      libxi-dev \
-                      libxinerama-dev \
-                      libxkbcommon-x11-dev \
-                      libxrandr-dev \
-                      meson \
-                      pkg-config \
-                      scons \
-                      steam \
-                      steam-devices \
-                      wayland-protocols \
-                      yasm \
-                      libwlroots-dev \
-                      epiphany \
-                      sakura \
-                      cabal-install \
-                      wmctrl \
-                      xdotool \
-                      bash
-                      # libegl-dev       # Not provided in disco dango
-                      # libxcb-iccm4-dev # Not provided in disco dango
-                      # steam-runtime    # Not provided in disco dango
-
-
-  # upgradeStack
-}
-
-installArchDependencies() {
- sudo pacman -S alsa-lib \
-                freetype2 \
-                glu \
-                libcap \
-                libdrm \
-                libglvnd \
-                libinput \
-                libudev0-shim \
-                libxcursor \
-                libxi \
-                libxinerama \
-                libxkbcommon \
-                libxkbcommon-x11 \
-                libxrandr \
-                mesa \
-                meson \
-                pixman \
-                pulseaudio \
-                scons \
-                stack
-                steam \
-                systemd \
-                wayland \
-                wayland-protocols \
-                yasm \
-                wlroots \ # 0.5.0-1
-                epiphany \
-                sakura \
-                cabal-install
- # yaourt -S elogind # optional dependency so we omit to avoid dealing with yaourt
-
-  upgradeStack
-}
-
-ubuntuAltTabReset() {
-  gsettings reset org.gnome.desktop.wm.keybindings switch-applications
-  gsettings get org.gnome.desktop.wm.keybindings switch-applications
-
-  gsettings reset org.gnome.desktop.wm.keybindings switch-applications-backward
-  gsettings get org.gnome.desktop.wm.keybindings switch-applications-backward
-}
-
-ubuntuAltTabDisable() {
-  gsettings set org.gnome.desktop.wm.keybindings switch-applications "['']"
-  gsettings set org.gnome.desktop.wm.keybindings switch-applications-backward "['']"
-}
-
-disableUbuntuSuperKey() {
-  gsettings set org.gnome.mutter overlay-key ''
-}
-
-# Warning: installs to system!
-compileWlroots() {
-    cd ./submodules/wlroots
-
-    meson build
-    sudo ninja -C build
-    sudo ninja -C build install
-
-    cd -
-}
-
-# Requires a Godot launch to generate api.json
-compileGodot() {
-    cd ./submodules/godot
-
-    cd ./modules/gdwlroots
-    make all
-    cd ../..
-
-    scons platform=x11 target=debug -j 8
-
-    if [ -e ./bin/godot.x11.tools.64 ]; then
-        ./bin/godot.x11.tools.64 --gdnative-generate-json-api api.json
-    fi
-
-    cd ../..
-}
-
-compileGodotHaskell() {
-    cd ./submodules/godot-haskell
-
-    cd classgen
-    if [ -e ../../godot/api.json ]; then
-        stack build
-        stack exec godot-haskell-classgen ../../godot/api.json
-        cd ..
-        cp -r src src.bak
-        rsync -a classgen/src/ src/
-    fi
-
-    cd ../..
-}
-
-compileGodotHaskellPlugin() {
-    cd ./addons/godot-haskell-plugin
-    stack build
-    cd -
-}
-
-switchToNix() {
-    cd ./addons/godot-haskell-plugin
-    rm libgodot-haskell-plugin.so
-    ln -s ../../result/bin/libgodot-haskell-plugin.so libgodot-haskell-plugin.so
-    cd -
-}
-
-switchToLocal() {
-    cd ./addons/godot-haskell-plugin
-    rm libgodot-haskell-plugin.so
-    path=$(nix-shell -Q --attr env shell.nix --run "../../result/bin/cabal list-bin flib:godot-haskell-plugin")
-    ln -s "$path" libgodot-haskell-plugin.so
-    cd -
-}
-
-checkInstallCachix() {
-    if command -v cachix; then
-        echo "cachix already installed.."
-    else
-        nix-env -iA cachix -f https://cachix.org/api/v1/install
-    fi
-}
+export SIMULA_NIX=$(pwd)/nix-forced-version/bin
 
 checkInstallNix() {
     if command -v nix; then
@@ -187,6 +8,36 @@ checkInstallNix() {
     else
         curl -L https://nixos.org/nix/install | sh
         . $HOME/.nix-profile/etc/profile.d/nix.sh
+    fi
+}
+
+# Bootstrop the proper versions of nix-* commands for building Simula
+buildNixForcedVersion() {
+    nix-build nix-forced-version.nix -o nix-forced-version # this should be the only time we use system-local `nix-*`!
+}
+
+checkInstallCachix() {
+    if command -v cachix; then
+        echo "cachix already installed.."
+    else
+        $SIMULA_NIX/nix-env -iA cachix -f https://cachix.org/api/v1/install
+    fi
+}
+
+checkInstallCurl() {
+    if command -v curl; then
+        echo "curl already installed.."
+    else
+        $SIMULA_NIX/nix-env -iA nixpkgs.curl
+    fi
+}
+
+
+checkInstallGit() {
+    if command -v git; then
+        echo "git already installed.."
+    else
+        $SIMULA_NIX/nix-env -iA nixpkgs.git
     fi
 }
 
@@ -198,141 +49,188 @@ checkIfNixOS() {
     fi
 }
 
-installSimula() {
-    checkInstallNix
-    checkInstallCachix
-    cachix use simula
-    curl https://www.wolframcloud.com/obj/george.w.singer/installMessage
-    echo "Downloading nixpkgs, this will take a while."
-    if [ -z $1 ]; then
-      NIXPKGS_ALLOW_UNFREE=1 nix-build -Q default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
-      switchToNix
-    # Useful for debug purposes
-    elif [ "$1" = "i" ]; then
-      switchToNix
-      NIXPKGS_ALLOW_UNFREE=1 nix-instantiate -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
-      switchToLocal
+# devBuild helper function
+switchToNix() {
+    cd ./addons/godot-haskell-plugin
+    rm -f libgodot-haskell-plugin.so
+    ln -s ../../result/bin/libgodot-haskell-plugin.so libgodot-haskell-plugin.so
+    cd -
+}
+
+# devBuild function
+switchToLocal() {
+    cd ./addons/godot-haskell-plugin
+    rm -f libgodot-haskell-plugin.so
+    path=$($SIMULA_NIX/nix-shell -Q shell.nix --run "../../result/bin/cabal list-bin flib:godot-haskell-plugin")
+    ln -s "$path" libgodot-haskell-plugin.so
+    cd -
+}
+
+
+updateEmail() {
+    if [ -e $SIMULA_CONFIG_DIR/email ]; then
+        # .. do nothing ..
+        echo ""
     else
-      switchToNix
-      NIXPKGS_ALLOW_UNFREE=1 nix-build -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
-      switchToLocal
+        $SIMULA_APP_DIR/dialog --title "SimulaVR" --backtitle "OPTIONAL: Provide email for important Simula updates & improved bug troubleshooting" --inputbox "Email: " 8 60 --output-fd 1 > $SIMULA_CONFIG_DIR/email 2>&1
+        $SIMULA_APP_DIR/curl --data-urlencode emailStr@email https://www.wolframcloud.com/obj/george.w.singer/emailMessage
+        clear
     fi
 }
 
+
+installSimula() {
+    # bootstrap nix, and then install curl or cachix if needed
+    checkInstallNix
+    buildNixForcedVersion
+    checkInstallCachix
+    checkInstallCurl
+    cachix use simula
+
+    # Display Simula message from developers
+    curl https://www.wolframcloud.com/obj/george.w.singer/installMessage
+
+    # devBuild = false
+    if [ -z $1 ]; then
+        NIXPKGS_ALLOW_UNFREE=1 $SIMULA_NIX/nix-build -Q default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
+        switchToNix # Clean up old devBuild state, if needed.
+
+    # nix-instatiate
+    elif [ "$1" = "i" ]; then # instantiation
+        switchToNix
+        NIXPKGS_ALLOW_UNFREE=1 $SIMULA_NIX/nix-instantiate -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
+        switchToLocal
+
+    # devBuild = true
+    else
+        switchToNix # devBuild = true
+        NIXPKGS_ALLOW_UNFREE=1 $SIMULA_NIX/nix-build -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
+        switchToLocal
+    fi
+}
+
+# Takes optional $1 argument for `dev` branch
 updateSimula() {
     checkInstallNix
     checkInstallCachix
+    checkInstallGit
     cachix use simula
 
     if [ -z $1 ]; then
         git pull origin master
         git submodule update --recursive
-        NIXPKGS_ALLOW_UNFREE=1 nix-build -Q default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
+        NIXPKGS_ALLOW_UNFREE=1 $SIMULA_NIX/nix-build -Q default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
         switchToNix
     else
         switchToNix
         git pull origin dev
         git submodule update --recursive
-        NIXPKGS_ALLOW_UNFREE=1 nix-build -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
+        NIXPKGS_ALLOW_UNFREE=1 $SIMULA_NIX/nix-build -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
         switchToNix
     fi
 }
 
-swapXpraNixToLocal() {
-    sudo rm ./result/bin/xpra
-    sudo ln -s $(which xpra) ./result/bin/xpra
+# devBuild = true function
+nsBuildMonado() {
+  cd ./submodules/monado
+  $SIMULA_NIX/nix-shell shell.nix --run nsBuildMonadoIncremental
+  cd -
 }
 
-# Experimental nsBuild* functions allow Simula developers to locally build
-# Simula modules inside a nix-shell
+# devBuild = true function
+nsCleanMonado() {
+  cd ./submodules/monado
+  $SIMULA_NIX/nix-shell shell.nix --run rmBuilds
+  cd -
+}
+
+# devBuild = true function
 nsBuildGodot() {
  cd ./submodules/godot
- local runCmd="wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c; scons -Q -j8 platform=x11 target=debug"
+ local runCmd="wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c; scons -Q -j8 platform=x11 target=debug warnings=no"; 
 
  if [ -z $1 ]; then
-   nix-shell --run "$runCmd"
+   $SIMULA_NIX/nix-shell --run "$runCmd"
  else
-   nix-shell --run "while inotifywait -qqre modify .; do $runCmd; done"
+   $SIMULA_NIX/nix-shell --run "while inotifywait -qqre modify .; do $runCmd; done"
  fi
  cd -
 }
 
+# devBuild = true function
 nsCleanGodot() {
     cd ./submodules/godot
     local runCmd="scons --clean"
-    nix-shell --run "$runCmd"
+    $SIMULA_NIX/nix-shell --run "$runCmd"
     cd -
 }
 
-# Updates godot-haskell to latest api.json generated from devBuildGodot
+# devBuild = true function
+# => Updates godot-haskell to latest api.json generated from devBuildGodot
 nsBuildGodotHaskell() {
   cd ./submodules/godot
-  nix-shell -Q --run "LD_LIBRARY_PATH=./modules/gdleapmotionV2/LeapSDK/lib/x64 $(../../utils/GetNixGL.sh) ./bin/godot.x11.tools.64 --gdnative-generate-json-api ./bin/api.json"
+  $SIMULA_NIX/nix-shell -Q --run "LD_LIBRARY_PATH=./modules/gdleapmotionV2/LeapSDK/lib/x64 $(../../utils/GetNixGL.sh) ./bin/godot.x11.tools.64 --gdnative-generate-json-api ./bin/api.json"
   cd -
 
   cd ./submodules/godot-haskell-cabal
   if [ -z $1 ]; then
-    nix-shell -Q --attr env release.nix --run "./updateApiJSON.sh"
+    $SIMULA_NIX/nix-shell -Q release.nix --run "./updateApiJSON.sh"
   elif [ $1 == "--profile" ]; then
-    nix-shell -Q --attr env --arg profileBuild true release.nix --run "./updateApiJSON.sh"
+    $SIMULA_NIX/nix-shell -Q --arg profileBuild true release.nix --run "./updateApiJSON.sh"
   fi
   cd -
 }
 
+# devBuild = true function
 nsBuildGodotHaskellPlugin() {
   cd ./addons/godot-haskell-plugin
   if [ -z $1 ]; then
-    nix-shell -Q --attr env shell.nix --run "../../result/bin/cabal build"
+    $SIMULA_NIX/nix-shell -Q shell.nix --run "../../result/bin/cabal build"
   elif [ $1 == "--profile" ]; then
-    nix-shell -Q --attr env shell.nix --arg profileBuild true --run "../../result/bin/cabal --enable-profiling build --ghc-options=\"-fprof-auto -rtsopts -fPIC -fexternal-dynamic-refs\""
+    $SIMULA_NIX/nix-shell -Q shell.nix --arg profileBuild true --run "../../result/bin/cabal --enable-profiling build --ghc-options=\"-fprof-auto -rtsopts -fPIC -fexternal-dynamic-refs\""
   else
-    nix-shell --attr env shell.nix --run "while inotifywait -qqre modify .; do ../../result/bin/cabal build; done"
+    $SIMULA_NIX/nix-shell shell.nix --run "while inotifywait -qqre modify .; do ../../result/bin/cabal build; done"
   fi
   cd -
 }
 
+# devBuild = true function
 nsREPLGodotHaskellPlugin() {
     cd ./addons/godot-haskell-plugin
-    nix-shell --attr env shell.nix --run "cabal repl"
+    $SIMULA_NIX/nix-shell shell.nix --run "cabal repl"
 }
 
+# devBuild = true function
+# => Takes optional argument for a profile build
 nsBuildSimulaLocal() {
-    installSimula 1
-    ./result/bin/cabal update
-    nsBuildWlroots
-    nsBuildGodot
-    patchGodotWlroots
-    nsBuildGodotHaskell "$1"
-    nsBuildGodotHaskellPlugin "$1"
-    switchToLocal
+    installSimula 1                      || { echo "installSimula 1 failed"; return 1; } # forces devBuild
+    PATH=./result/bin:$PATH cabal update || { echo "cabal update failed"; return 1; }
+    nsBuildMonado                        || { echo "nsBuildMonado failed"; return 1; }
+    nsBuildWlroots                       || { echo "nsBuildWlroots failed"; return 1; }
+    nsBuildGodot                         || { echo "nsBuildGodot failed"; return 1; }
+    patchGodotWlroots                    || { echo "patchGodotWlroots failed"; return 1; }
+    nsBuildGodotHaskell "$1"             || { echo "nsBuildGodotHaskell failed"; return 1; }
+    nsBuildGodotHaskellPlugin "$1"       || { echo "nsBuildGodotHaskellPlugin failed"; return 1; }
+    switchToLocal                        || { echo "switchToLocal failed"; return 1; }
 }
 
+# devBuild = true function
 nsBuildWlroots() {
     cd ./submodules/wlroots
     if [ -d "./build" ]; then
-        nix-shell -Q --run "ninja -C build"
+        $SIMULA_NIX/nix-shell -Q --run "ninja -C build"
     else
-        nix-shell -Q --run "meson build; ninja -C build"
+        $SIMULA_NIX/nix-shell -Q --run "meson build; ninja -C build"
     fi
     cd -
 }
 
-updateEmail() {
-    if [ -e ./email ]; then
-        # .. do nothing ..
-        echo ""
-    else
-        ./result/bin/dialog --title "SimulaVR" --backtitle "OPTIONAL: Provide email for important Simula updates & improved bug troubleshooting" --inputbox "Email: " 8 60 --output-fd 1 > ./email 2>&1
-        ./result/bin/curl --data-urlencode emailStr@email https://www.wolframcloud.com/obj/george.w.singer/emailMessage
-        clear
-    fi
-}
-
-#patch our Godot executable to point to our local build of wlroots
+# devBuild = true function
+# => Patch our Godot executable to point to our local build of wlroots
 patchGodotWlroots(){
     PATH_TO_SIMULA_WLROOTS="`pwd`/submodules/wlroots/build/"
     OLD_RPATH="`./result/bin/patchelf --print-rpath submodules/godot/bin/godot.x11.tools.64`"
-    if [[ $OLD_RPATH != $PATH_TO_SIMULA_WLROOTS* ]]; then #check if the current rpath contains our local simula wlroots build. If not, patchelf to add our path to the start of the executable's rpath
+    if [[ $OLD_RPATH != $PATH_TO_SIMULA_WLROOTS* ]]; then # Check if the current RPATH contains our local simula wlroots build. If not, patchelf it to add it
         echo "Patching godot.x11.tools to point to local wlroots lib"
         echo "Changing path to: $PATH_TO_SIMULA_WLROOTS:$OLD_RPATH"
         ./result/bin/patchelf --set-rpath "$PATH_TO_SIMULA_WLROOTS:$OLD_RPATH" submodules/godot/bin/godot.x11.tools.64
@@ -341,6 +239,8 @@ patchGodotWlroots(){
     fi
 }
 
+# devBuild = true function
+# rr helper function
 zenRR() {
-   nix-shell --arg onNixOS $(checkIfNixOS) --arg devBuild true --run "sudo python3 ./utils/zen_workaround.py"
+   $SIMULA_NIX/nix-shell --arg onNixOS $(checkIfNixOS) --arg devBuild true --run "sudo python3 ./utils/zen_workaround.py"
 }

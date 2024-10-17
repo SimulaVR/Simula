@@ -40,4 +40,5 @@
 	url = https://github.com/SimulaVR/i3status
 [submodule "submodules/monado"]
 	path = submodules/monado
-	url = https://github.com/SimulaVR/monado.git
+	url = https://github.com/SimulaVR/monado-xv.git
+	branch = xr50

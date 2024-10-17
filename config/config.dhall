@@ -8,11 +8,11 @@ let Configuration =
     --   "launchUsageInstructions" to launch Simula's usage instructions
     -- To omit launching an app in a spot, use `None Text` instead of `Some "cmd"`.
   {   _backend = "OpenXR" -- Supported options: "OpenVR", "OpenXR"
-  ,   _startingApps = { _center = Some "./result/bin/xfce4-terminal"
-                      , _right  = Some "launchUsageInstructions"
-                      , _bottom = Some "launchHMDWebcam"
-                      , _left   = Some "launchTerminal"
-                      , _top    = Some "launchTerminal"
+  ,   _startingApps = { _center = Some "launchTerminal"
+                      , _right  = None Text
+                      , _bottom = None Text
+                      , _left   = None Text
+                      , _top    = None Text
                       }
   , _defaultWindowResolution = Some { _1 = 900, _2 = 900 } -- New windows default this (typically square) resolution
                                                            -- Set to `None { _1 : Natural, _2 : Natural }` for windows to launch with their default (typically non-square) resolutions
@@ -49,7 +49,7 @@ let Configuration =
                               , { _keyCombination = ["KEY_MASK_META", "KEY_S"]                         , _keyAction = "resizeWindowToDefaultSize"  } -- Resizes window to `_defaultWindowResolution`
                               , { _keyCombination = ["KEY_MASK_META", "KEY_COMMA"]                     , _keyAction = "pullWindow"                 }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_PERIOD"]                    , _keyAction = "pushWindow"                 }
-                              , { _keyCombination = ["KEY_MASK_META", "KEY_W"]                         , _keyAction = "launchHMDWebCam"            }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_W"]                         , _keyAction = "toggleWasdMode"            }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_R"]                         , _keyAction = "reloadConfig"               }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_ESCAPE"]  , _keyAction = "terminateSimula"            }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_ALT", "KEY_UP"]        , _keyAction = "increaseTransparency"       }

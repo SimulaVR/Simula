@@ -19,7 +19,7 @@ import           Control.Concurrent.STM.TVar      as D
 import           Control.Monad.STM                as D
 import           Data.Vector                      as D (Vector, mapMaybe,
                                                         toList, unfoldrNM, (!?))
-import           Linear                           as D
+import           Linear                           as D hiding (normalize)
 
 -- Godot
 import           Godot.Api                        as G

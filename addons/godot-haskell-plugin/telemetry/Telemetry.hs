@@ -23,6 +23,8 @@ import           Data.Time.ISO8601
 import           Control.Concurrent.STM.TVar
 import           Data.Maybe
 import qualified Data.Map.Strict as M
+import           System.Environment      (lookupEnv)
+import           System.FilePath         ((</>))
 
 import Foreign
 
@@ -41,18 +43,28 @@ data Payload = Payload
 
 mixPanelToken = "d893bae9548d8e678cef251fd81df486" :: String
 
+getSimulaConfigDir :: IO FilePath
+getSimulaConfigDir = do
+  maybeConfigHome <- lookupEnv "SIMULA_CONFIG_DIR"
+  return $ case maybeConfigHome of
+    Just path -> path
+    Nothing -> "./.config"
+
 generateSessionUUID :: IO (UUID)
-generateSessionUUID = do exists                 <- doesFileExist "./UUID"
-                         maybeRandomUUID             <- Data.UUID.V1.nextUUID
-                         let randomUUID = fromMaybe nil maybeRandomUUID
-                         let randomUUIDToString =  (Data.UUID.toString randomUUID)
-                         -- unless exists          $  appendFile "UUID" randomUUIDToString
-                         writeFile "./config/UUID"  randomUUIDToString
-                         strUUID                <- readFile "./config/UUID"
-                         let maybeUUID          = Data.UUID.fromString (strUUID)
-                         return                 $ case maybeUUID   of
-                                                       (Just uuid) -> uuid
-                                                       Nothing     -> (nil :: UUID)
+generateSessionUUID = do
+  configDir <- getSimulaConfigDir
+  let uuidPath = configDir </> "UUID"
+  createDirectoryIfMissing True configDir
+  exists <- doesFileExist uuidPath
+  maybeRandomUUID <- Data.UUID.V1.nextUUID
+  let randomUUID = fromMaybe nil maybeRandomUUID
+  let randomUUIDToString = Data.UUID.toString randomUUID
+  writeFile uuidPath randomUUIDToString
+  strUUID <- readFile uuidPath
+  let maybeUUID = Data.UUID.fromString strUUID
+  return $ case maybeUUID of
+    (Just uuid) -> uuid
+    Nothing     -> (nil :: UUID)
 
 ensureUUIDIsRegistered :: UUID -> IO ()
 ensureUUIDIsRegistered uuid = do
@@ -176,9 +188,9 @@ forkSendPayload uuid (Payload { numWindowsOpen = tvarSurfaceTelemetryMap
   response <- httpLbs request manager
   return ()
 
--- The first variable encodes the number of windows open (possibly useful data).
 startTelemetry :: TVar SurfaceTelemetryMap -> IO ()
-startTelemetry tvarSurfaceTelemetryMap = do uuid <- generateSessionUUID
-                                            forkIO $ ensureUUIDIsRegistered uuid
-                                            forkSendPayloadEveryMinuteInterval uuid tvarSurfaceTelemetryMap 5 -- Send payload every 5 minutes
-                                            return ()
+startTelemetry tvarSurfaceTelemetryMap = do
+  uuid <- generateSessionUUID
+  forkIO $ ensureUUIDIsRegistered uuid
+  forkSendPayloadEveryMinuteInterval uuid tvarSurfaceTelemetryMap 5 -- Send payload every 5 minutes
+  return ()
