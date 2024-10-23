@@ -16,6 +16,7 @@ module Plugin.Types where
 import           System.Directory
 import           Linear.Matrix
 import           Linear.V3
+import           Path.IO
 
 import           Data.Time.Clock
 import           Data.Maybe
@@ -55,7 +56,6 @@ import qualified Language.C.Inline as C
 import           System.IO.Unsafe
 import           Data.Monoid
 import           Data.List
--- import           Data.Text as T
 import           Data.Text.Encoding
 import           Data.Text
 import qualified System.Process.ByteString as B
@@ -81,10 +81,15 @@ import System.IO.Streams.Internal
 import qualified Data.ByteString as B
 import System.IO.Streams.Text
 
+import System.FilePath ((</>), takeExtension, takeDirectory)
+import System.IO.Streams (OutputStream, InputStream, runInteractiveProcess)
+import Path (Path, Abs, Dir, parseAbsDir, parseRelDir, toFilePath, parseRelFile, fileExtension)
+
 deriving instance Eq GodotWlrOutput
 deriving instance Eq GodotWlrXdgSurface
 deriving instance Eq GodotWlrXWaylandSurface
 deriving instance Eq GodotSpatial
+
 
 instance Show Transform where
   show tf = (show (_tfBasis tf)) ++ (" w/position: ") ++ (show (_tfPosition tf))
@@ -153,11 +158,9 @@ data Configuration = Configuration {
 , _mouseSensitivityScaler :: Double
 , _keyBindings :: [KeyboardShortcut]
 , _keyRemappings :: [KeyboardRemapping]
-, _environmentsDirectory :: String
 , _environmentDefault :: String
 -- , _defaultTransparency :: Double -- Remove until order independent transparency is implemented
 , _scenes :: [String]
-, _hudConfig :: String
 } deriving (Generic, Show)
 
 instance FromDhall KeyboardRemapping
@@ -869,7 +872,7 @@ savePng cs surfaceTexture wlrSurface = do
   let dataDir = fromMaybe "." maybeDataDir
   createDirectoryIfMissing False (dataDir ++ "/media")
   let pathStr = dataDir ++ "/media/" ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
-  canonicalPath <- canonicalizePath pathStr
+  canonicalPath <- System.Directory.canonicalizePath pathStr
   pathStr' <- toLowLevel (pack pathStr)
 
   G.save_png surfaceTextureAsImage pathStr'
@@ -967,29 +970,56 @@ getTextureFromURL urlStr = do
    Api.godot_object_destroy $ safeCast godotImage
    if (unsafeCoerce godotImageTexture == nullPtr) then (return Nothing) else (return (Just (safeCast godotImageTexture)))
 
-loadEnvironmentTextures :: Configuration -> GodotWorldEnvironment -> IO [String]
-loadEnvironmentTextures configuration worldEnvironment = do
-  -- configuration <- readTVarIO (gss ^. gssConfiguration)
-  let envDir = (configuration ^. environmentsDirectory)
-  dirExists <- Control.Exception.Safe.try $ listDirectory envDir :: IO (Either IOException [FilePath])
-  dirs <- case dirExists of
-              Left _ -> return []
-              Right _ -> findAll [".png", ".jpg", ".jpeg"] <$> listDirectory envDir
-  let dirs' = Data.List.map (("./" ++ envDir ++ "/") ++) dirs
-  -- textures <- catMaybes <$> mapM (getEnvironmentTexture (worldEnvironment, tex)) dirs'
-  return dirs'
-  where contain w end = Data.List.take (Data.List.length end) (Data.List.reverse w) == Data.List.reverse end
-        findAll ends txt = Data.List.filter (\w -> Data.List.any (contain w) ends) txt
+getNixStorePath :: String -> IO FilePath
+getNixStorePath dirName = do
+  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
+  let appDir = fromMaybe "./result/bin" maybeAppDir
+  return $ takeDirectory appDir </> dirName
 
+loadEnvironmentTextures :: GodotSimulaServer -> GodotWorldEnvironment -> IO [FilePath]
+loadEnvironmentTextures gss worldEnvironment = do
+  maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
+  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
+  
+  dataDir <- case maybeDataDir of
+    Just dir -> return dir
+    Nothing -> do
+      home <- getHomeDirectory
+      return $ home </> ".local" </> "share" </> "Simula"
+  
+  let appDir = fromMaybe "./result/bin" maybeAppDir
+
+  let localEnvDir = dataDir </> "environments"
+  let nixEnvDir = appDir </> "environments"
+
+  -- Ensure the environments directory exists
+  localDirExists <- doesDirectoryExist localEnvDir
+  unless localDirExists $ do
+    -- Copy environments from Nix store.
+    -- We have to use `path` lib functions for this since
+    -- (shockingly) System.Directory doesn't offer a function to
+    -- copy directories.
+    createDirectoryIfMissing True localEnvDir
+    localEnvDirPath <- parseAbsDir localEnvDir
+    nixEnvDirPath <- parseAbsDir nixEnvDir
+    copyDirRecur nixEnvDirPath localEnvDirPath
+
+  imageFiles <- getImageFiles localEnvDir
+  return imageFiles
+  where getImageFiles :: FilePath -> IO [FilePath]
+        getImageFiles dir = do
+          content <- listDirectory dir
+          let fullPaths = Data.List.map (dir </>) content 
+          let imageFiles = Data.List.filter ((`Data.List.elem` [".png", ".jpg", ".jpeg"]) . takeExtension) fullPaths
+          return imageFiles
+    
 getEnvironmentTexture :: GodotWorldEnvironment -> String -> IO (Maybe GodotTexture)
 getEnvironmentTexture worldEnvironment filePath = do
-  -- (worldEnvironment, tex) <- readTVarIO (gss ^. gssWorldEnvironment)
   environment <- G.get_environment worldEnvironment :: IO GodotEnvironment
   sky <- G.get_sky environment :: IO GodotSky
   panoramaSky <- asClass' GodotPanoramaSky "PanoramaSky" sky
 
-  maybeMilkyTexture <- getTextureFromURL $ "res://" ++ filePath
-  -- maybeMilkyTexture <- getTextureFromURL $ filePath
+  maybeMilkyTexture <- getTextureFromURL $ filePath -- Don't use "res:// ++ filePath" since we need absolute system filepaths now
   case maybeMilkyTexture of
     Nothing -> do putStrLn $ "Can't load texture: " ++ filePath
                   return Nothing
@@ -1535,8 +1565,9 @@ validateSurfaceE surf = do
                    return ret
 
 catchGodot :: (a -> [GodotVariant] -> IO ()) -> ((a -> [GodotVariant] -> IO ()))
-catchGodot func x y = catch (func x y) (\e -> do -- putStrLn $ "Caught " ++ (show (e :: NullPointerException)) -- quiet for now :)
-                                                 return ())
+catchGodot func x y = catch (func x y) (\(e :: NullPointerException) -> do
+                                          -- putStrLn $ "Caught " ++ show e  -- quiet for now :)
+                                          return ())
 
 data RotationMethod = Workspace | Workspaces
 
@@ -1684,23 +1715,49 @@ logMemPid gss = do
 
 forkUpdateHUDRecursively :: GodotSimulaServer -> IO ()
 forkUpdateHUDRecursively gss = do
-  configuration <- readTVarIO (gss ^. gssConfiguration)
-  let configPath = (configuration ^. hudConfig)
+  maybeConfigDir <- lookupEnv "SIMULA_CONFIG_DIR"
   maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
+  
+  homeDir <- getHomeDirectory
+  configDir <- case maybeConfigDir of
+    Just dir -> return dir
+    Nothing -> return $ homeDir </> ".config" </> "Simula"
+    
   let appDir = fromMaybe "./result/bin" maybeAppDir
-  res@(inp,out,err,pid) <- System.IO.Streams.Process.runInteractiveProcess (appDir ++ "/i3status") ["-c", configPath] Nothing Nothing
 
-  forkIO $ updateHUDRecursively gss res
-  return ()
-  where updateHUDRecursively :: GodotSimulaServer -> (OutputStream B.ByteString, InputStream B.ByteString, InputStream B.ByteString, ProcessHandle) -> IO ()
-        updateHUDRecursively gss res@(inp,out,err,pid) = do
-          -- let sec = 5
-          -- threadDelay (1000 * 1000 * (sec))
-          updateWorkspaceHUD gss
-          updatei3StatusHUD gss res
+  let hudConfigPath = configDir </> "HUD.config"
+  
+  configExists <- System.Directory.doesFileExist hudConfigPath
+  unless configExists $ do
+    -- Copy default HUD config from Nix store
+    let defaultHudConfig = appDir </> "config" </> "HUD.config"
+    createDirectoryIfMissing True configDir
+    System.Directory.copyFile defaultHudConfig hudConfigPath
 
-          updateHUDRecursively gss res
+  let i3statusPath = appDir </> "i3status"
+  
+  putStrLn $ "Attempting to run i3status from: " ++ i3statusPath
+  putStrLn $ "Using config file: " ++ hudConfigPath
+  
+  res <- try $ System.IO.Streams.runInteractiveProcess 
+    i3statusPath
+    ["-c", hudConfigPath] 
+    Nothing 
+    Nothing
 
+  case res of
+    Left e -> putStrLn $ "Error starting i3status: " ++ show (e :: IOException)
+    Right processInfo -> do
+      forkIO $ updateHUDRecursively gss processInfo
+      return ()
+
+  where
+    updateHUDRecursively :: GodotSimulaServer -> (System.IO.Streams.OutputStream B.ByteString, System.IO.Streams.InputStream B.ByteString, System.IO.Streams.InputStream B.ByteString, ProcessHandle) -> IO ()
+    updateHUDRecursively gss res@(inp,out,err,pid) = do
+      updateWorkspaceHUD gss
+      updatei3StatusHUD gss res
+      updateHUDRecursively gss res
+      
 updateWorkspaceHUD :: GodotSimulaServer -> IO ()
 updateWorkspaceHUD gss = do
   (currentWorkspace, currentWorkspaceStr) <- readTVarIO (gss ^. gssWorkspace)
@@ -1737,10 +1794,13 @@ updatei3StatusHUD gss res@(inp,out,err,pid) = do
   hud <- readTVarIO (gss ^. gssHUD)
   out' <- System.IO.Streams.Text.decodeUtf8 out
   maybeLine <- System.IO.Streams.Internal.read out' :: IO (Maybe Text)
-  let line = Data.Maybe.fromJust maybeLine
-  let line' = unpack line
-  let hudNew = hud { _hudI3Status = line' }
+  let newHudStatus = case maybeLine of
+        Just line -> unpack line
+        Nothing -> "...no HUD data available...!"
+  let hudNew = hud { _hudI3Status = newHudStatus }
   atomically $ writeTVar (gss ^. gssHUD) hudNew
+  when (isNothing maybeLine) $
+    putStrLn "No data read from i3status output"
   return ()
 
 withGodotString :: (GodotString -> IO a) -> Text -> IO a

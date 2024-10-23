@@ -74,6 +74,8 @@ library
     , safe-exceptions
     , io-streams
     , filepath
+    , path-io
+    , path
   exposed-modules:
       Telemetry
       Plugin
@@ -182,6 +184,8 @@ foreign-library godot-haskell-plugin
     , safe-exceptions
     , io-streams
     , filepath
+    , path-io
+    , path
 
   default-extensions:
        FlexibleContexts

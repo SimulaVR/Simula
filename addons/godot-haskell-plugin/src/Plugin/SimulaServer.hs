@@ -456,7 +456,7 @@ getKeyboardAction gss keyboardShortcut =
           let keyboardRemappingsVal = getKeyboardRemappings gss (configuration ^. keyRemappings)
           atomically $ writeTVar (gss ^. gssKeyboardRemappings) keyboardRemappingsVal
           worldEnv@(worldEnvironment, _) <- readTVarIO (gss ^. gssWorldEnvironment)
-          textures <- loadEnvironmentTextures configuration worldEnvironment
+          textures <- loadEnvironmentTextures gss worldEnvironment
           atomically $ writeTVar (gss ^. gssEnvironmentTextures) textures
           atomically $ writeTVar (gss ^. gssAxisScrollSpeed) (configuration ^. axisScrollSpeed)
           atomically $ writeTVar (gss ^. gssMouseSensitivityScaler) (configuration ^. mouseSensitivityScaler)
@@ -911,83 +911,85 @@ parseConfiguration = do
   maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
   maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
 
-  putStrLn $ "DEBUG: PROFILE = " ++ show profile
-  putStrLn $ "DEBUG: SIMULA_CONFIG_DIR = " ++ show maybeConfigDir
-  putStrLn $ "DEBUG: SIMULA_DATA_DIR = " ++ show maybeDataDir
-  putStrLn $ "DEBUG: SIMULA_APP_DIR = " ++ show maybeAppDir
-  
-  
-  let configDir = fromMaybe "./config/Simula" maybeConfigDir
-      dataDir = fromMaybe "./." maybeDataDir
-      appDir = fromMaybe "./result/bin" maybeAppDir
-      localDir = "./."
-      simulaNixDir = takeDirectory appDir
-
-      defaultConfiguration = Configuration 
-        { _backend = "OpenVR"
-        , _startingApps = StartingApps 
-            -- { _center = Just $ "ENV=val " ++ appDir ++ "/xfce4-terminal"
-            { _center = Nothing
-            , _right = Nothing
-            , _bottom = Nothing
-            , _left = Nothing
-            , _top = Nothing
-            }
-        , _defaultWindowResolution = Just (900, 900)
-        , _defaultWindowScale = 1.0
-        , _axisScrollSpeed = 0.03
-        , _mouseSensitivityScaler = 1.00
-        , _keyBindings = 
-            [ KeyboardShortcut ["KEY_MASK_META", "KEY_BACKSPACE"] "terminateWindow"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_ESCAPE"] "toggleGrabMode"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_SLASH"] "launchTerminal"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_APOSTROPHE"] "moveCursor"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_ENTER"] "clickLeft"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_ENTER"] "clickRight"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_ALT_R"] "grabWindow"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_ALT_L"] "grabWindow"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_A"] "launchAppLauncher"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_E"] "cycleEnvironment"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_F"] "orientWindowTowardsGaze"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_9"] "scaleWindowDown"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_0"] "scaleWindowUp"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_MINUS"] "zoomOut"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_EQUAL"] "zoomIn"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_LEFT"] "contractWindowHorizontally"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_RIGHT"] "extendWindowHorizontally"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_UP"] "contractWindowVertically"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_DOWN"] "extendWindowVertically"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_S"] "resizeWindowToDefaultSize"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_COMMA"] "pullWindow"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_PERIOD"] "pushWindow"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_W"] "launchHMDWebCam"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_R"] "emacsclient -c"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_ESCAPE"] "terminateSimula"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_MASK_ALT", "KEY_UP"] "increaseTransparency"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_MASK_ALT", "KEY_DOWN"] "decreaseTransparency"
-            , KeyboardShortcut ["KEY_PRINT"] "toggleScreenshotMode"
-            , KeyboardShortcut ["KEY_MASK_SHIFT", "KEY_PRINT"] "takeScreenshotGlobal"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_K"] "firefox -new-window"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_G"] "google-chrome-stable --new-window news.ycombinator.com"
-            , KeyboardShortcut ["KEY_MASK_META", "KEY_J"] "gvim"
-            ]
-        , _keyRemappings = []
-        , _environmentsDirectory = simulaNixDir ++ "/environments"
-        , _environmentDefault = simulaNixDir ++ "/environments/AllSkyFree_Sky_EpicBlueSunset_Equirect.png"
-        , _scenes = []
-        , _hudConfig = configDir ++ "/HUD.config"
+  putStrLn $ "PROFILE = " ++ show profile
+  putStrLn $ "SIMULA_CONFIG_DIR = " ++ show maybeConfigDir
+  putStrLn $ "SIMULA_DATA_DIR = " ++ show maybeDataDir
+  putStrLn $ "SIMULA_APP_DIR = " ++ show maybeAppDir
+  let defaultConfiguration = Configuration { _backend = "OpenVR"
+    , _startingApps = StartingApps 
+        -- { _center = Just $ "ENV=val " ++ appDir ++ "/xfce4-terminal"
+        { _center = Nothing
+        , _right = Nothing
+        , _bottom = Nothing
+        , _left = Nothing
+        , _top = Nothing
         }
-      
+    , _defaultWindowResolution = Just (900, 900)
+    , _defaultWindowScale = 1.0
+    , _axisScrollSpeed = 0.03
+    , _mouseSensitivityScaler = 1.00
+    , _keyBindings = 
+        [ KeyboardShortcut ["KEY_MASK_META", "KEY_BACKSPACE"] "terminateWindow"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_ESCAPE"] "toggleGrabMode"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_SLASH"] "launchTerminal"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_APOSTROPHE"] "moveCursor"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_ENTER"] "clickLeft"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_ENTER"] "clickRight"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_ALT_R"] "grabWindow"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_ALT_L"] "grabWindow"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_A"] "launchAppLauncher"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_E"] "cycleEnvironment"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_F"] "orientWindowTowardsGaze"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_9"] "scaleWindowDown"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_0"] "scaleWindowUp"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_MINUS"] "zoomOut"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_EQUAL"] "zoomIn"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_LEFT"] "contractWindowHorizontally"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_RIGHT"] "extendWindowHorizontally"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_UP"] "contractWindowVertically"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_DOWN"] "extendWindowVertically"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_S"] "resizeWindowToDefaultSize"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_COMMA"] "pullWindow"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_PERIOD"] "pushWindow"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_W"] "launchHMDWebCam"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_R"] "emacsclient -c"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_ESCAPE"] "terminateSimula"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_MASK_ALT", "KEY_UP"] "increaseTransparency"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_MASK_ALT", "KEY_DOWN"] "decreaseTransparency"
+        , KeyboardShortcut ["KEY_PRINT"] "toggleScreenshotMode"
+        , KeyboardShortcut ["KEY_MASK_SHIFT", "KEY_PRINT"] "takeScreenshotGlobal"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_K"] "firefox -new-window"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_G"] "google-chrome-stable --new-window news.ycombinator.com"
+        , KeyboardShortcut ["KEY_MASK_META", "KEY_J"] "gvim"
+        ]
+    , _keyRemappings = []
+    , _environmentDefault = "AllSkyFree_Sky_EpicBlueSunset_Equirect.png"
+    , _scenes = []
+    }
+
+  homeDir <- getHomeDirectory
+  maybeConfigDir <- lookupEnv "SIMULA_CONFIG_DIR"
+  configDir <- case maybeConfigDir of
+    Just dir -> return dir
+    Nothing -> return $ homeDir </> ".config" </> "Simula"
+  maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
+  let dataDir = fromMaybe (homeDir </> ".local" </> "share" </> "Simula") maybeDataDir
+
   config <- case profile of
-    Just _ -> return defaultConfiguration
+    Just _ -> do putStrLn "PROFILE mode detected; using defaultConfiguration"
+                 return defaultConfiguration
     Nothing -> do
-      let configPath = configDir ++ "/config.dhall"
+      let configPath = configDir </> "config.dhall"
       configExists <- doesFileExist configPath
       if configExists
-        then input auto (T.pack configPath)
-        else return defaultConfiguration
-  
-  return config
+        then do
+          inputConfig <- input auto (T.pack configPath)
+          return inputConfig
+        else do
+          putStrLn "Unable to find config.dhall; using defaultConfiguration"
+          return defaultConfiguration
+
+  return config    
   
 -- | We first fill the TVars with dummy state, before updating them with their
 -- | real values in `ready`.
@@ -1059,13 +1061,15 @@ initGodotSimulaServer obj = do
       G.set_environment worldEnvironment environment
       -- G.set_transform gssWorldEnvironment Transform( 0.623013, -0.733525, 0.271654, 0.321394, 0.55667, 0.766044, -0.713134, -0.389948, 0.582563, 0, 100, 0 )
 
-      let texStr = (configuration ^. environmentDefault)
-      maybeDefaultTexture <- getTextureFromURL ("res://" ++ texStr)
+      maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
+      let dataDir = fromMaybe "./environments" maybeDataDir
+      let texStr = dataDir </> "environments" </> (configuration ^. environmentDefault)
+      maybeDefaultTexture <- getTextureFromURL texStr -- Don't use "res://" ++ texStr since we need absolute system paths
       case maybeDefaultTexture of
            Nothing -> do putStrLn "Can't set panorama texture!"
            Just tex -> do G.set_panorama panoramaSky tex
       gssWorldEnvironment' <- newTVarIO (worldEnvironment, texStr)
-      texturesStr <- loadEnvironmentTextures configuration worldEnvironment
+      texturesStr <- loadEnvironmentTextures gss worldEnvironment
       gssEnvironmentTextures' <- newTVarIO texturesStr
       gssStartingAppTransform' <- newTVarIO Nothing
 
