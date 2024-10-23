@@ -970,11 +970,12 @@ getTextureFromURL urlStr = do
    Api.godot_object_destroy $ safeCast godotImage
    if (unsafeCoerce godotImageTexture == nullPtr) then (return Nothing) else (return (Just (safeCast godotImageTexture)))
 
-getNixStorePath :: String -> IO FilePath
-getNixStorePath dirName = do
+getSimulaNixStorePath :: String -> IO FilePath
+getSimulaNixStorePath dirName = do
   maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
   let appDir = fromMaybe "./result/bin" maybeAppDir
-  return $ takeDirectory appDir </> dirName
+  let simulaStorePath = takeDirectory appDir  -- Returns `$SIMULA_APP_DIR/..`
+  return $ simulaStorePath </> dirName
 
 loadEnvironmentTextures :: GodotSimulaServer -> GodotWorldEnvironment -> IO [FilePath]
 loadEnvironmentTextures gss worldEnvironment = do
@@ -990,7 +991,7 @@ loadEnvironmentTextures gss worldEnvironment = do
   let appDir = fromMaybe "./result/bin" maybeAppDir
 
   let localEnvDir = dataDir </> "environments"
-  let nixEnvDir = appDir </> "environments"
+  nixEnvDir <- getSimulaNixStorePath "environments"
 
   -- Ensure the environments directory exists
   localDirExists <- doesDirectoryExist localEnvDir

@@ -102,7 +102,7 @@ let
       fi
 
       if [ ! -d "$SIMULA_DATA_DIR/environments" ]; then
-        cp -R $out/share/Simula/environments "$SIMULA_DATA_DIR/environments"
+        cp -R $out/environments "$SIMULA_DATA_DIR/environments"
       fi
     '';
 
