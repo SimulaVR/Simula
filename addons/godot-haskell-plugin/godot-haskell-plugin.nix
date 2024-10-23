@@ -13,7 +13,7 @@ mkDerivation {
     aeson base base64-bytestring bytestring clock colour containers
     directory extra http-client http-client-tls
     http-types inline-c iso8601-time lens linear process raw-strings-qq
-    stm text time unix uuid vector godot-haskell ordered-containers process-extras dhall hspec QuickCheck safe-exceptions io-streams
+    stm text time unix uuid vector godot-haskell ordered-containers process-extras dhall hspec QuickCheck safe-exceptions io-streams path path-io
   ];
   homepage = "https://github.com/SimulaVR/Simula#readme";
   license = lib.licenses.asl20;
