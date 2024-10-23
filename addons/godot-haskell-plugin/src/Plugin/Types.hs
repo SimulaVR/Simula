@@ -1535,7 +1535,7 @@ validateSurfaceE surf = do
                    return ret
 
 catchGodot :: (a -> [GodotVariant] -> IO ()) -> ((a -> [GodotVariant] -> IO ()))
-catchGodot func x y = catch (func x y) (\e -> do putStrLn $ "Caught " ++ (show (e :: NullPointerException))
+catchGodot func x y = catch (func x y) (\e -> do -- putStrLn $ "Caught " ++ (show (e :: NullPointerException)) -- quiet for now :)
                                                  return ())
 
 data RotationMethod = Workspace | Workspaces
