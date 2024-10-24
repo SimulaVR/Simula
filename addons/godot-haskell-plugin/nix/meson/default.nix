@@ -53,7 +53,7 @@ python3Packages.buildPythonApplication rec {
     cpp = '${targetPackages.stdenv.cc.targetPrefix}c++'
     ar = '${targetPackages.stdenv.cc.bintools.targetPrefix}ar'
     strip = '${targetPackages.stdenv.cc.bintools.targetPrefix}strip'
-    pkgconfig = 'pkg-config'
+    pkg-config = 'pkg-config'
     [properties]
     needs_exe_wrapper = true
     [host_machine]
@@ -65,7 +65,7 @@ python3Packages.buildPythonApplication rec {
 
   # 0.45 update enabled tests but they are failing
   doCheck = false;
-  # checkInputs = [ ninja pkgconfig ];
+  # checkInputs = [ ninja pkg-config ];
   # checkPhase = "python ./run_project_tests.py";
 
   inherit (stdenv) cc;

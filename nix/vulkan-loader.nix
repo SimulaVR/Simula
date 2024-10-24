@@ -1,4 +1,4 @@
-{ stdenv, lib, fetchFromGitHub, cmake, python3, vulkan-headers, pkgconfig
+{ stdenv, lib, fetchFromGitHub, cmake, python3, vulkan-headers, pkg-config
 , freetype, fontconfig, xorg, libxcb, libXrandr, libXext, wayland, addOpenGLRunpath, mesa_drivers }:
 
 stdenv.mkDerivation rec {
@@ -12,7 +12,7 @@ stdenv.mkDerivation rec {
     sha256 = "0w9i2pliw4ccmjyfzff4i2f3hxwsfd54jg7ahv2v634qmx59bsbi";
   };
 
-  nativeBuildInputs = [ pkgconfig ];
+  nativeBuildInputs = [ pkg-config ];
   buildInputs = [ cmake python3 freetype fontconfig xorg.xorgproto xorg.libX11 xorg.libXt xorg.libXft xorg.libXext xorg.libSM xorg.libICE libxcb libXrandr libXext wayland ];
   enableParallelBuilding = true;
 

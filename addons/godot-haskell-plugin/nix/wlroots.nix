@@ -1,4 +1,4 @@
-{ pkgs ? import <nixpkgs> {}, stdenv, fetchFromGitHub, fetchpatch, meson, ninja, pkgconfig
+{ pkgs ? import <nixpkgs> {}, stdenv, fetchFromGitHub, fetchpatch, meson, ninja, pkg-config
 , wayland, libGL, wayland-protocols, libinput, libxkbcommon, pixman
 , xcbutilwm, libX11, libcap, xcbutilimage, xcbutilerrors, mesa
 , libpng, ffmpeg_4, libdrm, lib
@@ -26,7 +26,7 @@ in stdenv.mkDerivation rec {
   # programs (in examples) AND rootston
   outputs = [ "out" "bin" "examples" ];
 
-  nativeBuildInputs = [ meson ninja pkgconfig ];
+  nativeBuildInputs = [ meson ninja pkg-config ];
 
   buildInputs = [
     libdrm wayland libGL wayland-protocols libinput libxkbcommon pixman

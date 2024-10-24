@@ -1,6 +1,6 @@
 { stdenv, lib, fetchurl
 , xorgproto, xorgserver
-, pkgconfig }:
+, pkg-config }:
 
 with lib;
 
@@ -18,7 +18,7 @@ stdenv.mkDerivation rec {
     ./0003-fix-pointer-limits.patch
     ./0005-support-for-30-bit-depth-in-dummy-driver.patch
   ];
-  nativeBuildInputs = [ pkgconfig ];
+  nativeBuildInputs = [ pkg-config ];
   buildInputs = [ xorgproto xorgserver ];
 
   meta = {

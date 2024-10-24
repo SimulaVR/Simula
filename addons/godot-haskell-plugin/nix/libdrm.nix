@@ -1,4 +1,4 @@
-{ stdenv, fetchurl, pkgconfig, libpthreadstubs, libpciaccess, valgrind-light, lib }:
+{ stdenv, fetchurl, pkg-config, libpthreadstubs, libpciaccess, valgrind-light, lib }:
 
 stdenv.mkDerivation rec {
   name = "libdrm-2.4.96";
@@ -10,7 +10,7 @@ stdenv.mkDerivation rec {
 
   outputs = [ "out" "dev" "bin" ];
 
-  nativeBuildInputs = [ pkgconfig ];
+  nativeBuildInputs = [ pkg-config ];
   buildInputs = [ libpthreadstubs libpciaccess valgrind-light ];
     # libdrm as of 2.4.70 does not actually do anything with udev.
 
