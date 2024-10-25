@@ -1,36 +1,25 @@
-{ stdenv, lib, fetchFromGitHub, cmake, python3, vulkan-headers, pkg-config
-, freetype, fontconfig, xorg, libxcb, libXrandr, libXext, wayland, addOpenGLRunpath, mesa_drivers }:
-
+{ lib, stdenv, fetchFromGitHub, cmake, ninja }:
 stdenv.mkDerivation rec {
-  pname = "vulkan-loader";
-  version = "1.2.162.0";
+  pname = "vulkan-headers";
+  version = "1.3.290.0";
+
+  nativeBuildInputs = [ cmake ninja ];
+
+  # cmakeFlags = lib.optionals stdenv.hostPlatform.isDarwin [ "-DVULKAN_HEADERS_ENABLE_MODULE=OFF" ]; # <- Simula devs: we comment this out for non-NixOS AMD builds
 
   src = fetchFromGitHub {
     owner = "KhronosGroup";
-    repo = "Vulkan-Loader";
-    rev = "sdk-${version}";
-    sha256 = "0w9i2pliw4ccmjyfzff4i2f3hxwsfd54jg7ahv2v634qmx59bsbi";
+    repo = "Vulkan-Headers";
+    rev = "vulkan-sdk-${version}";
+    hash = "sha256-goxA3Wg3u5hNCz54tWMJnFaS0JGVjphy14Ng/sAK/EM=";
   };
 
-  nativeBuildInputs = [ pkg-config ];
-  buildInputs = [ cmake python3 freetype fontconfig xorg.xorgproto xorg.libX11 xorg.libXt xorg.libXft xorg.libXext xorg.libSM xorg.libICE libxcb libXrandr libXext wayland ];
-  enableParallelBuilding = true;
-
-  preConfigure = ''
-    substituteInPlace loader/vulkan.pc.in --replace 'includedir=''${prefix}/include' 'includedir=${vulkan-headers}/include'
-  '';
-
-  cmakeFlags = [
-    "-DSYSCONFDIR=${mesa_drivers}/share" # Don't use addOpenGLRunpath.driverLink
-    "-DVULKAN_HEADERS_INSTALL_DIR=${vulkan-headers}"
-  ];
-
-  outputs = [ "out" "dev" ];
+  passthru.updateScript = ./update.sh;
 
   meta = with lib; {
-    description = "LunarG Vulkan loader";
+    description = "Vulkan Header files and API registry";
     homepage    = "https://www.lunarg.com";
-    platforms   = platforms.linux;
+    platforms   = platforms.unix ++ platforms.windows;
     license     = licenses.asl20;
     maintainers = [ maintainers.ralith ];
   };
