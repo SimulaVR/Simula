@@ -101,8 +101,8 @@ let
         cp $out/config/config.dhall "\$SIMULA_CONFIG_DIR/config.dhall"
       fi
 
-      if [ ! -d "$SIMULA_DATA_DIR/environments" ]; then
-        cp -R $out/environments "$SIMULA_DATA_DIR/environments"
+      if [ ! -d "\$SIMULA_DATA_DIR/environments" ]; then
+        cp -R $out/environments "\$SIMULA_DATA_DIR/environments"
       fi
     '';
 
