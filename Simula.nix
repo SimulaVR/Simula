@@ -1,11 +1,12 @@
 { stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, mimic, xsel, xclip, dialog, synapse, openxr-loader, xpra, valgrind, xorg, writeShellScriptBin, python3, awscli, wayland, wayland-protocols, zstd, profileBuild ? false, pkgs, patchelf, libv4l, openssl, cabal-install, externalSrc ? null}:
 let
 
-      localSrc = fetchGit {
-        url = builtins.toString ./.;
-        submodules = true;
-        allRefs = true;
-      };
+     localSrc = fetchGit {
+       url = builtins.toString ./.;
+       submodules = true;
+       allRefs = true;
+       shallow = true;
+     };
 
     /* Modify a stdenv so that it produces debug builds; that is,
       binaries have debug info, and compiler optimisations are
@@ -268,8 +269,9 @@ let
     xfce4-terminal-wrapped = writeScriptBin "xfce4-terminal" ''
       #!${stdenv.shell}
       export XDG_DATA_HOME=${dejavu_fonts}/share
+      cd $HOME
       exec ${xfce.xfce4-terminal}/bin/xfce4-terminal "$@"
-      '';
+'';
 
     midori-wrapped = writeScriptBin "midori" ''
       #!${stdenv.shell}
