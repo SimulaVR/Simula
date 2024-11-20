@@ -33,11 +33,11 @@ let
     wlroots-dev = callPackage ./submodules/wlroots/wlroots.nix { stdenv = stdenvRes; };
     vulkan-loader-custom = if onNixOS then vulkan-loader else (callPackage ./nix/vulkan-loader.nix { });
     glibc-locales = glibcLocales;
-    godot = callPackage ./submodules/godot/godot.nix { devBuild = devBuild; onNixOS = onNixOS; pkgs = import ./pinned-nixpkgs.nix; };
+    godot = callPackage ./submodules/godot/godot.nix { devBuild = devBuild; onNixOS = onNixOS; };
     godot-api = "${godot}/bin/api.json";
 
     haskellCallPkg = if profileBuild then (pkgs.haskellPackagesPIC.callPackage) else (haskellPackages.callPackage);
-    haskellCallPkgNoProfile = (import ./pinned-nixpkgs.nix { }).haskellPackages.callPackage;
+    haskellCallPkgNoProfile = haskellPackages.callPackage;
     godot-haskell-classgen = haskellCallPkgNoProfile ./submodules/godot-haskell-cabal/classgen/classgen.nix { };
     godot-haskell = haskellCallPkg ./submodules/godot-haskell/godot-haskell.nix { api-json = godot-api; profileBuild = profileBuild; godot-haskell-classgen = godot-haskell-classgen; };
     godot-haskell-plugin = haskellCallPkg ./addons/godot-haskell-plugin/godot-haskell-plugin.nix { devBuild = devBuild; onNixOS = onNixOS; godot = godot; godot-haskell = godot-haskell; profileBuild = profileBuild; };
