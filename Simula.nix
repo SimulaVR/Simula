@@ -1,4 +1,4 @@
-{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, mimic, xsel, xclip, dialog, synapse, openxr-loader, xpra, valgrind, xorg, writeShellScriptBin, python3, awscli, wayland, wayland-protocols, zstd, profileBuild ? false, pkgs, patchelf, libv4l, openssl, cabal-install, externalSrc ? null}:
+{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, mimic, xsel, xclip, dialog, synapse, openxr-loader, xpra, valgrind, xorg, writeShellScriptBin, python3, awscli, wayland, wayland-protocols, zstd, profileBuild ? false, pkgs, patchelf, libv4l, openssl, cabal-install, externalSrc ? null, i3status ? callPackage (fetchFromGitHub { owner = "SimulaVR"; repo = "i3status"; rev = "fba8ea459ce4da2e3198f7d536569668c3d0b9b9"; hash = "sha256-vLUDeYwbzuCdYsdb082jcsjTj3rpOTJK06H0WNrfI0U="; }) { } }:
 let
 
      localSrc = fetchGit {
@@ -45,8 +45,6 @@ let
     monado = callPackage ./submodules/monado/monado.nix { gst-plugins-base = pkgs.gst_all_1.gst-plugins-base; gstreamer = pkgs.gst_all_1.gstreamer; };
 
     ghc-version = ghc.version;
-
-    i3status = callPackage ./submodules/i3status/i3status.nix {};
 
     devBuildFalse = ''
       ln -s ${godot}/bin/godot.x11.opt.debug.64 $out/bin/godot.x11.opt.debug.64
