@@ -1,12 +1,5 @@
-{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, mimic, xsel, xclip, dialog, synapse, openxr-loader, xpra, valgrind, xorg, writeShellScriptBin, python3, awscli, wayland, wayland-protocols, zstd, profileBuild ? false, pkgs, patchelf, libv4l, openssl, cabal-install, externalSrc ? null}:
+{ stdenv, fetchFromGitHub, haskellPackages, callPackage, buildEnv, xrdb, wmctrl, SDL2, lib, onNixOS ? false, xwayland, xkbcomp, ghc, ffmpeg-full, midori, xfce, devBuild, fontconfig, glibcLocales, dejavu_fonts, writeScriptBin, coreutils, curl, vulkan-loader, mimic, xsel, xclip, dialog, synapse, openxr-loader, xpra, valgrind, xorg, writeShellScriptBin, python3, awscli, wayland, wayland-protocols, zstd, profileBuild ? false, pkgs, patchelf, libv4l, openssl, cabal-install}:
 let
-
-     localSrc = fetchGit {
-       url = builtins.toString ./.;
-       submodules = true;
-       allRefs = true;
-       shallow = true;
-     };
 
     /* Modify a stdenv so that it produces debug builds; that is,
       binaries have debug info, and compiler optimisations are
@@ -333,7 +326,7 @@ let
 
     simula = stdenv.mkDerivation {
       name = "Simula";
-      src = if externalSrc != null then externalSrc else localSrc;
+      src = ./.;
       buildInputs = [ xpra xrdb wmctrl fontconfig glibc-locales xfce4-terminal-wrapped openxr-loader midori-wrapped pernoscoSubmit i3status-wrapped cabal-install ghc ] ++ simulaPackages;
       installPhase = ''
       mkdir -p $out
