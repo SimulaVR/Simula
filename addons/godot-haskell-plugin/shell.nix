@@ -1,6 +1,5 @@
-{ devBuild ? true, onNixOS ? false, profileBuild ? false }:
+{ devBuild ? true, onNixOS ? false, profileBuild ? false, pkgs }:
 let
-  pkgs = if profileBuild then (import ../../pinned-nixpkgs.nix { overlays = (import ../../nix/profileOverlays.nix); }) else (import ../../pinned-nixpkgs.nix { });
   haskellCallPkg = if profileBuild then (pkgs.haskellPackagesPIC.callPackage) else (pkgs.haskellPackages.callPackage);
 in
    pkgs.mkShell {

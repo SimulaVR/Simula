@@ -1,14 +1,14 @@
 { lib, stdenv, fetchFromGitHub, cmake, libpfm, zlib, pkg-config, python3Packages, which, procps, gdb, capnproto }:
 
 stdenv.mkDerivation rec {
-  version = "5.5.0";
+  version = "unstable-2022-05-12";
   pname = "rr";
 
   src = fetchFromGitHub {
     owner = "mozilla";
     repo = "rr";
-    rev = version;
-    sha256 = "sha256-ZZhkmDWGNWejwXZEcFO9p9NG1dopK7kXRj7OrkJCPR0=";
+    rev = "c96cb688106634ad09af6214aa91252c3a4f74b1";
+    sha256 = "sha256-K4cEQnvBXr/j9qXCgIHLqMrRzm96ushTO5STivRj+Mk=";
   };
 
   postPatch = ''
