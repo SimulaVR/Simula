@@ -18,7 +18,7 @@
       systems = import inputs.systems;
 
       perSystem =
-        { pkgs, self', system, ... }:
+        { pkgs, system, ... }:
         let
           devBuild-onNixOS = pkgs.callPackage ./. { devBuild = true; onNixOS = true; };
           releaseBuild-onNixOS = pkgs.callPackage ./. { devBuild = false; onNixOS = true; };
