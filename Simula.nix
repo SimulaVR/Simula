@@ -46,7 +46,7 @@ let
 
     ghc-version = ghc.version;
 
-    i3status = callPackage ./submodules/i3status/i3status.nix {};
+    i3status = callPackage ./submodules/i3status {};
 
     devBuildFalse = ''
       ln -s ${godot}/bin/godot.x11.opt.debug.64 $out/bin/godot.x11.opt.debug.64
