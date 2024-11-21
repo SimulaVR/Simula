@@ -18,7 +18,7 @@
       systems = import inputs.systems;
 
       perSystem =
-        { pkgs, system, ... }:
+        { pkgs, self', system, ... }:
         let
           devBuild-onNixOS = pkgs.callPackage ./. { devBuild = true; onNixOS = true; };
           releaseBuild-onNixOS = pkgs.callPackage ./. { devBuild = false; onNixOS = true; };
@@ -26,19 +26,12 @@
           releaseBuild-onNonNixOS = pkgs.callPackage ./. { devBuild = false; onNixOS = false; };
         in
         {
-          _module.args.pkgs = import inputs.nixpkgs {
-            inherit system;
-            config.allowUnfree = true;
-            overlays = [ inputs.nixgl.overlays.default ];
-          };
-
-          checks = {
-            inherit
-              devBuild-onNixOS
-              releaseBuild-onNixOS
-              devBuild-onNonNixOS
-              releaseBuild-onNonNixOS
-              ;
+          _module.args = {
+            pkgs = import inputs.nixpkgs {
+              inherit system;
+              config.allowUnfree = true;
+              overlays = [ inputs.nixgl.overlays.default ];
+            };
           };
 
           packages = {
