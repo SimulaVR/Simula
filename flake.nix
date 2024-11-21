@@ -19,13 +19,35 @@
 
       perSystem =
         { pkgs, system, ... }:
+        let
+          devBuild-onNixOS = pkgs.callPackage ./. { devBuild = true; onNixOS = true; };
+          releaseBuild-onNixOS = pkgs.callPackage ./. { devBuild = false; onNixOS = true; };
+          devBuild-onNonNixOS = pkgs.callPackage ./. { devBuild = true; onNixOS = false; };
+          releaseBuild-onNonNixOS = pkgs.callPackage ./. { devBuild = false; onNixOS = false; };
+        in
         {
           _module.args.pkgs = import inputs.nixpkgs {
             inherit system;
             overlays = [ inputs.nixgl.overlays.default ];
           };
 
-          packages = { };
+          checks = {
+            inherit
+              devBuild-onNixOS
+              releaseBuild-onNixOS
+              devBuild-onNonNixOS
+              releaseBuild-onNonNixOS
+              ;
+          };
+
+          packages = {
+            inherit
+              devBuild-onNixOS
+              releaseBuild-onNixOS
+              devBuild-onNonNixOS
+              releaseBuild-onNonNixOS
+              ;
+          };
         };
     };
 }
