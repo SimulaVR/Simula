@@ -23,7 +23,7 @@ let
     wayland-protocols-dev = wayland-protocols.overrideAttrs (oldAttrs: {
       stdenv = stdenvRes;
     });
-    wlroots-dev = callPackage ./submodules/wlroots/wlroots.nix { stdenv = stdenvRes; };
+    wlroots-dev = callPackage ./submodules/wlroots { stdenv = stdenvRes; };
     vulkan-loader-custom = if onNixOS then vulkan-loader else (callPackage ./nix/vulkan-loader.nix { });
     glibc-locales = glibcLocales;
     godot = callPackage ./submodules/godot/godot.nix { devBuild = devBuild; onNixOS = onNixOS; };
