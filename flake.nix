@@ -42,6 +42,18 @@
               releaseBuild-onNonNixOS
               ;
           };
+
+          devShells.default = pkgs.mkShell {
+            packages = with pkgs; [
+              cachix
+              git
+              curl
+              scons
+              ninja
+              wayland-scanner
+              inotify-tools
+            ];
+          };
         };
     };
 }
