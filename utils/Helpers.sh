@@ -1,7 +1,5 @@
 # The following functions assume they are called from project root.
 
-export SIMULA_NIX=$(pwd)/nix-forced-version/bin
-
 checkInstallNix() {
     if command -v nix; then
         echo "nix already installed.."
@@ -20,7 +18,7 @@ checkInstallCachix() {
     if command -v cachix; then
         echo "cachix already installed.."
     else
-        $SIMULA_NIX/nix-env -iA cachix -f https://cachix.org/api/v1/install
+        nix-env -iA cachix -f https://cachix.org/api/v1/install
     fi
 }
 
@@ -28,7 +26,7 @@ checkInstallCurl() {
     if command -v curl; then
         echo "curl already installed.."
     else
-        $SIMULA_NIX/nix-env -iA nixpkgs.curl
+        nix-env -iA nixpkgs.curl
     fi
 }
 
@@ -37,7 +35,7 @@ checkInstallGit() {
     if command -v git; then
         echo "git already installed.."
     else
-        $SIMULA_NIX/nix-env -iA nixpkgs.git
+        nix-env -iA nixpkgs.git
     fi
 }
 
@@ -61,7 +59,7 @@ switchToNix() {
 switchToLocal() {
     cd ./addons/godot-haskell-plugin
     rm -f libgodot-haskell-plugin.so
-    path=$($SIMULA_NIX/nix-shell -Q shell.nix --run "../../result/bin/cabal list-bin flib:godot-haskell-plugin")
+    path=$(nix-shell -Q shell.nix --run "../../result/bin/cabal list-bin flib:godot-haskell-plugin")
     ln -s "$path" libgodot-haskell-plugin.so
     cd -
 }
@@ -92,19 +90,19 @@ installSimula() {
 
     # devBuild = false
     if [ -z $1 ]; then
-        NIXPKGS_ALLOW_UNFREE=1 $SIMULA_NIX/nix-build -Q default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
+        NIXPKGS_ALLOW_UNFREE=1 nix-build -Q default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
         switchToNix # Clean up old devBuild state, if needed.
 
     # nix-instatiate
     elif [ "$1" = "i" ]; then # instantiation
         switchToNix
-        NIXPKGS_ALLOW_UNFREE=1 $SIMULA_NIX/nix-instantiate -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
+        NIXPKGS_ALLOW_UNFREE=1 nix-instantiate -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
         switchToLocal
 
     # devBuild = true
     else
         switchToNix # devBuild = true
-        NIXPKGS_ALLOW_UNFREE=1 $SIMULA_NIX/nix-build -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
+        NIXPKGS_ALLOW_UNFREE=1 nix-build -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
         switchToLocal
     fi
 }
@@ -119,13 +117,13 @@ updateSimula() {
     if [ -z $1 ]; then
         git pull origin master
         git submodule update --recursive
-        NIXPKGS_ALLOW_UNFREE=1 $SIMULA_NIX/nix-build -Q default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
+        NIXPKGS_ALLOW_UNFREE=1 nix-build -Q default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
         switchToNix
     else
         switchToNix
         git pull origin dev
         git submodule update --recursive
-        NIXPKGS_ALLOW_UNFREE=1 $SIMULA_NIX/nix-build -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
+        NIXPKGS_ALLOW_UNFREE=1 nix-build -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
         switchToNix
     fi
 }
@@ -133,14 +131,14 @@ updateSimula() {
 # devBuild = true function
 nsBuildMonado() {
   cd ./submodules/monado
-  $SIMULA_NIX/nix-shell shell.nix --run nsBuildMonadoIncremental
+  nix-shell shell.nix --run nsBuildMonadoIncremental
   cd -
 }
 
 # devBuild = true function
 nsCleanMonado() {
   cd ./submodules/monado
-  $SIMULA_NIX/nix-shell shell.nix --run rmBuilds
+  nix-shell shell.nix --run rmBuilds
   cd -
 }
 
@@ -150,9 +148,9 @@ nsBuildGodot() {
  local runCmd="wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c; scons -Q -j8 platform=x11 target=debug warnings=no"; 
 
  if [ -z $1 ]; then
-   $SIMULA_NIX/nix-shell --run "$runCmd"
+   nix-shell --run "$runCmd"
  else
-   $SIMULA_NIX/nix-shell --run "while inotifywait -qqre modify .; do $runCmd; done"
+   nix-shell --run "while inotifywait -qqre modify .; do $runCmd; done"
  fi
  cd -
 }
@@ -161,7 +159,7 @@ nsBuildGodot() {
 nsCleanGodot() {
     cd ./submodules/godot
     local runCmd="scons --clean"
-    $SIMULA_NIX/nix-shell --run "$runCmd"
+    nix-shell --run "$runCmd"
     cd -
 }
 
@@ -169,14 +167,14 @@ nsCleanGodot() {
 # => Updates godot-haskell to latest api.json generated from devBuildGodot
 nsBuildGodotHaskell() {
   cd ./submodules/godot
-  $SIMULA_NIX/nix-shell -Q --run "LD_LIBRARY_PATH=./modules/gdleapmotionV2/LeapSDK/lib/x64 $(../../utils/GetNixGL.sh) ./bin/godot.x11.tools.64 --gdnative-generate-json-api ./bin/api.json"
+  nix-shell -Q --run "LD_LIBRARY_PATH=./modules/gdleapmotionV2/LeapSDK/lib/x64 $(../../utils/GetNixGL.sh) ./bin/godot.x11.tools.64 --gdnative-generate-json-api ./bin/api.json"
   cd -
 
   cd ./submodules/godot-haskell-cabal
   if [ -z $1 ]; then
-    $SIMULA_NIX/nix-shell -Q release.nix --run "./updateApiJSON.sh"
+    nix-shell -Q release.nix --run "./updateApiJSON.sh"
   elif [ $1 == "--profile" ]; then
-    $SIMULA_NIX/nix-shell -Q --arg profileBuild true release.nix --run "./updateApiJSON.sh"
+    nix-shell -Q --arg profileBuild true release.nix --run "./updateApiJSON.sh"
   fi
   cd -
 }
@@ -185,11 +183,11 @@ nsBuildGodotHaskell() {
 nsBuildGodotHaskellPlugin() {
   cd ./addons/godot-haskell-plugin
   if [ -z $1 ]; then
-    $SIMULA_NIX/nix-shell -Q shell.nix --run "../../result/bin/cabal build"
+    nix-shell -Q shell.nix --run "../../result/bin/cabal build"
   elif [ $1 == "--profile" ]; then
-    $SIMULA_NIX/nix-shell -Q shell.nix --arg profileBuild true --run "../../result/bin/cabal --enable-profiling build --ghc-options=\"-fprof-auto -rtsopts -fPIC -fexternal-dynamic-refs\""
+    nix-shell -Q shell.nix --arg profileBuild true --run "../../result/bin/cabal --enable-profiling build --ghc-options=\"-fprof-auto -rtsopts -fPIC -fexternal-dynamic-refs\""
   else
-    $SIMULA_NIX/nix-shell shell.nix --run "while inotifywait -qqre modify .; do ../../result/bin/cabal build; done"
+    nix-shell shell.nix --run "while inotifywait -qqre modify .; do ../../result/bin/cabal build; done"
   fi
   cd -
 }
@@ -197,7 +195,7 @@ nsBuildGodotHaskellPlugin() {
 # devBuild = true function
 nsREPLGodotHaskellPlugin() {
     cd ./addons/godot-haskell-plugin
-    $SIMULA_NIX/nix-shell shell.nix --run "cabal repl"
+    nix-shell shell.nix --run "cabal repl"
 }
 
 # devBuild = true function
@@ -218,9 +216,9 @@ nsBuildSimulaLocal() {
 nsBuildWlroots() {
     cd ./submodules/wlroots
     if [ -d "./build" ]; then
-        $SIMULA_NIX/nix-shell -Q --run "ninja -C build"
+        nix-shell -Q --run "ninja -C build"
     else
-        $SIMULA_NIX/nix-shell -Q --run "meson build; ninja -C build"
+        nix-shell -Q --run "meson build; ninja -C build"
     fi
     cd -
 }
@@ -242,7 +240,7 @@ patchGodotWlroots(){
 # devBuild = true function
 # rr helper function
 zenRR() {
-   $SIMULA_NIX/nix-shell --arg onNixOS $(checkIfNixOS) --arg devBuild true --run "sudo python3 ./utils/zen_workaround.py"
+   nix-shell --arg onNixOS $(checkIfNixOS) --arg devBuild true --run "sudo python3 ./utils/zen_workaround.py"
 }
 
 removeSimulaXDGFiles() {
