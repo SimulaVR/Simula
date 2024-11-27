@@ -69,6 +69,7 @@
               wayland-scanner
               pkg-config
               inotify-tools
+              python3
             ];
 
             buildInputs = [

@@ -252,7 +252,7 @@ patchGodotWlroots(){
 # devBuild = true function
 # rr helper function
 zenRR() {
-   nix-shell --arg onNixOS $(checkIfNixOS) --arg devBuild true --run "sudo python3 ./utils/zen_workaround.py"
+   sudo python3 ./utils/zen_workaround.py
 }
 
 removeSimulaXDGFiles() {
