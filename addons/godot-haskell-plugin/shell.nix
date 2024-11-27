@@ -1,4 +1,4 @@
-{ devBuild ? true, onNixOS ? false, profileBuild ? false, pkgs }:
+{ profileBuild ? false, pkgs }:
 let
   haskellCallPkg = if profileBuild then (pkgs.haskellPackagesPIC.callPackage) else (pkgs.haskellPackages.callPackage);
 in

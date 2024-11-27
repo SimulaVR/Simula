@@ -4,21 +4,19 @@ checkInstallNix() {
     if command -v nix; then
         echo "nix already installed.."
     else
-        curl -L https://nixos.org/nix/install | sh
-        . $HOME/.nix-profile/etc/profile.d/nix.sh
+        echo "nix not found..."
+        echo "Please install nix from:"
+        echo "https://nixos.org/download/"
     fi
-}
-
-# Bootstrop the proper versions of nix-* commands for building Simula
-buildNixForcedVersion() {
-    nix-build nix-forced-version.nix -o nix-forced-version # this should be the only time we use system-local `nix-*`!
 }
 
 checkInstallCachix() {
     if command -v cachix; then
         echo "cachix already installed.."
     else
-        nix-env -iA cachix -f https://cachix.org/api/v1/install
+        echo "cachix not found..."
+        echo "Please install cachix. Example install command:"
+        echo "nix-env -iA cachix -f https://cachix.org/api/v1/install"
     fi
 }
 
@@ -26,7 +24,9 @@ checkInstallCurl() {
     if command -v curl; then
         echo "curl already installed.."
     else
-        nix-env -iA nixpkgs.curl
+        echo "curl not found..."
+        echo "Please install curl. Example install command:"
+        echo "nix-env -iA nixpkgs.curl"
     fi
 }
 
@@ -36,6 +36,9 @@ checkInstallGit() {
         echo "git already installed.."
     else
         nix-env -iA nixpkgs.git
+        echo "curl not found..."
+        echo "Please install curl. Example install command:"
+        echo "nix-env -iA nixpkgs.git"
     fi
 }
 
@@ -70,8 +73,8 @@ updateEmail() {
         # .. do nothing ..
         echo ""
     else
-        $SIMULA_APP_DIR/dialog --title "SimulaVR" --backtitle "OPTIONAL: Provide email for important Simula updates & improved bug troubleshooting" --inputbox "Email: " 8 60 --output-fd 1 > $SIMULA_CONFIG_DIR/email 2>&1
-        $SIMULA_APP_DIR/curl --data-urlencode emailStr@email https://www.wolframcloud.com/obj/george.w.singer/emailMessage
+        dialog --title "SimulaVR" --backtitle "OPTIONAL: Provide email for important Simula updates & improved bug troubleshooting" --inputbox "Email: " 8 60 --output-fd 1 > $SIMULA_CONFIG_DIR/email 2>&1
+        curl --data-urlencode emailStr@email https://www.wolframcloud.com/obj/george.w.singer/emailMessage
         clear
     fi
 }
@@ -80,7 +83,6 @@ updateEmail() {
 installSimula() {
     # bootstrap nix, and then install curl or cachix if needed
     checkInstallNix
-    buildNixForcedVersion
     checkInstallCachix
     checkInstallCurl
     cachix use simula
@@ -90,20 +92,15 @@ installSimula() {
 
     # devBuild = false
     if [ -z $1 ]; then
-        NIXPKGS_ALLOW_UNFREE=1 nix-build -Q default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
-        switchToNix # Clean up old devBuild state, if needed.
+        nix build '.?submodules=1#releaseBuild-onNixOS'
 
     # nix-instatiate
     elif [ "$1" = "i" ]; then # instantiation
-        switchToNix
-        NIXPKGS_ALLOW_UNFREE=1 nix-instantiate -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
-        switchToLocal
+        nix eval '.?submodules=1#devBuild-onNixOS'
 
     # devBuild = true
     else
-        switchToNix # devBuild = true
-        NIXPKGS_ALLOW_UNFREE=1 nix-build -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
-        switchToLocal
+        nix build '.?submodules=1#devBuild-onNixOS'
     fi
 }
 
@@ -117,40 +114,65 @@ updateSimula() {
     if [ -z $1 ]; then
         git pull origin master
         git submodule update --recursive
-        NIXPKGS_ALLOW_UNFREE=1 nix-build -Q default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
-        switchToNix
+        nix build '.?submodules=1#releaseBuild-onNixOS'
     else
-        switchToNix
         git pull origin dev
         git submodule update --recursive
-        NIXPKGS_ALLOW_UNFREE=1 nix-build -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
-        switchToNix
+        nix build '.?submodules=1#releaseBuild-onNixOS'
     fi
 }
 
 # devBuild = true function
 nsBuildMonado() {
   cd ./submodules/monado
-  nix-shell shell.nix --run nsBuildMonadoIncremental
-  cd -
+
+  # nsBuildMonadoIncremental
+  mkdir -p build
+  cd build
+
+  if [ ! -f CMakeCache.txt ]; then
+    cmake .. \
+      -DXRT_FEATURE_SERVICE=ON \
+      -DXRT_OPENXR_INSTALL_ABSOLUTE_RUNTIME_PATH=ON \
+      -DXRT_BUILD_DRIVER_SIMULAVR=ON \
+      -DXRT_HAVE_XVISIO=ON \
+      -DXVSDK_INCLUDE_DIR=${xvsdk}/include \
+      -DXVSDK_LIBRARY_DIR=${xvsdk}/lib
+  fi
+
+  cmake --build . -- -j$(nproc)
+
+  ln -sf "$(pwd)/src/xrt/targets/service/monado-service" ../monado-service
+
+  echo "Monado incremental build completed successfully"
+
+  cd ../../..
 }
 
 # devBuild = true function
 nsCleanMonado() {
   cd ./submodules/monado
-  nix-shell shell.nix --run rmBuilds
+
+  # rmBuilds
+  find . -name build -type d -exec rm -rf {} +
+  echo "All build directories have been cleaned."
+
   cd -
 }
 
 # devBuild = true function
 nsBuildGodot() {
  cd ./submodules/godot
- local runCmd="wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c; scons -Q -j8 platform=x11 target=debug warnings=no"; 
 
  if [ -z $1 ]; then
-   nix-shell --run "$runCmd"
+   wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h
+   wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c
+   scons -Q -j8 platform=x11 target=debug warnings=no
  else
-   nix-shell --run "while inotifywait -qqre modify .; do $runCmd; done"
+   while inotifywait -qqre modify .
+   do
+     wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c; scons -Q -j8 platform=x11 target=debug warnings=no
+   done
  fi
  cd -
 }
@@ -158,8 +180,7 @@ nsBuildGodot() {
 # devBuild = true function
 nsCleanGodot() {
     cd ./submodules/godot
-    local runCmd="scons --clean"
-    nix-shell --run "$runCmd"
+    scons --clean
     cd -
 }
 
@@ -167,15 +188,11 @@ nsCleanGodot() {
 # => Updates godot-haskell to latest api.json generated from devBuildGodot
 nsBuildGodotHaskell() {
   cd ./submodules/godot
-  nix-shell -Q --run "LD_LIBRARY_PATH=./modules/gdleapmotionV2/LeapSDK/lib/x64 $(../../utils/GetNixGL.sh) ./bin/godot.x11.tools.64 --gdnative-generate-json-api ./bin/api.json"
+  LD_LIBRARY_PATH=./modules/gdleapmotionV2/LeapSDK/lib/x64 ./bin/godot.x11.tools.64 --gdnative-generate-json-api ./bin/api.json
   cd -
 
   cd ./submodules/godot-haskell-cabal
-  if [ -z $1 ]; then
-    nix-shell -Q release.nix --run "./updateApiJSON.sh"
-  elif [ $1 == "--profile" ]; then
-    nix-shell -Q --arg profileBuild true release.nix --run "./updateApiJSON.sh"
-  fi
+  ./updateApiJSON.sh
   cd -
 }
 
@@ -183,11 +200,11 @@ nsBuildGodotHaskell() {
 nsBuildGodotHaskellPlugin() {
   cd ./addons/godot-haskell-plugin
   if [ -z $1 ]; then
-    nix-shell -Q shell.nix --run "../../result/bin/cabal build"
+    cabal build
   elif [ $1 == "--profile" ]; then
-    nix-shell -Q shell.nix --arg profileBuild true --run "../../result/bin/cabal --enable-profiling build --ghc-options=\"-fprof-auto -rtsopts -fPIC -fexternal-dynamic-refs\""
+    cabal --enable-profiling build --ghc-options=\"-fprof-auto -rtsopts -fPIC -fexternal-dynamic-refs\"
   else
-    nix-shell shell.nix --run "while inotifywait -qqre modify .; do ../../result/bin/cabal build; done"
+    while inotifywait -qqre modify .; do cabal build; done
   fi
   cd -
 }
@@ -215,11 +232,21 @@ nsBuildSimulaLocal() {
 # devBuild = true function
 nsBuildWlroots() {
     cd ./submodules/wlroots
+
     if [ -d "./build" ]; then
-        nix-shell -Q --run "ninja -C build"
+        ninja -C build
     else
-        nix-shell -Q --run "meson build; ninja -C build"
+        meson build\
+          -Dlibcap=enabled\
+          -Dlogind=enabled\
+          -Dxwayland=enabled\
+          -Dx11-backend=enabled\
+          -Dxcb-icccm=disabled\
+          -Dxcb-errors=enabled\
+          -Dc_link_args='-lX11-xcb -lxcb-xinput'
+        ninja -C build
     fi
+
     cd -
 }
 
@@ -227,11 +254,11 @@ nsBuildWlroots() {
 # => Patch our Godot executable to point to our local build of wlroots
 patchGodotWlroots(){
     PATH_TO_SIMULA_WLROOTS="`pwd`/submodules/wlroots/build/"
-    OLD_RPATH="`./result/bin/patchelf --print-rpath submodules/godot/bin/godot.x11.tools.64`"
+    OLD_RPATH="`patchelf --print-rpath submodules/godot/bin/godot.x11.tools.64`"
     if [[ $OLD_RPATH != $PATH_TO_SIMULA_WLROOTS* ]]; then # Check if the current RPATH contains our local simula wlroots build. If not, patchelf it to add it
         echo "Patching godot.x11.tools to point to local wlroots lib"
         echo "Changing path to: $PATH_TO_SIMULA_WLROOTS:$OLD_RPATH"
-        ./result/bin/patchelf --set-rpath "$PATH_TO_SIMULA_WLROOTS:$OLD_RPATH" submodules/godot/bin/godot.x11.tools.64
+        patchelf --set-rpath "$PATH_TO_SIMULA_WLROOTS:$OLD_RPATH" submodules/godot/bin/godot.x11.tools.64
     else
         echo "Not patching godot.x11.tools, already patched."
     fi
@@ -240,7 +267,7 @@ patchGodotWlroots(){
 # devBuild = true function
 # rr helper function
 zenRR() {
-   nix-shell --arg onNixOS $(checkIfNixOS) --arg devBuild true --run "sudo python3 ./utils/zen_workaround.py"
+   sudo python3 ./utils/zen_workaround.py
 }
 
 removeSimulaXDGFiles() {

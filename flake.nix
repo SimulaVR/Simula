@@ -20,10 +20,27 @@
       perSystem =
         { pkgs, system, ... }:
         let
-          devBuild-onNixOS = pkgs.callPackage ./. { devBuild = true; onNixOS = true; };
-          releaseBuild-onNixOS = pkgs.callPackage ./. { devBuild = false; onNixOS = true; };
-          devBuild-onNonNixOS = pkgs.callPackage ./. { devBuild = true; onNixOS = false; };
-          releaseBuild-onNonNixOS = pkgs.callPackage ./. { devBuild = false; onNixOS = false; };
+          devBuild-onNixOS = pkgs.callPackage ./. {
+            devBuild = true;
+            onNixOS = true;
+          };
+          releaseBuild-onNixOS = pkgs.callPackage ./. {
+            devBuild = false;
+            onNixOS = true;
+          };
+          devBuild-onNonNixOS = pkgs.callPackage ./. {
+            devBuild = true;
+            onNixOS = false;
+          };
+          releaseBuild-onNonNixOS = pkgs.callPackage ./. {
+            devBuild = false;
+            onNixOS = false;
+          };
+
+          wlroots = pkgs.callPackage ./submodules/wlroots { };
+          libxcb-errors = pkgs.callPackage ./submodules/wlroots/libxcb-errors { };
+          godot-haskell-classgen = pkgs.haskellPackages.callPackage ./submodules/godot-haskell-cabal/classgen/classgen.nix { };
+          xvsdk = pkgs.callPackage ((pkgs.fetchFromGitHub { owner = "SimulaVR"; repo = "xvsdk"; rev = "c58f6e022742841c8dc9a476ec80eb37416c0332"; sha256 = "14lfh2m1zfpgqi5y6x1pkckr0gk9x9q1d33q04lgxkggm8ipprsb"; }) + "/xvsdk.nix") { };
         in
         {
           _module.args = {
@@ -41,6 +58,109 @@
               devBuild-onNonNixOS
               releaseBuild-onNonNixOS
               ;
+          };
+
+          devShells.default = pkgs.mkShell {
+            nativeBuildInputs = with pkgs; [
+              cachix
+              git
+              curl
+              dialog
+              scons
+              meson
+              ninja
+              cmake
+              wayland-scanner
+              pkg-config
+              inotify-tools
+              python3
+              patchelf
+              godot-haskell-classgen
+              glslang
+              doxygen
+            ];
+
+            buildInputs = [
+              pkgs.xorg.libX11.dev
+              pkgs.xorg.libXcursor
+              pkgs.xorg.libXinerama
+              pkgs.xorg.libXext
+              pkgs.xorg.libXrandr
+              pkgs.xorg.libXi
+              pkgs.libGLU
+              pkgs.libxkbcommon
+              wlroots
+              pkgs.wayland-scanner.dev
+              pkgs.pixman
+              libxcb-errors
+              pkgs.eudev
+              pkgs.dbus.dev
+              pkgs.alsa-lib
+              pkgs.pulseaudio.dev
+              pkgs.wayland-protocols
+              pkgs.libdrm
+              pkgs.mesa
+              pkgs.wayland
+              pkgs.libGL
+              pkgs.libinput.dev
+              pkgs.libxkbcommon
+              pkgs.pixman
+              pkgs.xorg.xcbutilwm
+              pkgs.libcap
+              pkgs.xorg.xcbutilimage
+              pkgs.xorg.xcbutilerrors
+              pkgs.mesa
+              pkgs.libpng
+              pkgs.ffmpeg_4
+              pkgs.xorg.libxcb.dev
+              pkgs.xorg.xinput
+              pkgs.xorg.libxcb
+
+              pkgs.bluez
+              pkgs.cjson
+              pkgs.eigen
+              pkgs.elfutils
+              pkgs.ffmpeg
+              pkgs.gst_all_1.gst-plugins-base
+              pkgs.gst_all_1.gstreamer
+              pkgs.hidapi
+              pkgs.libbsd
+              pkgs.libdrm
+              pkgs.libffi
+              pkgs.libGL
+              pkgs.libjpeg
+              pkgs.librealsense
+              pkgs.libsurvive
+              pkgs.libunwind
+              pkgs.libusb1
+              pkgs.libuv
+              pkgs.libuvc
+              pkgs.libv4l
+              pkgs.xorg.libXau
+              pkgs.xorg.libXdmcp
+              pkgs.onnxruntime
+              pkgs.opencv4
+              pkgs.openhmd
+              pkgs.openvr
+              pkgs.orc
+              pkgs.pcre2
+              pkgs.SDL2
+              pkgs.shaderc
+              pkgs.udev
+              pkgs.vulkan-headers
+              pkgs.vulkan-loader
+              pkgs.wayland
+              pkgs.wayland-protocols
+              pkgs.wayland-scanner
+              pkgs.zlib
+              pkgs.zstd
+
+              xvsdk
+            ];
+
+            shellHook = ''
+              export PS1="\n[nix-shell:\w]$ "
+            '';
           };
         };
     };

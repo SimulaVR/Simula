@@ -26,7 +26,6 @@
   mimic,
   xsel,
   xclip,
-  dialog,
   synapse,
   openxr-loader,
   xpra,
@@ -450,8 +449,6 @@ let
         ln -s ${mimic}/bin/mimic $out/bin/mimic
         ln -s ${xclip}/bin/xclip $out/bin/xclip
         ln -s ${patchelf}/bin/patchelf $out/bin/patchelf
-        ln -s ${dialog}/bin/dialog $out/bin/dialog
-        ln -s ${curl}/bin/curl $out/bin/curl
         ln -s ${i3status-wrapped}/bin/i3status $out/bin/i3status
 
       ''
