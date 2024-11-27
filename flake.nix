@@ -20,10 +20,25 @@
       perSystem =
         { pkgs, system, ... }:
         let
-          devBuild-onNixOS = pkgs.callPackage ./. { devBuild = true; onNixOS = true; };
-          releaseBuild-onNixOS = pkgs.callPackage ./. { devBuild = false; onNixOS = true; };
-          devBuild-onNonNixOS = pkgs.callPackage ./. { devBuild = true; onNixOS = false; };
-          releaseBuild-onNonNixOS = pkgs.callPackage ./. { devBuild = false; onNixOS = false; };
+          devBuild-onNixOS = pkgs.callPackage ./. {
+            devBuild = true;
+            onNixOS = true;
+          };
+          releaseBuild-onNixOS = pkgs.callPackage ./. {
+            devBuild = false;
+            onNixOS = true;
+          };
+          devBuild-onNonNixOS = pkgs.callPackage ./. {
+            devBuild = true;
+            onNixOS = false;
+          };
+          releaseBuild-onNonNixOS = pkgs.callPackage ./. {
+            devBuild = false;
+            onNixOS = false;
+          };
+
+          wlroots = pkgs.callPackage ./submodules/wlroots { };
+          libxcb-errors = pkgs.callPackage ./submodules/wlroots/libxcb-errors { };
         in
         {
           _module.args = {
@@ -44,7 +59,7 @@
           };
 
           devShells.default = pkgs.mkShell {
-            packages = with pkgs; [
+            nativeBuildInputs = with pkgs; [
               cachix
               git
               curl
@@ -52,8 +67,32 @@
               scons
               ninja
               wayland-scanner
+              pkg-config
               inotify-tools
             ];
+
+            buildInputs = [
+              pkgs.xorg.libX11
+              pkgs.xorg.libXcursor
+              pkgs.xorg.libXinerama
+              pkgs.xorg.libXext
+              pkgs.xorg.libXrandr
+              pkgs.xorg.libXi
+              pkgs.libGLU
+              pkgs.libxkbcommon
+              wlroots
+              pkgs.wayland-scanner.dev
+              pkgs.pixman
+              libxcb-errors
+              pkgs.eudev
+              pkgs.dbus.dev
+              pkgs.alsa-lib
+              pkgs.pulseaudio.dev
+            ];
+
+            shellHook = ''
+              export PS1="\n[nix-shell:\w]$ "
+            '';
           };
         };
     };

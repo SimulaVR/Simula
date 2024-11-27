@@ -145,12 +145,16 @@ nsCleanMonado() {
 # devBuild = true function
 nsBuildGodot() {
  cd ./submodules/godot
- local runCmd="wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c; scons -Q -j8 platform=x11 target=debug warnings=no"; 
 
  if [ -z $1 ]; then
-   nix-shell --run "$runCmd"
+   wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h
+   wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c
+   scons -Q -j8 platform=x11 target=debug warnings=no
  else
-   nix-shell --run "while inotifywait -qqre modify .; do $runCmd; done"
+   while inotifywait -qqre modify .
+   do
+     wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c; scons -Q -j8 platform=x11 target=debug warnings=no
+   done
  fi
  cd -
 }
