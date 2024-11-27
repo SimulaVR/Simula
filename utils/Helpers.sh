@@ -227,11 +227,21 @@ nsBuildSimulaLocal() {
 # devBuild = true function
 nsBuildWlroots() {
     cd ./submodules/wlroots
+
     if [ -d "./build" ]; then
-        nix-shell -Q --run "ninja -C build"
+        ninja -C build
     else
-        nix-shell -Q --run "meson build; ninja -C build"
+        meson build\
+          -Dlibcap=enabled\
+          -Dlogind=enabled\
+          -Dxwayland=enabled\
+          -Dx11-backend=enabled\
+          -Dxcb-icccm=disabled\
+          -Dxcb-errors=enabled\
+          -Dc_link_args='-lX11-xcb -lxcb-xinput'
+        ninja -C build
     fi
+
     cd -
 }
 

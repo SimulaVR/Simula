@@ -65,7 +65,9 @@
               curl
               dialog
               scons
+              meson
               ninja
+              cmake
               wayland-scanner
               pkg-config
               inotify-tools
@@ -73,7 +75,7 @@
             ];
 
             buildInputs = [
-              pkgs.xorg.libX11
+              pkgs.xorg.libX11.dev
               pkgs.xorg.libXcursor
               pkgs.xorg.libXinerama
               pkgs.xorg.libXext
@@ -89,6 +91,25 @@
               pkgs.dbus.dev
               pkgs.alsa-lib
               pkgs.pulseaudio.dev
+              pkgs.wayland-protocols
+              pkgs.libdrm
+              pkgs.mesa
+              pkgs.wayland
+              pkgs.libGL
+              pkgs.libinput.dev
+              pkgs.libxkbcommon
+              pkgs.pixman
+              pkgs.xorg.xcbutilwm
+              pkgs.libcap
+              pkgs.xorg.xcbutilimage
+              pkgs.xorg.xcbutilerrors
+              pkgs.mesa
+              pkgs.libpng
+              pkgs.ffmpeg_4
+              pkgs.xorg.libX11.dev
+              pkgs.xorg.libxcb.dev
+              pkgs.xorg.xinput
+              pkgs.xorg.libxcb
             ];
 
             shellHook = ''
