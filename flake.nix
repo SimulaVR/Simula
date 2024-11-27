@@ -72,6 +72,7 @@
               pkg-config
               inotify-tools
               python3
+              patchelf
             ];
 
             buildInputs = [
