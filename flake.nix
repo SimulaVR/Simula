@@ -40,6 +40,7 @@
           wlroots = pkgs.callPackage ./submodules/wlroots { };
           libxcb-errors = pkgs.callPackage ./submodules/wlroots/libxcb-errors { };
           godot-haskell-classgen = pkgs.haskellPackages.callPackage ./submodules/godot-haskell-cabal/classgen/classgen.nix { };
+          xvsdk = pkgs.callPackage ((pkgs.fetchFromGitHub { owner = "SimulaVR"; repo = "xvsdk"; rev = "c58f6e022742841c8dc9a476ec80eb37416c0332"; sha256 = "14lfh2m1zfpgqi5y6x1pkckr0gk9x9q1d33q04lgxkggm8ipprsb"; }) + "/xvsdk.nix") { };
         in
         {
           _module.args = {
@@ -75,6 +76,8 @@
               python3
               patchelf
               godot-haskell-classgen
+              glslang
+              doxygen
             ];
 
             buildInputs = [
@@ -109,10 +112,50 @@
               pkgs.mesa
               pkgs.libpng
               pkgs.ffmpeg_4
-              pkgs.xorg.libX11.dev
               pkgs.xorg.libxcb.dev
               pkgs.xorg.xinput
               pkgs.xorg.libxcb
+
+              pkgs.bluez
+              pkgs.cjson
+              pkgs.eigen
+              pkgs.elfutils
+              pkgs.ffmpeg
+              pkgs.gst_all_1.gst-plugins-base
+              pkgs.gst_all_1.gstreamer
+              pkgs.hidapi
+              pkgs.libbsd
+              pkgs.libdrm
+              pkgs.libffi
+              pkgs.libGL
+              pkgs.libjpeg
+              pkgs.librealsense
+              pkgs.libsurvive
+              pkgs.libunwind
+              pkgs.libusb1
+              pkgs.libuv
+              pkgs.libuvc
+              pkgs.libv4l
+              pkgs.xorg.libXau
+              pkgs.xorg.libXdmcp
+              pkgs.onnxruntime
+              pkgs.opencv4
+              pkgs.openhmd
+              pkgs.openvr
+              pkgs.orc
+              pkgs.pcre2
+              pkgs.SDL2
+              pkgs.shaderc
+              pkgs.udev
+              pkgs.vulkan-headers
+              pkgs.vulkan-loader
+              pkgs.wayland
+              pkgs.wayland-protocols
+              pkgs.wayland-scanner
+              pkgs.zlib
+              pkgs.zstd
+
+              xvsdk
             ];
 
             shellHook = ''
