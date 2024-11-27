@@ -4,8 +4,9 @@ checkInstallNix() {
     if command -v nix; then
         echo "nix already installed.."
     else
-        curl -L https://nixos.org/nix/install | sh
-        . $HOME/.nix-profile/etc/profile.d/nix.sh
+        echo "nix not found..."
+        echo "Please install nix from:"
+        echo "https://nixos.org/download/"
     fi
 }
 
@@ -18,7 +19,9 @@ checkInstallCachix() {
     if command -v cachix; then
         echo "cachix already installed.."
     else
-        nix-env -iA cachix -f https://cachix.org/api/v1/install
+        echo "cachix not found..."
+        echo "Please install cachix. Example install command:"
+        echo "nix-env -iA cachix -f https://cachix.org/api/v1/install"
     fi
 }
 
@@ -26,7 +29,9 @@ checkInstallCurl() {
     if command -v curl; then
         echo "curl already installed.."
     else
-        nix-env -iA nixpkgs.curl
+        echo "curl not found..."
+        echo "Please install curl. Example install command:"
+        echo "nix-env -iA nixpkgs.curl"
     fi
 }
 
@@ -36,6 +41,9 @@ checkInstallGit() {
         echo "git already installed.."
     else
         nix-env -iA nixpkgs.git
+        echo "curl not found..."
+        echo "Please install curl. Example install command:"
+        echo "nix-env -iA nixpkgs.git"
     fi
 }
 
