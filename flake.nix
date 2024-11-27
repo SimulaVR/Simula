@@ -48,6 +48,7 @@
               cachix
               git
               curl
+              dialog
               scons
               ninja
               wayland-scanner
