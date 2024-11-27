@@ -170,8 +170,7 @@ nsBuildGodot() {
 # devBuild = true function
 nsCleanGodot() {
     cd ./submodules/godot
-    local runCmd="scons --clean"
-    nix-shell --run "$runCmd"
+    scons --clean
     cd -
 }
 
