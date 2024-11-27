@@ -10,11 +10,6 @@ checkInstallNix() {
     fi
 }
 
-# Bootstrop the proper versions of nix-* commands for building Simula
-buildNixForcedVersion() {
-    nix-build nix-forced-version.nix -o nix-forced-version # this should be the only time we use system-local `nix-*`!
-}
-
 checkInstallCachix() {
     if command -v cachix; then
         echo "cachix already installed.."
@@ -88,7 +83,6 @@ updateEmail() {
 installSimula() {
     # bootstrap nix, and then install curl or cachix if needed
     checkInstallNix
-    buildNixForcedVersion
     checkInstallCachix
     checkInstallCurl
     cachix use simula
@@ -98,20 +92,15 @@ installSimula() {
 
     # devBuild = false
     if [ -z $1 ]; then
-        NIXPKGS_ALLOW_UNFREE=1 nix-build -Q default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "false"
-        switchToNix # Clean up old devBuild state, if needed.
+        nix build '.?submodules=1#releaseBuild-onNixOS'
 
     # nix-instatiate
     elif [ "$1" = "i" ]; then # instantiation
-        switchToNix
-        NIXPKGS_ALLOW_UNFREE=1 nix-instantiate -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
-        switchToLocal
+        nix eval '.?submodules=1#devBuild-onNixOS'
 
     # devBuild = true
     else
-        switchToNix # devBuild = true
-        NIXPKGS_ALLOW_UNFREE=1 nix-build -Q -K default.nix --arg onNixOS "$(checkIfNixOS)" --arg devBuild "true"
-        switchToLocal
+        nix build '.?submodules=1#devBuild-onNixOS'
     fi
 }
 
