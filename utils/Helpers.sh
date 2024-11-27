@@ -164,15 +164,11 @@ nsCleanGodot() {
 # => Updates godot-haskell to latest api.json generated from devBuildGodot
 nsBuildGodotHaskell() {
   cd ./submodules/godot
-  nix-shell -Q --run "LD_LIBRARY_PATH=./modules/gdleapmotionV2/LeapSDK/lib/x64 $(../../utils/GetNixGL.sh) ./bin/godot.x11.tools.64 --gdnative-generate-json-api ./bin/api.json"
+  LD_LIBRARY_PATH=./modules/gdleapmotionV2/LeapSDK/lib/x64 ./bin/godot.x11.tools.64 --gdnative-generate-json-api ./bin/api.json
   cd -
 
   cd ./submodules/godot-haskell-cabal
-  if [ -z $1 ]; then
-    nix-shell -Q release.nix --run "./updateApiJSON.sh"
-  elif [ $1 == "--profile" ]; then
-    nix-shell -Q --arg profileBuild true release.nix --run "./updateApiJSON.sh"
-  fi
+  ./updateApiJSON.sh
   cd -
 }
 
@@ -180,11 +176,11 @@ nsBuildGodotHaskell() {
 nsBuildGodotHaskellPlugin() {
   cd ./addons/godot-haskell-plugin
   if [ -z $1 ]; then
-    nix-shell -Q shell.nix --run "../../result/bin/cabal build"
+    cabal build
   elif [ $1 == "--profile" ]; then
-    nix-shell -Q shell.nix --arg profileBuild true --run "../../result/bin/cabal --enable-profiling build --ghc-options=\"-fprof-auto -rtsopts -fPIC -fexternal-dynamic-refs\""
+    cabal --enable-profiling build --ghc-options=\"-fprof-auto -rtsopts -fPIC -fexternal-dynamic-refs\"
   else
-    nix-shell shell.nix --run "while inotifywait -qqre modify .; do ../../result/bin/cabal build; done"
+    while inotifywait -qqre modify .; do cabal build; done
   fi
   cd -
 }

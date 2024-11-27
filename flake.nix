@@ -39,6 +39,7 @@
 
           wlroots = pkgs.callPackage ./submodules/wlroots { };
           libxcb-errors = pkgs.callPackage ./submodules/wlroots/libxcb-errors { };
+          godot-haskell-classgen = pkgs.haskellPackages.callPackage ./submodules/godot-haskell-cabal/classgen/classgen.nix { };
         in
         {
           _module.args = {
@@ -73,6 +74,7 @@
               inotify-tools
               python3
               patchelf
+              godot-haskell-classgen
             ];
 
             buildInputs = [
