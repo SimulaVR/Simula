@@ -171,6 +171,7 @@
               pkgs.zstd
 
               godot-haskell
+              pkgs.haskellPackages.parsers
 
               xvsdk
             ];
