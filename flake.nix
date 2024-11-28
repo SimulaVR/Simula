@@ -40,6 +40,7 @@
           wlroots = pkgs.callPackage ./submodules/wlroots { };
           libxcb-errors = pkgs.callPackage ./submodules/wlroots/libxcb-errors { };
           godot-haskell-classgen = pkgs.haskellPackages.callPackage ./submodules/godot-haskell-cabal/classgen/classgen.nix { };
+          godot-haskell = pkgs.haskellPackages.callPackage ./submodules/godot-haskell/godot-haskell.nix { inherit godot-haskell-classgen; };
           xvsdk = pkgs.callPackage ((pkgs.fetchFromGitHub { owner = "SimulaVR"; repo = "xvsdk"; rev = "c58f6e022742841c8dc9a476ec80eb37416c0332"; sha256 = "14lfh2m1zfpgqi5y6x1pkckr0gk9x9q1d33q04lgxkggm8ipprsb"; }) + "/xvsdk.nix") { };
         in
         {
@@ -78,6 +79,8 @@
               godot-haskell-classgen
               glslang
               doxygen
+              cabal-install
+              ghc
             ];
 
             buildInputs = [
@@ -154,6 +157,8 @@
               pkgs.wayland-scanner
               pkgs.zlib
               pkgs.zstd
+
+              godot-haskell
 
               xvsdk
             ];
