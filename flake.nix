@@ -18,7 +18,12 @@
       systems = import inputs.systems;
 
       perSystem =
-        { pkgs, lib, system, ... }:
+        {
+          pkgs,
+          lib,
+          system,
+          ...
+        }:
         let
           devBuild-onNixOS = pkgs.callPackage ./. {
             devBuild = true;
@@ -56,99 +61,99 @@
           ) { };
 
           build-godot =
-          let
-            pkgconfig-libpath = [
-              pkgs.xorg.libX11.dev
-              pkgs.xorg.libXcursor.dev
-              pkgs.xorg.libXinerama.dev
-              pkgs.xorg.libXext.dev
-              pkgs.xorg.libXrandr.dev
-              pkgs.xorg.libXrender.dev
-              pkgs.xorg.libXi.dev
-              pkgs.xorg.libXfixes.dev
-              pkgs.xorg.libxcb.dev
-              pkgs.libGLU.dev
-              pkgs.libglvnd.dev
-              pkgs.zlib.dev
-              pkgs.alsa-lib.dev
-              pkgs.pulseaudio.dev
-              pkgs.eudev
-              pkgs.libxkbcommon.dev
-              pkgs.wayland.dev
-              pkgs.pixman
-              pkgs.dbus.dev
-              libxcb-errors
-              wlroots
-            ];
-            pkgconfig-sharepath = [
-              pkgs.xorg.xorgproto
-            ];
-          in
-          pkgs.writeShellApplication {
-            name = "build-godot";
-            runtimeInputs = [
-              pkgs.wayland-scanner
-              pkgs.scons
-              pkgs.inotify-tools
-              pkgs.pkg-config
-              pkgs.gcc
-            ];
-            text = ''
-              export PKG_CONFIG_PATH="${lib.strings.makeSearchPath "lib/pkgconfig" pkgconfig-libpath}:${lib.strings.makeSearchPath "share/pkgconfig" pkgconfig-sharepath}"
-              echo $PKG_CONFIG_PATH
+            let
+              pkgconfig-libpath = [
+                pkgs.xorg.libX11.dev
+                pkgs.xorg.libXcursor.dev
+                pkgs.xorg.libXinerama.dev
+                pkgs.xorg.libXext.dev
+                pkgs.xorg.libXrandr.dev
+                pkgs.xorg.libXrender.dev
+                pkgs.xorg.libXi.dev
+                pkgs.xorg.libXfixes.dev
+                pkgs.xorg.libxcb.dev
+                pkgs.libGLU.dev
+                pkgs.libglvnd.dev
+                pkgs.zlib.dev
+                pkgs.alsa-lib.dev
+                pkgs.pulseaudio.dev
+                pkgs.eudev
+                pkgs.libxkbcommon.dev
+                pkgs.wayland.dev
+                pkgs.pixman
+                pkgs.dbus.dev
+                libxcb-errors
+                wlroots
+              ];
+              pkgconfig-sharepath = [
+                pkgs.xorg.xorgproto
+              ];
+            in
+            pkgs.writeShellApplication {
+              name = "build-godot";
+              runtimeInputs = [
+                pkgs.wayland-scanner
+                pkgs.scons
+                pkgs.inotify-tools
+                pkgs.pkg-config
+                pkgs.gcc
+              ];
+              text = ''
+                export PKG_CONFIG_PATH="${lib.strings.makeSearchPath "lib/pkgconfig" pkgconfig-libpath}:${lib.strings.makeSearchPath "share/pkgconfig" pkgconfig-sharepath}"
+                echo $PKG_CONFIG_PATH
 
-              help_message () {
-                echo "Usage: $0 help|build|watch"
-              }
+                help_message () {
+                  echo "Usage: $0 help|build|watch"
+                }
 
-              build_once () {
-                cd ./submodules/godot
+                build_once () {
+                  cd ./submodules/godot
 
-                wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h
-                wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c
-                scons -Q -j8 platform=x11 target=debug warnings=no
+                  wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h
+                  wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c
+                  scons -Q -j8 platform=x11 target=debug warnings=no
 
-                cd -
-              }
+                  cd -
+                }
 
-              watch_build () {
-                cd ./submodules/godot
+                watch_build () {
+                  cd ./submodules/godot
 
-                while inotifywait -qqre modify .
+                  while inotifywait -qqre modify .
+                  do
+                    wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c; scons -Q -j8 platform=x11 target=debug warnings=no
+                  done
+
+                  cd -
+                }
+
+                while (( $# > 0 ))
                 do
-                  wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c; scons -Q -j8 platform=x11 target=debug warnings=no
+                  case $1 in
+                    h | help)
+                      help_message
+                      exit 0
+                      ;;
+                    b | build)
+                      build_once
+                      exit 0
+                      ;;
+                    w | watch)
+                      watch_build
+                      exit 0
+                      ;;
+                    *)
+                      echo "Unknown argument: $1"
+                      exit 1
+                      ;;
+                  esac
                 done
 
-                cd -
-              }
-
-              while (( $# > 0 ))
-              do
-                case $1 in
-                  h | help)
-                    help_message
-                    exit 0
-                    ;;
-                  b | build)
-                    build_once
-                    exit 0
-                    ;;
-                  w | watch)
-                    watch_build
-                    exit 0
-                    ;;
-                  *)
-                    echo "Unknown argument: $1"
-                    exit 1
-                    ;;
-                esac
-              done
-
-              help_message
-              echo "No argument. exit with 2"
-              exit 2
-            '';
-          };
+                help_message
+                echo "No argument. exit with 2"
+                exit 2
+              '';
+            };
         in
         {
           _module.args = {
