@@ -91,7 +91,7 @@
               pkgs.scons
               pkgs.inotify-tools
               pkgs.pkg-config
-              pkgs.stdenv.cc.cc
+              pkgs.gcc
             ];
             text = ''
               export PKG_CONFIG_PATH="${lib.strings.makeSearchPath "lib/pkgconfig" pkgconfig-libpath}:${lib.strings.makeSearchPath "share/pkgconfig" pkgconfig-sharepath}"
