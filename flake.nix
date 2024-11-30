@@ -100,7 +100,6 @@
               ];
               text = ''
                 export PKG_CONFIG_PATH="${lib.strings.makeSearchPath "lib/pkgconfig" pkgconfig-libpath}:${lib.strings.makeSearchPath "share/pkgconfig" pkgconfig-sharepath}"
-                echo $PKG_CONFIG_PATH
 
                 help_message () {
                   echo "Usage: $0 help|build|watch"
