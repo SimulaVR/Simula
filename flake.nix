@@ -63,74 +63,7 @@
           # ShellScripts. Run with 'nix run .?submodules=1#clean-godot'
           clean-godot = pkgs.callPackage ./utils/nix/clean-godot.nix { };
           build-godot = pkgs.callPackage ./utils/nix/build-godot.nix { };
-
-          build-wlroots =
-            let
-              pkgconfig-libpath = [
-                pkgs.wayland.dev
-                pkgs.libGL
-                pkgs.libinput.dev
-                pkgs.libxkbcommon.dev
-                pkgs.pixman
-                pkgs.xorg.xcbutilwm
-                pkgs.libcap.dev
-                pkgs.xorg.xcbutilimage
-                pkgs.xorg.xcbutilerrors
-                pkgs.libpng.dev
-                pkgs.ffmpeg_4
-                pkgs.libglvnd.dev
-                pkgs.xorg.libX11.dev
-                pkgs.xorg.libxcb.dev
-                pkgs.xorg.xinput
-                pkgs.libdrm.dev
-                pkgs.mesa.dev
-                pkgs.eudev
-                pkgs.systemdLibs.dev
-                pkgs.ffmpeg.dev
-                pkgs.udev.dev
-                pkgs.eglexternalplatform
-
-                libxcb-errors
-              ];
-              pkgconfig-sharepath = [
-                pkgs.wayland-protocols
-                pkgs.xorg.xorgproto
-              ];
-            in
-            pkgs.writeShellApplication {
-              name = "build-wlroots";
-              runtimeInputs = [
-                pkgs.gcc
-                pkgs.meson
-                pkgs.cmake
-                pkgs.ninja
-                pkgs.pkg-config
-                pkgs.wayland-scanner
-                pkgs.mesa
-                pkgs.udev
-              ];
-
-              text = ''
-                export PKG_CONFIG_PATH="${lib.strings.makeSearchPath "lib/pkgconfig" pkgconfig-libpath}:${lib.strings.makeSearchPath "share/pkgconfig" pkgconfig-sharepath}"
-
-                cd ./submodules/wlroots
-
-                if [ -d "./build" ]; then
-                  ninja -C build
-                else
-                  meson build\
-                    -Dlibcap=enabled\
-                    -Dlogind=enabled\
-                    -Dxwayland=enabled\
-                    -Dx11-backend=enabled\
-                    -Dxcb-icccm=disabled\
-                    -Dxcb-errors=enabled
-                  ninja -C build
-                fi
-
-                cd -
-              '';
-            };
+          build-wlroots = pkgs.callPackage ./utils/nix/build-wlroots.nix { };
         in
         {
           _module.args = {
