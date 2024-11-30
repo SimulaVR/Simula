@@ -60,6 +60,52 @@
             + "/xvsdk.nix"
           ) { };
 
+          clean-godot =
+            let
+              pkgconfig-libpath = [
+                pkgs.xorg.libX11.dev
+                pkgs.xorg.libXcursor.dev
+                pkgs.xorg.libXinerama.dev
+                pkgs.xorg.libXext.dev
+                pkgs.xorg.libXrandr.dev
+                pkgs.xorg.libXrender.dev
+                pkgs.xorg.libXi.dev
+                pkgs.xorg.libXfixes.dev
+                pkgs.xorg.libxcb.dev
+                pkgs.libGLU.dev
+                pkgs.libglvnd.dev
+                pkgs.zlib.dev
+                pkgs.alsa-lib.dev
+                pkgs.pulseaudio.dev
+                pkgs.eudev
+                pkgs.libxkbcommon.dev
+                pkgs.wayland.dev
+                pkgs.pixman
+                pkgs.dbus.dev
+                libxcb-errors
+                wlroots
+              ];
+              pkgconfig-sharepath = [
+                pkgs.xorg.xorgproto
+              ];
+            in
+            pkgs.writeShellApplication {
+              name = "clean-godot";
+              runtimeInputs = [
+                pkgs.wayland-scanner
+                pkgs.scons
+                pkgs.pkg-config
+                pkgs.gcc
+              ];
+              text = ''
+                export PKG_CONFIG_PATH="${lib.strings.makeSearchPath "lib/pkgconfig" pkgconfig-libpath}:${lib.strings.makeSearchPath "share/pkgconfig" pkgconfig-sharepath}"
+
+                cd ./submodules/godot
+                scons --clean
+                cd -
+              '';
+            };
+
           build-godot =
             let
               pkgconfig-libpath = [
@@ -176,6 +222,10 @@
             build-godot = {
               type = "app";
               program = build-godot;
+            };
+            clean-godot = {
+              type = "app";
+              program = clean-godot;
             };
           };
 
