@@ -206,27 +206,6 @@ nsBuildSimulaLocal() {
 }
 
 # devBuild = true function
-nsBuildWlroots() {
-    cd ./submodules/wlroots
-
-    if [ -d "./build" ]; then
-        ninja -C build
-    else
-        meson build\
-          -Dlibcap=enabled\
-          -Dlogind=enabled\
-          -Dxwayland=enabled\
-          -Dx11-backend=enabled\
-          -Dxcb-icccm=disabled\
-          -Dxcb-errors=enabled\
-          -Dc_link_args='-lX11-xcb -lxcb-xinput'
-        ninja -C build
-    fi
-
-    cd -
-}
-
-# devBuild = true function
 # => Patch our Godot executable to point to our local build of wlroots
 patchGodotWlroots(){
     PATH_TO_SIMULA_WLROOTS="`pwd`/submodules/wlroots/build/"
