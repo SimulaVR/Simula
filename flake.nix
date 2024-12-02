@@ -205,6 +205,8 @@
               export PS1="\n[nix-shell:\w]$ "
             '';
           };
+
+          devShells.wlroots-dev = pkgs.callPackage ./submodules/wlroots { };
         };
     };
 }
