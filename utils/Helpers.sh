@@ -98,17 +98,6 @@ updateSimula() {
 }
 
 # devBuild = true function
-nsCleanMonado() {
-  cd ./submodules/monado
-
-  # rmBuilds
-  find . -name build -type d -exec rm -rf {} +
-  echo "All build directories have been cleaned."
-
-  cd -
-}
-
-# devBuild = true function
 # => Updates godot-haskell to latest api.json generated from devBuildGodot
 nsBuildGodotHaskell() {
   cd ./submodules/godot
