@@ -64,6 +64,7 @@
           clean-godot = pkgs.callPackage ./utils/nix/clean-godot.nix { };
           build-godot = pkgs.callPackage ./utils/nix/build-godot.nix { };
           build-wlroots = pkgs.callPackage ./utils/nix/build-wlroots.nix { };
+          build-monado = pkgs.callPackage ./utils/nix/build-monado.nix { };
         in
         {
           _module.args = {
@@ -95,6 +96,10 @@
             build-wlroots = {
               type = "app";
               program = build-wlroots;
+            };
+            build-monado = {
+              type = "app";
+              program = build-monado;
             };
           };
 
@@ -208,6 +213,7 @@
 
           devShells.wlroots-dev = pkgs.callPackage ./submodules/wlroots { };
           devShells.godot-dev = pkgs.callPackage ./submodules/godot/godot.nix { };
+          devShells.monado-dev = pkgs.callPackage ./submodules/monado/shell.nix { };
         };
     };
 }
