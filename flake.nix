@@ -65,6 +65,7 @@
           build-godot = pkgs.callPackage ./utils/nix/build-godot.nix { };
           build-wlroots = pkgs.callPackage ./utils/nix/build-wlroots.nix { };
           build-monado = pkgs.callPackage ./utils/nix/build-monado.nix { };
+          clean-monado = pkgs.callPackage ./utils/nix/clean-monado.nix { };
         in
         {
           _module.args = {
@@ -100,6 +101,10 @@
             build-monado = {
               type = "app";
               program = build-monado;
+            };
+            clean-monado = {
+              type = "app";
+              program = clean-monado;
             };
           };
 
