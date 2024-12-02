@@ -98,33 +98,6 @@ updateSimula() {
 }
 
 # devBuild = true function
-nsBuildMonado() {
-  cd ./submodules/monado
-
-  # nsBuildMonadoIncremental
-  mkdir -p build
-  cd build
-
-  if [ ! -f CMakeCache.txt ]; then
-    cmake .. \
-      -DXRT_FEATURE_SERVICE=ON \
-      -DXRT_OPENXR_INSTALL_ABSOLUTE_RUNTIME_PATH=ON \
-      -DXRT_BUILD_DRIVER_SIMULAVR=ON \
-      -DXRT_HAVE_XVISIO=ON \
-      -DXVSDK_INCLUDE_DIR=${xvsdk}/include \
-      -DXVSDK_LIBRARY_DIR=${xvsdk}/lib
-  fi
-
-  cmake --build . -- -j$(nproc)
-
-  ln -sf "$(pwd)/src/xrt/targets/service/monado-service" ../monado-service
-
-  echo "Monado incremental build completed successfully"
-
-  cd ../../..
-}
-
-# devBuild = true function
 nsCleanMonado() {
   cd ./submodules/monado
 
