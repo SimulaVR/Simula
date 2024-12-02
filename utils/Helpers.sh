@@ -79,24 +79,6 @@ updateEmail() {
     fi
 }
 
-# Takes optional $1 argument for `dev` branch
-updateSimula() {
-    checkInstallNix
-    checkInstallCachix
-    checkInstallGit
-    cachix use simula
-
-    if [ -z $1 ]; then
-        git pull origin master
-        git submodule update --recursive
-        nix build '.?submodules=1#releaseBuild-onNixOS'
-    else
-        git pull origin dev
-        git submodule update --recursive
-        nix build '.?submodules=1#releaseBuild-onNixOS'
-    fi
-}
-
 # devBuild = true function
 # => Updates godot-haskell to latest api.json generated from devBuildGodot
 nsBuildGodotHaskell() {
