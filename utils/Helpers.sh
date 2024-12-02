@@ -161,30 +161,6 @@ nsCleanMonado() {
 }
 
 # devBuild = true function
-nsBuildGodot() {
- cd ./submodules/godot
-
- if [ -z $1 ]; then
-   wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h
-   wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c
-   scons -Q -j8 platform=x11 target=debug warnings=no
- else
-   while inotifywait -qqre modify .
-   do
-     wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c; scons -Q -j8 platform=x11 target=debug warnings=no
-   done
- fi
- cd -
-}
-
-# devBuild = true function
-nsCleanGodot() {
-    cd ./submodules/godot
-    scons --clean
-    cd -
-}
-
-# devBuild = true function
 # => Updates godot-haskell to latest api.json generated from devBuildGodot
 nsBuildGodotHaskell() {
   cd ./submodules/godot
@@ -227,27 +203,6 @@ nsBuildSimulaLocal() {
     nsBuildGodotHaskell "$1"             || { echo "nsBuildGodotHaskell failed"; return 1; }
     nsBuildGodotHaskellPlugin "$1"       || { echo "nsBuildGodotHaskellPlugin failed"; return 1; }
     switchToLocal                        || { echo "switchToLocal failed"; return 1; }
-}
-
-# devBuild = true function
-nsBuildWlroots() {
-    cd ./submodules/wlroots
-
-    if [ -d "./build" ]; then
-        ninja -C build
-    else
-        meson build\
-          -Dlibcap=enabled\
-          -Dlogind=enabled\
-          -Dxwayland=enabled\
-          -Dx11-backend=enabled\
-          -Dxcb-icccm=disabled\
-          -Dxcb-errors=enabled\
-          -Dc_link_args='-lX11-xcb -lxcb-xinput'
-        ninja -C build
-    fi
-
-    cd -
 }
 
 # devBuild = true function

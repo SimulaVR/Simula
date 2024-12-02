@@ -18,7 +18,12 @@
       systems = import inputs.systems;
 
       perSystem =
-        { pkgs, system, ... }:
+        {
+          pkgs,
+          lib,
+          system,
+          ...
+        }:
         let
           devBuild-onNixOS = pkgs.callPackage ./. {
             devBuild = true;
@@ -54,6 +59,11 @@
             })
             + "/xvsdk.nix"
           ) { };
+
+          # ShellScripts. Run with 'nix run .?submodules=1#clean-godot'
+          clean-godot = pkgs.callPackage ./utils/nix/clean-godot.nix { };
+          build-godot = pkgs.callPackage ./utils/nix/build-godot.nix { };
+          build-wlroots = pkgs.callPackage ./utils/nix/build-wlroots.nix { };
         in
         {
           _module.args = {
@@ -71,6 +81,21 @@
               devBuild-onNonNixOS
               releaseBuild-onNonNixOS
               ;
+          };
+
+          apps = {
+            build-godot = {
+              type = "app";
+              program = build-godot;
+            };
+            clean-godot = {
+              type = "app";
+              program = clean-godot;
+            };
+            build-wlroots = {
+              type = "app";
+              program = build-wlroots;
+            };
           };
 
           devShells.default = pkgs.mkShell {
@@ -180,6 +205,9 @@
               export PS1="\n[nix-shell:\w]$ "
             '';
           };
+
+          devShells.wlroots-dev = pkgs.callPackage ./submodules/wlroots { };
+          devShells.godot-dev = pkgs.callPackage ./submodules/godot/godot.nix { };
         };
     };
 }
