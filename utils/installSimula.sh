@@ -41,16 +41,35 @@ checkInstallCurl() {
     fi
 }
 
+installReleaseBuild() {
+    # bootstrap nix, and then install curl or cachix if needed
+    checkInstallNix
+    checkInstallCachix
+    checkInstallCurl
+    cachix use simula
+
+    # Display Simula message from developers
+    curl https://www.wolframcloud.com/obj/george.w.singer/installMessage
+
+    # Build releaseBuild-onNixOS
+    nix build '.?submodules=1#releaseBuild-onNixOS'
+}
+
+installDebugBuild() {
+    # bootstrap nix, and then install curl or cachix if needed
+    checkInstallNix
+    checkInstallCachix
+    checkInstallCurl
+    cachix use simula
+
+    # Display Simula message from developers
+    curl https://www.wolframcloud.com/obj/george.w.singer/installMessage
+
+    # Build releaseBuild-onNixOS
+    nix build '.?submodules=1#devBuild-onNixOS'
+}
+
 ## --- main process
-
-# bootstrap nix, and then install curl or cachix if needed
-checkInstallNix
-checkInstallCachix
-checkInstallCurl
-cachix use simula
-
-# Display Simula message from developers
-curl https://www.wolframcloud.com/obj/george.w.singer/installMessage
 
 while (( $# > 0 ))
 do
@@ -60,11 +79,11 @@ do
             exit 0
             ;;
         r | releaseBuild)
-            nix build '.?submodules=1#releaseBuild-onNixOS'
+            installReleaseBuild
             exit 0
             ;;
         d | debugBuild)
-            nix build '.?submodules=1#devBuild-onNixOS'
+            installDebugBuild
             exit 0
             ;;
         *)
