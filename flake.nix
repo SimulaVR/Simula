@@ -207,6 +207,7 @@
           };
 
           devShells.wlroots-dev = pkgs.callPackage ./submodules/wlroots { };
+          devShells.godot-dev = pkgs.callPackage ./submodules/godot/godot.nix { };
         };
     };
 }

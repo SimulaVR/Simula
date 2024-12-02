@@ -2,95 +2,39 @@
   callPackage,
   writeShellApplication,
   lib,
-  xorg,
-  libGLU,
-  libglvnd,
-  zlib,
-  alsa-lib,
-  pulseaudio,
-  eudev,
-  libxkbcommon,
-  wayland,
-  pixman,
-  dbus,
-
-  # runtimeInputs
-  wayland-scanner,
-  scons,
-  gcc,
-  pkg-config,
-  inotify-tools,
-  
-  # Imported from submodules
-  wlroots ? callPackage ../../submodules/wlroots { },
-  libxcb-errors ? callPackage ../../submodules/wlroots/libxcb-errors { },
+  nix,
 }:
-
-let
-  pkgconfig-libpath = [
-    xorg.libX11.dev
-    xorg.libXcursor.dev
-    xorg.libXinerama.dev
-    xorg.libXext.dev
-    xorg.libXrandr.dev
-    xorg.libXrender.dev
-    xorg.libXi.dev
-    xorg.libXfixes.dev
-    xorg.libxcb.dev
-    libGLU.dev
-    libglvnd.dev
-    zlib.dev
-    alsa-lib.dev
-    pulseaudio.dev
-    eudev
-    libxkbcommon.dev
-    wayland.dev
-    pixman
-    dbus.dev
-
-    libxcb-errors
-    wlroots
-  ];
-  pkgconfig-sharepath = [
-    xorg.xorgproto
-  ];
-in
 
 writeShellApplication {
   name = "build-godot";
   runtimeInputs = [
-    wayland-scanner
-    scons
-    inotify-tools
-    pkg-config
-    gcc
+    nix
   ];
   text = ''
-    export PKG_CONFIG_PATH="${lib.strings.makeSearchPath "lib/pkgconfig" pkgconfig-libpath}:${lib.strings.makeSearchPath "share/pkgconfig" pkgconfig-sharepath}"
-
     help_message () {
       echo "Usage: $0 help|build|watch"
     }
 
     build_once () {
-      cd ./submodules/godot
-
-      wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h
-      wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c
-      scons -Q -j8 platform=x11 target=debug warnings=no
-
-      cd -
+      nix develop '.?submodules=1#godot-dev'\
+        --command sh -c\
+          "cd ./submodules/godot
+           wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h
+           wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c
+           scons -Q -j8 platform=x11 target=debug warnings=no"
     }
 
     watch_build () {
-      cd ./submodules/godot
+      nix develop '.?submodules=1#godot-dev'\
+        --command sh -c\
+          "cd ./submodules/godot
 
-      while inotifywait -qqre modify .
-      do
-        wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h; wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c; scons -Q -j8 platform=x11 target=debug warnings=no
-      done
-
-      cd -
+           while inotifywait -qqre modify .
+           do
+             wayland-scanner server-header ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.h
+             wayland-scanner private-code ./modules/gdwlroots/xdg-shell.xml ./modules/gdwlroots/xdg-shell-protocol.c
+             scons -Q -j8 platform=x11 target=debug warnings=no
+           done"
     }
 
     while (( $# > 0 ))
