@@ -79,31 +79,6 @@ updateEmail() {
     fi
 }
 
-
-installSimula() {
-    # bootstrap nix, and then install curl or cachix if needed
-    checkInstallNix
-    checkInstallCachix
-    checkInstallCurl
-    cachix use simula
-
-    # Display Simula message from developers
-    curl https://www.wolframcloud.com/obj/george.w.singer/installMessage
-
-    # devBuild = false
-    if [ -z $1 ]; then
-        nix build '.?submodules=1#releaseBuild-onNixOS'
-
-    # nix-instatiate
-    elif [ "$1" = "i" ]; then # instantiation
-        nix eval '.?submodules=1#devBuild-onNixOS'
-
-    # devBuild = true
-    else
-        nix build '.?submodules=1#devBuild-onNixOS'
-    fi
-}
-
 # Takes optional $1 argument for `dev` branch
 updateSimula() {
     checkInstallNix
