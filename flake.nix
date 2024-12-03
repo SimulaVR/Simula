@@ -50,6 +50,7 @@
           godot-haskell = pkgs.haskellPackages.callPackage ./submodules/godot-haskell/godot-haskell.nix {
             inherit godot-haskell-classgen;
           };
+          simula-godot = pkgs.callPackage ./submodules/godot/godot.nix { };
           xvsdk = pkgs.callPackage (
             (pkgs.fetchFromGitHub {
               owner = "SimulaVR";
@@ -67,6 +68,9 @@
           build-monado = pkgs.callPackage ./utils/nix/build-monado.nix { };
           clean-monado = pkgs.callPackage ./utils/nix/clean-monado.nix { };
           repl-godot-haskell-plugin = pkgs.callPackage ./utils/nix/repl-godot-haskell-plugin.nix { };
+          build-godot-haskell = pkgs.callPackage ./utils/nix/build-godot-haskell.nix {
+            godot = simula-godot;
+          };
         in
         {
           _module.args = {
@@ -83,6 +87,7 @@
               releaseBuild-onNixOS
               devBuild-onNonNixOS
               releaseBuild-onNonNixOS
+              simula-godot
               ;
           };
 
@@ -110,6 +115,10 @@
             repl-godot-haskell-plugin = {
               type = "app";
               program = repl-godot-haskell-plugin;
+            };
+            build-godot-haskell = {
+              type = "app";
+              program = build-godot-haskell;
             };
           };
 
@@ -225,6 +234,9 @@
           devShells.godot-dev = pkgs.callPackage ./submodules/godot/godot.nix { };
           devShells.monado-dev = pkgs.callPackage ./submodules/monado/shell.nix { };
           devShells.godot-haskell-plugin-dev = pkgs.callPackage ./addons/godot-haskell-plugin/shell.nix { };
+          devShells.godot-haskell-cabal-dev = pkgs.haskellPackages.callPackage ./submodules/godot-haskell-cabal/godot-haskell.nix {
+            inherit godot-haskell-classgen;
+          };
         };
     };
 }
