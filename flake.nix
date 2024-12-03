@@ -66,6 +66,7 @@
           build-wlroots = pkgs.callPackage ./utils/nix/build-wlroots.nix { };
           build-monado = pkgs.callPackage ./utils/nix/build-monado.nix { };
           clean-monado = pkgs.callPackage ./utils/nix/clean-monado.nix { };
+          repl-godot-haskell-plugin = pkgs.callPackage ./utils/nix/repl-godot-haskell-plugin.nix { };
         in
         {
           _module.args = {
@@ -105,6 +106,10 @@
             clean-monado = {
               type = "app";
               program = clean-monado;
+            };
+            repl-godot-haskell-plugin = {
+              type = "app";
+              program = repl-godot-haskell-plugin;
             };
           };
 
@@ -219,6 +224,7 @@
           devShells.wlroots-dev = pkgs.callPackage ./submodules/wlroots { };
           devShells.godot-dev = pkgs.callPackage ./submodules/godot/godot.nix { };
           devShells.monado-dev = pkgs.callPackage ./submodules/monado/shell.nix { };
+          devShells.godot-haskell-plugin-dev = pkgs.callPackage ./addons/godot-haskell-plugin/shell.nix { };
         };
     };
 }

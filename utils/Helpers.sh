@@ -1,47 +1,5 @@
 # The following functions assume they are called from project root.
 
-checkInstallNix() {
-    if command -v nix; then
-        echo "nix already installed.."
-    else
-        echo "nix not found..."
-        echo "Please install nix from:"
-        echo "https://nixos.org/download/"
-    fi
-}
-
-checkInstallCachix() {
-    if command -v cachix; then
-        echo "cachix already installed.."
-    else
-        echo "cachix not found..."
-        echo "Please install cachix. Example install command:"
-        echo "nix-env -iA cachix -f https://cachix.org/api/v1/install"
-    fi
-}
-
-checkInstallCurl() {
-    if command -v curl; then
-        echo "curl already installed.."
-    else
-        echo "curl not found..."
-        echo "Please install curl. Example install command:"
-        echo "nix-env -iA nixpkgs.curl"
-    fi
-}
-
-
-checkInstallGit() {
-    if command -v git; then
-        echo "git already installed.."
-    else
-        nix-env -iA nixpkgs.git
-        echo "curl not found..."
-        echo "Please install curl. Example install command:"
-        echo "nix-env -iA nixpkgs.git"
-    fi
-}
-
 checkIfNixOS() {
     if [ -e /etc/NIXOS ]; then
         echo "true";
@@ -102,12 +60,6 @@ nsBuildGodotHaskellPlugin() {
     while inotifywait -qqre modify .; do cabal build; done
   fi
   cd -
-}
-
-# devBuild = true function
-nsREPLGodotHaskellPlugin() {
-    cd ./addons/godot-haskell-plugin
-    nix-shell shell.nix --run "cabal repl"
 }
 
 # devBuild = true function
