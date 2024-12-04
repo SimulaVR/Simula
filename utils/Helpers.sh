@@ -38,18 +38,6 @@ updateEmail() {
 }
 
 # devBuild = true function
-# => Updates godot-haskell to latest api.json generated from devBuildGodot
-nsBuildGodotHaskell() {
-  cd ./submodules/godot
-  LD_LIBRARY_PATH=./modules/gdleapmotionV2/LeapSDK/lib/x64 ./bin/godot.x11.tools.64 --gdnative-generate-json-api ./bin/api.json
-  cd -
-
-  cd ./submodules/godot-haskell-cabal
-  ./updateApiJSON.sh
-  cd -
-}
-
-# devBuild = true function
 nsBuildGodotHaskellPlugin() {
   cd ./addons/godot-haskell-plugin
   if [ -z $1 ]; then
