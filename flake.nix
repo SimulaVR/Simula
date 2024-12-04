@@ -73,6 +73,7 @@
             inherit godot-haskell-classgen;
             godot = simula-godot;
           };
+          patch-godot-wlroots = pkgs.callPackage ./utils/nix/patch-godot-wlroots.nix { };
         in
         {
           _module.args = {
@@ -125,6 +126,10 @@
             build-godot-haskell = {
               type = "app";
               program = build-godot-haskell;
+            };
+            patch-godot-wlroots = {
+              type = "app";
+              program = patch-godot-wlroots;
             };
           };
 
