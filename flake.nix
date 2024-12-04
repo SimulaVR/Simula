@@ -68,6 +68,7 @@
           build-monado = pkgs.callPackage ./utils/nix/build-monado.nix { };
           clean-monado = pkgs.callPackage ./utils/nix/clean-monado.nix { };
           repl-godot-haskell-plugin = pkgs.callPackage ./utils/nix/repl-godot-haskell-plugin.nix { };
+          build-godot-haskell-plugin = pkgs.callPackage ./utils/nix/build-godot-haskell-plugin.nix { };
           build-godot-haskell = pkgs.callPackage ./utils/nix/build-godot-haskell.nix {
             inherit godot-haskell-classgen;
             godot = simula-godot;
@@ -116,6 +117,10 @@
             repl-godot-haskell-plugin = {
               type = "app";
               program = repl-godot-haskell-plugin;
+            };
+            build-godot-haskell-plugin = {
+              type = "app";
+              program = build-godot-haskell-plugin;
             };
             build-godot-haskell = {
               type = "app";
