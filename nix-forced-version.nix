@@ -1,4 +1,4 @@
-{ pkgs ? import ./pinned-nixpkgs.nix {} }:
+{ pkgs }:
 
 let
   nix-cmds = [
