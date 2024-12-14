@@ -5,7 +5,6 @@ let
        url = builtins.toString ./.;
        submodules = true;
        allRefs = true;
-       shallow = true;
      };
 
     /* Modify a stdenv so that it produces debug builds; that is,
