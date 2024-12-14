@@ -16,16 +16,6 @@ switchToNix() {
     cd -
 }
 
-# devBuild function
-switchToLocal() {
-    cd ./addons/godot-haskell-plugin
-    rm -f libgodot-haskell-plugin.so
-    path=$(nix-shell -Q shell.nix --run "../../result/bin/cabal list-bin flib:godot-haskell-plugin")
-    ln -s "$path" libgodot-haskell-plugin.so
-    cd -
-}
-
-
 updateEmail() {
     if [ -e $SIMULA_CONFIG_DIR/email ]; then
         # .. do nothing ..
