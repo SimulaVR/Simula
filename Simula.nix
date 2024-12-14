@@ -86,7 +86,10 @@ let
       #!${stdenv.shell}
       ${xdgSetup}
       pkill monado-service
-      ${monadoSetup}
+      export SIMULA_CONFIG_PATH=$out/config/simula_monado_config.json
+      export XR_RUNTIME_JSON=$out/config/active_runtime.json
+      export XRT_COMPOSITOR_LOG=debug
+      export XRT_COMPOSITOR_SCALE_PERCENTAGE=100
       ${monado}/bin/monado-service 2>&1 | tee \$SIMULA_DATA_DIR/log/monado.log
       EOF
       chmod +x $out/bin/simula-monado-service
