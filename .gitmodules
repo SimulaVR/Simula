@@ -6,7 +6,6 @@
 	path = submodules/wlroots
 	url = https://github.com/SimulaVR/wlroots
 	branch = simula
-	shallow = true
 [submodule "submodules/godot"]
 	path = submodules/godot
 	url = https://github.com/SimulaVR/godot
