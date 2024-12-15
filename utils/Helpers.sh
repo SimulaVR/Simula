@@ -1,13 +1,5 @@
 # The following functions assume they are called from project root.
 
-# devBuild helper function
-switchToNix() {
-    cd ./addons/godot-haskell-plugin
-    rm -f libgodot-haskell-plugin.so
-    ln -s ../../result/bin/libgodot-haskell-plugin.so libgodot-haskell-plugin.so
-    cd -
-}
-
 updateEmail() {
     if [ -e $SIMULA_CONFIG_DIR/email ]; then
         # .. do nothing ..

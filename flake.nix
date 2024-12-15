@@ -75,6 +75,7 @@
           };
           patch-godot-wlroots = pkgs.callPackage ./utils/nix/patch-godot-wlroots.nix { };
           switch-to-local = pkgs.callPackage ./utils/nix/switch-to-local { };
+          switch-to-nix = pkgs.callPackage ./utils/nix/switch-to-nix { };
         in
         {
           _module.args = {
@@ -135,6 +136,10 @@
             switch-to-local = {
               type = "app";
               program = switch-to-local;
+            };
+            switch-to-nix = {
+              type = "app";
+              program = switch-to-nix;
             };
           };
 
