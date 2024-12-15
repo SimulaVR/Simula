@@ -1,3 +1,8 @@
+#!/bin/sh
+set -o errexit
+set -o nounset
+set -o pipefail
+
 # This shell script is loaded by ./default.nix
 
 cd ./addons/godot-haskell-plugin
