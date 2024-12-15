@@ -74,7 +74,7 @@
             godot = simula-godot;
           };
           patch-godot-wlroots = pkgs.callPackage ./utils/nix/patch-godot-wlroots.nix { };
-          switch-to-local = pkgs.callPackage ./utils/nix/switch-to-local.nix { };
+          switch-to-local = pkgs.callPackage ./utils/nix/switch-to-local { };
         in
         {
           _module.args = {
