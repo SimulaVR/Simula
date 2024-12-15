@@ -1,13 +1,5 @@
 # The following functions assume they are called from project root.
 
-checkIfNixOS() {
-    if [ -e /etc/NIXOS ]; then
-        echo "true";
-    else
-        echo "false";
-    fi
-}
-
 # devBuild helper function
 switchToNix() {
     cd ./addons/godot-haskell-plugin
