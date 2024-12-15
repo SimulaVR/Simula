@@ -28,19 +28,6 @@ updateEmail() {
 }
 
 # devBuild = true function
-nsBuildGodotHaskellPlugin() {
-  cd ./addons/godot-haskell-plugin
-  if [ -z $1 ]; then
-    cabal build
-  elif [ $1 == "--profile" ]; then
-    cabal --enable-profiling build --ghc-options=\"-fprof-auto -rtsopts -fPIC -fexternal-dynamic-refs\"
-  else
-    while inotifywait -qqre modify .; do cabal build; done
-  fi
-  cd -
-}
-
-# devBuild = true function
 # => Takes optional argument for a profile build
 nsBuildSimulaLocal() {
     installSimula 1                      || { echo "installSimula 1 failed"; return 1; } # forces devBuild
