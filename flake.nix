@@ -79,7 +79,7 @@
             '';
 
             meta = {
-              platforms = lib.platforms.unix;
+              platforms = lib.platforms.linux;
             };
           };
         in
