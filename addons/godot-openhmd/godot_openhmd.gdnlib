@@ -4,11 +4,3 @@ singleton=true
 load_once=true
 symbol_prefix="godot_"
 reloadable=true
-
-[entry]
-
-X11.64="res://addons/godot-openhmd/bin/linux/libgodot_openhmd.so"
-
-[dependencies]
-
-X11.64=[ "res://addons/godot-openhmd/bin/linux/libopenhmd.so" ]

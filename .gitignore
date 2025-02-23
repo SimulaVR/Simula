@@ -16,3 +16,6 @@ dist-newstyle
 
 .import
 *.import
+
+# Nix's result
+result

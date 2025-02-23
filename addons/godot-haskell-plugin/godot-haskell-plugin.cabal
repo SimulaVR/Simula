@@ -40,7 +40,7 @@ library
   -- include-dirs:
   --     include
   build-depends:
-      base >=4.12 && <5
+      base
     , lens
     , godot-haskell
     , colour
@@ -150,7 +150,7 @@ foreign-library godot-haskell-plugin
   other-modules: FLib
   ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code -g2 -threaded
   build-depends:
-      base >=4.12 && <5
+      base
     , lens
     , godot-haskell
     , colour
