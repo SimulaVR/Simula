@@ -32,9 +32,16 @@
 
             nativeBuildInputs = [
               pkgs.godot3-headless
+              pkgs.autoPatchelfHook
             ];
 
             buildInputs = [
+              pkgs.xorg.libXcursor
+              pkgs.xorg.libXinerama
+              pkgs.xorg.libXext
+              pkgs.xorg.libXrandr
+              pkgs.xorg.libXi
+              pkgs.libGL
             ];
 
             buildPhase = ''
@@ -63,10 +70,10 @@
 
               # Patch binaries.
               interpreter=$(cat $NIX_CC/nix-support/dynamic-linker)
-              #patchelf \
-              #  --set-interpreter $interpreter \
-              #  --set-rpath ${lib.makeLibraryPath buildInputs} \
-              #  $out/share/test-godot3-with-nix/out
+              patchelf \
+                --set-interpreter $interpreter \
+                --set-rpath ${lib.makeLibraryPath buildInputs} \
+                $out/share/simula/out
 
               runHook postInstall
             '';
