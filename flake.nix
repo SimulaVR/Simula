@@ -100,7 +100,10 @@
           simula = pkgs.stdenv.mkDerivation rec {
             pname = "simula";
             version = "0.0.0-dev";
-            src = lib.cleanSource ./.;
+
+            # `lib.cleanSource` omits `.so` files such as `addons/gdleapmotion/bin/x11/libgdleapmotion.so`
+            #src = lib.cleanSource ./.;
+            src = ./.;
 
             nativeBuildInputs = [
               pkgs.godot3-headless
