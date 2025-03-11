@@ -7,7 +7,7 @@ symbol_prefix="godot_"
 [entry]
 
 Windows.64="res://addons/godot-haskell-plugin/godot-haskell-plugin.dll"
-X11.64="res://addons/godot-haskell-plugin/libgodot-haskell-plugin.so"
+X11.64="res://addons/godot-haskell-plugin/bin/x11/libgodot-haskell-plugin.so"
 
 [dependencies]
 

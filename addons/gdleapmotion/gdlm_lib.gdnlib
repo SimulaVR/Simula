@@ -11,4 +11,4 @@ X11.64="res://addons/gdleapmotion/bin/x11/libgdleapmotion.so"
 
 [dependencies]
 
-X11.64=["res://addons/gdleapmotion/bin/x64/LeapC.so"]
+X11.64=["res://addons/gdleapmotion/bin/x11/libLeap.so"]
