@@ -43,8 +43,35 @@
               pkgs.xorg.libXinerama
               pkgs.xorg.libXext
               pkgs.xorg.libXrandr
+              pkgs.xorg.libXrender
+              pkgs.xorg.libX11
               pkgs.xorg.libXi
               pkgs.libGL
+              pkgs.stdenv.cc.cc.lib
+              pkgs.openxr-loader
+              pkgs.systemd
+              pkgs.gmp
+
+              # Haskell Dependencies
+              pkgs.haskellPackages.aeson
+              pkgs.haskellPackages.ansi-wl-pprint
+              pkgs.haskellPackages.base
+              pkgs.haskellPackages.bytestring
+              pkgs.haskellPackages.casing
+              pkgs.haskellPackages.colour
+              pkgs.haskellPackages.containers
+              pkgs.haskellPackages.lens
+              pkgs.haskellPackages.linear
+              pkgs.haskellPackages.mtl
+              pkgs.haskellPackages.parsec
+              pkgs.haskellPackages.parsers
+              pkgs.haskellPackages.stm
+              pkgs.haskellPackages.template-haskell
+              pkgs.haskellPackages.text
+              pkgs.haskellPackages.unordered-containers
+              pkgs.haskellPackages.vector
+              pkgs.haskellPackages.prettyprinter
+              pkgs.haskellPackages.prettyprinter-ansi-terminal
             ];
 
             buildPhase = ''
@@ -58,9 +85,9 @@
               mkdir -p $HOME/.local/share/godot
               ln -s ${pkgs.godot3-export-templates}/share/godot/templates $HOME/.local/share/godot
 
-              mkdir -p $out/share/simula
+              mkdir -p $out/opt/simula
 
-              godot3-headless --export "Linux/X11" $out/share/simula/out
+              godot3-headless --export "Linux/X11" $out/opt/simula/out
 
               runHook postBuild
             '';
@@ -70,13 +97,6 @@
 
               mkdir -p $out/bin
               ln -s $out/share/simula/out $out/bin/simula
-
-              # Patch binaries.
-              interpreter=$(cat $NIX_CC/nix-support/dynamic-linker)
-              patchelf \
-                --set-interpreter $interpreter \
-                --set-rpath ${lib.makeLibraryPath buildInputs} \
-                $out/share/simula/out
 
               runHook postInstall
             '';
