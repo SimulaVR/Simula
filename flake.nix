@@ -25,6 +25,74 @@
           ...
         }:
         let
+          godot-haskell = pkgs.haskellPackages.mkDerivation {
+            pname = "godot-haskell";
+            version = "3.1.0.0-simula";
+
+            src = pkgs.fetchFromGitHub {
+              owner = "SimulaVR";
+              repo = "godot-haskell";
+              rev = "c4105239909af90758c585d35f2d03f71381fb57";
+              hash = "sha256-iqXW6e+bL33AJAWPsrhdU8yJC4MJjrdBqGAGDA7Xupw=";
+              fetchSubmodules = true;
+            };
+
+            libraryHaskellDepends = [
+              pkgs.haskellPackages.aeson
+              pkgs.haskellPackages.ansi-wl-pprint
+              pkgs.haskellPackages.casing
+              pkgs.haskellPackages.colour
+              pkgs.haskellPackages.lens
+              pkgs.haskellPackages.linear
+              pkgs.haskellPackages.parsers
+              pkgs.haskellPackages.unordered-containers
+              pkgs.haskellPackages.vector
+              pkgs.haskellPackages.prettyprinter
+              pkgs.haskellPackages.prettyprinter-ansi-terminal
+            ];
+
+            libraryToolDepends = [
+              pkgs.haskellPackages.c2hs
+              pkgs.haskellPackages.hpack
+            ];
+
+            preConfigure = ''
+              hpack
+            '';
+
+            homepage = "https://github.com/KaneTW/godot-haskell#readme";
+            description = "Haskell bindings for the Godot game engine API";
+            license = lib.licenses.bsd3;
+
+            doCheck = false;
+            doHaddock = false;
+            enableLibraryProfiling = false;
+          };
+          haskell-dependencies = pkgs.stdenvNoCC.mkDerivation rec {
+            name = "haskell-dependencies";
+            dontUnpack = true;
+
+            buildInputs = [
+              pkgs.haskellPackages.ghc
+              pkgs.haskellPackages.aeson
+              pkgs.haskellPackages.ansi-wl-pprint
+              pkgs.haskellPackages.casing
+              pkgs.haskellPackages.colour
+              pkgs.haskellPackages.lens
+              pkgs.haskellPackages.linear
+              pkgs.haskellPackages.parsers
+              pkgs.haskellPackages.unordered-containers
+              pkgs.haskellPackages.vector
+              pkgs.haskellPackages.prettyprinter
+              pkgs.haskellPackages.prettyprinter-ansi-terminal
+              godot-haskell
+            ];
+
+            installPhase = ''
+              mkdir -p $out/lib
+              cp -r ${lib.strings.concatStringsSep " " (builtins.map (drv: "${drv}/lib/ghc-${pkgs.haskellPackages.ghc.version}/lib/${pkgs.stdenv.system}-ghc-${pkgs.haskellPackages.ghc.version}/*.so") buildInputs)} $out/lib
+            '';
+          };
           simula = pkgs.stdenv.mkDerivation rec {
             pname = "simula";
             version = "0.0.0-dev";
@@ -51,28 +119,10 @@
               pkgs.openxr-loader
               pkgs.systemd
               pkgs.gmp
-
-              # Haskell Dependencies
-              pkgs.haskellPackages.aeson
-              pkgs.haskellPackages.ansi-wl-pprint
-              pkgs.haskellPackages.base
-              pkgs.haskellPackages.bytestring
-              pkgs.haskellPackages.casing
-              pkgs.haskellPackages.colour
-              pkgs.haskellPackages.containers
-              pkgs.haskellPackages.lens
-              pkgs.haskellPackages.linear
-              pkgs.haskellPackages.mtl
-              pkgs.haskellPackages.parsec
-              pkgs.haskellPackages.parsers
-              pkgs.haskellPackages.stm
-              pkgs.haskellPackages.template-haskell
-              pkgs.haskellPackages.text
-              pkgs.haskellPackages.unordered-containers
-              pkgs.haskellPackages.vector
-              pkgs.haskellPackages.prettyprinter
-              pkgs.haskellPackages.prettyprinter-ansi-terminal
+              haskell-dependencies
             ];
+
+            LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
 
             buildPhase = ''
               runHook preBuild
@@ -96,7 +146,7 @@
               runHook preInstall
 
               mkdir -p $out/bin
-              ln -s $out/share/simula/out $out/bin/simula
+              ln -s $out/opt/simula/out $out/bin/simula
 
               runHook postInstall
             '';
@@ -142,7 +192,7 @@
         in
         {
           packages = {
-            inherit simula for-simula-beginner;
+            inherit simula for-simula-beginner haskell-dependencies godot-haskell;
             default = simula;
           };
 
