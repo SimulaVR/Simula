@@ -60,13 +60,17 @@
               hpack
             '';
 
+            configureFlags = [
+              "--ghc-options=-fPIC -fexternal-dynamic-refs"
+            ];
+
             homepage = "https://github.com/KaneTW/godot-haskell#readme";
             description = "Haskell bindings for the Godot game engine API";
             license = lib.licenses.bsd3;
 
             doCheck = false;
             doHaddock = false;
-            enableLibraryProfiling = false;
+            enableLibraryProfiling = true;
           };
           haskell-dependencies = pkgs.stdenvNoCC.mkDerivation rec {
             name = "haskell-dependencies";
