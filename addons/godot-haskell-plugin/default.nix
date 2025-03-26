@@ -3,7 +3,8 @@
   callPackage,
   haskellPackages,
 
-  # Dependencies
+  ### Dependencies
+  # This dependency needs `/submodules/godot-haskell/default.nix`
   godot-haskell ? callPackage ../../submodules/godot-haskell { },
 
   # Arguments when you build this

@@ -72,23 +72,38 @@
             doHaddock = false;
             enableLibraryProfiling = true;
           };
+          godot-haskell-plugin = pkgs.callPackage ./addons/godot-haskell-plugin {
+            inherit godot-haskell;
+          };
+
+          # `haskell-dependencies` contains shared libraries
+          # This attribute is needed to pick up `${any-package}/lib/ghc-9.6.5/lib/x86_64-linux-ghc-9.6.5/*.so` for `pkgs.autoPatchelfHook`
           haskell-dependencies = pkgs.stdenvNoCC.mkDerivation rec {
             name = "haskell-dependencies";
             dontUnpack = true;
 
             buildInputs = [
-              pkgs.haskellPackages.ghc
-              pkgs.haskellPackages.aeson
-              pkgs.haskellPackages.ansi-wl-pprint
-              pkgs.haskellPackages.casing
-              pkgs.haskellPackages.colour
-              pkgs.haskellPackages.lens
-              pkgs.haskellPackages.linear
-              pkgs.haskellPackages.parsers
-              pkgs.haskellPackages.unordered-containers
-              pkgs.haskellPackages.vector
-              pkgs.haskellPackages.prettyprinter
-              pkgs.haskellPackages.prettyprinter-ansi-terminal
+              # godot-haskell-plugin dependencies
+              pkgs.haskellPackages.QuickCheck
+              pkgs.haskellPackages.base64-bytestring
+              pkgs.haskellPackages.clock
+              pkgs.haskellPackages.dhall
+              pkgs.haskellPackages.extra
+              pkgs.haskellPackages.hspec
+              pkgs.haskellPackages.hspec-core
+              pkgs.haskellPackages.http-client
+              pkgs.haskellPackages.http-client-tls
+              pkgs.haskellPackages.http-types
+              pkgs.haskellPackages.inline-c
+              pkgs.haskellPackages.io-streams
+              pkgs.haskellPackages.iso8601-time
+              pkgs.haskellPackages.ordered-containers
+              pkgs.haskellPackages.path
+              pkgs.haskellPackages.path-io
+              pkgs.haskellPackages.process-extras
+              pkgs.haskellPackages.raw-strings-qq
+              pkgs.haskellPackages.safe-exceptions
+              pkgs.haskellPackages.uuid
               godot-haskell
             ];
 
@@ -97,6 +112,8 @@
               cp -r ${lib.strings.concatStringsSep " " (builtins.map (drv: "${drv}/lib/ghc-${pkgs.haskellPackages.ghc.version}/lib/${pkgs.stdenv.system}-ghc-${pkgs.haskellPackages.ghc.version}/*.so") buildInputs)} $out/lib
             '';
           };
+
+          # The Simula package. This package doesn't have any tools, such as Terminal application
           simula = pkgs.stdenv.mkDerivation rec {
             pname = "simula";
             version = "0.0.0-dev";
@@ -159,6 +176,24 @@
               platforms = lib.platforms.linux;
             };
           };
+
+          # Simula for-beginner package.
+          # There is the package with some tools:
+          # | Package name             | Executable name |
+          # |--------------------------+-----------------|
+          # | pkgs.xpra                | xpra            |
+          # | pkgs.xfce.xfce4-terminal | xfce4-terminal  |
+          # | pkgs.xorg.xrdb           | xrdb            |
+          # | pkgs.wmctrl              | wmctrl          |
+          # | pkgs.ffmpeg              | ffplay          |
+          # | pkgs.ffmpeg              | ffmpeg          |
+          # | pkgs.midori              | midori          |
+          # | pkgs.synapse             | synapse         |
+          # | pkgs.xsel                | xsel            |
+          # | pkgs.mimic               | mimic           |
+          # | pkgs.xclip               | xclip           |
+          # | pkgs.curl                | curl            |
+          # | pkgs.i3status            | i3status        |
           for-simula-beginner = simula.overrideAttrs (prevAttrs: {
             pname = "simula-for-beginner";
 
@@ -196,7 +231,7 @@
         in
         {
           packages = {
-            inherit simula for-simula-beginner haskell-dependencies godot-haskell;
+            inherit simula for-simula-beginner haskell-dependencies godot-haskell godot-haskell-plugin;
             default = simula;
           };
 
