@@ -201,14 +201,7 @@
               runHook preInstall
 
               mkdir -p $out/bin
-              ln -s $out/share/simula/out $out/bin/simula
-
-              # Patch binaries.
-              interpreter=$(cat $NIX_CC/nix-support/dynamic-linker)
-              patchelf \
-                --set-interpreter $interpreter \
-                --set-rpath ${lib.makeLibraryPath prevAttrs.buildInputs} \
-                $out/share/simula/out
+              ln -s $out/opt/simula/out $out/bin/simula
 
               # Install some tools' symlink
               ln -s ${pkgs.xpra}/bin/xpra $out/bin/xpra
