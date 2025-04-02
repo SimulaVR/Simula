@@ -113,6 +113,23 @@
             '';
           };
 
+          cleanSourceFilter =
+            name:
+            type:
+            let
+              baseName = baseNameOf (toString name);
+            in
+            !(
+              (baseName == ".git")
+              || lib.hasSuffix "~" baseName
+              || builtins.match "^\\.sw[a-z]$" baseName != null
+              || builtins.match "^\\..*\\.sw[a-z]$" baseName != null
+              || lib.hasSuffix ".o" baseName
+              #|| lib.hasSuffix ".so" baseName # ".so" cannot remove because dynamic libraries is used by Godot plugins
+              || (type == "symlink" && lib.hasPrefix "result" baseName)
+              || (type == "unknown")
+            );
+
           # The Simula package. This package doesn't have any tools, such as Terminal application
           simula = pkgs.stdenv.mkDerivation rec {
             pname = "simula";
@@ -120,7 +137,10 @@
 
             # `lib.cleanSource` omits `.so` files such as `addons/gdleapmotion/bin/x11/libgdleapmotion.so`
             #src = lib.cleanSource ./.;
-            src = ./.;
+            src = lib.cleanSourceWith {
+              filter = cleanSourceFilter;
+              src = ./.;
+            };
 
             nativeBuildInputs = [
               pkgs.godot3-headless
@@ -136,14 +156,11 @@
               pkgs.xorg.libX11
               pkgs.xorg.libXi
               pkgs.libGL
-              pkgs.stdenv.cc.cc.lib
               pkgs.openxr-loader
               pkgs.systemd
               pkgs.gmp
               haskell-dependencies
             ];
-
-            LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
 
             buildPhase = ''
               runHook preBuild
@@ -228,10 +245,27 @@
             default = simula;
           };
 
-          devShells.default = pkgs.mkShell {
+          devShells.default = pkgs.mkShell rec {
             nativeBuildInputs = [
               pkgs.godot3
             ];
+
+            buildInputs = [
+              pkgs.xorg.libXcursor
+              pkgs.xorg.libXinerama
+              pkgs.xorg.libXext
+              pkgs.xorg.libXrandr
+              pkgs.xorg.libXrender
+              pkgs.xorg.libX11
+              pkgs.xorg.libXi
+              pkgs.libGL
+              pkgs.openxr-loader
+              pkgs.systemd
+              pkgs.gmp
+              haskell-dependencies
+            ];
+
+            LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
 
             shellHook = ''
               export PS1="\n[nix-shell:\w]$ "
