@@ -6,6 +6,9 @@
   ### Dependencies
   # This dependency needs `/submodules/godot-haskell/default.nix`
   godot-haskell ? callPackage ../../submodules/godot-haskell { },
+  wayland,
+  wlroots,
+  pixman,
 
   # Arguments when you build this
   profileBuild ? false,
@@ -45,6 +48,12 @@ haskellPackages.mkDerivation {
     haskellPackages.safe-exceptions
     haskellPackages.uuid
     haskellPackages.vector
+  ];
+
+  librarySystemDepends = [
+    wayland.dev
+    wlroots
+    pixman
   ];
 
   homepage = "https://github.com/SimulaVR/Simula#readme";
