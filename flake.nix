@@ -21,9 +21,7 @@
     inputs.flake-parts.lib.mkFlake { inherit inputs; } {
       systems = import inputs.systems;
 
-      imports = [
-        inputs.treefmt-nix.flakeModule
-      ];
+      imports = [ inputs.treefmt-nix.flakeModule ];
 
       perSystem =
         {
@@ -68,9 +66,7 @@
               hpack
             '';
 
-            configureFlags = [
-              "--ghc-options=-fPIC -fexternal-dynamic-refs"
-            ];
+            configureFlags = [ "--ghc-options=-fPIC -fexternal-dynamic-refs" ];
 
             homepage = "https://github.com/KaneTW/godot-haskell#readme";
             description = "Haskell bindings for the Godot game engine API";
@@ -80,9 +76,7 @@
             doHaddock = false;
             enableLibraryProfiling = true;
           };
-          godot-haskell-plugin = pkgs.callPackage ./addons/godot-haskell-plugin {
-            inherit godot-haskell;
-          };
+          godot-haskell-plugin = pkgs.callPackage ./addons/godot-haskell-plugin { inherit godot-haskell; };
 
           # `haskell-dependencies` contains shared libraries
           # This attribute is needed to pick up `${any-package}/lib/ghc-9.6.5/lib/x86_64-linux-ghc-9.6.5/*.so` for `pkgs.autoPatchelfHook`
@@ -117,13 +111,19 @@
 
             installPhase = ''
               mkdir -p $out/lib
-              cp -r ${lib.strings.concatStringsSep " " (builtins.map (drv: "${drv}/lib/ghc-${pkgs.haskellPackages.ghc.version}/lib/${pkgs.stdenv.system}-ghc-${pkgs.haskellPackages.ghc.version}/*.so") buildInputs)} $out/lib
+              cp -r ${
+                lib.strings.concatStringsSep " " (
+                  builtins.map (
+                    drv:
+                    "${drv}/lib/ghc-${pkgs.haskellPackages.ghc.version}/lib/${pkgs.stdenv.system}-ghc-${pkgs.haskellPackages.ghc.version}/*.so"
+                  ) buildInputs
+                )
+              } $out/lib
             '';
           };
 
           cleanSourceFilter =
-            name:
-            type:
+            name: type:
             let
               baseName = baseNameOf (toString name);
             in
@@ -254,14 +254,18 @@
           };
 
           packages = {
-            inherit simula for-simula-beginner haskell-dependencies godot-haskell godot-haskell-plugin;
+            inherit
+              simula
+              for-simula-beginner
+              haskell-dependencies
+              godot-haskell
+              godot-haskell-plugin
+              ;
             default = simula;
           };
 
           devShells.default = pkgs.mkShell rec {
-            nativeBuildInputs = [
-              pkgs.godot3
-            ];
+            nativeBuildInputs = [ pkgs.godot3 ];
 
             buildInputs = [
               pkgs.xorg.libXcursor

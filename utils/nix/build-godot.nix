@@ -7,9 +7,7 @@
 
 writeShellApplication {
   name = "build-godot";
-  runtimeInputs = [
-    nix
-  ];
+  runtimeInputs = [ nix ];
   text = ''
     help_message () {
       echo "Usage: $0 help|build|watch"

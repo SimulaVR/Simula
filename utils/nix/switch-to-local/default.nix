@@ -7,9 +7,7 @@
 
 writeShellApplication {
   name = "switch-to-local";
-  runtimeInputs = [
-    nix
-  ];
+  runtimeInputs = [ nix ];
   text = ''
     nix develop '.?submodules=1#godot-haskell-plugin-dev' --command sh -c ${cmd-sh}
   '';

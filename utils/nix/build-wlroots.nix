@@ -9,9 +9,7 @@
 
 writeShellApplication {
   name = "build-wlroots";
-  runtimeInputs = [
-    nix
-  ];
+  runtimeInputs = [ nix ];
 
   text = ''
     if [ -d "./submodules/wlroots/build" ]; then
