@@ -418,6 +418,16 @@
               src = ./.;
             };
 
+            nativeBuildInputs = [
+              pkgs.autoPatchelfHook
+            ];
+
+            buildInputs = [
+              haskell-dependencies
+              pkgs.systemd
+              pkgs.openxr-loader
+            ];
+
             dontBuild = true;
 
             installPhase = ''
