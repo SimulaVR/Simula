@@ -251,13 +251,9 @@
               hash = "sha256-F9N4yC/Mw3LcW+LQCCfnRzOYPS8mEypnX7UodnZdY4U=";
             };
 
-            nativeBuildInputs = [
-              pkgs.autoPatchelfHook
-            ];
+            nativeBuildInputs = [ pkgs.autoPatchelfHook ];
 
-            buildInputs = [
-              pkgs.stdenv.cc.cc.lib
-            ];
+            buildInputs = [ pkgs.stdenv.cc.cc.lib ];
 
             dontBuild = true;
 
@@ -418,9 +414,7 @@
               src = ./.;
             };
 
-            nativeBuildInputs = [
-              pkgs.autoPatchelfHook
-            ];
+            nativeBuildInputs = [ pkgs.autoPatchelfHook ];
 
             buildInputs = [
               haskell-dependencies
@@ -446,21 +440,23 @@
                 set -o nounset
                 set -o pipefail
 
-                export PATH="${lib.makeBinPath [
-                  godot
-                  pkgs.xpra
-                  pkgs.xfce.xfce4-terminal
-                  pkgs.xorg.xrdb
-                  pkgs.wmctrl
-                  pkgs.ffmpeg
-                  pkgs.midori
-                  pkgs.synapse
-                  pkgs.xsel
-                  pkgs.mimic
-                  pkgs.xclip
-                  pkgs.curl
-                  pkgs.i3status
-                ]}:$PATH"
+                export PATH="${
+                  lib.makeBinPath [
+                    godot
+                    pkgs.xpra
+                    pkgs.xfce.xfce4-terminal
+                    pkgs.xorg.xrdb
+                    pkgs.wmctrl
+                    pkgs.ffmpeg
+                    pkgs.midori
+                    pkgs.synapse
+                    pkgs.xsel
+                    pkgs.mimic
+                    pkgs.xclip
+                    pkgs.curl
+                    pkgs.i3status
+                  ]
+                }:$PATH"
 
                 godot -m ${simula.src}/project.godot
               ' > $out/bin/simula
