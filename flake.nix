@@ -426,6 +426,7 @@
               haskell-dependencies
               pkgs.systemd
               pkgs.openxr-loader
+              godot-haskell-plugin
             ];
 
             dontBuild = true;
