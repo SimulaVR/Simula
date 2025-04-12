@@ -516,7 +516,13 @@
           };
 
           devShells.default = pkgs.mkShell rec {
-            nativeBuildInputs = [ godot ];
+            nativeBuildInputs = [
+              # A Simula runner, Godot engine forked by SimulaVR
+              godot
+
+              # Nix LSP
+              pkgs.nil
+            ];
 
             buildInputs = [
               pkgs.xorg.libXcursor
