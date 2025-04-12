@@ -451,7 +451,7 @@
                   pkgs.i3status
                 ]}:$PATH"
 
-                godot -m ${simula.src}/opt/simula
+                godot -m ${simula.src}
               ' > $out/bin/simula
               chmod 766 $out/bin/simula
 
