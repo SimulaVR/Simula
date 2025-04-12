@@ -1,6 +1,7 @@
 name: nix-checker
 
 on:
+  pull_request:
   push:
     tags:
     branches:
