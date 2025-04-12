@@ -374,6 +374,7 @@
             '';
           };
 
+          # A source filter for Simula
           cleanSourceFilter =
             name: type:
             let
@@ -390,8 +391,23 @@
               || (type == "unknown")
             );
 
-          # The Simula package. This package doesn't have any tools, such as Terminal application
-          simula = pkgs.stdenv.mkDerivation rec {
+          # Simula package, with some tools:
+          # | Package name             |
+          # |--------------------------|
+          # | pkgs.xpra                |
+          # | pkgs.xfce.xfce4-terminal |
+          # | pkgs.xorg.xrdb           |
+          # | pkgs.wmctrl              |
+          # | pkgs.ffmpeg              |
+          # | pkgs.ffmpeg              |
+          # | pkgs.midori              |
+          # | pkgs.synapse             |
+          # | pkgs.xsel                |
+          # | pkgs.mimic               |
+          # | pkgs.xclip               |
+          # | pkgs.curl                |
+          # | pkgs.i3status            |
+          simula = pkgs.stdenv.mkDerivation {
             pname = "simula";
             version = "0.0.0-dev";
 
@@ -402,101 +418,68 @@
               src = ./.;
             };
 
-            nativeBuildInputs = [
-              pkgs.godot3-headless
-              pkgs.autoPatchelfHook
-            ];
+            dontBuild = true;
 
-            buildInputs = [
-              pkgs.xorg.libXcursor
-              pkgs.xorg.libXinerama
-              pkgs.xorg.libXext
-              pkgs.xorg.libXrandr
-              pkgs.xorg.libXrender
-              pkgs.xorg.libX11
-              pkgs.xorg.libXi
-              pkgs.libGL
-              pkgs.openxr-loader
-              pkgs.systemd
-              pkgs.gmp
-              haskell-dependencies
-            ];
-
-            buildPhase = ''
-              runHook preBuild
-
-              # Cannot create file '/homeless-shelter/.config/godot/projects/...'
-              export HOME=$TMPDIR
-
-              # Link the export-templates to the expected location. The --export commands
-              # expects the template-file at .../templates/{godot-version}.stable/linux_x11_64_release
-              mkdir -p $HOME/.local/share/godot
-              ln -s ${pkgs.godot3-export-templates}/share/godot/templates $HOME/.local/share/godot
+            installPhase = ''
+              runHook preInstall
 
               mkdir -p $out/opt/simula
+              cp -r $src/* $src/.??* $out/opt/simula
 
-              godot3-headless --export "Linux/X11" $out/opt/simula/out
-
-              runHook postBuild
-            '';
-
-            installPhase = ''
-              runHook preInstall
-
+              # Install Simula runner
               mkdir -p $out/bin
-              ln -s $out/opt/simula/out $out/bin/simula
+              echo '
+                #!${pkgs.stdenv.builder}
 
-              runHook postInstall
-            '';
+                set -o errexit
+                set -o nounset
+                set -o pipefail
 
-            meta = {
-              platforms = lib.platforms.linux;
-            };
-          };
+                export PATH="${lib.makeBinPath [
+                  godot
+                  pkgs.xpra
+                  pkgs.xfce.xfce4-terminal
+                  pkgs.xorg.xrdb
+                  pkgs.wmctrl
+                  pkgs.ffmpeg
+                  pkgs.midori
+                  pkgs.synapse
+                  pkgs.xsel
+                  pkgs.mimic
+                  pkgs.xclip
+                  pkgs.curl
+                  pkgs.i3status
+                ]}:$PATH"
 
-          # Simula for-beginner package.
-          # There is the package with some tools:
-          # | Package name             | Executable name |
-          # |--------------------------+-----------------|
-          # | pkgs.xpra                | xpra            |
-          # | pkgs.xfce.xfce4-terminal | xfce4-terminal  |
-          # | pkgs.xorg.xrdb           | xrdb            |
-          # | pkgs.wmctrl              | wmctrl          |
-          # | pkgs.ffmpeg              | ffplay          |
-          # | pkgs.ffmpeg              | ffmpeg          |
-          # | pkgs.midori              | midori          |
-          # | pkgs.synapse             | synapse         |
-          # | pkgs.xsel                | xsel            |
-          # | pkgs.mimic               | mimic           |
-          # | pkgs.xclip               | xclip           |
-          # | pkgs.curl                | curl            |
-          # | pkgs.i3status            | i3status        |
-          for-simula-beginner = simula.overrideAttrs (prevAttrs: {
-            pname = "simula-for-beginner";
+                godot -m ${simula.src}/opt/simula
+              ' > $out/bin/simula
+              chmod 766 $out/bin/simula
 
-            installPhase = ''
-              runHook preInstall
-
-              mkdir -p $out/bin
-              ln -s $out/opt/simula/out $out/bin/simula
-
-              # Install some tools' symlink
+              # Install some tools
               ln -s ${pkgs.xpra}/bin/xpra $out/bin/xpra
               ln -s ${pkgs.xfce.xfce4-terminal}/bin/xfce4-terminal $out/bin/xfce4-terminal
               ln -s ${pkgs.xorg.xrdb}/bin/xrdb $out/bin/xrdb
               ln -s ${pkgs.wmctrl}/bin/wmctrl $out/bin/wmctrl
-              ln -s ${pkgs.ffmpeg}/bin/ffplay $out/bin/ffplay
-              ln -s ${pkgs.ffmpeg}/bin/ffmpeg $out/bin/ffmpeg
+              ln -s ${pkgs.ffmpeg-full}/bin/ffplay $out/bin/ffplay
+              ln -s ${pkgs.ffmpeg-full}/bin/ffmpeg $out/bin/ffmpeg
               ln -s ${pkgs.midori}/bin/midori $out/bin/midori
               ln -s ${pkgs.synapse}/bin/synapse $out/bin/synapse
               ln -s ${pkgs.xsel}/bin/xsel $out/bin/xsel
               ln -s ${pkgs.mimic}/bin/mimic $out/bin/mimic
               ln -s ${pkgs.xclip}/bin/xclip $out/bin/xclip
+              ln -s ${pkgs.patchelf}/bin/patchelf $out/bin/patchelf
+              ln -s ${pkgs.dialog}/bin/dialog $out/bin/dialog
               ln -s ${pkgs.curl}/bin/curl $out/bin/curl
               ln -s ${pkgs.i3status}/bin/i3status $out/bin/i3status
 
               runHook postInstall
             '';
+
+            meta = {
+              homepage = "https://github.com/SimulaVR/Simula";
+              license = lib.licenses.mit;
+              platforms = lib.platforms.linux;
+            };
           });
         in
         {
@@ -513,7 +496,6 @@
           packages = {
             inherit
               simula
-              for-simula-beginner
               haskell-dependencies
               godot
               godot-haskell
