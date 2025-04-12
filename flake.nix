@@ -480,7 +480,7 @@
               license = lib.licenses.mit;
               platforms = lib.platforms.linux;
             };
-          });
+          };
         in
         {
           _module.args.pkgs = import inputs.nixpkgs {
