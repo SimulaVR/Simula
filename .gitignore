@@ -19,3 +19,6 @@ dist-newstyle
 
 # Nix's result
 result
+
+# nix-direnv
+.direnv/
