@@ -458,6 +458,10 @@
                   ]
                 }:$PATH"
 
+                export SIMULA_LOG_DIR="$XDG_CACHE_HOME/Simula"
+                export SIMULA_DATA_DIR="$XDG_DATA_HOME/Simula"
+                export SIMULA_CONFIG_DIR="$XDG_CONFIG_HOME/Simula"
+
                 godot -m ${simula.src}/project.godot
               ' > $out/bin/simula
               chmod 766 $out/bin/simula
