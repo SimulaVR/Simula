@@ -524,14 +524,20 @@
               # A Simula runner, Godot engine forked by SimulaVR
               godot
 
-              # Nix LSP
+              # Development tools
               pkgs.nil
-
-              # Task runner
               pkgs.just
+              pkgs.inotify-tools
+              pkgs.cabal-install
+              pkgs.haskellPackages.ghc
             ];
 
-            buildInputs = [ haskell-dependencies ];
+            buildInputs = [
+              # Add build dependencies you want to add LD_LIBRARY_PATH!!
+
+              haskell-dependencies
+              pkgs.zlib
+            ];
 
             LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
 

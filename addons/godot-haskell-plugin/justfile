@@ -1,0 +1,14 @@
+default:
+    @just --list
+
+build:
+    cabal build
+
+profile-build:
+    cabal --enable-profiling build \
+        --ghc-options='-fprof-auto -rtsopts -fPIC -fexternal-dynamic-refs'
+
+watch-build:
+    while inotifywait -qqre modify .; do \
+        cabal build; \
+    done
