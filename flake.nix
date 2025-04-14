@@ -525,17 +525,6 @@
             ];
 
             buildInputs = [
-              pkgs.xorg.libXcursor
-              pkgs.xorg.libXinerama
-              pkgs.xorg.libXext
-              pkgs.xorg.libXrandr
-              pkgs.xorg.libXrender
-              pkgs.xorg.libX11
-              pkgs.xorg.libXi
-              pkgs.libGL
-              pkgs.openxr-loader
-              pkgs.systemd
-              pkgs.gmp
               haskell-dependencies
             ];
 
