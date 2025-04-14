@@ -526,6 +526,9 @@
 
               # Nix LSP
               pkgs.nil
+
+              # Task runner
+              pkgs.just
             ];
 
             buildInputs = [ haskell-dependencies ];

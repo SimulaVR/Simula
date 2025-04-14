@@ -1,0 +1,2 @@
+default:
+    @just --list
