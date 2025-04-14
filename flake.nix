@@ -524,9 +524,7 @@
               pkgs.nil
             ];
 
-            buildInputs = [
-              haskell-dependencies
-            ];
+            buildInputs = [ haskell-dependencies ];
 
             LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
 
