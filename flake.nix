@@ -403,7 +403,7 @@
           # | pkgs.xclip               |
           # | pkgs.curl                |
           # | pkgs.i3status            |
-          simula = pkgs.stdenv.mkDerivation {
+          simula = pkgs.stdenv.mkDerivation rec {
             pname = "simula";
             version = "0.0.0-dev";
 
@@ -420,7 +420,6 @@
               haskell-dependencies
               pkgs.systemd
               pkgs.openxr-loader
-              godot-haskell-plugin
             ];
 
             dontBuild = true;
@@ -457,6 +456,8 @@
                     pkgs.i3status
                   ]
                 }:$PATH"
+
+                export LD_LIBRARY_PATH="${lib.makeLibraryPath buildInputs}"
 
                 export XDG_CACHE_HOME=''${XDG_CACHE_HOME:-$HOME/.cache}
                 export XDG_DATA_HOME=''${XDG_DATA_HOME:-$HOME/.local/share}
