@@ -492,6 +492,7 @@
             '';
 
             meta = {
+              mainProgram = "simula";
               homepage = "https://github.com/SimulaVR/Simula";
               license = lib.licenses.mit;
               platforms = lib.platforms.linux;
