@@ -12,3 +12,20 @@ watch-build:
     while inotifywait -qqre modify .; do \
         cabal build; \
     done
+
+repl:
+    cabal repl
+
+switch-to-local:
+    rm -f bin/x11/libgodot-haskell-plugin.so
+    cp $(cabal list-bin flib:godot-haskell-plugin) bin/x11/libgodot-haskell-plugin.so
+
+switch-to-nix:
+    # Delete original libgodot-haskell-plugin.so
+    rm -f bin/x11/libgodot-haskell-plugin.so
+
+    # Build godot-haskell-plugin
+    nix build .#godot-haskell-plugin
+
+    # Copy the built result
+    find result/ -name libgodot-haskell-plugin.so | xargs -i cp {} bin/x11/libgodot-haskell-plugin.so
