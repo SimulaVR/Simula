@@ -32,22 +32,22 @@ The left image is a VR terminal /without/ our filter applied; the right is the s
 To install Simula on all Linux distros, run:
 
 #+BEGIN_SRC shell
-# Clone
-git clone --depth 1 --recursive https://github.com/SimulaVR/Simula
-cd Simula
+# You should use cachix to install Simula faster!!
+cachix use simula
 
-# Download (or build, if downloading fails)
-source ./utils/Helpers.sh && installSimula
+# Using Nix flakes
+nix profile install github:SimulaVR/Simula
 
-# Launch
-./result/bin/simula # Needs SteamVR to be running
+# Or clone this Git repo, then build Simula!!
+git clone https://github.com/SimulaVR/Simula
+nix build
 #+END_SRC
 
 *Installing Simula should take less than 1 minute:* this script doesn't actually compile anything on your system, but instead downloads the appropriate binaries from our cache in a way that is system and driver agnostic. Under the hood, we (i) check whether you have ~nix~ and ~cachix~ installed (and, if not, install them); (ii) check which graphics drivers you have and (iii) download Simula via ~cachix~ with the appropriate driver flags, falling back to a ~nix~ build if downloading fails.
 
 On NixOS systems, you must ensure
 
-#+BEGIN_SRC 
+#+BEGIN_SRC
 nix.settings.trusted-users = [ "root" "<your_user_name>"];
 #+END_SRC
 
@@ -56,10 +56,10 @@ is added to your ~configuration.nix~, or the install command above will be unabl
 # Simula is untested on machines with AMD drivers, though AMD cards running mesa drivers should be supported.
 
 ** OpenXR Backend (Optional)
-   
+
 If you want to avoid using SteamVR, Simula supports an optional OpenXR backend (e.g. [[https://gitlab.freedesktop.org/monado/monado][monado]]).  To use, adjust ~_backend~ from ~OpenVR~ to ~OpenXR~ in ~./config.dhall~.  You will then be required to ensure that an OpenXR runtime (e.g. ~monado-service~) is running on your system before launching Simula.  In addition, you must tell Simula where your ~libopenxr_monado.so~ is located:
 
-#+BEGIN_SRC 
+#+BEGIN_SRC
 monado-service &
 XR_RUNTIME_JSON=/path/to/your/openxr_monado-dev.json ./result/bin/simula
 #+END_SRC
@@ -173,7 +173,7 @@ Windows become "active" once you look at them. Active windows receive typing eve
 [[https://www.youtube.com/watch?v=D5c3Hfp8Hcw][https://www.wolframcloud.com/obj/george.w.singer/1063512563850488463045946458923996976334308262441.png]]
 
 Simula has a headset [[https://www.youtube.com/watch?v=D5c3Hfp8Hcw][webcam view]] (binded presently to ~Super + w~) that allows you to see your mouse and keyboard from VR.
- 
+
 ** Configuration
 
 - Many things are configurable in Simula. See ~./config/config.dhall~ for a self-documenting list of things to adjust.
@@ -192,7 +192,7 @@ xpra attach :13
 and they will appear on your current ~DISPLAY~. Running ~xpra stop~ (or just ~pkill xpra~) is a quick way to kill all apps associated with your Simula session(s).
 
 * Simula One Headset
-  
+
 We are in the process of developing a (limited number of) portable VR headsets for sale which come with SimulaVR mounted on them by default.  If you are interested in purchasing one, [[https://simulavr.com][visit our website]] and join our waitlist to receive a place in line and/or periodic updates on its development.
 
 * Community
@@ -200,7 +200,7 @@ We are in the process of developing a (limited number of) portable VR headsets f
 For troubleshooting and discussion, join our community at https://discordapp.com/invite/a4PnP7n.
 
 * COMMENT Installation
-  
+
 [[https://gitter.im/SimulaVR/Simula][file:./doc/GitterBadge.png]]
 
 Simula is in alpha phase, and can be difficult to get working on many setups. For help with installation, please visit our [[https://gitter.im/SimulaVR/Simula][chat room]]. Note that Simula has only been tested on Ubuntu 19.04 (Disco Dingo), but the instructions below should in principle work on (i) older versions of Ubuntu and/or other distros that use ~apt~ (i.e., Debian) or (ii) Arch Linux (or distros that use ~pacman~).
@@ -281,9 +281,8 @@ If you're interested in a future where Linux and VR co-exist, you can donate to 
 *Project Expenses.* Donations to the project pay for the following expenses:
   - Part-time developers (x 1)
   - Vive donations to contributors (x 3)
-  - 
+  -
 
 * COMMENT Plans & Monthly Updates
 
 See Simula's [[https://github.com/SimulaVR/Simula/wiki][Wiki]] for our Master Plan and list of Monthly Updates.
-
