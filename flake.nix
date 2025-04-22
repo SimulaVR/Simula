@@ -466,7 +466,12 @@
               export SIMULA_DATA_DIR="$XDG_DATA_HOME/Simula"
               export SIMULA_CONFIG_DIR="$XDG_CONFIG_HOME/Simula"
 
-              godot -m ${simula.src}/project.godot' > $out/bin/simula
+              if grep -qi NixOS /etc/os-release; then
+                godot -m ${simula.src}/project.godot
+              else
+                echo "Detects non-NixOS distribution. Running Simula with nixGL..."
+                nix run --impure github:nix-community/nixGL -- godot -m ${simula.src}/project.godot
+              fi' > $out/bin/simula
               chmod 766 $out/bin/simula
 
               # Install some tools
