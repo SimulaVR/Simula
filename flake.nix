@@ -426,6 +426,10 @@
               mkdir -p $out/opt/simula
               cp -r $src/* $src/.??* $out/opt/simula
 
+              # Install godot-haskell-plugin from the result by currently source code
+              chmod 755 $out/opt/simula/addons/godot-haskell-plugin/bin/x11/libgodot-haskell-plugin.so
+              find ${godot-haskell-plugin} -name libgodot-haskell-plugin.so | xargs -i cp {} $out/opt/simula/addons/godot-haskell-plugin/bin/x11/libgodot-haskell-plugin.so
+
               # Install Simula runner
               mkdir -p $out/bin
               echo '#!/usr/bin/env sh
