@@ -3,6 +3,7 @@
     nixpkgs.url = "github:nixos/nixpkgs/63dacb46bf939521bdc93981b4cbb7ecb58427a0";
     systems.url = "github:nix-systems/x86_64-linux";
     godot.url = "git+https://github.com/haruki7049/godot?rev=df193d656aad69c0efe33fa9278907c2341d7ce9&submodules=1";
+    godot-haskell.url = "git+https://github.com/haruki7049/godot-haskell?rev=b06876dcd2add327778aea03ba81751a60849cc8&submodules=1";
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
       inputs.nixpkgs-lib.follows = "nixpkgs";
@@ -28,54 +29,7 @@
           ...
         }:
         let
-          godot-haskell = pkgs.haskellPackages.mkDerivation {
-            pname = "godot-haskell";
-            version = "3.4.4.0-simula";
-
-            src = pkgs.fetchFromGitHub {
-              owner = "SimulaVR";
-              repo = "godot-haskell";
-              rev = "c4105239909af90758c585d35f2d03f71381fb57";
-              hash = "sha256-iqXW6e+bL33AJAWPsrhdU8yJC4MJjrdBqGAGDA7Xupw=";
-              fetchSubmodules = true;
-            };
-
-            libraryHaskellDepends = [
-              pkgs.haskellPackages.aeson
-              pkgs.haskellPackages.ansi-wl-pprint
-              pkgs.haskellPackages.casing
-              pkgs.haskellPackages.colour
-              pkgs.haskellPackages.lens
-              pkgs.haskellPackages.linear
-              pkgs.haskellPackages.parsers
-              pkgs.haskellPackages.unordered-containers
-              pkgs.haskellPackages.vector
-              pkgs.haskellPackages.prettyprinter
-              pkgs.haskellPackages.prettyprinter-ansi-terminal
-              pkgs.haskellPackages.extra
-              pkgs.haskellPackages.fsnotify
-              pkgs.haskellPackages.interpolate
-            ];
-
-            libraryToolDepends = [
-              pkgs.haskellPackages.c2hs
-              pkgs.haskellPackages.hpack
-            ];
-
-            preConfigure = ''
-              hpack
-            '';
-
-            configureFlags = [ "--ghc-options=-fPIC -fexternal-dynamic-refs" ];
-
-            homepage = "https://github.com/KaneTW/godot-haskell#readme";
-            description = "Haskell bindings for the Godot game engine API";
-            license = lib.licenses.bsd3;
-
-            doCheck = false;
-            doHaddock = false;
-            enableLibraryProfiling = true;
-          };
+          godot-haskell = inputs.godot-haskell.packages."${system}".godot-haskell;
           godot-haskell-plugin = pkgs.callPackage ./addons/godot-haskell-plugin { inherit godot-haskell; };
 
           # `haskell-dependencies` contains shared libraries
