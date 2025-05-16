@@ -224,12 +224,7 @@
           };
 
           packages = {
-            inherit
-              simula
-              haskell-dependencies
-              godot-haskell
-              godot-haskell-plugin
-              ;
+            inherit simula godot-haskell-plugin;
             default = simula;
           };
 
