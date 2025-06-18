@@ -4,11 +4,11 @@ default:
 build:
     cabal build
 
-profile-build:
+build-profile:
     cabal --enable-profiling build \
         --ghc-options='-fprof-auto -rtsopts -fPIC -fexternal-dynamic-refs'
 
-watch-build:
+build-watch:
     while inotifywait -qqre modify .; do \
         cabal build; \
     done
@@ -21,11 +21,12 @@ switch-to-local:
     cp $(cabal list-bin flib:godot-haskell-plugin) bin/x11/libgodot-haskell-plugin.so
 
 switch-to-nix:
-    # Delete original libgodot-haskell-plugin.so
     rm -f bin/x11/libgodot-haskell-plugin.so
-
-    # Build godot-haskell-plugin
     nix build .#godot-haskell-plugin
 
-    # Copy the built result
+    # Copy the build result
     find result/ -name libgodot-haskell-plugin.so | xargs -i cp {} bin/x11/libgodot-haskell-plugin.so
+
+clean:
+    cabal clean
+    rm -f bin/x11/libgodot-haskell-plugin.so
