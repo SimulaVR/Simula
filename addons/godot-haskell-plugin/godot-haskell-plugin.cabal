@@ -95,7 +95,6 @@ library
       Plugin.VR
       Plugin.Debug
       Plugin.CanvasAR
-      Plugin.LeapMotion
       Plugin.Input.HandTelekinesis
       -- Debug.C
       -- Debug.Marshal
@@ -143,7 +142,6 @@ foreign-library godot-haskell-plugin
     Plugin.VR
     Plugin.Debug
     Plugin.CanvasAR
-    Plugin.LeapMotion
     Plugin.Input.HandTelekinesis
     -- Debug.C
     -- Debug.Marshal
