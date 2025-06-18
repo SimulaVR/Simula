@@ -158,7 +158,6 @@ getKeyboardAction gss keyboardShortcut =
     "rotateWorkspacesHorizontallyRight" -> rotateWorkspacesHorizontally gss (-0.15707963)
     "toggleARMode" -> toggleARMode gss
     "toggleWasdMode" -> toggleWasdMode gss
-    "addLeapMotion" -> addLeapMotion gss
     "recordScreen" -> recordScreen gss
     "decreaseDampRotation" -> damp gss (Rotation (-0.5))
     "increaseDampRotation" -> damp gss (Rotation (0.5))
@@ -578,14 +577,6 @@ getKeyboardAction gss keyboardShortcut =
             _ -> do let newWorkspace = (gss ^. gssWorkspaces) V.! workspaceNum
                     addChild newWorkspace gsvs
         sendToWorkspace _ _ _ _ = return ()
-
-        addLeapMotion :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
-        addLeapMotion gss _ True = do
-          putStrLn "Adding LEAP Motion to scene graph.."
-          -- addLeapMotionScene -- Deprecated
-          addLeapMotionModule gss
-          return ()
-        addLeapMotion _ _ _ = return ()
 
         damp :: GodotSimulaServer -> Damp -> SpriteLocation -> Bool -> IO ()
         damp gss damp _ True = do
@@ -1130,7 +1121,6 @@ initGodotSimulaServer obj = do
       gssWasdMode' <- newTVarIO False
       gssCanvasAR' <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar CanvasAR)
       gssScreenRecorder' <- newTVarIO (Nothing)
-      gssLeapMotion' <- newTVarIO (error "Failed to initialize GodotLeapMotion") :: IO (TVar GodotLeapMotion)
 
       let defaultDampSensitivity = DampSensitivity {
                                      _dsRotation    = 8.5
@@ -1186,7 +1176,6 @@ initGodotSimulaServer obj = do
       , _gssWasdMode              = gssWasdMode'              :: TVar Bool
       , _gssCanvasAR              = gssCanvasAR'              :: TVar CanvasAR
       , _gssScreenRecorder        = gssScreenRecorder'        :: TVar (Maybe ProcessHandle)
-      , _gssLeapMotion            = gssLeapMotion'            :: TVar GodotLeapMotion
       , _gssDampSensitivity       = gssDampSensitivity'       :: TVar DampSensitivity
       , _gssKeyboardModifiersActive = gssKeyboardModifiersActive' :: TVar (Maybe Modifiers)
       }
