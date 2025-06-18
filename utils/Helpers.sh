@@ -11,21 +11,21 @@ updateEmail() {
     fi
 }
 
-# devBuild = true function
-# => Takes optional argument for a profile build
-nsBuildSimulaLocal() {
-    installSimula 1                      || { echo "installSimula 1 failed"; return 1; } # forces devBuild
-    PATH=./result/bin:$PATH cabal update || { echo "cabal update failed"; return 1; }
-    nsBuildMonado                        || { echo "nsBuildMonado failed"; return 1; }
-    nsBuildWlroots                       || { echo "nsBuildWlroots failed"; return 1; }
-    nsBuildGodot                         || { echo "nsBuildGodot failed"; return 1; }
-    patchGodotWlroots                    || { echo "patchGodotWlroots failed"; return 1; }
-    nsBuildGodotHaskell "$1"             || { echo "nsBuildGodotHaskell failed"; return 1; }
-    nsBuildGodotHaskellPlugin "$1"       || { echo "nsBuildGodotHaskellPlugin failed"; return 1; }
-    switchToLocal                        || { echo "switchToLocal failed"; return 1; }
+# Idempotent function which forces the ./submodules/godot/bin/godot.x11.tools.64 binary's
+# RPATH to point to our local wlroots (in ./submodules/wlroots) instead of some other
+# wlroots in the nix store
+patchGodotWlroots(){
+    PATH_TO_SIMULA_WLROOTS="`pwd`/submodules/wlroots/build/"
+    OLD_RPATH="`./result/bin/patchelf --print-rpath submodules/godot/bin/godot.x11.tools.64`"
+    if [[ $OLD_RPATH != $PATH_TO_SIMULA_WLROOTS* ]]; then # Check if the current RPATH contains our local simula wlroots build. If not, patchelf it to add it
+        echo "Patching godot.x11.tools to point to local wlroots lib"
+        echo "Changing path to: $PATH_TO_SIMULA_WLROOTS:$OLD_RPATH"
+        ./result/bin/patchelf --set-rpath "$PATH_TO_SIMULA_WLROOTS:$OLD_RPATH" submodules/godot/bin/godot.x11.tools.64
+    else
+        echo "Not patching godot.x11.tools, already patched."
+    fi
 }
 
-# devBuild = true function
 # rr helper function
 zenRR() {
    sudo python3 ./utils/zen_workaround.py
@@ -34,7 +34,7 @@ zenRR() {
 removeSimulaXDGFiles() {
     # Get current timestamp for backup files
     TIMESTAMP=$(date +"%Y-%m-%d-%H:%M")
-    
+
     # Helper function to backup and remove a file
     backup_and_remove() {
         local file="$1"
