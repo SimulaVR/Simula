@@ -71,12 +71,11 @@ ready self _ = do
     (Just gss, Nothing) -> do gssConf <- readTVarIO (gss ^. gssConfiguration)
                               let backend = _backend gssConf :: String
                               case backend of
-                                "OpenVR" -> return openVR
                                 "OpenXR" -> return openXR
-                                _        -> do putStrLn "Unable to parse backend; defaulting to OpenVR"
-                                               return openVR
+                                _        -> do putStrLn "Unable to parse backend; defaulting to OpenXR"
+                                               return openXR
     (Just gss, _) -> return openXR
-    (Nothing, _) -> do return openVR
+    (Nothing, _) -> do return openXR
 
   debugModeMaybe <- lookupEnv "DEBUG"
   rrModeMaybe <- lookupEnv "RUNNING_UNDER_RR"

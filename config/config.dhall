@@ -7,7 +7,7 @@ let Configuration =
     --   "launchHMDWebcam" to launch the HMD webcam view
     --   "launchUsageInstructions" to launch Simula's usage instructions
     -- To omit launching an app in a spot, use `None Text` instead of `Some "cmd"`.
-  {   _backend = "OpenXR" -- Supported options: "OpenVR", "OpenXR"
+  {   _backend = "OpenXR"
   ,   _startingApps = { _center = Some "launchTerminal"
                       , _right  = None Text
                       , _bottom = None Text

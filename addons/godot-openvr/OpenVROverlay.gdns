@@ -1,8 +1,0 @@
-[gd_resource type="NativeScript" load_steps=2 format=2]
-
-[ext_resource path="res://addons/godot-openvr/godot_openvr.gdnlib" type="GDNativeLibrary" id=1]
-
-[resource]
-resource_name = "OpenVROverlay"
-class_name = "OpenVROverlay"
-library = ExtResource( 1 )
