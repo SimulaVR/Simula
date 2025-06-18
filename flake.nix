@@ -1,4 +1,15 @@
 {
+  description = "SimulaVR's Nix flake for Simula";
+
+  nixConfig = {
+    extra-substituters = [
+      "https://simula.cachix.org"
+    ];
+    extra-trusted-public-keys = [
+      "simula.cachix.org-1:Sr0SD5FIjc8cUVIeBHl8VJswQEJOBIE6u3wpmjslGBA="
+    ];
+  };
+
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/63dacb46bf939521bdc93981b4cbb7ecb58427a0";
     systems.url = "github:nix-systems/x86_64-linux";
@@ -124,6 +135,7 @@
 
             buildInputs = [
               haskell-dependencies
+              godot-haskell-plugin
               pkgs.systemd
               pkgs.openxr-loader
             ];
@@ -138,7 +150,11 @@
 
               # Install godot-haskell-plugin from the result by currently source code
               chmod 755 $out/opt/simula/addons/godot-haskell-plugin/bin/x11/libgodot-haskell-plugin.so
-              find ${godot-haskell-plugin} -name libgodot-haskell-plugin.so | xargs -i cp {} $out/opt/simula/addons/godot-haskell-plugin/bin/x11/libgodot-haskell-plugin.so
+              search_path_list="${lib.strings.concatStringsSep " " buildInputs}"
+              for path in $search_path_list
+              do
+                find $path -name libgodot-haskell-plugin.so | xargs -i cp {} $out/opt/simula/addons/godot-haskell-plugin/bin/x11/libgodot-haskell-plugin.so
+              done
 
               # Install Simula runner
               mkdir -p $out/bin
