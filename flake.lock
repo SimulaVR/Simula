@@ -1,5 +1,22 @@
 {
   "nodes": {
+    "environments": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1596070630,
+        "narHash": "sha256-FZuP3/cMiumMZwX8RPqMLVAn10IMFlpimq9Bps77wP8=",
+        "ref": "refs/heads/master",
+        "rev": "91bb3777d558e809be12bcc94f6c984487994765",
+        "revCount": 2,
+        "type": "git",
+        "url": "https://github.com/SimulaVR/environments"
+      },
+      "original": {
+        "rev": "91bb3777d558e809be12bcc94f6c984487994765",
+        "type": "git",
+        "url": "https://github.com/SimulaVR/environments"
+      }
+    },
     "flake-parts": {
       "inputs": {
         "nixpkgs-lib": [
@@ -44,7 +61,71 @@
     "flake-parts_3": {
       "inputs": {
         "nixpkgs-lib": [
+          "godot",
+          "wlroots-flake",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1743550720,
+        "narHash": "sha256-hIshGgKZCgWh6AYJpJmRgFdR3WUbkY04o82X05xqQiY=",
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "rev": "c621e8422220273271f52058f618c94e405bb0f5",
+        "type": "github"
+      },
+      "original": {
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "type": "github"
+      }
+    },
+    "flake-parts_4": {
+      "inputs": {
+        "nixpkgs-lib": [
           "godot-haskell",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1743550720,
+        "narHash": "sha256-hIshGgKZCgWh6AYJpJmRgFdR3WUbkY04o82X05xqQiY=",
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "rev": "c621e8422220273271f52058f618c94e405bb0f5",
+        "type": "github"
+      },
+      "original": {
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "type": "github"
+      }
+    },
+    "flake-parts_5": {
+      "inputs": {
+        "nixpkgs-lib": [
+          "i3status-fork",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1748821116,
+        "narHash": "sha256-F82+gS044J1APL0n4hH50GYdPRv/5JWm34oCJYmVKdE=",
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "rev": "49f0870db23e8c1ca0b5259734a02cd9e1e371a1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "type": "github"
+      }
+    },
+    "flake-parts_6": {
+      "inputs": {
+        "nixpkgs-lib": [
+          "monado",
           "nixpkgs"
         ]
       },
@@ -66,30 +147,31 @@
       "inputs": {
         "flake-parts": "flake-parts_2",
         "nixpkgs": "nixpkgs",
-        "systems": "systems"
+        "systems": "systems",
+        "wlroots-flake": "wlroots-flake"
       },
       "locked": {
-        "lastModified": 1744450338,
-        "narHash": "sha256-Df5ToAYrb5xAqqKQqngAVSVfz9v1l61ZTQqOu7Xvudc=",
-        "ref": "df193d656aad69c0efe33fa9278907c2341d7ce9",
-        "rev": "df193d656aad69c0efe33fa9278907c2341d7ce9",
-        "revCount": 29794,
+        "lastModified": 1750113651,
+        "narHash": "sha256-bcvtb1B1eLYjwHgIvumsX01EZd4bN5NWkKPlWZb34Hc=",
+        "ref": "refs/heads/3.x-simula",
+        "rev": "d4bfd13c124cae3393aacfdf97433bb1e8f79d92",
+        "revCount": 29799,
         "submodules": true,
         "type": "git",
-        "url": "https://github.com/haruki7049/godot"
+        "url": "https://github.com/SimulaVR/godot"
       },
       "original": {
-        "rev": "df193d656aad69c0efe33fa9278907c2341d7ce9",
+        "rev": "d4bfd13c124cae3393aacfdf97433bb1e8f79d92",
         "submodules": true,
         "type": "git",
-        "url": "https://github.com/haruki7049/godot"
+        "url": "https://github.com/SimulaVR/godot"
       }
     },
     "godot-haskell": {
       "inputs": {
-        "flake-parts": "flake-parts_3",
+        "flake-parts": "flake-parts_4",
         "nixpkgs": "nixpkgs_2",
-        "systems": "systems_2",
+        "systems": "systems_3",
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
@@ -100,13 +182,75 @@
         "revCount": 134,
         "submodules": true,
         "type": "git",
-        "url": "https://github.com/haruki7049/godot-haskell"
+        "url": "https://github.com/SimulaVR/godot-haskell"
       },
       "original": {
         "rev": "b06876dcd2add327778aea03ba81751a60849cc8",
         "submodules": true,
         "type": "git",
-        "url": "https://github.com/haruki7049/godot-haskell"
+        "url": "https://github.com/SimulaVR/godot-haskell"
+      }
+    },
+    "i3status-fork": {
+      "inputs": {
+        "flake-parts": "flake-parts_5",
+        "nixpkgs": "nixpkgs_3",
+        "systems": "systems_4",
+        "treefmt-nix": "treefmt-nix_2"
+      },
+      "locked": {
+        "lastModified": 1748823702,
+        "narHash": "sha256-qcM4csq5kAyOYJ1BRNOJ35g1RVkz8yZHWHTuPzBAucg=",
+        "ref": "refs/heads/master",
+        "rev": "f734c9fe2580b6a23bcb1d1081376ae7897bdbf2",
+        "revCount": 11,
+        "type": "git",
+        "url": "https://github.com/SimulaVR/i3status"
+      },
+      "original": {
+        "rev": "f734c9fe2580b6a23bcb1d1081376ae7897bdbf2",
+        "type": "git",
+        "url": "https://github.com/SimulaVR/i3status"
+      }
+    },
+    "libxcb-errors": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1732504353,
+        "narHash": "sha256-LPNRkLQSTPkCRIc9lhHYIvQs8ags3GpGehCWLY5qvJw=",
+        "owner": "SimulaVR",
+        "repo": "libxcb-errors",
+        "rev": "cb26a7dc442b0bb37f8648986350291d3d45a47a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "SimulaVR",
+        "repo": "libxcb-errors",
+        "type": "github"
+      }
+    },
+    "monado": {
+      "inputs": {
+        "flake-parts": "flake-parts_6",
+        "nixpkgs": "nixpkgs_4",
+        "systems": "systems_5",
+        "treefmt-nix": "treefmt-nix_3"
+      },
+      "locked": {
+        "lastModified": 1749601885,
+        "narHash": "sha256-H9xpVWfJCi+I4qUAmgs5Jv6Wp0HyaecS7nzJmLR0X6w=",
+        "ref": "refs/heads/xr50",
+        "rev": "cc3eca140e762a990bf107f5282a2ae4853e3893",
+        "revCount": 7216,
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/SimulaVR/monado-xv"
+      },
+      "original": {
+        "rev": "cc3eca140e762a990bf107f5282a2ae4853e3893",
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/SimulaVR/monado-xv"
       }
     },
     "nixpkgs": {
@@ -157,14 +301,49 @@
         "type": "github"
       }
     },
+    "nixpkgs_4": {
+      "locked": {
+        "lastModified": 1717179513,
+        "narHash": "sha256-vboIEwIQojofItm2xGCdZCzW96U85l9nDW3ifMuAIdM=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "63dacb46bf939521bdc93981b4cbb7ecb58427a0",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "63dacb46bf939521bdc93981b4cbb7ecb58427a0",
+        "type": "github"
+      }
+    },
+    "nixpkgs_5": {
+      "locked": {
+        "lastModified": 1717179513,
+        "narHash": "sha256-vboIEwIQojofItm2xGCdZCzW96U85l9nDW3ifMuAIdM=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "63dacb46bf939521bdc93981b4cbb7ecb58427a0",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "63dacb46bf939521bdc93981b4cbb7ecb58427a0",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
+        "environments": "environments",
         "flake-parts": "flake-parts",
         "godot": "godot",
         "godot-haskell": "godot-haskell",
-        "nixpkgs": "nixpkgs_3",
-        "systems": "systems_3",
-        "treefmt-nix": "treefmt-nix_2"
+        "i3status-fork": "i3status-fork",
+        "monado": "monado",
+        "nixpkgs": "nixpkgs_5",
+        "systems": "systems_6",
+        "treefmt-nix": "treefmt-nix_4"
       }
     },
     "systems": {
@@ -184,6 +363,21 @@
     },
     "systems_2": {
       "locked": {
+        "lastModified": 1689347949,
+        "narHash": "sha256-12tWmuL2zgBgZkdoB6qXZsgJEH9LR3oUgpaQq2RbI80=",
+        "owner": "nix-systems",
+        "repo": "default-linux",
+        "rev": "31732fcf5e8fea42e59c2488ad31a0e651500f68",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-systems",
+        "repo": "default-linux",
+        "type": "github"
+      }
+    },
+    "systems_3": {
+      "locked": {
         "lastModified": 1680978846,
         "narHash": "sha256-Gtqg8b/v49BFDpDetjclCYXm8mAnTrUzR0JnE2nv5aw=",
         "owner": "nix-systems",
@@ -197,7 +391,37 @@
         "type": "github"
       }
     },
-    "systems_3": {
+    "systems_4": {
+      "locked": {
+        "lastModified": 1680978846,
+        "narHash": "sha256-Gtqg8b/v49BFDpDetjclCYXm8mAnTrUzR0JnE2nv5aw=",
+        "owner": "nix-systems",
+        "repo": "x86_64-linux",
+        "rev": "2ecfcac5e15790ba6ce360ceccddb15ad16d08a8",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-systems",
+        "repo": "x86_64-linux",
+        "type": "github"
+      }
+    },
+    "systems_5": {
+      "locked": {
+        "lastModified": 1680978846,
+        "narHash": "sha256-Gtqg8b/v49BFDpDetjclCYXm8mAnTrUzR0JnE2nv5aw=",
+        "owner": "nix-systems",
+        "repo": "x86_64-linux",
+        "rev": "2ecfcac5e15790ba6ce360ceccddb15ad16d08a8",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-systems",
+        "repo": "x86_64-linux",
+        "type": "github"
+      }
+    },
+    "systems_6": {
       "locked": {
         "lastModified": 1680978846,
         "narHash": "sha256-Gtqg8b/v49BFDpDetjclCYXm8mAnTrUzR0JnE2nv5aw=",
@@ -236,6 +460,48 @@
     "treefmt-nix_2": {
       "inputs": {
         "nixpkgs": [
+          "i3status-fork",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1748243702,
+        "narHash": "sha256-9YzfeN8CB6SzNPyPm2XjRRqSixDopTapaRsnTpXUEY8=",
+        "owner": "numtide",
+        "repo": "treefmt-nix",
+        "rev": "1f3f7b784643d488ba4bf315638b2b0a4c5fb007",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "treefmt-nix",
+        "type": "github"
+      }
+    },
+    "treefmt-nix_3": {
+      "inputs": {
+        "nixpkgs": [
+          "monado",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1748243702,
+        "narHash": "sha256-9YzfeN8CB6SzNPyPm2XjRRqSixDopTapaRsnTpXUEY8=",
+        "owner": "numtide",
+        "repo": "treefmt-nix",
+        "rev": "1f3f7b784643d488ba4bf315638b2b0a4c5fb007",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "treefmt-nix",
+        "type": "github"
+      }
+    },
+    "treefmt-nix_4": {
+      "inputs": {
+        "nixpkgs": [
           "nixpkgs"
         ]
       },
@@ -251,6 +517,33 @@
         "owner": "numtide",
         "repo": "treefmt-nix",
         "type": "github"
+      }
+    },
+    "wlroots-flake": {
+      "inputs": {
+        "flake-parts": "flake-parts_3",
+        "libxcb-errors": "libxcb-errors",
+        "nixpkgs": [
+          "godot",
+          "nixpkgs"
+        ],
+        "systems": "systems_2"
+      },
+      "locked": {
+        "lastModified": 1750111025,
+        "narHash": "sha256-/y8ORmcHGspGGS/0x9v7RuQ/YkuVU792Qe5HuKncoME=",
+        "ref": "refs/heads/simula",
+        "rev": "e44903dee9e2e68219799699c38536e7d9961294",
+        "revCount": 3591,
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/SimulaVR/wlroots"
+      },
+      "original": {
+        "rev": "e44903dee9e2e68219799699c38536e7d9961294",
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/SimulaVR/wlroots"
       }
     }
   },
