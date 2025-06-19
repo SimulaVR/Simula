@@ -22,10 +22,6 @@ switch-to-local:
 
 switch-to-nix:
     rm -f bin/x11/libgodot-haskell-plugin.so
-    nix build .#godot-haskell-plugin
-
-    # Copy the build result
-    find result/ -name libgodot-haskell-plugin.so | xargs -i cp {} bin/x11/libgodot-haskell-plugin.so
 
 clean:
     cabal clean

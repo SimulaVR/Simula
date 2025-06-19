@@ -3,14 +3,12 @@
   callPackage,
   haskellPackages,
 
-  ### Dependencies
-  # This dependency needs `/submodules/godot-haskell/default.nix`
+  # External dependencies
   godot-haskell ? callPackage ../../submodules/godot-haskell { },
   wayland,
   wlroots,
   pixman,
 
-  # Arguments when you build this
   profileBuild ? false,
 }:
 
