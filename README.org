@@ -27,12 +27,21 @@ A common objection to the viability of VR Desktop is that it exhibits poor text 
 
 The left image is a VR terminal /without/ our filter applied; the right is the same image /with/ our filter applied. Compared to other VR Desktops, Simula allows for longer sessions without uncomfortable eye strain.
 
-* Installation
+* Installation & Launching
 
 To install Simula on all Linux distros, run:
 
 #+BEGIN_SRC shell
 nix profile install github:SimulaVR/Simula # install
+
+# NOTE: When installing for the first time, you'll be prompted:
+#
+# > "do you want to allow configuration setting 'extra-substituters'
+# > to be set to 'https://simula.cachix.org' (y/N)?"
+#
+# Answering "y" to this (and the other messages) will allow nix to just
+# download the Simula binaries onto your machine, saving you the time of
+# compiling everything locally (which can take awhile)
 #+END_SRC
 
 and then launch it via

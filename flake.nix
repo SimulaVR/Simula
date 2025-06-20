@@ -1,4 +1,15 @@
 {
+  description = "SimulaVR's Nix flake for Simula";
+
+  nixConfig = {
+    extra-substituters = [
+      "https://simula.cachix.org"
+    ];
+    extra-trusted-public-keys = [
+      "simula.cachix.org-1:Sr0SD5FIjc8cUVIeBHl8VJswQEJOBIE6u3wpmjslGBA="
+    ];
+  };
+
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/63dacb46bf939521bdc93981b4cbb7ecb58427a0";
     systems.url = "github:nix-systems/x86_64-linux";
