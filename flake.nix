@@ -199,7 +199,6 @@
             export SIMULA_LOG_DIR="$XDG_CACHE_HOME/Simula"
             export SIMULA_DATA_DIR="$XDG_DATA_HOME/Simula"
             export SIMULA_CONFIG_DIR="$XDG_CONFIG_HOME/Simula"
-            export SIMULA_APP_DIR="$SIMULA_NIX_DIR/bin"
 
             echo "XDG_CACHE_HOME: $XDG_CACHE_HOME"
             echo "XDG_DATA_HOME: $XDG_DATA_HOME"
@@ -208,29 +207,6 @@
             echo "SIMULA_LOG_DIR: $SIMULA_LOG_DIR"
             echo "SIMULA_DATA_DIR: $SIMULA_DATA_DIR"
             echo "SIMULA_CONFIG_DIR: $SIMULA_CONFIG_DIR"
-          '';
-
-          addSimulaProgramsToPaths = inputs_: buildInputs_: ''
-            export PATH="${
-              lib.makeBinPath [
-                inputs_.godot.packages."${system}".godot
-                pkgs.xpra
-                pkgs.xorg.xrdb
-                pkgs.wmctrl
-                pkgs.ffmpeg
-                pkgs.synapse
-                pkgs.xsel
-                pkgs.mimic
-                pkgs.xclip
-                pkgs.curl
-                xfce4-terminal-wrapped
-                midori-wrapped
-                i3status-wrapped
-                pkgs.xorg.xkbcomp # needed to avoid some edgecase errors, IIRC
-                pkgs.libv4l       # needed for webcam support
-                pkgs.xwayland
-              ]
-            }:$PATH"
           '';
 
           # Needed to ensure fonts don't show up as blocks on certain non-NixOS distributions, IIRC
@@ -279,31 +255,6 @@
             fi
           '';
 
-          symLinkSimulaHelperPrograms = ''
-            ln -s ${pkgs.xpra}/bin/xpra $out/bin/xpra
-            ln -s ${pkgs.xorg.xrdb}/bin/xrdb $out/bin/xrdb
-            ln -s ${pkgs.wmctrl}/bin/wmctrl $out/bin/wmctrl
-            ln -s ${pkgs.ffmpeg-full}/bin/ffplay $out/bin/ffplay
-            ln -s ${pkgs.ffmpeg-full}/bin/ffmpeg $out/bin/ffmpeg
-            ln -s ${pkgs.synapse}/bin/synapse $out/bin/synapse
-            ln -s ${pkgs.xsel}/bin/xsel $out/bin/xsel
-            ln -s ${pkgs.mimic}/bin/mimic $out/bin/mimic
-            ln -s ${pkgs.xclip}/bin/xclip $out/bin/xclip
-            ln -s ${pkgs.patchelf}/bin/patchelf $out/bin/patchelf
-            ln -s ${pkgs.dialog}/bin/dialog $out/bin/dialog
-            ln -s ${pkgs.curl}/bin/curl $out/bin/curl
-
-            ln -s ${xfce4-terminal-wrapped}/bin/xfce4-terminal $out/bin/xfce4-terminal
-            ln -s ${midori-wrapped}/bin/midori $out/bin/midori
-            ln -s ${i3status-wrapped}/bin/i3status $out/bin/i3status
-
-            # Hack to fix some bug
-            # (I can't remember but think it had something to do with preserving SIMULA_* values from being defined correctly?)
-            # For some reason if symlink to wrapper, it wouldn't work right.
-            echo '${simulaMonadoServiceContent}' > $out/bin/simula-monado-service
-            chmod +x $out/bin/simula-monado-service
-          '';
-
           simula = pkgs.stdenv.mkDerivation rec {
             pname = "simula";
             version = "0.0.0";
@@ -313,7 +264,10 @@
               src = ./.;
             };
 
-            nativeBuildInputs = [ pkgs.autoPatchelfHook ];
+            nativeBuildInputs = [
+              pkgs.autoPatchelfHook
+              pkgs.makeWrapper
+            ];
 
             buildInputs = [
               pkgs.systemd
@@ -321,6 +275,30 @@
             ];
 
             dontBuild = true;
+
+            # Force certain nix programs that Simula needs at runtime to be in the front of the user's PATH
+            # (We use this strategy instead of just adding the programs to bin/* to avoid
+            # potential conflicts if the user has already installed them via nix)
+            passthru.simulaRuntimePrograms = with pkgs; [
+              xpra
+              xorg.xrdb
+              wmctrl
+              ffmpeg-full
+              synapse
+              xsel
+              mimic
+              xclip
+              xfce4-terminal-wrapped
+              midori-wrapped
+              i3status-wrapped
+              xorg.xkbcomp
+              xwayland
+            ];
+
+            passthru.simulaRuntimeLibs = with pkgs; [
+              openxr-loader
+              libv4l
+            ];
 
             installPhase = ''
               runHook preInstall
@@ -330,18 +308,26 @@
               ${placeGodotHaskellPluginLib}
 
               mkdir -p $out/bin
-              cat > $out/bin/simula << 'EOF'
+              cat > $out/bin/simula-unwrapped << 'EOF'
                 ${initiateSimulaRunner}
                 ${monadoEnvVars}
                 ${xdgAndSimulaEnvVars}
-                ${addSimulaProgramsToPaths inputs buildInputs}
                 ${fontEnvVars}
                 ${copySimulaConfigFiles}
                 ${launchSimula} "$@"
               EOF
-              chmod 755 $out/bin/simula
+              chmod 755 $out/bin/simula-unwrapped
 
-              ${symLinkSimulaHelperPrograms}
+              # A wrapped `simula` includes various helper programs that Simula
+              # needs guarantees are available at runtime.
+              makeWrapper $out/bin/simula-unwrapped $out/bin/simula \
+              --prefix PATH : ${lib.makeBinPath passthru.simulaRuntimePrograms} \
+              --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath passthru.simulaRuntimeLibs}
+              
+              cat > $out/bin/simula-monado-service << 'EOF'
+                ${simulaMonadoServiceContent}
+              EOF
+              chmod 755 $out/bin/simula-monado-service
 
               runHook postInstall
             '';

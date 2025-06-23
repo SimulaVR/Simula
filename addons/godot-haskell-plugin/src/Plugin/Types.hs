@@ -879,8 +879,6 @@ appLaunch :: GodotSimulaServer -> String -> Maybe String -> IO ProcessID
 appLaunch gss appStr maybeLocation = do
   let originalEnv = (gss ^. gssOriginalEnv)
   maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
-  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
-  let appDir = fromMaybe "./result/bin" maybeAppDir
   case (appStr, maybeXwaylandDisplay) of
     ("nullApp", _) -> return $ fromInteger 0
     ("launchHMDWebcam", _) -> launchHMDWebCam gss maybeLocation
@@ -912,12 +910,10 @@ appLaunch gss appStr maybeLocation = do
 launchHMDWebCam :: GodotSimulaServer -> Maybe String -> IO ProcessID
 launchHMDWebCam gss maybeLocation = do
   maybePath <- getHMDWebCamPath
-  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
-  let appDir = fromMaybe "./result/bin" maybeAppDir
   case maybePath of
     Nothing -> do putStrLn "Cannot find HMD web cam!"
                   appLaunch gss "nullApp" Nothing
-    Just path  -> appLaunch gss (appDir ++ "/ffplay -loglevel quiet -f v4l2" ++ path) maybeLocation
+    Just path  -> appLaunch gss ("ffplay -loglevel quiet -f v4l2" ++ path) maybeLocation
     where getHMDWebCamPath :: IO (Maybe FilePath)
           getHMDWebCamPath = do
             res <- Control.Exception.Safe.try $ listDirectory "/dev/v4l/by-id" :: IO (Either IOException [FilePath])
@@ -932,9 +928,7 @@ launchHMDWebCam gss maybeLocation = do
                             
 terminalLaunch :: GodotSimulaServer -> Maybe String -> IO ProcessID
 terminalLaunch gss maybeLocation = do
-  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
-  let appDir = fromMaybe "./result/bin" maybeAppDir
-  appLaunch gss (appDir ++ "/xfce4-terminal") maybeLocation
+  appLaunch gss ("xfce4-terminal") maybeLocation
 
 getTextureFromURL :: String -> IO (Maybe GodotTexture)
 getTextureFromURL urlStr = do
@@ -947,13 +941,6 @@ getTextureFromURL urlStr = do
    Api.godot_string_destroy pngUrl
    Api.godot_object_destroy $ safeCast godotImage
    if (unsafeCoerce godotImageTexture == nullPtr) then (return Nothing) else (return (Just (safeCast godotImageTexture)))
-
-getSimulaNixStorePath :: String -> IO FilePath
-getSimulaNixStorePath dirName = do
-  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
-  let appDir = fromMaybe "./result/bin" maybeAppDir
-  let simulaStorePath = takeDirectory appDir  -- Returns `$SIMULA_APP_DIR/..`
-  return $ simulaStorePath </> dirName
 
 loadEnvironmentTextures :: GodotSimulaServer -> GodotWorldEnvironment -> IO [FilePath]
 loadEnvironmentTextures gss worldEnvironment = do
@@ -1173,9 +1160,7 @@ saveViewportAsPngAndLaunch gsvs tex m22@(V2 (V2 ox oy) (V2 ex ey)) = do
       gss <- readTVarIO (gsvs ^. gsvsServer)
 
       -- Copy to clipboard
-      maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
-      let appDir = fromMaybe "./result/bin" maybeAppDir
-      appLaunch gss (appDir ++ "/xclip -selection clipboard -t image/png -i " ++ pathStr) Nothing >> return ()
+      appLaunch gss ("xclip -selection clipboard -t image/png -i " ++ pathStr) Nothing >> return ()
 
       return ()
 
@@ -1662,27 +1647,25 @@ logMemPid gss = do
 forkUpdateHUDRecursively :: GodotSimulaServer -> IO ()
 forkUpdateHUDRecursively gss = do
   maybeConfigDir <- lookupEnv "SIMULA_CONFIG_DIR"
-  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
+  maybeNixDir <- lookupEnv "SIMULA_NIX_DIR"
   
   homeDir <- getHomeDirectory
   configDir <- case maybeConfigDir of
     Just dir -> return dir
     Nothing -> return $ homeDir </> ".config" </> "Simula"
     
-  let appDir = fromMaybe "./result/bin" maybeAppDir
+  let nixDir = fromMaybe "./result" maybeNixDir
 
   let hudConfigPath = configDir </> "HUD.config"
   
   configExists <- System.Directory.doesFileExist hudConfigPath
   unless configExists $ do
     -- Copy default HUD config from Nix store
-    let defaultHudConfig = appDir </> "config" </> "HUD.config"
+    let defaultHudConfig = nixDir </> "opt" </> "simula" </> "config" </> "HUD.config"
     createDirectoryIfMissing True configDir
     System.Directory.copyFile defaultHudConfig hudConfigPath
 
-  nixDir <- fromMaybe "./result/bin" <$> lookupEnv "SIMULA_NIX_DIR"
-  let i3statusPath = nixDir </> "bin" </> "i3status"
-  
+  let i3statusPath = "i3status"
   putStrLn $ "Attempting to run i3status from: " ++ i3statusPath
   putStrLn $ "Using config file: " ++ hudConfigPath
   

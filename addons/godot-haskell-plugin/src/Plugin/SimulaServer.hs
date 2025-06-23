@@ -269,9 +269,7 @@ getKeyboardAction gss keyboardShortcut =
                 let dataDir = fromMaybe "./media" maybeDataDir
                 createDirectoryIfMissing False dataDir
                 let relativePath = (dataDir ++ "/" ++ videoBaseName ++ ".mkv")
-                maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
-                let appDir = fromMaybe "./result/bin" maybeAppDir
-                (_,_,_, ph) <- createProcess (proc (appDir ++ "/ffmpeg") ["-nostdin", "-f", "x11grab", "-framerate", "90", "-i", ":0.0", "-c:v", "libx264", "-y", "-loglevel", "quiet", relativePath])
+                (_,_,_, ph) <- createProcess (proc ("ffmpeg") ["-nostdin", "-f", "x11grab", "-framerate", "90", "-i", ":0.0", "-c:v", "libx264", "-y", "-loglevel", "quiet", relativePath])
                 atomically $ writeTVar (gss ^. gssScreenRecorder) (Just ph)
               return ()
             Just ph -> do
@@ -309,8 +307,6 @@ getKeyboardAction gss keyboardShortcut =
         textToSpeech gss _ True = do
           let originalEnv = (gss ^. gssOriginalEnv)
           maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
-          maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
-          let appDir = fromMaybe "./result/bin" maybeAppDir
           case maybeXwaylandDisplay of
             Nothing -> putStrLn "No DISPLAY found!"
             (Just xwaylandDisplay) -> do
@@ -318,9 +314,9 @@ getKeyboardAction gss keyboardShortcut =
               let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
               let envListWithDisplay = M.toList envMapWithDisplay
 
-              (_, output', _) <- B.readCreateProcessWithExitCode ((shell (appDir ++ "/xsel -p")) { env = Just envListWithDisplay, new_session = True }) ""
+              (_, output', _) <- B.readCreateProcessWithExitCode ((shell ("xsel -p")) { env = Just envListWithDisplay, new_session = True }) ""
               let output = (B.unpack output')
-              createProcess (proc (appDir ++ "/mimic") ["-pw", "--setf", "duration_stretch=0.68", "-t", output]) { env = Just envListWithDisplay, new_session = True } :: IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+              createProcess (proc ("mimic") ["-pw", "--setf", "duration_stretch=0.68", "-t", output]) { env = Just envListWithDisplay, new_session = True } :: IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
               return ()
         textToSpeech _ _ _ = return ()
   
@@ -755,20 +751,19 @@ ready gss _ = do
   getSingleton GodotInput "Input" >>= \inp -> G.set_mouse_mode inp G.MOUSE_MODE_CAPTURED
   pid <- getProcessID
 
-  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
-  let appDir = fromMaybe "./result/bin" maybeAppDir
-  let simulaNixDir = takeDirectory appDir
-  let command = appDir ++ "/xrdb -merge " ++ simulaNixDir ++ "/.Xdefaults"
+  maybeNixDir <- lookupEnv "SIMULA_NIX_DIR"
+  let nixDir = fromMaybe "./result" maybeNixDir
+  let command = "xrdb -merge " ++ nixDir ++ "/opt/simula/.Xdefaults"
   createProcess (shell command) { env = Just [("DISPLAY", newDisplay)] }
 
   case rrModeMaybe of
     Just "1" -> return ()
-    _ -> do (_, windows', _) <- B.readCreateProcessWithExitCode (shell (appDir ++ "/wmctrl -lp")) ""
+    _ -> do (_, windows', _) <- B.readCreateProcessWithExitCode (shell ("wmctrl -lp")) ""
             let windows = (B.unpack windows')
             let rightWindows = filter (\line -> isInfixOf (show pid) line) (lines windows)
             when (length rightWindows > 0 && length (words $ head rightWindows) > 0)$ do
               let simulaWindow = (head . words . head) rightWindows
-              createProcess ((shell $ appDir ++ "/wmctrl -ia " ++ simulaWindow) { env = Just [("DISPLAY", oldDisplay)] })
+              createProcess ((shell $ "wmctrl -ia " ++ simulaWindow) { env = Just [("DISPLAY", oldDisplay)] })
               return ()
 
   -- Adding a `WorldEnvironment` anywhere to an active scene graph
@@ -900,12 +895,10 @@ parseConfiguration = do
   profile <- lookupEnv "PROFILE"
   maybeConfigDir <- lookupEnv "SIMULA_CONFIG_DIR"
   maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
-  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
 
   putStrLn $ "PROFILE = " ++ show profile
   putStrLn $ "SIMULA_CONFIG_DIR = " ++ show maybeConfigDir
   putStrLn $ "SIMULA_DATA_DIR = " ++ show maybeDataDir
-  putStrLn $ "SIMULA_APP_DIR = " ++ show maybeAppDir
   let defaultConfiguration = Configuration { _backend = "OpenVR"
     , _startingApps = StartingApps 
         -- { _center = Just $ "ENV=val " ++ appDir ++ "/xfce4-terminal"
@@ -1446,9 +1439,7 @@ physicsProcess gss _ = do
 shellCmd1 :: GodotSimulaServer -> String -> IO ()
 shellCmd1 gss appStr = do
   let originalEnv = (gss ^. gssOriginalEnv)
-  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
-  let appDir = fromMaybe "./result/bin" maybeAppDir
-  createProcess (shell (appDir ++ "/" ++ appStr)) { env = Just originalEnv }
+  createProcess (shell (appStr)) { env = Just originalEnv }
   return ()
 
 _on_simula_shortcut :: GodotSimulaServer -> [GodotVariant] -> IO ()
@@ -1542,8 +1533,6 @@ launchXpra :: GodotSimulaServer -> IO ()
 launchXpra gss = do
   let originalEnv = (gss ^. gssOriginalEnv)
   maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
-  maybeAppDir <- lookupEnv "SIMULA_APP_DIR"
-  let appDir = fromMaybe "./result/bin" maybeAppDir
   case maybeXwaylandDisplay of
     Nothing -> putStrLn "No DISPLAY found!"
     (Just xwaylandDisplay) -> do
@@ -1551,24 +1540,24 @@ launchXpra gss = do
       let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
       let envListWithDisplay = M.toList envMapWithDisplay
 
-      (_,output',_) <- B.readCreateProcessWithExitCode (shell (appDir ++ "/xpra list")) ""
+      (_,output',_) <- B.readCreateProcessWithExitCode (shell ("xpra list")) ""
       let output = B.unpack output'
       let isXpraAlreadyLive = isInfixOf ":13" output
       case isXpraAlreadyLive of
-        False -> do createSessionLeader (appDir ++ "/xpra") ["--fake-xinerama=no", "start", "--start", appDir ++ "/xfce4-terminal", ":13"] (Just envListWithDisplay)
-                    waitForXpraRecursively appDir
+        False -> do createSessionLeader ("xpra") ["--fake-xinerama=no", "start", "--start", "xfce4-terminal", ":13"] (Just envListWithDisplay)
+                    waitForXpraRecursively "."
         True -> do putStrLn "xpra is already running!"
-      createSessionLeader (appDir ++ "/xpra") ["attach", ":13"] (Just envListWithDisplay)
+      createSessionLeader ("xpra") ["attach", ":13"] (Just envListWithDisplay)
       return ()
 
-  where waitForXpraRecursively appDir = do
-          (_,output',_) <- B.readCreateProcessWithExitCode (shell (appDir ++ "/xpra list")) ""
+  where waitForXpraRecursively dir = do
+          (_,output',_) <- B.readCreateProcessWithExitCode (shell (dir ++ "/xpra list")) ""
           let output = B.unpack output'
           putStrLn $ "Output is: " ++ output
           let isXpraAlreadyLive = isInfixOf ":13" output
           case isXpraAlreadyLive of
             False -> do putStrLn $ "Waiting for xpra server.."
-                        waitForXpraRecursively appDir
+                        waitForXpraRecursively dir
             True -> do putStrLn "xpra server found!"
 
 createSessionLeader :: FilePath -> [String] -> Maybe [(String, String)] -> IO (ProcessID, ProcessGroupID)
