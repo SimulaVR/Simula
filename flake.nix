@@ -160,6 +160,7 @@
           copySimulaSourcesToNixStore = ''
             mkdir -p $out/opt/simula
             cp -r $src/* $src/.??* $out/opt/simula
+            chmod -R u+w $out/opt/simula # Ensure things are writable so environments can be copied over next
           '';
 
           copyEnvironmentsToNixStore = ''
