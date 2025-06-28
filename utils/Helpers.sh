@@ -133,3 +133,40 @@ getPropagatedPackages() {
     fi
   done
 }
+
+
+# LLM generated function which takes a flake reference ($1)
+# and shows associated package dependencies which somehow involve
+# the pattern $2.
+# Example: getNixDependenciesWhichInvolve "./flake.nix" "python"
+getNixDependenciesWhichInvolve() {
+    local flake_ref="${1:?Error: flake reference required}"
+    local pattern="${2:?Error: package pattern required}"
+
+    local out
+    out=$(nix build --no-link --print-out-paths "$flake_ref") || return 1
+
+    nix-store -q --tree "$out" | \
+    awk -v pat="$pattern" '
+    {
+        line[NR]   = $0
+        indent[NR] = match($0, /[^│ ]/) - 1   # count leading spaces/│
+    }
+    $0 ~ pat { keep[NR] = 1 }                 # mark direct pattern hits
+    END {
+        # propagate the marks
+        for (i = 1; i <= NR; i++) if (keep[i]) {
+            # ancestors
+            lev = indent[i]
+            for (a = i - 1; a >= 1; a--)
+                if (indent[a] < lev) { keep[a] = 1; lev = indent[a] }
+            # descendants
+            base = indent[i]
+            for (d = i + 1; d <= NR && indent[d] > base; d++)
+                keep[d] = 1
+        }
+        # print result
+        for (i = 1; i <= NR; i++)
+            if (keep[i]) print line[i]
+    }'
+}
