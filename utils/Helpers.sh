@@ -104,3 +104,32 @@ removeSimulaXDGFiles() {
 
     echo "Simula XDG_* files have been cleared"
 }
+
+# Takes a /nix/store path as $1 and figures out which of its dependencies
+# propagates packages to its dependents. Useful for figuring out which other
+# packages Simula could conflict with if a user tries to install it on their
+# system.
+getPropagatedPackages() {
+  nix-store -q --requisites "$1" | while read pkg; do
+    local found_propagation=false
+    
+    # Check for (i) propagatedBuildInputs, (ii) propagatedUserEnvPkgs, and (iii) propagatedNativeBuildInputs
+    for prop_type in "propagated-build-inputs" "propagated-user-env-pkgs" "propagated-native-build-inputs"; do
+      if [[ -e "$pkg/nix-support/$prop_type" ]]; then
+        content=$(cat "$pkg/nix-support/$prop_type" | tr -d '\n' | tr -s ' ')
+        if [[ -n "$content" ]]; then
+          if [[ "$found_propagation" == "false" ]]; then
+            echo "$(basename $pkg) propagates:"
+            found_propagation=true
+          fi
+          echo "  via $prop_type:"
+          echo "  $content" | xargs -n1 basename | sed 's/^/    /'
+        fi
+      fi
+    done
+    
+    if [[ "$found_propagation" == "true" ]]; then
+      echo
+    fi
+  done
+}
