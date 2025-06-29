@@ -113,8 +113,8 @@ getPropagatedPackages() {
   nix-store -q --requisites "$1" | while read pkg; do
     local found_propagation=false
     
-    # Check for (i) propagatedBuildInputs, (ii) propagatedUserEnvPkgs, and (iii) propagatedNativeBuildInputs
-    for prop_type in "propagated-build-inputs" "propagated-user-env-pkgs" "propagated-native-build-inputs"; do
+    # Check for (i) propagatedBuildInputs, (ii) propagatedUserEnvPackkages, and (iii) propagatedNativeBuildInputs
+    for prop_type in "propagated-build-inputs" "propagated-user-env-packages" "propagated-native-build-inputs"; do
       if [[ -e "$pkg/nix-support/$prop_type" ]]; then
         content=$(cat "$pkg/nix-support/$prop_type" | tr -d '\n' | tr -s ' ')
         if [[ -n "$content" ]]; then
