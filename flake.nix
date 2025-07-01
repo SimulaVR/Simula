@@ -1,5 +1,5 @@
 {
-  description = "SimulaVR's Nix flake for Simula";
+  description = "Flake for SimulaVR/Simula";
 
   nixConfig = {
     extra-substituters = [
@@ -284,7 +284,7 @@
               xpra
               xorg.xrdb
               wmctrl
-              ffmpeg-full
+              ffmpeg
               synapse
               xsel
               mimic
