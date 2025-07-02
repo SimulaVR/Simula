@@ -214,15 +214,18 @@
           copySimulaConfigFiles = ''
             # Copy over default config files if they don't already exist
             if [ ! -f "$SIMULA_CONFIG_DIR/HUD.config" ]; then
-              cp "$SIMULA_NIX_DIR/config/HUD.config" "$SIMULA_CONFIG_DIR/HUD.config"
+              mkdir -p "$SIMULA_CONFIG_DIR"
+              cp "$SIMULA_NIX_DIR/opt/simula/config/HUD.config" "$SIMULA_CONFIG_DIR/HUD.config"
             fi
 
             if [ ! -f "$SIMULA_CONFIG_DIR/config.dhall" ]; then
-              cp "$SIMULA_NIX_DIR/config/config.dhall" "$SIMULA_CONFIG_DIR/config.dhall"
+              mkdir -p "$SIMULA_CONFIG_DIR"
+              cp "$SIMULA_NIX_DIR/opt/simula/config/config.dhall" "$SIMULA_CONFIG_DIR/config.dhall"
             fi
 
             if [ ! -d "$SIMULA_DATA_DIR/environments" ]; then
-              cp -R "$SIMULA_NIX_DIR/environments" "$SIMULA_DATA_DIR/environments"
+              mkdir -p "$SIMULA_DATA_DIR"
+              cp -R "$SIMULA_NIX_DIR/opt/simula/environments" "$SIMULA_DATA_DIR/environments"
             fi
           '';
 
