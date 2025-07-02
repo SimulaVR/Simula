@@ -3,9 +3,9 @@ name: "cachix-pusher"
 on:
   push:
     branches:
-      - master
+      - "master"
     tags:
-      - *
+      - "*"
 
 jobs:
   push:
