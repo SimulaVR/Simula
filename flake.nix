@@ -2,12 +2,8 @@
   description = "Flake for SimulaVR/Simula";
 
   nixConfig = {
-    extra-substituters = [
-      "https://simula.cachix.org"
-    ];
-    extra-trusted-public-keys = [
-      "simula.cachix.org-1:Sr0SD5FIjc8cUVIeBHl8VJswQEJOBIE6u3wpmjslGBA="
-    ];
+    extra-substituters = [ "https://simula.cachix.org" ];
+    extra-trusted-public-keys = [ "simula.cachix.org-1:Sr0SD5FIjc8cUVIeBHl8VJswQEJOBIE6u3wpmjslGBA=" ];
   };
 
   inputs = {
@@ -329,7 +325,7 @@
               makeWrapper $out/bin/simula-unwrapped $out/bin/simula \
               --prefix PATH : ${lib.makeBinPath passthru.simulaRuntimePrograms} \
               --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath passthru.simulaRuntimeLibs}
-              
+
               cat > $out/bin/simula-monado-service << 'EOF'
                 ${simulaMonadoServiceContent}
               EOF
@@ -358,11 +354,7 @@
           };
 
           packages = {
-            inherit
-              simula
-              godot-haskell
-              godot-haskell-plugin
-              ;
+            inherit simula godot-haskell godot-haskell-plugin;
             default = simula;
           };
 
