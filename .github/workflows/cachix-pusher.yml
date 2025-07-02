@@ -1,8 +1,11 @@
 name: "cachix-pusher"
 
 on:
-  branches:
-    - master
+  push:
+    branches:
+      - master
+    tags:
+      - *
 
 jobs:
   push:
