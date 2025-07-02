@@ -1,3 +1,12 @@
+build:
+  nix build && \
+  just build-monado && \
+  just build-wlroots && \
+  just build-godot && \
+  source ./utils/Helpers.sh && patchGodotWlroots && \
+  just build-godot-haskell-plugin && \
+  just switch-to-local
+
 direnv_allow:
   find . -name '.envrc' -execdir direnv allow \;
 
@@ -39,15 +48,6 @@ build-monado:
 
 build-monado-watch:
   nix develop ./submodules/monado?submodules=1#default --command bash -c "cd ./submodules/monado && just build"
-
-build:
-  nix build && \
-  just build-monado && \
-  just build-wlroots && \
-  just build-godot && \
-  source ./utils/Helpers.sh && patchGodotWlroots && \
-  just build-godot-haskell-plugin && \
-  just switch-to-local
 
 run-monado:
   ./result/bin/simula-monado-service --local
