@@ -349,7 +349,12 @@
 
           treefmt = {
             projectRootFile = "project.godot";
+
+            # Nix
             programs.nixfmt.enable = true;
+
+            # GitHub Actions
+            programs.actionlint.enable = true;
           };
 
           packages = {
