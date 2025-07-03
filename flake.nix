@@ -43,6 +43,34 @@
 
         imports = [ inputs.treefmt-nix.flakeModule ];
 
+
+        flake.nixosModules = rec {
+          default = simula;
+          simula = moduleWithSystem (
+            perSystem@{ config }:
+            nixos@{ config, lib, ... }:
+
+            let
+              cfg = config.programs.simula;
+            in
+
+            {
+              options.programs.simula = {
+                enable = lib.options.mkEnableOption "Linux VR Desktop";
+                package = lib.options.mkOption {
+                  type = lib.types.package;
+                  default = perSystem.config.packages.simula;
+                };
+                extraPackages = lib.options.mkOption {
+                  type = lib.types.listOf lib.types.package;
+                  default = [ ];
+                };
+              };
+              config = lib.mkIf cfg.enable { environment.systemPackages = [ cfg.package ] ++ cfg.extraPackages; };
+            }
+          );
+        };
+
         perSystem =
           {
             config,
@@ -711,7 +739,6 @@ _EOF_HELP_
                 platforms = lib.platforms.linux;
               };
             };
-
           in
           {
             _module.args.pkgs = import inputs.nixpkgs {
