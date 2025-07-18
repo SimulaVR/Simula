@@ -10,6 +10,10 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | This module defines the Simula server, which is responsible for handling
+-- | Wayland clients, managing windows (surfaces), and processing user input
+-- | from keyboard shortcuts. It acts as the bridge between the Godot front-end
+-- | and the underlying Wayland compositor logic.
 module Plugin.SimulaServer where
 
 import Data.Char
@@ -91,6 +95,9 @@ import qualified Data.Vector as V
 
 import qualified Data.Text as T
 
+-- | Translates a 'KeyboardShortcut' from the configuration file into a
+-- | corresponding 'KeyboardAction' (a function that can be executed).
+-- | This acts as a central dispatcher for all keyboard commands.
 getKeyboardAction :: GodotSimulaServer -> KeyboardShortcut -> KeyboardAction
 getKeyboardAction gss keyboardShortcut =
   case (keyboardShortcut ^. keyAction) of
@@ -254,6 +261,9 @@ getKeyboardAction gss keyboardShortcut =
         rotateWorkspacesHorizontally gss radians _ False = do
           return ()
 
+                -- | Toggles screen recording using ffmpeg. On the first press, it starts
+        -- | recording the screen to a timestamped file in SIMULA_DATA_DIR.
+        -- | On the second press, it stops the recording.
         recordScreen :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
         recordScreen gss _ True = do
           maybePh <- readTVarIO (gss ^. gssScreenRecorder)
@@ -283,6 +293,8 @@ getKeyboardAction gss keyboardShortcut =
         recordScreen gss _ False = do
           return ()
 
+                -- | Sends a "close" request to the Wayland surface currently under the cursor.
+        -- | This is a graceful termination request, not a forceful kill.
         terminateWindow :: SpriteLocation -> Bool -> IO ()
         terminateWindow (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
           simulaView <- readTVarIO (gsvs ^. gsvsView)
@@ -297,6 +309,7 @@ getKeyboardAction gss keyboardShortcut =
               G.send_close wlrXWaylandSurface
         terminateWindow _ _ = return ()
   
+                -- | Launches an arbitrary shell command. Used for applications like terminals.
         shellLaunch :: GodotSimulaServer -> String -> SpriteLocation -> Bool -> IO ()
         shellLaunch gss shellCmd _ True = do
           appLaunch gss shellCmd Nothing

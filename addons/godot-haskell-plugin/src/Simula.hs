@@ -4,7 +4,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Plugin.Simula (GodotSimula(..)) where
+module Simula (GodotSimula(..)) where
 
 import           Plugin.Imports
 import           Data.Maybe
@@ -36,6 +36,9 @@ import           Godot.Gdnative.Internal                  ( GodotNodePath
 
 import           System.Environment
 
+-- | The GodotSimula class is the main entry point for the Simula VR window manager.
+-- It is responsible for initializing the VR environment, handling user input,
+-- and managing the state of the application.
 data GodotSimula = GodotSimula
   { _sObj      :: GodotObject
   , _sGrabState :: TVar GrabState
@@ -48,9 +51,12 @@ instance NativeScript GodotSimula where
 
   -- classExtends = "Node"
   classMethods =
-    [ func NoRPC "_ready" (catchGodot Plugin.Simula.ready)
-    , func NoRPC "_process" (catchGodot Plugin.Simula.process)
-    , func NoRPC "on_button_signal" (catchGodot Plugin.Simula.on_button_signal)
+    -- The 'ready' function is called when the node enters the scene tree.
+    [ func NoRPC "_ready" (catchGodot ready)
+    -- The 'process' function is called every frame.
+    , func NoRPC "_process" (catchGodot process)
+    -- The 'on_button_signal' function is called when a controller button is pressed.
+    , func NoRPC "on_button_signal" (catchGodot on_button_signal)
     ]
   classSignals = []
 
@@ -59,6 +65,9 @@ instance HasBaseClass GodotSimula where
   super (GodotSimula obj _) = GodotNode obj
 
 
+-- | The ready function is called when the node enters the scene tree.
+-- It is responsible for initializing the VR environment, setting up the controllers,
+-- and loading the pancake camera.
 ready :: GodotSimula -> [GodotVariant] -> IO ()
 ready self _ = do
   -- OpenHMD is unfortunately not yet a working substitute for OpenVR
@@ -183,6 +192,9 @@ ready self _ = do
     return ()
 
 
+-- | The on_button_signal function is called when a controller button is pressed.
+-- It is responsible for handling button events and dispatching them to the
+-- appropriate handler.
 on_button_signal :: GodotSimula -> [GodotVariant] -> IO ()
 on_button_signal self [buttonVar, controllerVar, pressedVar] = do
   -- putStrLn "on_button_signal in Simula.hs"
@@ -228,6 +240,9 @@ onButton self gsc button pressed = do
       _                  -> const $ return ()
 
 
+-- | The process function is called every frame.
+-- It is responsible for handling the state of the application, such as
+-- processing grab events.
 process :: GodotSimula -> [GodotVariant] -> IO ()
 process self _ = do
   -- putStrLn "process in Simula.hs"

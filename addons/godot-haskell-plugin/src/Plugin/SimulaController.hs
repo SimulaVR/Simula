@@ -47,6 +47,9 @@ import           Foreign.C
 
 import Godot.Api.Auto
 
+-- | The GodotSimulaController class is responsible for handling controller input.
+-- It is responsible for tracking the controller's position and orientation,
+-- handling button presses, and managing the telekinesis system.
 data GodotSimulaController = GodotSimulaController
   { _gscObj     :: GodotObject
   , _gscRayCast :: GodotRayCast
@@ -106,7 +109,9 @@ instance NativeScript GodotSimulaController where
 
   -- classExtends = "ARVRController"
   classMethods =
+    -- The 'process' function is called every frame.
     [ func NoRPC "_process" (catchGodot Plugin.SimulaController.process)
+    -- The 'physicsProcess' function is called every physics frame.
     , func NoRPC "_physics_process" (catchGodot Plugin.SimulaController.physicsProcess)
     ]
   classSignals = []
@@ -239,6 +244,9 @@ addSimulaController originNode nodeName ctID = do
 
   return ct
 
+-- | The process function is called every frame.
+-- It is responsible for updating the controller's state, such as the touchpad
+-- state and the telekinesis system.
 process :: GodotSimulaController -> [GodotVariant] -> IO ()
 process self [deltaGV] = do
   delta <- fromGodotVariant deltaGV :: IO Float
@@ -286,6 +294,8 @@ getWlrSeatFromPath self = do
 
   return wlrSeat
 
+-- | The physicsProcess function is called every physics frame.
+-- It is responsible for handling the telekinesis system.
 physicsProcess :: GodotSimulaController -> [GodotVariant] -> IO ()
 physicsProcess self _ = do
   whenM (G.get_is_active self) $ do

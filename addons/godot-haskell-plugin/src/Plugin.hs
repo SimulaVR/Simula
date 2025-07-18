@@ -4,7 +4,7 @@ module Plugin (registerClasses) where
 
 import           Godot.Nativescript
 
-import           Plugin.Simula
+import           Simula
 import           Plugin.SimulaController
 import           Plugin.SimulaServer
 import           Plugin.SimulaViewSprite
