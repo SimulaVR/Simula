@@ -116,26 +116,7 @@
 
           monado = inputs.monado.packages.${system}.default;
 
-          simulaMonadoServiceContent = ''
-            #!${pkgs.stdenv.shell}
-            ${xdgAndSimulaEnvVars}
 
-            pkill monado-service
-            export SIMULA_CONFIG_PATH=$SIMULA_NIX_DIR/opt/simula/config/simula_monado_config.json
-            export XR_RUNTIME_JSON=$SIMULA_NIX_DIR/opt/simula/config/active_runtime.json
-            export XRT_COMPOSITOR_LOG=debug
-            export XRT_COMPOSITOR_SCALE_PERCENTAGE=100
-
-            # If --local is passed, use the monado binary compiled in ./submodules/monado
-            if [[ "''${1:-}" == "--local" ]]; then
-              shift  # remove --local so $@ now contains only user args
-              MONADO_BINARY="./submodules/monado/build/src/xrt/targets/service/monado-service"
-            else
-              MONADO_BINARY="${monado}/bin/monado-service"
-            fi
-
-            $MONADO_BINARY 2>&1 | tee "$SIMULA_LOG_DIR/monado.log"
-          '';
 
           cleanSourceFilter =
             name: type:
@@ -171,134 +152,20 @@
             chmod 755 $out/opt/simula/addons/godot-haskell-plugin/bin/x11/libgodot-haskell-plugin.so
           '';
 
-          initiateSimulaRunner = ''
-            #!/usr/bin/env sh
 
-            # Exit `simula` launcher early if anything weird happens
-            set -o errexit
-            set -o nounset
-            set -o pipefail
-          '';
 
-          monadoEnvVars = ''
-            export SIMULA_CONFIG_PATH=./config/simula_monado_config.json
-            export XR_RUNTIME_JSON=./config/active_runtime.json
-            export XRT_COMPOSITOR_LOG=debug
-            export XRT_COMPOSITOR_SCALE_PERCENTAGE=100
-          '';
 
-          xdgAndSimulaEnvVars = ''
-            export XDG_CACHE_HOME=''${XDG_CACHE_HOME:-$HOME/.cache}
-            export XDG_DATA_HOME=''${XDG_DATA_HOME:-$HOME/.local/share}
-            export XDG_CONFIG_HOME=''${XDG_CONFIG_HOME:-$HOME/.config}
 
-            export SIMULA_NIX_DIR="$(dirname "$(dirname "$(readlink -f "$0")")")"
-            export SIMULA_LOG_DIR="$XDG_CACHE_HOME/Simula"
-            export SIMULA_DATA_DIR="$XDG_DATA_HOME/Simula"
-            export SIMULA_CONFIG_DIR="$XDG_CONFIG_HOME/Simula"
 
-            echo "XDG_CACHE_HOME: $XDG_CACHE_HOME"
-            echo "XDG_DATA_HOME: $XDG_DATA_HOME"
-            echo "XDG_CONFIG_HOME: $XDG_CONFIG_HOME"
-            echo "SIMULA_NIX_DIR: $SIMULA_NIX_DIR"
-            echo "SIMULA_LOG_DIR: $SIMULA_LOG_DIR"
-            echo "SIMULA_DATA_DIR: $SIMULA_DATA_DIR"
-            echo "SIMULA_CONFIG_DIR: $SIMULA_CONFIG_DIR"
-          '';
 
           # Needed to ensure fonts don't show up as blocks on certain non-NixOS distributions, IIRC
-          fontEnvVars = ''
-            export LOCALE_ARCHIVE=${pkgs.glibcLocales}/lib/locale/locale-archive
-          '';
 
-          copySimulaConfigFiles = ''
-            # Copy over default config files if they don't already exist
-            if [ ! -f "$SIMULA_CONFIG_DIR/HUD.config" ]; then
-              mkdir -p "$SIMULA_CONFIG_DIR"
-              cp "$SIMULA_NIX_DIR/opt/simula/config/HUD.config" "$SIMULA_CONFIG_DIR/HUD.config"
-            fi
 
-            if [ ! -f "$SIMULA_CONFIG_DIR/config.dhall" ]; then
-              mkdir -p "$SIMULA_CONFIG_DIR"
-              cp "$SIMULA_NIX_DIR/opt/simula/config/config.dhall" "$SIMULA_CONFIG_DIR/config.dhall"
-            fi
 
-            if [ ! -d "$SIMULA_DATA_DIR/environments" ]; then
-              mkdir -p "$SIMULA_DATA_DIR"
-              cp -R "$SIMULA_NIX_DIR/opt/simula/environments" "$SIMULA_DATA_DIR/environments"
-            fi
-          '';
-
-          launchSimula = ''
-            # Use --local if you want to launch Simula locally (with godot binary from ./submodules/godot)
-            if [ "''${1:-}" = "--local" ]; then
-              GODOT_BINARY="./submodules/godot/bin/godot.x11.tools.64"
-              PROJECT_PATH="./."
-              shift  # remove --local so $@ now contains only user args
-            # Otherwise, use the nix store for everything
-            else
-              GODOT_BINARY="${inputs.godot.packages."${system}".godot}/bin/godot"
-              PROJECT_PATH="$SIMULA_NIX_DIR/opt/simula"
-
-              # Ensure that we're in the right directory before launching so the relative res:// paths work correctly
-              # (I tried using absolute paths instead of res://, but godot doesn't seem to play well so we use this hack)
-              cd "$PROJECT_PATH"
-              PROJECT_PATH="./."
-            fi
-
-            # We `script` (+ stdbuf and ansi2text) to tee the output into the console (colorized) and into our log files (non-colorized)
-            if grep -qi NixOS /etc/os-release; then
-              ${pkgs.util-linux}/bin/script -qfc "$GODOT_BINARY -m \"$PROJECT_PATH\" $@" >(${pkgs.coreutils}/bin/stdbuf -oL -eL ${pkgs.colorized-logs}/bin/ansi2txt > "$SIMULA_DATA_DIR/log/output.file")
-            else
-              echo "Detected non-NixOS distribution, so running Simula with nixGL"
-              nix run --impure github:nix-community/nixGL -- ${pkgs.util-linux}/bin/script -qfc "$GODOT_BINARY -m \"$PROJECT_PATH\" $@" >(${pkgs.coreutils}/bin/stdbuf -oL -eL ${pkgs.colorized-logs}/bin/ansi2txt > "$SIMULA_DATA_DIR/log/output.file")
-            fi
-          '';
 
           simula = pkgs.stdenv.mkDerivation rec {
             pname = "simula";
             version = "0.0.0";
-
-            src = lib.cleanSourceWith {
-              filter = cleanSourceFilter;
-              src = ./.;
-            };
-
-            nativeBuildInputs = [
-              pkgs.autoPatchelfHook
-              pkgs.makeWrapper
-            ];
-
-            buildInputs = [
-              pkgs.systemd
-              pkgs.openxr-loader
-            ];
-
-            dontBuild = true;
-
-            # Force certain nix programs that Simula needs at runtime to be in the front of the user's PATH
-            # (We use this strategy instead of just adding the programs to bin/* to avoid
-            # potential conflicts if the user has already installed them via nix)
-            passthru.simulaRuntimePrograms = with pkgs; [
-              xpra
-              xorg.xrdb
-              wmctrl
-              ffmpeg
-              synapse
-              xsel
-              mimic
-              xclip
-              xfce4-terminal-wrapped
-              midori-wrapped
-              i3status-wrapped
-              xorg.xkbcomp
-              xwayland
-            ];
-
-            passthru.simulaRuntimeLibs = with pkgs; [
-              openxr-loader
-              libv4l
-            ];
 
             installPhase = ''
               runHook preInstall
@@ -308,24 +175,31 @@
               ${placeGodotHaskellPluginLib}
 
               mkdir -p $out/bin
-              cat > $out/bin/simula-unwrapped << 'EOF'
-                ${initiateSimulaRunner}
-                ${monadoEnvVars}
-                ${xdgAndSimulaEnvVars}
-                ${fontEnvVars}
-                ${copySimulaConfigFiles}
-                ${launchSimula} "$@"
+
+              simulaUnwrapped=${pkgs.substituteAll {
+                src = ./nix/simula-unwrapped.sh;
+                inherit (pkgs) util-linux coreutils colorized-logs;
+                glibcLocales = pkgs.glibcLocales;
+                godot = inputs.godot.packages."${system}".godot;
+              }}
+
+              cat > $out/bin/simula-unwrapped << EOF
+              ''${simulaUnwrapped}
               EOF
               chmod 755 $out/bin/simula-unwrapped
 
-              # A wrapped `simula` includes various helper programs that Simula
-              # needs guarantees are available at runtime.
               makeWrapper $out/bin/simula-unwrapped $out/bin/simula \
-              --prefix PATH : ${lib.makeBinPath passthru.simulaRuntimePrograms} \
-              --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath passthru.simulaRuntimeLibs}
+                --prefix PATH : ${lib.makeBinPath passthru.simulaRuntimePrograms} \
+                --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath passthru.simulaRuntimeLibs}
 
-              cat > $out/bin/simula-monado-service << 'EOF'
-                ${simulaMonadoServiceContent}
+              simulaMonadoService=${pkgs.substituteAll {
+                src = ./nix/simula-monado-service.sh;
+                inherit (pkgs) stdenv;
+                inherit monado;
+              }}
+
+              cat > $out/bin/simula-monado-service << EOF
+              ''${simulaMonadoService}
               EOF
               chmod 755 $out/bin/simula-monado-service
 

@@ -47,7 +47,7 @@ build-monado:
   nix develop ./submodules/monado?submodules=1#default --command bash -c "cd ./submodules/monado && just build"
 
 build-monado-watch:
-  nix develop ./submodules/monado?submodules=1#default --command bash -c "cd ./submodules/monado && just build"
+  nix develop ./submodules/monado?submodules=1#default --command bash -c "cd ./submodules/monado && just build-watch"
 
 run-monado:
   ./result/bin/simula-monado-service --local
