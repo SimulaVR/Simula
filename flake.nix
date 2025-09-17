@@ -120,22 +120,23 @@
           simulaMonadoServiceContent = ''
             #!${pkgs.stdenv.shell}
             ${xdgAndSimulaEnvVars}
+            ${monadoEnvVars}
 
-            pkill monado-service
-            export SIMULA_CONFIG_PATH=$SIMULA_NIX_DIR/opt/simula/config/simula_monado_config.json
-            export XR_RUNTIME_JSON=$SIMULA_NIX_DIR/opt/simula/config/active_runtime.json
+            ${pkgs.procps}/bin/pkill monado-service
             export XRT_COMPOSITOR_LOG=debug
             export XRT_COMPOSITOR_SCALE_PERCENTAGE=100
+            export XR_RUNTIME_JSON=${monado}/share/openxr/1/openxr_monado.json
 
             # If --local is passed, use the monado binary compiled in ./submodules/monado
             if [[ "''${1:-}" == "--local" ]]; then
               shift  # remove --local so $@ now contains only user args
+              export XR_RUNTIME_JSON="./config/active_runtime.json"
               MONADO_BINARY="./submodules/monado/build/src/xrt/targets/service/monado-service"
             else
               MONADO_BINARY="${monado}/bin/monado-service"
             fi
 
-            $MONADO_BINARY 2>&1 | tee "$SIMULA_LOG_DIR/monado.log"
+            $MONADO_BINARY 2>&1 | ${pkgs.coreutils}/bin/tee "$SIMULA_LOG_DIR/monado.log"
           '';
 
           cleanSourceFilter =
@@ -182,8 +183,7 @@
           '';
 
           monadoEnvVars = ''
-            export SIMULA_CONFIG_PATH=./config/simula_monado_config.json
-            export XR_RUNTIME_JSON=./config/active_runtime.json
+            export SIMULA_CONFIG_PATH=@out@/opt/simula/config/simula_monado_config.json
             export XRT_COMPOSITOR_LOG=debug
             export XRT_COMPOSITOR_SCALE_PERCENTAGE=100
           '';
@@ -338,6 +338,9 @@
               ${simulaMonadoServiceContent}
               EOF
               chmod 755 $out/bin/simula-monado-service
+
+              substituteInPlace $out/bin/simula-unwrapped --replace '@out@' "$out"
+              substituteInPlace $out/bin/simula-monado-service --replace '@out@' "$out"
 
               runHook postInstall
             '';
