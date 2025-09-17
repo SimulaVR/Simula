@@ -206,6 +206,12 @@
             echo "SIMULA_CONFIG_DIR: $SIMULA_CONFIG_DIR"
           '';
 
+          ensureRuntimePaths = binPath: libPath: ''
+            # Ensure runtime tools/libs are visible to Godot and its child shells
+            export PATH="${binPath}:$PATH"
+            export LD_LIBRARY_PATH="${libPath}:$LD_LIBRARY_PATH"
+          '';
+
           # Needed to ensure fonts don't show up as blocks on certain non-NixOS distributions, IIRC
           fontEnvVars = ''
             export LOCALE_ARCHIVE=${pkgs.glibcLocales}/lib/locale/locale-archive
@@ -309,12 +315,15 @@
 
               mkdir -p $out/bin
               cat > $out/bin/simula-unwrapped << 'EOF'
-                ${initiateSimulaRunner}
-                ${monadoEnvVars}
-                ${xdgAndSimulaEnvVars}
-                ${fontEnvVars}
-                ${copySimulaConfigFiles}
-                ${launchSimula} "$@"
+              ${initiateSimulaRunner}
+              ${monadoEnvVars}
+              ${xdgAndSimulaEnvVars}
+              ${ensureRuntimePaths (lib.makeBinPath passthru.simulaRuntimePrograms) (
+                lib.makeLibraryPath passthru.simulaRuntimeLibs
+              )}
+              ${fontEnvVars}
+              ${copySimulaConfigFiles}
+              ${launchSimula} "$@"
               EOF
               chmod 755 $out/bin/simula-unwrapped
 
@@ -325,7 +334,7 @@
               --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath passthru.simulaRuntimeLibs}
 
               cat > $out/bin/simula-monado-service << 'EOF'
-                ${simulaMonadoServiceContent}
+              ${simulaMonadoServiceContent}
               EOF
               chmod 755 $out/bin/simula-monado-service
 
