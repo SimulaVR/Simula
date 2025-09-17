@@ -36,6 +36,7 @@
 
       perSystem =
         {
+          config,
           pkgs,
           lib,
           system,
@@ -363,6 +364,7 @@
           packages = {
             inherit simula godot-haskell godot-haskell-plugin;
             default = simula;
+            treefmt = config.treefmt.build.wrapper;
           };
 
           devShells.default = pkgs.mkShell rec {
