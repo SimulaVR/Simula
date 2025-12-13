@@ -109,12 +109,6 @@
               exec ${pkgs.xfce.xfce4-terminal}/bin/xfce4-terminal "$@"
             '';
 
-            midori-wrapped = pkgs.writeScriptBin "midori" ''
-              #!${pkgs.stdenv.shell}
-              export XDG_DATA_HOME=${pkgs.dejavu_fonts}/share
-              exec ${pkgs.midori}/bin/midori "$@"
-            '';
-
             i3status-forked = inputs.i3status-fork.packages.${system}.default;
 
             i3status-wrapped = pkgs.writeScriptBin "i3status" ''
@@ -306,7 +300,6 @@
                 mimic
                 xclip
                 xfce4-terminal-wrapped
-                midori-wrapped
                 i3status-wrapped
                 xorg.xkbcomp
                 xwayland
