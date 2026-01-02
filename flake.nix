@@ -384,11 +384,17 @@
                 pkgs.inotify-tools
                 pkgs.cabal-install
                 pkgs.haskellPackages.ghc
+                pkgs.patchelf
+                pkgs.pkg-config
               ];
 
               buildInputs = [
                 haskell-dependencies
                 pkgs.zlib
+                pkgs.zlib.dev
+                pkgs.zstd
+                pkgs.xz
+                pkgs.bzip2
               ];
 
               LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
