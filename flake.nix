@@ -11,7 +11,7 @@
     systems.url = "github:nix-systems/x86_64-linux";
     godot.url = "git+https://github.com/SimulaVR/godot?rev=d4bfd13c124cae3393aacfdf97433bb1e8f79d92&submodules=1";
     godot-haskell.url = "git+https://github.com/SimulaVR/godot-haskell?rev=b06876dcd2add327778aea03ba81751a60849cc8&submodules=1";
-    monado.url = "git+https://github.com/SimulaVR/monado-xv?rev=cc3eca140e762a990bf107f5282a2ae4853e3893&submodules=1";
+    monado.url = "git+https://github.com/SimulaVR/monado-xv?rev=47b52aa79efa6f39fc99502442223207ae067e6b&submodules=1";
     environments = {
       url = "git+https://github.com/SimulaVR/environments?rev=91bb3777d558e809be12bcc94f6c984487994765";
       flake = false;
