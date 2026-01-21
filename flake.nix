@@ -7,7 +7,7 @@
   };
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/63dacb46bf939521bdc93981b4cbb7ecb58427a0";
+    nixpkgs.url = "github:nixos/nixpkgs/25.11";
     systems.url = "github:nix-systems/x86_64-linux";
     godot.url = "git+https://github.com/SimulaVR/godot?rev=d4bfd13c124cae3393aacfdf97433bb1e8f79d92&submodules=1";
     godot-haskell.url = "git+https://github.com/SimulaVR/godot-haskell?rev=b06876dcd2add327778aea03ba81751a60849cc8&submodules=1";
@@ -82,16 +82,22 @@
                 pkgs.haskellPackages.uuid
               ];
 
+              library-paths = lib.strings.concatStringsSep " " (
+                builtins.map (
+                  drv:
+                  "${drv}/lib"
+                ) buildInputs
+              );
+
               installPhase = ''
                 mkdir -p $out/lib
-                cp -r ${
-                  lib.strings.concatStringsSep " " (
-                    builtins.map (
-                      drv:
-                      "${drv}/lib/ghc-${pkgs.haskellPackages.ghc.version}/lib/${pkgs.stdenv.system}-ghc-${pkgs.haskellPackages.ghc.version}/*.so"
-                    ) buildInputs
-                  )
-                } $out/lib
+                echo After directories creation
+
+                for path in ${library-paths}
+                do
+                  find $path -type f -name '*.so' \
+                    | xargs -i cp -r {} $out/lib
+                done
               '';
             };
 
@@ -101,12 +107,6 @@
               export XDG_DATA_HOME=${pkgs.dejavu_fonts}/share
               cd $HOME
               exec ${pkgs.xfce.xfce4-terminal}/bin/xfce4-terminal "$@"
-            '';
-
-            midori-wrapped = pkgs.writeScriptBin "midori" ''
-              #!${pkgs.stdenv.shell}
-              export XDG_DATA_HOME=${pkgs.dejavu_fonts}/share
-              exec ${pkgs.midori}/bin/midori "$@"
             '';
 
             i3status-forked = inputs.i3status-fork.packages.${system}.default;
@@ -300,7 +300,6 @@
                 mimic
                 xclip
                 xfce4-terminal-wrapped
-                midori-wrapped
                 i3status-wrapped
                 xorg.xkbcomp
                 xwayland
