@@ -30,7 +30,7 @@ build-godot-watch:
   nix develop ./submodules/godot# --command bash -c "cd ./submodules/godot && just build-watch"
 
 build-godot-openxr:
-  nix develop ./submodules/godot-openxr# --command bash -c "cd ./submodules/godot-openxr && just build"
+  nix develop ./submodules/godot-openxr# --command bash -c "cd ./submodules/godot-openxr && just build && just install"
 
 build-godot-haskell-plugin:
   cd ./addons/godot-haskell-plugin && just build && cd -
