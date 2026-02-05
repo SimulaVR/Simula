@@ -21,7 +21,7 @@
     };
     i3status-fork.url = "git+https://github.com/SimulaVR/i3status?rev=f734c9fe2580b6a23bcb1d1081376ae7897bdbf2";
     godot-openxr = {
-      url = "github:SimulaVR/godot-openxr";
+      url = "git+https://github.com/SimulaVR/godot-openxr?submodules=1";
       flake = false;
     };
     flake-parts = {

@@ -197,16 +197,18 @@
       "flake": false,
       "locked": {
         "lastModified": 1770320166,
-        "narHash": "sha256-9di80EMscRjQBVI63+b1cxMRs/PEfEGO9xEn+Y8PsQQ=",
-        "owner": "SimulaVR",
-        "repo": "godot-openxr",
+        "narHash": "sha256-r8cg5GL6rXopk4Ml8xLqYVIqmA8HfMidwmQrvDKdSVI=",
+        "ref": "refs/heads/master",
         "rev": "f172b16ff89e0644a26614a4b5fdef41c5c8bac6",
-        "type": "github"
+        "revCount": 2,
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/SimulaVR/godot-openxr"
       },
       "original": {
-        "owner": "SimulaVR",
-        "repo": "godot-openxr",
-        "type": "github"
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/SimulaVR/godot-openxr"
       }
     },
     "i3status-fork": {
