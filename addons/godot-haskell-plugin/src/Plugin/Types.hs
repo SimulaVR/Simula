@@ -57,7 +57,7 @@ import           System.IO.Unsafe
 import           Data.Monoid
 import           Data.List
 import           Data.Text.Encoding
-import           Data.Text
+import           Data.Text hiding (show)
 import qualified System.Process.ByteString as B
 import qualified Data.ByteString.Char8 as B
 

@@ -9,7 +9,7 @@
 
 module Plugin.SimulaViewSprite where
 
-import Data.Text
+import Data.Text hiding (show)
 import Control.Exception
 import Data.Proxy
 
