@@ -7,10 +7,13 @@
   };
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/63dacb46bf939521bdc93981b4cbb7ecb58427a0";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
     systems.url = "github:nix-systems/x86_64-linux";
     godot.url = "git+https://github.com/SimulaVR/godot?rev=d4bfd13c124cae3393aacfdf97433bb1e8f79d92&submodules=1";
-    godot-haskell.url = "git+https://github.com/SimulaVR/godot-haskell?rev=b06876dcd2add327778aea03ba81751a60849cc8&submodules=1";
+    godot-haskell = {
+      url = "git+https://github.com/SimulaVR/godot-haskell?rev=b06876dcd2add327778aea03ba81751a60849cc8&submodules=1";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     monado.url = "git+https://github.com/SimulaVR/monado-xv?rev=47b52aa79efa6f39fc99502442223207ae067e6b&submodules=1";
     environments = {
       url = "git+https://github.com/SimulaVR/environments?rev=91bb3777d558e809be12bcc94f6c984487994765";
@@ -46,6 +49,9 @@
           }:
           let
             godot-haskell = inputs.godot-haskell.packages."${system}".godot-haskell;
+            godot-openxr = pkgs.callPackage ./submodules/godot-openxr/default.nix { 
+              godot = inputs.godot;
+            };
             godot-haskell-plugin = pkgs.callPackage ./addons/godot-haskell-plugin { inherit godot-haskell; };
 
             # Needed to build godot-haskell-plugin locally inside a nix develop shell
@@ -56,6 +62,9 @@
             haskell-dependencies = pkgs.stdenvNoCC.mkDerivation rec {
               name = "haskell-dependencies";
               dontUnpack = true;
+
+              ghcVersion = pkgs.haskellPackages.ghc.version;
+              hostSystem = pkgs.stdenv.system;
 
               buildInputs = [
                 # godot-haskell-plugin dependencies
@@ -84,14 +93,9 @@
 
               installPhase = ''
                 mkdir -p $out/lib
-                cp -r ${
-                  lib.strings.concatStringsSep " " (
-                    builtins.map (
-                      drv:
-                      "${drv}/lib/ghc-${pkgs.haskellPackages.ghc.version}/lib/${pkgs.stdenv.system}-ghc-${pkgs.haskellPackages.ghc.version}/*.so"
-                    ) buildInputs
-                  )
-                } $out/lib
+                for drv in $buildInputs; do
+                  find "$drv" -name "*.so" -exec cp {} $out/lib \;
+                done
               '';
             };
 
@@ -103,11 +107,11 @@
               exec ${pkgs.xfce.xfce4-terminal}/bin/xfce4-terminal "$@"
             '';
 
-            midori-wrapped = pkgs.writeScriptBin "midori" ''
-              #!${pkgs.stdenv.shell}
-              export XDG_DATA_HOME=${pkgs.dejavu_fonts}/share
-              exec ${pkgs.midori}/bin/midori "$@"
-            '';
+          # midori-wrapped = pkgs.writeScriptBin "midori" ''
+          #   #!${pkgs.stdenv.shell}
+          #   export XDG_DATA_HOME=${pkgs.dejavu_fonts}/share
+          #   exec ${pkgs.midori}/bin/midori "$@"
+          # '';
 
             i3status-forked = inputs.i3status-fork.packages.${system}.default;
 
@@ -173,6 +177,11 @@
               chmod -R +w $out/opt/simula/addons/godot-haskell-plugin/bin/x11/
               cp ${godot-haskell-plugin}/lib/ghc-*/lib/libgodot-haskell-plugin.so $out/opt/simula/addons/godot-haskell-plugin/bin/x11/libgodot-haskell-plugin.so
               chmod 755 $out/opt/simula/addons/godot-haskell-plugin/bin/x11/libgodot-haskell-plugin.so
+
+              # Replace pre-compiled libgodot_openxr.so with our source-built one
+              chmod -R +w $out/opt/simula/addons/godot-openxr/bin/linux/
+              cp ${godot-openxr}/bin/linux/libgodot_openxr.so $out/opt/simula/addons/godot-openxr/bin/linux/libgodot_openxr.so
+              chmod 755 $out/opt/simula/addons/godot-openxr/bin/linux/libgodot_openxr.so
             '';
 
             initiateSimulaRunner = ''
@@ -300,7 +309,7 @@
                 mimic
                 xclip
                 xfce4-terminal-wrapped
-                midori-wrapped
+              # midori-wrapped
                 i3status-wrapped
                 xorg.xkbcomp
                 xwayland
@@ -315,6 +324,7 @@
                 runHook preInstall
 
                 ${copySimulaSourcesToNixStore}
+                rm -f $out/opt/simula/addons/godot-haskell-plugin/godot-haskell-gdwlroots.tar.gz
                 ${copyEnvironmentsToNixStore}
                 ${placeGodotHaskellPluginLib}
 
@@ -369,12 +379,13 @@
             };
 
             packages = {
-              inherit simula godot-haskell godot-haskell-plugin;
+              inherit simula godot-haskell godot-haskell-plugin godot-openxr;
               default = simula;
               treefmt = config.treefmt.build.wrapper;
             };
 
-            devShells.default = pkgs.mkShell rec {
+            devShells.default = pkgs.haskellPackages.shellFor {
+              packages = p: [ godot-haskell-plugin ];
               nativeBuildInputs = [
                 inputs.godot.packages."${system}".godot
 
@@ -383,15 +394,11 @@
                 pkgs.just
                 pkgs.inotify-tools
                 pkgs.cabal-install
-                pkgs.haskellPackages.ghc
               ];
 
               buildInputs = [
-                haskell-dependencies
                 pkgs.zlib
               ];
-
-              LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
 
               shellHook = ''
                 export PS1="\n[nix-shell:\w]$ "

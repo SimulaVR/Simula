@@ -3,6 +3,7 @@ build:
   just build-monado && \
   just build-wlroots && \
   just build-godot && \
+  just build-godot-openxr && \
   source ./utils/Helpers.sh && patchGodotWlroots && \
   just build-godot-haskell-plugin && \
   just switch-to-local
@@ -27,6 +28,14 @@ build-godot:
 
 build-godot-watch:
   nix develop ./submodules/godot# --command bash -c "cd ./submodules/godot && just build-watch"
+
+build-godot-openxr:
+  nix-build submodules/godot-openxr/default.nix --arg godot ./submodules/godot -o submodules/godot-openxr/result
+  mkdir -p addons/godot-openxr/bin/linux/
+  cp submodules/godot-openxr/result/bin/linux/libgodot_openxr.so addons/godot-openxr/bin/linux/libgodot_openxr.so
+
+cache-godot-openxr: build-godot-openxr
+  cachix push simula submodules/godot-openxr/result
 
 build-godot-haskell-plugin:
   cd ./addons/godot-haskell-plugin && just build && cd -
