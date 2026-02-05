@@ -31,8 +31,6 @@ build-godot-watch:
 
 build-godot-openxr:
   nix develop ./submodules/godot-openxr# --command bash -c "cd ./submodules/godot-openxr && just build"
-  mkdir -p addons/godot-openxr/bin/linux/
-  cp submodules/godot-openxr/demo/addons/godot-openxr/bin/linux/libgodot_openxr.so addons/godot-openxr/bin/linux/libgodot_openxr.so
 
 build-godot-haskell-plugin:
   cd ./addons/godot-haskell-plugin && just build && cd -
