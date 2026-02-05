@@ -11,7 +11,7 @@
     systems.url = "github:nix-systems/x86_64-linux";
     godot.url = "git+https://github.com/SimulaVR/godot?rev=d4bfd13c124cae3393aacfdf97433bb1e8f79d92&submodules=1";
     godot-haskell = {
-      url = "git+https://github.com/SimulaVR/godot-haskell?rev=b06876dcd2add327778aea03ba81751a60849cc8&submodules=1";
+      url = "git+https://github.com/SimulaVR/godot-haskell?rev=ae307f7de0c10f4e91930a156ee37bee8c79be5f&submodules=1";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     monado.url = "git+https://github.com/SimulaVR/monado-xv?rev=47b52aa79efa6f39fc99502442223207ae067e6b&submodules=1";
@@ -20,6 +20,10 @@
       flake = false;
     };
     i3status-fork.url = "git+https://github.com/SimulaVR/i3status?rev=f734c9fe2580b6a23bcb1d1081376ae7897bdbf2";
+    godot-openxr = {
+      url = "github:SimulaVR/godot-openxr";
+      flake = false;
+    };
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
       inputs.nixpkgs-lib.follows = "nixpkgs";
@@ -49,7 +53,7 @@
           }:
           let
             godot-haskell = inputs.godot-haskell.packages."${system}".godot-haskell;
-            godot-openxr = pkgs.callPackage ./submodules/godot-openxr/default.nix { 
+            godot-openxr = pkgs.callPackage "${inputs.godot-openxr}/default.nix" { 
               godot = inputs.godot;
             };
             godot-haskell-plugin = pkgs.callPackage ./addons/godot-haskell-plugin { inherit godot-haskell; };
