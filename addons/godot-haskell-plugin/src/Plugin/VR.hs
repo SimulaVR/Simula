@@ -50,9 +50,11 @@ openXR = findInterface OpenXR
 -- | Initialize the ARVRInterface and return the success/failure
 initVR :: GodotNode -> GodotARVRInterface -> IO VRInitResult
 initVR node vri =
-  G.initialize vri >>= \case
-    True  -> initSuccess
-    False -> initFailed
+  case validateObject vri of
+    Nothing -> initFailed
+    Just _ -> G.initialize vri >>= \case
+      True  -> initSuccess
+      False -> initFailed
  where
   initSuccess :: IO VRInitResult
   initSuccess = do
