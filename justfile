@@ -30,12 +30,9 @@ build-godot-watch:
   nix develop ./submodules/godot# --command bash -c "cd ./submodules/godot && just build-watch"
 
 build-godot-openxr:
-  nix-build submodules/godot-openxr/default.nix --arg godot ./submodules/godot -o submodules/godot-openxr/result
+  nix develop ./submodules/godot-openxr# --command bash -c "cd ./submodules/godot-openxr && just build"
   mkdir -p addons/godot-openxr/bin/linux/
-  cp submodules/godot-openxr/result/bin/linux/libgodot_openxr.so addons/godot-openxr/bin/linux/libgodot_openxr.so
-
-cache-godot-openxr: build-godot-openxr
-  cachix push simula submodules/godot-openxr/result
+  cp submodules/godot-openxr/demo/addons/godot-openxr/bin/linux/libgodot_openxr.so addons/godot-openxr/bin/linux/libgodot_openxr.so
 
 build-godot-haskell-plugin:
   cd ./addons/godot-haskell-plugin && just build && cd -
