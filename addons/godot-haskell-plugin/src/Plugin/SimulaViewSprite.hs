@@ -425,12 +425,10 @@ processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)
 
                case evt of
                  Motion                -> do return ()
-                 Button pressed button -> do ---focus gsvs
+                 Button _ _ -> do ---focus gsvs
                                              G.keyboard_notify_enter wlrSeat godotWlrSurface
                                              pointerNotifyButton wlrSeat evt
-                                             case pressed of
-                                               False -> G.pointer_clear_focus wlrSeat
-                                               True -> return ()
+                                             return ()
 
                pointerNotifyFrame wlrSeat
 
