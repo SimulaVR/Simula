@@ -45,11 +45,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1743550720,
-        "narHash": "sha256-hIshGgKZCgWh6AYJpJmRgFdR3WUbkY04o82X05xqQiY=",
+        "lastModified": 1769996383,
+        "narHash": "sha256-AnYjnFWgS49RlqX7LrC4uA+sCCDBj0Ry/WOJ5XWAsa0=",
         "owner": "hercules-ci",
         "repo": "flake-parts",
-        "rev": "c621e8422220273271f52058f618c94e405bb0f5",
+        "rev": "57928607ea566b5db3ad13af0e57e921e6b12381",
         "type": "github"
       },
       "original": {
@@ -67,11 +67,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1743550720,
-        "narHash": "sha256-hIshGgKZCgWh6AYJpJmRgFdR3WUbkY04o82X05xqQiY=",
+        "lastModified": 1769996383,
+        "narHash": "sha256-AnYjnFWgS49RlqX7LrC4uA+sCCDBj0Ry/WOJ5XWAsa0=",
         "owner": "hercules-ci",
         "repo": "flake-parts",
-        "rev": "c621e8422220273271f52058f618c94e405bb0f5",
+        "rev": "57928607ea566b5db3ad13af0e57e921e6b12381",
         "type": "github"
       },
       "original": {
@@ -148,20 +148,21 @@
         "flake-parts": "flake-parts_2",
         "nixpkgs": "nixpkgs",
         "systems": "systems",
+        "treefmt-nix": "treefmt-nix",
         "wlroots-flake": "wlroots-flake"
       },
       "locked": {
-        "lastModified": 1750113651,
-        "narHash": "sha256-bcvtb1B1eLYjwHgIvumsX01EZd4bN5NWkKPlWZb34Hc=",
+        "lastModified": 1770583884,
+        "narHash": "sha256-78k7hM4ZF8/UcaiU35t8vAUzY8M+f5OERk6zYdg4Zl8=",
         "ref": "refs/heads/3.x-simula",
-        "rev": "d4bfd13c124cae3393aacfdf97433bb1e8f79d92",
-        "revCount": 29799,
+        "rev": "1172b6b60efb77c58aa69d10dfad8b9a9565dc40",
+        "revCount": 29805,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/SimulaVR/godot"
       },
       "original": {
-        "rev": "d4bfd13c124cae3393aacfdf97433bb1e8f79d92",
+        "rev": "1172b6b60efb77c58aa69d10dfad8b9a9565dc40",
         "submodules": true,
         "type": "git",
         "url": "https://github.com/SimulaVR/godot"
@@ -174,7 +175,7 @@
           "nixpkgs"
         ],
         "systems": "systems_3",
-        "treefmt-nix": "treefmt-nix"
+        "treefmt-nix": "treefmt-nix_2"
       },
       "locked": {
         "lastModified": 1770321723,
@@ -196,11 +197,11 @@
     "godot-openxr": {
       "flake": false,
       "locked": {
-        "lastModified": 1770320166,
-        "narHash": "sha256-r8cg5GL6rXopk4Ml8xLqYVIqmA8HfMidwmQrvDKdSVI=",
+        "lastModified": 1770325857,
+        "narHash": "sha256-k5+U+Xz2N3WCX2acAgCtnlFOdscpI/vKfAUmtbpOFXw=",
         "ref": "refs/heads/master",
-        "rev": "f172b16ff89e0644a26614a4b5fdef41c5c8bac6",
-        "revCount": 2,
+        "rev": "a6f66d7883c63f9a13d8fcc0647816f8a104c3bd",
+        "revCount": 10,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/SimulaVR/godot-openxr"
@@ -216,7 +217,7 @@
         "flake-parts": "flake-parts_5",
         "nixpkgs": "nixpkgs_2",
         "systems": "systems_4",
-        "treefmt-nix": "treefmt-nix_2"
+        "treefmt-nix": "treefmt-nix_3"
       },
       "locked": {
         "lastModified": 1748823702,
@@ -254,7 +255,7 @@
         "flake-parts": "flake-parts_6",
         "nixpkgs": "nixpkgs_3",
         "systems": "systems_5",
-        "treefmt-nix": "treefmt-nix_3"
+        "treefmt-nix": "treefmt-nix_4"
       },
       "locked": {
         "lastModified": 1768682734,
@@ -275,17 +276,17 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1717179513,
-        "narHash": "sha256-vboIEwIQojofItm2xGCdZCzW96U85l9nDW3ifMuAIdM=",
+        "lastModified": 1770464364,
+        "narHash": "sha256-z5NJPSBwsLf/OfD8WTmh79tlSU8XgIbwmk6qB1/TFzY=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "63dacb46bf939521bdc93981b4cbb7ecb58427a0",
+        "rev": "23d72dabcb3b12469f57b37170fcbc1789bd7457",
         "type": "github"
       },
       "original": {
         "owner": "nixos",
+        "ref": "nixos-25.11",
         "repo": "nixpkgs",
-        "rev": "63dacb46bf939521bdc93981b4cbb7ecb58427a0",
         "type": "github"
       }
     },
@@ -323,11 +324,11 @@
     },
     "nixpkgs_4": {
       "locked": {
-        "lastModified": 1770136044,
-        "narHash": "sha256-tlFqNG/uzz2++aAmn4v8J0vAkV3z7XngeIIB3rM3650=",
+        "lastModified": 1770464364,
+        "narHash": "sha256-z5NJPSBwsLf/OfD8WTmh79tlSU8XgIbwmk6qB1/TFzY=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "e576e3c9cf9bad747afcddd9e34f51d18c855b4e",
+        "rev": "23d72dabcb3b12469f57b37170fcbc1789bd7457",
         "type": "github"
       },
       "original": {
@@ -348,7 +349,7 @@
         "monado": "monado",
         "nixpkgs": "nixpkgs_4",
         "systems": "systems_6",
-        "treefmt-nix": "treefmt-nix_4"
+        "treefmt-nix": "treefmt-nix_5"
       }
     },
     "systems": {
@@ -444,6 +445,27 @@
     "treefmt-nix": {
       "inputs": {
         "nixpkgs": [
+          "godot",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1770228511,
+        "narHash": "sha256-wQ6NJSuFqAEmIg2VMnLdCnUc0b7vslUohqqGGD+Fyxk=",
+        "owner": "numtide",
+        "repo": "treefmt-nix",
+        "rev": "337a4fe074be1042a35086f15481d763b8ddc0e7",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "treefmt-nix",
+        "type": "github"
+      }
+    },
+    "treefmt-nix_2": {
+      "inputs": {
+        "nixpkgs": [
           "godot-haskell",
           "nixpkgs"
         ]
@@ -462,7 +484,7 @@
         "type": "github"
       }
     },
-    "treefmt-nix_2": {
+    "treefmt-nix_3": {
       "inputs": {
         "nixpkgs": [
           "i3status-fork",
@@ -483,7 +505,7 @@
         "type": "github"
       }
     },
-    "treefmt-nix_3": {
+    "treefmt-nix_4": {
       "inputs": {
         "nixpkgs": [
           "monado",
@@ -504,7 +526,7 @@
         "type": "github"
       }
     },
-    "treefmt-nix_4": {
+    "treefmt-nix_5": {
       "inputs": {
         "nixpkgs": [
           "nixpkgs"
@@ -535,17 +557,17 @@
         "systems": "systems_2"
       },
       "locked": {
-        "lastModified": 1750111025,
-        "narHash": "sha256-/y8ORmcHGspGGS/0x9v7RuQ/YkuVU792Qe5HuKncoME=",
+        "lastModified": 1770499572,
+        "narHash": "sha256-VzIH7zAGq7JIudl1z1MuQqOcSJRjOLzL0x9AwwAuNow=",
         "ref": "refs/heads/simula",
-        "rev": "e44903dee9e2e68219799699c38536e7d9961294",
-        "revCount": 3591,
+        "rev": "e1529945c8b87f1d65c48e1b036eb54b0b707c67",
+        "revCount": 3592,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/SimulaVR/wlroots"
       },
       "original": {
-        "rev": "e44903dee9e2e68219799699c38536e7d9961294",
+        "rev": "e1529945c8b87f1d65c48e1b036eb54b0b707c67",
         "submodules": true,
         "type": "git",
         "url": "https://github.com/SimulaVR/wlroots"

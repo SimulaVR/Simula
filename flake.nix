@@ -9,7 +9,7 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
     systems.url = "github:nix-systems/x86_64-linux";
-    godot.url = "git+https://github.com/SimulaVR/godot?rev=d4bfd13c124cae3393aacfdf97433bb1e8f79d92&submodules=1";
+    godot.url = "git+https://github.com/SimulaVR/godot?rev=1172b6b60efb77c58aa69d10dfad8b9a9565dc40&submodules=1";
     godot-haskell = {
       url = "git+https://github.com/SimulaVR/godot-haskell?rev=ae307f7de0c10f4e91930a156ee37bee8c79be5f&submodules=1";
       inputs.nixpkgs.follows = "nixpkgs";
