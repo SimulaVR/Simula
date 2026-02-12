@@ -8,6 +8,16 @@ build:
   just build-godot-haskell-plugin && \
   just switch-to-local
 
+build-profiling:
+  nix build && \
+  just build-monado && \
+  just build-wlroots && \
+  just build-godot && \
+  just build-godot-openxr && \
+  source ./utils/Helpers.sh && patchGodotWlroots && \
+  just build-godot-haskell-plugin-profiling && \
+  just switch-to-local-profiling
+
 direnv_allow:
   find . -name '.envrc' -execdir direnv allow \;
 
@@ -35,6 +45,9 @@ build-godot-openxr:
 build-godot-haskell-plugin:
   cd ./addons/godot-haskell-plugin && just build && cd -
 
+build-godot-haskell-plugin-profiling:
+  cd ./addons/godot-haskell-plugin && just build-profiling && cd -
+
 clean-godot-haskell-plugin:
   cd ./addons/godot-haskell-plugin && just clean && cd -
 
@@ -43,6 +56,9 @@ switch-to-nix:
 
 switch-to-local:
   cd ./addons/godot-haskell-plugin && just switch-to-local && cd -
+
+switch-to-local-profiling:
+  cd ./addons/godot-haskell-plugin && just switch-to-local-profiling && cd -
 
 build-godot-haskell-plugin-watch:
   cd ./addons/godot-haskell-plugin && just switch-to-local && just build-watch && cd -
@@ -58,3 +74,11 @@ run-monado:
 
 run:
   ./result/bin/simula --local
+
+run-profiling:
+  ts="$(date -u +%Y%m%dT%H%M%SZ)" && \
+  out_dir="./profiling/godot-haskell-plugin/${ts}" && \
+  mkdir -p "$out_dir" && \
+  echo "Profiling output directory: $out_dir" && \
+  SIMULA_HS_PROFILE_PREFIX="$out_dir/godot-haskell-plugin" \
+  ./result/bin/simula --local 2>&1 | tee "$out_dir/simula.log"

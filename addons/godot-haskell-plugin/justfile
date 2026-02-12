@@ -4,9 +4,9 @@ default:
 build:
     cabal build
 
-build-profile:
-    cabal --enable-profiling build \
-        --ghc-options='-fprof-auto -rtsopts -fPIC -fexternal-dynamic-refs'
+build-profiling:
+    cabal build \
+        --ghc-options='-eventlog -rtsopts -fPIC -fexternal-dynamic-refs'
 
 build-watch:
     while inotifywait -qqre modify .; do \
@@ -17,6 +17,10 @@ repl:
     cabal repl
 
 switch-to-local:
+    rm -f bin/x11/libgodot-haskell-plugin.so
+    cp $(cabal list-bin flib:godot-haskell-plugin) bin/x11/libgodot-haskell-plugin.so
+
+switch-to-local-profiling:
     rm -f bin/x11/libgodot-haskell-plugin.so
     cp $(cabal list-bin flib:godot-haskell-plugin) bin/x11/libgodot-haskell-plugin.so
 

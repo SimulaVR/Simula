@@ -22,3 +22,6 @@ result
 
 # nix-direnv
 .direnv/
+
+# Local profiling output
+profiling/
