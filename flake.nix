@@ -254,6 +254,7 @@
             launchSimula = ''
               # Use --local if you want to launch Simula locally (with godot binary from ./submodules/godot)
               if [ "''${1:-}" = "--local" ]; then
+                export IPC_IGNORE_VERSION=1
                 export XR_RUNTIME_JSON="./config/active_runtime.json"
                 GODOT_BINARY="./submodules/godot/bin/godot.x11.tools.64"
                 PROJECT_PATH="./."
