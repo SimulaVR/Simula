@@ -18,6 +18,12 @@ build-profiling:
   just build-godot-haskell-plugin-profiling && \
   just switch-to-local-profiling
 
+build-simula-rgp:
+  nix build .#simula-rgp
+
+build-simula-monado-service-rgp:
+  nix build .#simula-monado-service-rgp
+
 direnv_allow:
   find . -name '.envrc' -execdir direnv allow \;
 
@@ -74,6 +80,12 @@ run-monado:
 
 run:
   ./result/bin/simula --local
+
+run-simula-rgp:
+  nix run .#simula-rgp -- --local
+
+run-simula-monado-service-rgp:
+  nix run .#simula-monado-service-rgp -- --local
 
 run-profiling:
   ts="$(date -u +%Y%m%dT%H%M%SZ)" && \

@@ -149,6 +149,99 @@
               $MONADO_BINARY 2>&1 | ${pkgs.coreutils}/bin/tee "$SIMULA_LOG_DIR/monado.log"
             '';
 
+            # `rgp` is used for Vulkan profiling on AMD GPUs
+            mkRgpWrapper =
+              {
+                targetLabel,
+                targetBin,
+                logFile,
+                extraEnv ? "",
+                extraEcho ? "",
+                extraCleanup ? "",
+              }:
+              ''
+                #!${pkgs.stdenv.shell}
+                set -euo pipefail
+
+                ts="$(${pkgs.coreutils}/bin/date -u +%Y%m%dT%H%M%SZ)"
+                out_dir="''${SIMULA_RGP_OUTPUT_DIR:-$PWD/profiling/rgp/$ts}"
+                trigger_file="''${MESA_VK_TRACE_TRIGGER:-$out_dir/rgp.trigger}"
+                before_list="$out_dir/rgp-before.txt"
+                after_list="$out_dir/rgp-after.txt"
+                target_log="$out_dir/${logFile}"
+
+                ${pkgs.coreutils}/bin/mkdir -p "$out_dir"
+                ${pkgs.coreutils}/bin/rm -f "$trigger_file"
+                ${pkgs.findutils}/bin/find /tmp -maxdepth 1 -type f -name '*.rgp' | ${pkgs.coreutils}/bin/sort > "$before_list"
+
+                export MESA_VK_TRACE="''${MESA_VK_TRACE:-rgp}"
+                export MESA_VK_TRACE_TRIGGER="$trigger_file"
+                ${extraEnv}
+                target_bin="${targetBin}"
+
+                echo "RGP output directory: $out_dir"
+                echo "Trigger capture with: touch $trigger_file"
+                echo "Using ${targetLabel} binary: $target_bin"
+                ${extraEcho}
+                target_pid=""
+
+                cleanup() {
+                  set +e
+                  if [ -n "$target_pid" ]; then
+                    ${pkgs.coreutils}/bin/kill "$target_pid" 2>/dev/null || true
+                    wait "$target_pid" 2>/dev/null || true
+                    target_pid=""
+                  fi
+
+                  ${extraCleanup}
+
+                  ${pkgs.findutils}/bin/find /tmp -maxdepth 1 -type f -name '*.rgp' | ${pkgs.coreutils}/bin/sort > "$after_list"
+                  ${pkgs.coreutils}/bin/comm -13 "$before_list" "$after_list" | while read -r path; do
+                    if [ -n "$path" ]; then
+                      ${pkgs.coreutils}/bin/mv "$path" "$out_dir/"
+                    fi
+                  done
+
+                  ${pkgs.coreutils}/bin/ls -1 "$out_dir"/*.rgp 2>/dev/null || echo "No new .rgp captures found."
+                }
+                trap cleanup EXIT
+
+                set +e
+                "$target_bin" "$@" > >(${pkgs.coreutils}/bin/tee -a "$target_log") 2>&1 &
+                target_pid="$!"
+                wait "$target_pid"
+                status="$?"
+                target_pid=""
+                set -e
+
+                exit $status
+              '';
+
+            simulaMonadoServiceRgpContent = mkRgpWrapper {
+              targetLabel = "monado service";
+              targetBin = "./result/bin/simula-monado-service";
+              logFile = "monado-wrapper.log";
+              extraEnv = ''
+                export XRT_NO_STDIN="''${XRT_NO_STDIN:-1}"
+              '';
+              extraEcho = ''
+                echo "XRT_COMPOSITOR_LOG=$XRT_COMPOSITOR_LOG"
+              '';
+              extraCleanup = ''
+                # Ensure that rgp stops recording when the wrapper script terminates
+                ${pkgs.procps}/bin/pkill monado-service 2>/dev/null || true
+              '';
+            };
+
+            simulaRgpContent = mkRgpWrapper {
+              targetLabel = "simula";
+              targetBin = "./result/bin/simula";
+              logFile = "simula-wrapper.log";
+            };
+
+            simulaMonadoServiceRgpTool = pkgs.writeShellScriptBin "simula-monado-service-rgp" simulaMonadoServiceRgpContent;
+            simulaRgpTool = pkgs.writeShellScriptBin "simula-rgp" simulaRgpContent;
+
             cleanSourceFilter =
               name: type:
               let
@@ -385,8 +478,21 @@
 
             packages = {
               inherit simula godot-haskell godot-haskell-plugin godot-openxr;
+              simula-rgp = simulaRgpTool;
+              simula-monado-service-rgp = simulaMonadoServiceRgpTool;
               default = simula;
               treefmt = config.treefmt.build.wrapper;
+            };
+
+            apps = {
+              simula-rgp = {
+                type = "app";
+                program = "${simulaRgpTool}/bin/simula-rgp";
+              };
+              simula-monado-service-rgp = {
+                type = "app";
+                program = "${simulaMonadoServiceRgpTool}/bin/simula-monado-service-rgp";
+              };
             };
 
             devShells.default = pkgs.haskellPackages.shellFor {
@@ -399,6 +505,7 @@
                 pkgs.just
                 pkgs.inotify-tools
                 pkgs.cabal-install
+                pkgs.rgp
               ];
 
               buildInputs = [
