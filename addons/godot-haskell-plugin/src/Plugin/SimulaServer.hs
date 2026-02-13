@@ -1053,6 +1053,11 @@ initGodotSimulaServer obj = do
       let gssPid' = show pid
 
       gssStartingAppPids' <- newTVarIO M.empty :: IO (TVar (M.Map ProcessID [String]))
+      -- Starting apps launch placement system:
+      -- First try launchToken -> location, then fallback to launchToken -> class and class -> [...location queue...]
+      gssStartingAppLaunchTokens' <- newTVarIO M.empty :: IO (TVar (M.Map String String))
+      gssStartingAppLaunchTokenClassHints' <- newTVarIO M.empty :: IO (TVar (M.Map String String))
+      gssStartingAppWindowClassHints' <- newTVarIO M.empty :: IO (TVar (M.Map String [String]))
 
       gssGrab' <- newTVarIO Nothing
 
@@ -1148,6 +1153,9 @@ initGodotSimulaServer obj = do
       , _gssStartingAppTransform  = gssStartingAppTransform'  :: TVar (Maybe GodotTransform)
       , _gssPid                   = gssPid'                   :: String
       , _gssStartingAppPids       = gssStartingAppPids'       :: TVar (M.Map ProcessID [String])
+      , _gssStartingAppLaunchTokens = gssStartingAppLaunchTokens' :: TVar (M.Map String String)
+      , _gssStartingAppLaunchTokenClassHints = gssStartingAppLaunchTokenClassHints' :: TVar (M.Map String String)
+      , _gssStartingAppWindowClassHints = gssStartingAppWindowClassHints' :: TVar (M.Map String [String])
       , _gssGrab                  = gssGrab'                  :: TVar (Maybe Grab)
       , _gssDiffMap               = gssDiffMap'               :: TVar (M.Map GodotSpatial GodotTransform)
       , _gssWorkspaces            = gssWorkspaces'            :: Vector GodotSpatial

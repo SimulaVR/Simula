@@ -123,17 +123,41 @@ updateSimulaViewSprite gsvs = do
       simulaView <- readTVarIO (gsvs ^. gsvsView) --
       let eitherSurface = (simulaView ^. svWlrEitherSurface)
       gss <- readTVarIO (gsvs ^. gsvsServer)
-      pid <- case eitherSurface of
-                  Left wlrXdgSurface -> do
-                    wlrXdgSurface <- validateSurfaceE wlrXdgSurface
-                    pidInt <- G.get_pid wlrXdgSurface
-                    return $ (fromInteger $ fromIntegral pidInt)
-                  Right wlrXWaylandSurface -> do
-                    wlrXWaylandSurface <- validateSurfaceE wlrXWaylandSurface
-                    pidInt <- G.get_pid wlrXWaylandSurface
-                    return $ (fromInteger $ fromIntegral pidInt)
-      pids <- (pid:) <$> getParentsPids pid
-      maybeLocation <- getSimulaStartingLocationAtomically gss pids
+      maybeWindowClass <- case eitherSurface of
+        Left wlrXdgSurface -> do
+          wlrXdgSurface <- validateSurfaceE wlrXdgSurface
+          getXdgAppId wlrXdgSurface
+        Right wlrXWaylandSurface -> do
+          wlrXWaylandSurface <- validateSurfaceE wlrXWaylandSurface
+          getXWaylandWindowClass wlrXWaylandSurface
+      maybeLocationByLaunchToken <- case (maybeWindowClass >>= extractStartingAppLaunchToken) of
+        Nothing -> return Nothing
+        Just launchToken -> getSimulaStartingLocationByLaunchToken gss launchToken
+      maybeLocationByWindowClass <- case maybeLocationByLaunchToken of
+        Just _ -> return Nothing
+        Nothing -> case maybeWindowClass of
+          Nothing -> return Nothing
+          Just windowClass -> getSimulaStartingLocationByWindowClass gss windowClass
+      maybeLocation <- case (maybeLocationByLaunchToken, maybeLocationByWindowClass) of
+        (Just location, _) -> return (Just location)
+        (Nothing, Just location) -> return (Just location)
+        (Nothing, Nothing) -> do
+          pid <- case eitherSurface of
+            Left wlrXdgSurface -> do
+              wlrXdgSurface <- validateSurfaceE wlrXdgSurface
+              pidInt <- G.get_pid wlrXdgSurface
+              return $ (fromInteger $ fromIntegral pidInt)
+            Right wlrXWaylandSurface -> do
+              wlrXWaylandSurface <- validateSurfaceE wlrXWaylandSurface
+              pidInt <- G.get_pid wlrXWaylandSurface
+              return $ (fromInteger $ fromIntegral pidInt)
+          pids <- (pid:) <$> getParentsPids pid
+          getSimulaStartingLocationByPid gss pids
+      let resolutionPath = case (maybeLocationByLaunchToken, maybeLocationByWindowClass) of
+            (Just _, _) -> "launch-token"
+            (Nothing, Just _) -> "window-class"
+            (Nothing, Nothing) -> "pid"
+      appendWindowLog $ "[placement] path=" ++ resolutionPath ++ " class=" ++ show maybeWindowClass ++ " location=" ++ show maybeLocation
       case maybeLocation of
         Just location -> moveToStartingPosition gsvs location
         Nothing -> return ()
@@ -170,6 +194,7 @@ moveToStartingPosition gsvs appLocation = do
   aabb   <- G.get_aabb meshInstance
   size   <- Api.godot_aabb_get_size aabb >>= fromLowLevel
   let sizeX  = size ^. _x
+  let sizeY  = size ^. _y
   gsvsTransform <- G.get_global_transform gsvs
   startingAppTransform <- readTVarIO (gss ^. gssStartingAppTransform)
   startingAppTransform' <- case startingAppTransform of
@@ -183,11 +208,11 @@ moveToStartingPosition gsvs appLocation = do
     "right" -> do G.set_global_transform gsvs startingAppTransform'
                   G.translate gsvs =<< toLowLevel (V3 (-sizeX) 0 0)
     "bottom" -> do G.set_global_transform gsvs startingAppTransform'
-                   G.translate gsvs =<< toLowLevel (V3 0 (-sizeX) 0)
+                   G.translate gsvs =<< toLowLevel (V3 0 (-sizeY) 0)
     "left" -> do G.set_global_transform gsvs startingAppTransform'
                  G.translate gsvs =<< toLowLevel (V3 (sizeX) 0 0)
     "top" -> do G.set_global_transform gsvs startingAppTransform'
-                G.translate gsvs =<< toLowLevel (V3 0 (sizeX) 0)
+                G.translate gsvs =<< toLowLevel (V3 0 (sizeY) 0)
     _ -> return ()
   orientSpriteTowardsGaze gsvs
 

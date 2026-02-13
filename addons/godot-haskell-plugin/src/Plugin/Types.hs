@@ -20,6 +20,7 @@ import           Path.IO
 
 import           Data.Time.Clock
 import           Data.Maybe
+import qualified Data.Maybe as Maybe
 import           System.Environment (lookupEnv)
 import           Control.Concurrent
 import           Control.Monad
@@ -56,6 +57,8 @@ import qualified Language.C.Inline as C
 import           System.IO.Unsafe
 import           Data.Monoid
 import           Data.List
+import qualified Data.List as List
+import qualified Data.Char as Char
 import           Data.Text.Encoding
 import           Data.Text hiding (show)
 import qualified System.Process.ByteString as B
@@ -66,6 +69,7 @@ import Data.IORef
 import qualified Data.Map.Strict as M
 
 import Data.UUID
+import Data.UUID.V1 (nextUUID)
 import System.Process
 import System.Process.Internals
 import System.Posix.Types
@@ -84,6 +88,19 @@ import System.IO.Streams.Text
 import System.FilePath ((</>), takeExtension, takeDirectory)
 import System.IO.Streams (OutputStream, InputStream, runInteractiveProcess)
 import Path (Path, Abs, Dir, parseAbsDir, parseRelDir, toFilePath, parseRelFile, fileExtension)
+
+windowLogPath :: FilePath
+windowLogPath = "./window_logs.txt"
+
+appendWindowLog :: String -> IO ()
+appendWindowLog msg = do
+  debugFlag <- lookupEnv "SIMULA_DEBUG_WINDOW_LAUNCHING"
+  let enabled = isJust debugFlag
+  when enabled $ do
+    now <- getCurrentTime
+    let line = (show now) ++ " " ++ msg ++ "\n"
+    _ <- (Control.Exception.Safe.try (appendFile windowLogPath line)) :: IO (Either SomeException ())
+    return ()
 
 deriving instance Eq GodotWlrOutput
 deriving instance Eq GodotWlrXdgSurface
@@ -248,6 +265,12 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssStartingAppTransform    :: TVar (Maybe GodotTransform)
   , _gssPid                     :: String
   , _gssStartingAppPids         :: TVar (M.Map ProcessID [String])
+  -- launchToken -> location (precise one-shot placement for token-class windows)
+  , _gssStartingAppLaunchTokens :: TVar (M.Map String String)
+  -- launchToken -> fallback app class (e.g. "google-chrome") for class-queue lookup
+  , _gssStartingAppLaunchTokenClassHints :: TVar (M.Map String String)
+  -- app class -> queued locations, consumed in launch order (e.g. center/right/...)
+  , _gssStartingAppWindowClassHints :: TVar (M.Map String [String])
   , _gssGrab                    :: TVar (Maybe Grab)
   , _gssDiffMap                 :: TVar (M.Map GodotSpatial GodotTransform)
   , _gssWorkspaces              :: Vector GodotSpatial
@@ -875,6 +898,7 @@ savePngPancake gss screenshotBaseName = do
 -- :2)
 appLaunch :: GodotSimulaServer -> String -> Maybe String -> IO ProcessID
 appLaunch gss appStr maybeLocation = do
+  appendWindowLog $ "[appLaunch] command=" ++ show appStr ++ " location=" ++ show maybeLocation
   let originalEnv = (gss ^. gssOriginalEnv)
   maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
   case (appStr, maybeXwaylandDisplay) of
@@ -884,25 +908,95 @@ appLaunch gss appStr maybeLocation = do
     ("launchUsageInstructions", _) -> appLaunch gss "midori https://github.com/SimulaVR/Simula#usage -p" maybeLocation
     (_, Nothing) -> putStrLn "No DISPLAY found!" >> (return $ fromInteger 0)
     (_, (Just xwaylandDisplay)) -> do
+      maybeLaunchToken <- case maybeLocation of
+        Nothing -> return Nothing
+        Just _ -> mkStartingAppLaunchToken
+      appendWindowLog $ "[appLaunch] maybeLaunchToken=" ++ show maybeLaunchToken
+      let maybeTokenizedCommand = do
+            launchToken <- maybeLaunchToken
+            launchCmd <- injectStartingAppLaunchToken appStr launchToken
+            return (launchToken, launchCmd)
+      let launchCmd = Maybe.maybe appStr snd maybeTokenizedCommand
+      appendWindowLog $ "[appLaunch] launchCmd=" ++ show launchCmd ++ " tokenized=" ++ show maybeTokenizedCommand
       let envMap = M.fromList originalEnv
       let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
       let envMapWithWaylandDisplay = case maybeLocation of
             Just location -> M.insert "SIMULA_STARTING_LOCATION" location (M.insert "WAYLAND_DISPLAY" "simula-0" envMapWithDisplay)
             Nothing -> (M.insert "WAYLAND_DISPLAY" "simula-0" envMapWithDisplay)
-      let envListWithDisplays = M.toList envMapWithWaylandDisplay
-      res <- Control.Exception.Safe.try $ createProcess (shell appStr) { env = Just envListWithDisplays, new_session = True } :: IO (Either IOException (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle))
+      let envMapWithLaunchToken = case maybeTokenizedCommand of
+            Just (launchToken, _) -> M.insert "SIMULA_LAUNCH_TOKEN" launchToken envMapWithWaylandDisplay
+            Nothing -> envMapWithWaylandDisplay
+      let envListWithDisplays = M.toList envMapWithLaunchToken
+      res <- Control.Exception.Safe.try $ createProcess (shell launchCmd) { env = Just envListWithDisplays, new_session = True } :: IO (Either IOException (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle))
       pid <- case res of
-                  Left _ -> return $ fromInteger 0
+                  Left _ -> do appendWindowLog "[appLaunch] createProcess failed"
+                               return $ fromInteger 0
                   Right (_, _, _, processHandle) -> do maybePid <- System.Process.getPid processHandle
                                                        case maybePid of
-                                                            Just pid -> return pid
-                                                            Nothing -> return $ fromInteger $ 0
-      startingAppPids <- readTVarIO (gss ^. gssStartingAppPids)
-      case maybeLocation of
-        Nothing -> return ()
-        Just location -> do let startingAppPids' = M.insertWith (++) pid [location] startingAppPids
-                            atomically $ writeTVar (gss ^. gssStartingAppPids) startingAppPids'
+                                                            Just pid -> do appendWindowLog $ "[appLaunch] pid=" ++ show pid
+                                                                           return pid
+                                                            Nothing -> do appendWindowLog "[appLaunch] process has no pid"
+                                                                          return $ fromInteger $ 0
+      when (pid /= (fromInteger 0)) $ do
+        startingAppPids <- readTVarIO (gss ^. gssStartingAppPids)
+        case maybeLocation of
+          Nothing -> return ()
+          Just location -> do let startingAppPids' = M.insertWith (++) pid [location] startingAppPids
+                              atomically $ writeTVar (gss ^. gssStartingAppPids) startingAppPids'
+        case (maybeLocation, maybeTokenizedCommand) of
+          (Just location, Just (launchToken, _)) ->
+            do atomically $ modifyTVar' (gss ^. gssStartingAppLaunchTokens) (M.insert launchToken location)
+               appendWindowLog $ "[appLaunch] token-map insert token=" ++ show launchToken ++ " location=" ++ show location
+          _ -> return ()
+        case (maybeLocation, inferStartingAppWindowClassHint appStr) of
+          (Just location, Just windowClassHint) ->
+            do atomically $ modifyTVar' (gss ^. gssStartingAppWindowClassHints) (M.insertWith (\new old -> old ++ new) windowClassHint [location])
+               appendWindowLog $ "[appLaunch] class-hint enqueue class=" ++ show windowClassHint ++ " location=" ++ show location
+          _ -> return ()
+        case (maybeTokenizedCommand, inferStartingAppWindowClassHint appStr) of
+          (Just (launchToken, _), Just windowClassHint) ->
+            do atomically $ modifyTVar' (gss ^. gssStartingAppLaunchTokenClassHints) (M.insert launchToken windowClassHint)
+               appendWindowLog $ "[appLaunch] token-class-hint token=" ++ show launchToken ++ " class=" ++ show windowClassHint
+          _ -> return ()
       return pid
+
+  where mkStartingAppLaunchToken :: IO (Maybe String)
+        mkStartingAppLaunchToken = do
+          maybeUUID <- nextUUID
+          return $ fmap (\uuid -> "simula-launch-" ++ Data.List.filter (/= '-') (show uuid)) maybeUUID
+
+        injectStartingAppLaunchToken :: String -> String -> Maybe String
+        injectStartingAppLaunchToken command launchToken
+          | "--class=" `List.isInfixOf` List.map Char.toLower command = Nothing
+          | otherwise = injectChromiumClass command launchToken
+
+        injectChromiumClass :: String -> String -> Maybe String
+        injectChromiumClass command launchToken =
+          let chromiumExecutables = ["google-chrome-stable", "google-chrome", "chromium-browser", "chromium"]
+              launchArg = " --class=" ++ launchToken
+              injectAfter executable =
+                let replacement = executable ++ launchArg
+                 in unpack (replace (pack executable) (pack replacement) (pack command))
+              findInjected [] = Nothing
+              findInjected (executable:rest) =
+                if executable `List.isInfixOf` command
+                  then Just (injectAfter executable)
+                  else findInjected rest
+           in findInjected chromiumExecutables
+
+        inferStartingAppWindowClassHint :: String -> Maybe String
+        inferStartingAppWindowClassHint command =
+          let commandLower = List.map Char.toLower command
+              has needle = needle `List.isInfixOf` commandLower
+           in if has "google-chrome-stable" || has "google-chrome" || has "chromium-browser" || has "chromium"
+                 then Just "google-chrome"
+                 else if has "firefox"
+                   then Just "firefox"
+                   else if has "gvim"
+                     then Just "gvim"
+                   else if has "xfce4-terminal"
+                     then Just "xfce4-terminal"
+                     else Nothing
 
 
 launchHMDWebCam :: GodotSimulaServer -> Maybe String -> IO ProcessID
@@ -1331,6 +1425,132 @@ setShader gsvs tres = do
       G.set_material quadMesh (safeCast shm)
     Nothing -> error "couldn't fetch shader"
 
+getXWaylandWindowClass :: GodotWlrXWaylandSurface -> IO (Maybe String)
+getXWaylandWindowClass wlrXWaylandSurface = do
+  method <- toLowLevel (pack "get_window_class") :: IO GodotString
+  classStrResult <- (Control.Exception.Safe.try $ do
+    classVariant <- G.call wlrXWaylandSurface method [] :: IO GodotVariant
+    classGodotStr <- fromGodotVariant classVariant :: IO GodotString
+    fromLowLevel classGodotStr :: IO Text) :: IO (Either SomeException Text)
+  Api.godot_string_destroy method
+  ret <- case classStrResult of
+    Left _ -> return Nothing
+    Right classTxt | Data.Text.null classTxt -> return Nothing
+    Right classTxt -> return (Just (Data.Text.unpack classTxt))
+  appendWindowLog $ "[getXWaylandWindowClass] class=" ++ show ret
+  return ret
+
+getXdgAppId :: GodotWlrXdgSurface -> IO (Maybe String)
+getXdgAppId wlrXdgSurface = do
+  appIdResult <- (Control.Exception.Safe.try $ do
+    wlrXdgToplevel <- G.get_xdg_toplevel wlrXdgSurface :: IO GodotWlrXdgToplevel
+    wlrXdgToplevel <- validateSurfaceE wlrXdgToplevel
+    appIdGodotStr <- G.get_app_id wlrXdgToplevel :: IO GodotString
+    fromLowLevel appIdGodotStr :: IO Text) :: IO (Either SomeException Text)
+  ret <- case appIdResult of
+    Left _ -> return Nothing
+    Right appIdTxt | Data.Text.null appIdTxt -> return Nothing
+    Right appIdTxt -> return (Just (Data.Text.unpack appIdTxt))
+  appendWindowLog $ "[getXdgAppId] appId=" ++ show ret
+  return ret
+
+extractStartingAppLaunchToken :: String -> Maybe String
+extractStartingAppLaunchToken classStr =
+  let token = List.map Char.toLower classStr
+      prefix = "simula-launch-"
+  in if prefix `List.isPrefixOf` token then Just token else Nothing
+
+getSimulaStartingLocationByLaunchToken :: GodotSimulaServer -> String -> IO (Maybe String)
+getSimulaStartingLocationByLaunchToken gss launchToken = do
+  (ret, maybeConsumedClassKey) <- atomically $ do
+    launchTokens <- readTVar (gss ^. gssStartingAppLaunchTokens)
+    tokenClassHints <- readTVar (gss ^. gssStartingAppLaunchTokenClassHints)
+    classHints <- readTVar (gss ^. gssStartingAppWindowClassHints)
+    case M.lookup launchToken launchTokens of
+      Nothing -> return (Nothing, Nothing)
+      Just location -> do
+        let launchTokens' = M.delete launchToken launchTokens
+        let maybeClassKey = normalizeWindowClass <$> M.lookup launchToken tokenClassHints
+        let classHints' = case maybeClassKey of
+              Nothing -> classHints
+              Just classKey -> consumeClassHintLocation classKey location classHints
+        writeTVar (gss ^. gssStartingAppLaunchTokens) launchTokens'
+        when (classHints' /= classHints) $
+          writeTVar (gss ^. gssStartingAppWindowClassHints) classHints'
+        return (Just location, maybeClassKey)
+  appendWindowLog $
+    "[token-match] token=" ++ show launchToken
+      ++ " location=" ++ show ret
+      ++ " consumedClassKey=" ++ show maybeConsumedClassKey
+  return ret
+  where
+    consumeClassHintLocation :: String -> String -> M.Map String [String] -> M.Map String [String]
+    consumeClassHintLocation classKey location hints =
+      case M.lookup classKey hints of
+        Nothing -> hints
+        Just locations ->
+          let remaining = removeFirstLocation locations
+           in if remaining == locations
+                then hints
+                else if Prelude.null remaining
+                  then M.delete classKey hints
+                  else M.insert classKey remaining hints
+      where
+        removeFirstLocation :: [String] -> [String]
+        removeFirstLocation [] = []
+        removeFirstLocation (x:xs)
+          | x == location = xs
+          | otherwise = x : removeFirstLocation xs
+
+normalizeWindowClass :: String -> String
+normalizeWindowClass classStr =
+  let trim = List.dropWhile Char.isSpace . List.reverse . List.dropWhile Char.isSpace . List.reverse
+  in trim (List.map Char.toLower classStr)
+
+getSimulaStartingLocationByWindowClass :: GodotSimulaServer -> String -> IO (Maybe String)
+getSimulaStartingLocationByWindowClass gss classStr = do
+  let classKey = normalizeWindowClass classStr
+  (ret, usedClassKey, fallbackClassKey) <- atomically $ do
+    classHints <- readTVar (gss ^. gssStartingAppWindowClassHints)
+    tokenClassHints <- readTVar (gss ^. gssStartingAppLaunchTokenClassHints)
+
+    let popClassHint :: String -> M.Map String [String] -> (Maybe String, M.Map String [String])
+        popClassHint key hints =
+          case M.lookup key hints of
+            Nothing -> (Nothing, hints)
+            Just [] -> (Nothing, M.delete key hints)
+            Just (location:remaining) ->
+              let hints' =
+                    if Prelude.null remaining
+                      then M.delete key hints
+                      else M.insert key remaining hints
+              in (Just location, hints')
+
+    let (directRet, classHintsAfterDirect) = popClassHint classKey classHints
+    case directRet of
+      Just location -> do
+        when (classHintsAfterDirect /= classHints) $ writeTVar (gss ^. gssStartingAppWindowClassHints) classHintsAfterDirect
+        return (Just location, Just classKey, Nothing)
+      Nothing -> do
+        let maybeFallbackClassKey = do
+              launchToken <- extractStartingAppLaunchToken classKey
+              fallbackClass <- M.lookup launchToken tokenClassHints
+              return (normalizeWindowClass fallbackClass)
+        case maybeFallbackClassKey of
+          Nothing -> do
+            when (classHintsAfterDirect /= classHints) $ writeTVar (gss ^. gssStartingAppWindowClassHints) classHintsAfterDirect
+            return (Nothing, Nothing, Nothing)
+          Just fallbackClassKey -> do
+            let (fallbackRet, classHintsAfterFallback) = popClassHint fallbackClassKey classHintsAfterDirect
+            when (classHintsAfterFallback /= classHints) $ writeTVar (gss ^. gssStartingAppWindowClassHints) classHintsAfterFallback
+            return (fallbackRet, if isJust fallbackRet then Just fallbackClassKey else Nothing, Just fallbackClassKey)
+  appendWindowLog $
+    "[class-match] classKey=" ++ show classKey
+      ++ " fallbackClassKey=" ++ show fallbackClassKey
+      ++ " usedClassKey=" ++ show usedClassKey
+      ++ " location=" ++ show ret
+  return ret
+
 getParentPid :: ProcessID -> IO (Maybe ProcessID)
 getParentPid pid = do
   let fp = "/proc/" ++ show (toInteger pid) ++ "/stat"
@@ -1351,8 +1571,8 @@ getParentsPids pid = do
       return (ppid':ps)
     Nothing -> return []
 
-getSimulaStartingLocationAtomically :: GodotSimulaServer -> [ProcessID] -> IO (Maybe String)
-getSimulaStartingLocationAtomically gss pids = do
+getSimulaStartingLocationByPid :: GodotSimulaServer -> [ProcessID] -> IO (Maybe String)
+getSimulaStartingLocationByPid gss pids = do
   ret <- case pids of
               [] -> return Nothing
               pid:pids -> atomically $ do startingAppPids <- readTVar (gss ^. gssStartingAppPids)
@@ -1372,7 +1592,7 @@ getSimulaStartingLocationAtomically gss pids = do
        (_, Just ret) -> return $ Just ret
        ([], Nothing) -> return Nothing
        (pid:pids, Nothing) -> do
-         getSimulaStartingLocationAtomically gss pids
+         getSimulaStartingLocationByPid gss pids
 
 keyboardGrabInitiate :: GodotSimulaServer -> Grab -> IO ()
 keyboardGrabInitiate gss (GrabWindow gsvs _) = do
