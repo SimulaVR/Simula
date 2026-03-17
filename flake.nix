@@ -53,7 +53,7 @@
           }:
           let
             godot-haskell = inputs.godot-haskell.packages."${system}".godot-haskell;
-            godot-openxr = pkgs.callPackage "${inputs.godot-openxr}/default.nix" { 
+            godot-openxr = pkgs.callPackage "${inputs.godot-openxr}/default.nix" {
               godot = inputs.godot;
             };
             godot-haskell-plugin = pkgs.callPackage ./addons/godot-haskell-plugin { inherit godot-haskell; };
@@ -111,11 +111,11 @@
               exec ${pkgs.xfce.xfce4-terminal}/bin/xfce4-terminal "$@"
             '';
 
-          # midori-wrapped = pkgs.writeScriptBin "midori" ''
-          #   #!${pkgs.stdenv.shell}
-          #   export XDG_DATA_HOME=${pkgs.dejavu_fonts}/share
-          #   exec ${pkgs.midori}/bin/midori "$@"
-          # '';
+            # midori-wrapped = pkgs.writeScriptBin "midori" ''
+            #   #!${pkgs.stdenv.shell}
+            #   export XDG_DATA_HOME=${pkgs.dejavu_fonts}/share
+            #   exec ${pkgs.midori}/bin/midori "$@"
+            # '';
 
             i3status-forked = inputs.i3status-fork.packages.${system}.default;
 
@@ -407,7 +407,7 @@
                 mimic
                 xclip
                 xfce4-terminal-wrapped
-              # midori-wrapped
+                # midori-wrapped
                 i3status-wrapped
                 xorg.xkbcomp
                 xwayland
@@ -477,7 +477,12 @@
             };
 
             packages = {
-              inherit simula godot-haskell godot-haskell-plugin godot-openxr;
+              inherit
+                simula
+                godot-haskell
+                godot-haskell-plugin
+                godot-openxr
+                ;
               simula-rgp = simulaRgpTool;
               simula-monado-service-rgp = simulaMonadoServiceRgpTool;
               default = simula;
