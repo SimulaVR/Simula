@@ -982,12 +982,15 @@ handle_unmap_base self [wlrXWaylandSurfaceVariant] = do
                                                           else (return ())
 
   G.set_process self False
+  G.set_process_input self False
   atomically $ writeTVar (simulaView ^. svMapped) False
-  isInSceneGraph <- G.is_a_parent_of ((safeCast gss) :: GodotNode ) ((safeCast self) :: GodotNode)
   atomically $ writeTVar (self ^. gsvsIsDamaged) True
-  case isInSceneGraph of
-       True -> removeChild gss self
-       False -> return ()
+  isInSceneGraph <- G.is_inside_tree ((safeCast self) :: GodotNode)
+  when isInSceneGraph $ do
+    parentNode <- G.get_parent ((safeCast self) :: GodotNode) :: IO GodotNode
+    case validateObject parentNode of
+      Just validParentNode -> removeChild validParentNode self
+      Nothing -> return ()
 
 getXWaylandSubsurfaceAndCoords :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> SurfaceLocalCoordinates -> IO (GodotWlrSurface, SubSurfaceLocalCoordinates)
 getXWaylandSubsurfaceAndCoords gsvs wlrXWaylandSurface coords@(SurfaceLocalCoordinates (sx, sy)) = do
