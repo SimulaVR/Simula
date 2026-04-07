@@ -60,7 +60,7 @@ instance HasBaseClass GodotSimula where
 
 
 ready :: GodotSimula -> [GodotVariant] -> IO ()
-ready self _ = do
+ready self gvArgs = do
   -- OpenHMD is unfortunately not yet a working substitute for OpenVR
   -- https://github.com/SimulaVR/Simula/issues/72
 
@@ -119,6 +119,7 @@ ready self _ = do
   G.set_current gpc True
   G.add_child self (safeCast gpc) True
 
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()
  where
   -- Helper function for black texture debugging.
@@ -184,7 +185,7 @@ ready self _ = do
 
 
 on_button_signal :: GodotSimula -> [GodotVariant] -> IO ()
-on_button_signal self [buttonVar, controllerVar, pressedVar] = do
+on_button_signal self gvArgs@[buttonVar, controllerVar, pressedVar] = do
   -- putStrLn "on_button_signal in Simula.hs"
   button <- fromGodotVariant buttonVar
   controllerObj <- fromGodotVariant controllerVar
@@ -193,6 +194,7 @@ on_button_signal self [buttonVar, controllerVar, pressedVar] = do
   --Just controller <- asNativeScript controllerObj -- tryObjectCast controllerObj
   pressed <- fromGodotVariant pressedVar
   onButton self controller button pressed
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
 
@@ -229,11 +231,12 @@ onButton self gsc button pressed = do
 
 
 process :: GodotSimula -> [GodotVariant] -> IO ()
-process self _ = do
+process self gvArgs = do
   -- putStrLn "process in Simula.hs"
   let gst = _sGrabState self
   atomically (readTVar gst)
     >>= handleState
     >>= atomically . writeTVar gst
 
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()

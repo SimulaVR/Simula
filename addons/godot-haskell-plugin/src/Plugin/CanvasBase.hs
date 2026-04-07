@@ -88,16 +88,18 @@ newCanvasBase gsvs = do
   return cb
 
 _ready :: CanvasBase -> [GodotVariant] -> IO ()
-_ready cb _ = do
+_ready cb gvArgs = do
   G.set_process cb True
+  mapM_ Api.godot_variant_destroy gvArgs
 
 _process :: CanvasBase -> [GodotVariant] -> IO ()
-_process self args = do
+_process self gvArgs = do
   G.update self
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
 _draw :: CanvasBase -> [GodotVariant] -> IO ()
-_draw cb _ = do
+_draw cb gvArgs = do
   gsvs <- readTVarIO (cb ^. cbGSVS)
   gss <- readTVarIO (gsvs ^. gsvsServer)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
@@ -110,6 +112,8 @@ _draw cb _ = do
 
   -- Increment global framecount
   atomically $ modifyTVar' (gsvs ^. gsvsFrameCount) (+1)
+
+  mapM_ Api.godot_variant_destroy gvArgs
 
   where
     getTransparency :: CanvasBase -> IO Double

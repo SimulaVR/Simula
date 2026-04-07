@@ -57,19 +57,21 @@ instance NativeScript CanvasAR where
     ]
 
 _ready :: CanvasAR -> [GodotVariant] -> IO ()
-_ready self _ = do
+_ready self gvArgs = do
   -- canvasShaderMaterial <- readTVarIO (self ^. carShader)
   -- G.set_material self (safeCast canvasShaderMaterial)
   G.set_process self True
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
 _process :: CanvasAR -> [GodotVariant] -> IO ()
-_process self args = do
+_process self gvArgs = do
   G.update self
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
 _draw :: CanvasAR -> [GodotVariant] -> IO ()
-_draw car _ = do
+_draw car gvArgs = do
   cameraTexture <- readTVarIO (car ^. carCameraTexture)
   modulateColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1.0) :: IO GodotColor
   renderPosition <- toLowLevel (V2 0 0)
@@ -80,3 +82,4 @@ _draw car _ = do
   -- m22Rect' <- toLowLevel m22Rect
   -- redColor <- (toLowLevel $ (rgb 1.0 0.0 0.0) `withOpacity` 0.5) :: IO GodotColor
   -- G.draw_rect car m22Rect' redColor True 1.0 False
+  mapM_ Api.godot_variant_destroy gvArgs

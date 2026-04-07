@@ -62,16 +62,18 @@ instance HasBaseClass GodotPancakeCamera where
   super (GodotPancakeCamera obj ) = GodotCamera obj
 
 _ready :: GodotPancakeCamera -> [GodotVariant] -> IO ()
-_ready gpc args = do
+_ready gpc gvArgs = do
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
 -- | Take the PoV of the ARVRCamera, if it exists.
 _process :: GodotPancakeCamera -> [GodotVariant] -> IO ()
-_process gpc args = do
+_process gpc gvArgs = do
   maybeARVRTransform <- getARVRCameraTransform gpc
   case maybeARVRTransform of
     (Just transform) -> G.set_global_transform gpc transform
     Nothing -> return ()
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()
   where getARVRCameraTransform :: GodotPancakeCamera -> IO (Maybe GodotTransform)
         getARVRCameraTransform gpc = do
@@ -87,4 +89,3 @@ _process gpc args = do
                             return (Just transform)
           Api.godot_node_path_destroy nodePath
           return maybeTransform
-

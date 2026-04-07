@@ -240,7 +240,7 @@ addSimulaController originNode nodeName ctID = do
   return ct
 
 process :: GodotSimulaController -> [GodotVariant] -> IO ()
-process self [deltaGV] = do
+process self gvArgs@[deltaGV] = do
   delta <- fromGodotVariant deltaGV :: IO Float
   active <- G.get_is_active self
   visible <- G.is_visible self
@@ -271,6 +271,7 @@ process self [deltaGV] = do
         Nothing   -> godotPrint "Failed to set controller mesh."
       G.set_visible self True
 
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
 getWlrSeatFromPath :: GodotSimulaController -> IO GodotWlrSeat
@@ -287,7 +288,7 @@ getWlrSeatFromPath self = do
   return wlrSeat
 
 physicsProcess :: GodotSimulaController -> [GodotVariant] -> IO ()
-physicsProcess self _ = do
+physicsProcess self gvArgs = do
   whenM (G.get_is_active self) $ do
     isGripPressed <- isButtonPressed 2 self
     triggerPull <- G.get_joystick_axis self 2
@@ -296,4 +297,5 @@ physicsProcess self _ = do
     tk <- readTVarIO (_gscTelekinesis self) >>= telekinesis levitateCond True
     atomically $ writeTVar (_gscTelekinesis self) tk
 
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()

@@ -71,7 +71,7 @@ instance NativeScript CanvasSurface where
     ]
 
 _ready :: CanvasSurface -> [GodotVariant] -> IO ()
-_ready self _ = do
+_ready self gvArgs = do
   clearshm <- load GodotShaderMaterial "ShaderMaterial" "res://addons/godot-haskell-plugin/CanvasClearShader.tres"
   premulshm <- load GodotShaderMaterial "ShaderMaterial" "res://addons/godot-haskell-plugin/CanvasPremulShader.tres"
   case (clearshm, premulshm) of
@@ -82,18 +82,20 @@ _ready self _ = do
     _ -> error "Failed to load canvas shaders"
 
   G.set_process self True
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
 _process :: CanvasSurface -> [GodotVariant] -> IO ()
-_process self args = do
+_process self gvArgs = do
   gsvs <- readTVarIO (self ^. csGSVS)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   mapped <- readTVarIO (simulaView ^. svMapped)
   when mapped $ G.update self
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
 _draw :: CanvasSurface -> [GodotVariant] -> IO ()
-_draw cs _ = do
+_draw cs gvArgs = do
   gsvs <- readTVarIO (cs ^. csGSVS)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   mapped <- readTVarIO (simulaView ^. svMapped)
@@ -129,6 +131,7 @@ _draw cs _ = do
         mapM (drawWlrSurfaceRegions cs regions) depthFirstSurfaces
         mapM Api.godot_array_destroy [surfacesVariantsArray, xsVariantArray, ysVariantArray, regionsArray]
         return ()
+  mapM_ Api.godot_variant_destroy gvArgs
   where
     tuple1 (a1, b2, c3) = a1
     tuple2 (a1, b2, c3) = b2
