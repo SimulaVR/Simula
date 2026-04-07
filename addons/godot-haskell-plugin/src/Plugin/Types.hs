@@ -1265,11 +1265,27 @@ getDepthFirstSurfaces :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int
 getDepthFirstSurfaces gsvs = do
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
-  wlrSurfaceParent <- (getWlrSurface eitherSurface) >>= validateSurfaceE
   depthFirstBaseSurfaces <- getDepthFirstBaseSurfaces gsvs
-  depthFirstWlrSurfaces <- getDepthFirstWlrSurfaces wlrSurfaceParent
-  let depthFirstSurfaces = depthFirstBaseSurfaces ++ depthFirstWlrSurfaces
+  depthFirstSurfaces <- case eitherSurface of
+    Left _ -> do
+      depthFirstWlrSurfaces <- fmap List.concat $ forM depthFirstBaseSurfaces $ \(wlrSurface, x, y) ->
+        getDepthFirstWlrSurfacesFrom x y wlrSurface
+      return $ dedupeDepthFirstSurfaces (depthFirstBaseSurfaces ++ depthFirstWlrSurfaces)
+    Right _ -> do
+      wlrSurfaceParent <- (getWlrSurface eitherSurface) >>= validateSurfaceE
+      depthFirstWlrSurfaces <- getDepthFirstWlrSurfaces wlrSurfaceParent
+      return (depthFirstBaseSurfaces ++ depthFirstWlrSurfaces)
   return depthFirstSurfaces
+  where
+    sameWlrSurface :: GodotWlrSurface -> GodotWlrSurface -> Bool
+    sameWlrSurface surfaceA surfaceB = ((coerce surfaceA) :: Ptr ()) == ((coerce surfaceB) :: Ptr ())
+
+    dedupeDepthFirstSurfaces :: [(GodotWlrSurface, Int, Int)] -> [(GodotWlrSurface, Int, Int)]
+    dedupeDepthFirstSurfaces = List.foldl' keepFirst []
+      where
+        keepFirst acc surfaceWithCoords@(surface, _, _)
+          | List.any (\(seenSurface, _, _) -> sameWlrSurface seenSurface surface) acc = acc
+          | otherwise = acc ++ [surfaceWithCoords]
 
 getDepthFirstBaseSurfaces :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
 getDepthFirstBaseSurfaces gsvs = do
@@ -1366,13 +1382,24 @@ getDepthFirstXdgSurfaces wlrXdgSurface = do
           foldM appendXdgSurfaceAndChildren (oldList ++ [(wlrXdgSurface, x, y)]) subsurfacesAndCoords
 
 getDepthFirstWlrSurfaces :: GodotWlrSurface -> IO [(GodotWlrSurface, Int, Int)]
-getDepthFirstWlrSurfaces wlrSurface = do
+getDepthFirstWlrSurfaces = getDepthFirstWlrSurfacesFrom 0 0
+
+getDepthFirstWlrSurfacesFrom :: Int -> Int -> GodotWlrSurface -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstWlrSurfacesFrom rootX rootY wlrSurface = do
   surfaceChildrenAndCoords <- getSurfaceChildren wlrSurface
-  foldM appendSurfaceAndChildren [] surfaceChildrenAndCoords
-  where appendSurfaceAndChildren :: [(GodotWlrSurface, Int, Int)] -> (GodotWlrSurface, Int, Int) -> IO [(GodotWlrSurface, Int, Int)]
-        appendSurfaceAndChildren oldList arg@(wlrSurface, x, y) = do
-          surfacesAndCoords <- getSurfaceChildren wlrSurface :: IO [(GodotWlrSurface, Int, Int)]
-          foldM appendSurfaceAndChildren (oldList ++ [(wlrSurface, x, y)]) surfacesAndCoords
+  let rootRelativeSurfaceChildrenAndCoords = fmap (\(childSurface, childX, childY) -> (childSurface, rootX + childX, rootY + childY)) surfaceChildrenAndCoords
+  snd <$> foldM appendSurfaceAndChildren ([], []) rootRelativeSurfaceChildrenAndCoords
+  where
+        sameWlrSurface :: GodotWlrSurface -> GodotWlrSurface -> Bool
+        sameWlrSurface surfaceA surfaceB = ((coerce surfaceA) :: Ptr ()) == ((coerce surfaceB) :: Ptr ())
+
+        appendSurfaceAndChildren :: ([GodotWlrSurface], [(GodotWlrSurface, Int, Int)]) -> (GodotWlrSurface, Int, Int) -> IO ([GodotWlrSurface], [(GodotWlrSurface, Int, Int)])
+        appendSurfaceAndChildren (visited, oldList) arg@(wlrSurface, x, y)
+          | List.any (`sameWlrSurface` wlrSurface) visited = return (visited, oldList)
+          | otherwise = do
+              surfacesAndCoords <- getSurfaceChildren wlrSurface :: IO [(GodotWlrSurface, Int, Int)]
+              let rootRelativeSurfacesAndCoords = fmap (\(childSurface, childX, childY) -> (childSurface, x + childX, y + childY)) surfacesAndCoords
+              foldM appendSurfaceAndChildren (wlrSurface : visited, oldList ++ [(wlrSurface, x, y)]) rootRelativeSurfacesAndCoords
 
         getSurfaceChildren :: GodotWlrSurface -> IO [(GodotWlrSurface, Int, Int)]
         getSurfaceChildren wlrSurface = do
