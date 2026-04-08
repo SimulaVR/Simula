@@ -427,7 +427,10 @@ connectGodotSignal sourceObj signalName methodObj methodName defaultArgs = do
   let methodObj' =  safeCast methodObj     :: GodotObject
   methodName'    <- (toLowLevel (pack methodName))  :: IO GodotString
   defaultArgs'   <- (toLowLevel defaultArgs) :: IO GodotArray -- Wraps godot_array_new; do we have to clean this up via godot_array_destroy ?
-  G.connect sourceObj' signalName' methodObj' methodName' defaultArgs' 0
+  finally
+    (G.connect sourceObj' signalName' methodObj' methodName' defaultArgs' 0)
+    (do Api.godot_array_destroy defaultArgs'
+        mapM_ Api.godot_string_destroy [methodName', signalName'])
 
 addChild :: (GodotNode :< parent)
          => (GodotNode :< child)
