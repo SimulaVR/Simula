@@ -241,6 +241,152 @@
 
             simulaMonadoServiceRgpTool = pkgs.writeShellScriptBin "simula-monado-service-rgp" simulaMonadoServiceRgpContent;
             simulaRgpTool = pkgs.writeShellScriptBin "simula-rgp" simulaRgpContent;
+            awscli = if pkgs ? awscli2 then pkgs.awscli2 else pkgs.awscli;
+            # Provide sources from certain nix supplied libs for penosco visiblity
+            simulaPernoscoSourceTree = pkgs.stdenvNoCC.mkDerivation {
+              pname = "simula-pernosco-source-tree";
+              version = "0.0.0";
+              dontUnpack = true;
+
+              installPhase = ''
+                mkdir -p $out/srcs/xwayland
+                ${pkgs.gnutar}/bin/tar -xf ${pkgs.xwayland.src} --directory $out/srcs/xwayland --strip-components=1
+
+                mkdir -p $out/srcs/libxcb
+                ${pkgs.gnutar}/bin/tar -xf ${pkgs.xorg.libxcb.src} --directory $out/srcs/libxcb --strip-components=1
+
+                mkdir -p $out/srcs/wayland
+                ${pkgs.gnutar}/bin/tar -xf ${pkgs.wayland.src} --directory $out/srcs/wayland --strip-components=1
+              '';
+            };
+
+            simulaPernoscoSubmit = pkgs.writeShellScript "simula-pernosco-submit" ''
+              set -euo pipefail
+
+              project_root="''${SIMULA_PROJECT_ROOT:-$PWD}"
+              trace_dir=""
+              global_args=()
+              upload_args=()
+              show_help=0
+              extra_store_source_dirs=()
+
+              # Support e.g. `./simula-pernosco-submit --title "Broken popup" ./rr/latest-trace`
+              while [ "$#" -gt 0 ]; do
+                case "$1" in
+                  -x|--ignore-warnings)
+                    global_args+=("$1")
+                    ;;
+                  --title|--url|--dry-run|--substitute)
+                    opt="$1"
+                    upload_args+=("$opt")
+                    shift
+                    if [ "$#" -eq 0 ]; then
+                      echo "Missing value for $opt" >&2
+                      exit 1
+                    fi
+                    upload_args+=("$1")
+                    ;;
+                  --consent-to-current-privacy-policy|--no-local-sources|--help|-h)
+                    upload_args+=("$1")
+                    if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+                      show_help=1
+                    fi
+                    ;;
+                  -*)
+                    upload_args+=("$1")
+                    ;;
+                  *)
+                    if [ -z "$trace_dir" ]; then
+                      trace_dir="$1"
+                    else
+                      upload_args+=("$1")
+                    fi
+                    ;;
+                esac
+                shift
+              done
+
+              if [ "$show_help" -eq 1 ]; then
+                exec ${pkgs.python3}/bin/python3 "$project_root/submodules/pernosco-submit/pernosco-submit" \
+                  "''${global_args[@]}" \
+                  upload \
+                  "''${upload_args[@]}"
+              fi
+
+              if [ -z "$trace_dir" ]; then
+                trace_dir="$project_root/rr/latest-trace"
+              elif [[ "$trace_dir" != /* ]]; then
+                trace_dir="$PWD/$trace_dir"
+              fi
+
+              if [ ! -e "$trace_dir" ]; then
+                echo "Trace directory not found: $trace_dir" >&2
+                exit 1
+              fi
+
+              pernosco_submit="$project_root/submodules/pernosco-submit/pernosco-submit"
+              if [ ! -e "$pernosco_submit" ]; then
+                echo "Couldn't find pernosco-submit at $pernosco_submit" >&2
+                exit 1
+              fi
+
+              wlroots_lib="$project_root/submodules/wlroots/build/libwlroots.so.0"
+              if [ ! -e "$wlroots_lib" ]; then
+                echo "Expected wlroots build artifact at $wlroots_lib" >&2
+                exit 1
+              fi
+
+              source_root="${simulaPernoscoSourceTree}/srcs"
+              wlroots_so_name="$(${pkgs.coreutils}/bin/basename "$(${pkgs.coreutils}/bin/readlink -f "$wlroots_lib")")"
+              wayland_client_so_name="$(${pkgs.coreutils}/bin/basename "$(${pkgs.coreutils}/bin/readlink -f ${pkgs.wayland}/lib/libwayland-client.so)")"
+              wayland_egl_so_name="$(${pkgs.coreutils}/bin/basename "$(${pkgs.coreutils}/bin/readlink -f ${pkgs.wayland}/lib/libwayland-egl.so)")"
+              wayland_server_so_name="$(${pkgs.coreutils}/bin/basename "$(${pkgs.coreutils}/bin/readlink -f ${pkgs.wayland}/lib/libwayland-server.so)")"
+              libxcb_so_name="$(${pkgs.coreutils}/bin/basename "$(${pkgs.coreutils}/bin/readlink -f ${pkgs.xorg.libxcb}/lib/libxcb.so)")"
+
+              shopt -s nullglob
+              for pattern in /nix/store/*-wlroots-* /nix/store/*-wayland-* /nix/store/*-libxcb-*; do
+                for path in $pattern; do
+                  if [ -e "$path" ]; then
+                    extra_store_source_dirs+=("$path")
+                  fi
+                done
+              done
+              shopt -u nullglob
+
+              export PATH="${lib.makeBinPath [
+                awscli
+                pkgs.openssl
+                pkgs.gnutar
+                pkgs.zstd
+                pkgs.git
+                pkgs.mercurial
+                pkgs.rr
+                pkgs.coreutils
+              ]}:$PATH"
+
+              exec ${pkgs.python3}/bin/python3 "$pernosco_submit" \
+                "''${global_args[@]}" \
+                upload \
+                --substitute="$wlroots_so_name=$project_root/submodules/wlroots/backend" \
+                --substitute="$wayland_client_so_name=$source_root/wayland/src" \
+                --substitute="$wayland_egl_so_name=$source_root/wayland/egl" \
+                --substitute="$wayland_server_so_name=$source_root/wayland/src" \
+                --substitute="$libxcb_so_name=$source_root/libxcb/src" \
+                --substitute="Xwayland=$source_root/xwayland/doc" \
+                "''${upload_args[@]}" \
+                "$trace_dir" \
+                "$project_root" \
+                "$project_root/submodules/wlroots" \
+                "$source_root" \
+                "$source_root/wayland/src" \
+                "$source_root/wayland/egl" \
+                "$source_root/libxcb/src" \
+                "$source_root/xwayland/doc" \
+                "${pkgs.wayland}" \
+                "${pkgs.xorg.libxcb}" \
+                "${pkgs.wlroots}" \
+                "''${extra_store_source_dirs[@]}"
+            '';
 
             cleanSourceFilter =
               name: type:
@@ -256,6 +402,7 @@
                 || (baseName == "rr")
                 #|| lib.hasSuffix ".so" baseName # ".so" cannot remove because dynamic libraries is used by Godot plugins
                 || (type == "symlink" && lib.hasPrefix "result" baseName)
+                || (type == "symlink" && baseName == "simula-pernosco-submit")
                 || (type == "unknown")
               );
 
@@ -419,18 +566,22 @@
               trace_dir="''${SIMULA_RR_TRACE_DIR:-$PWD/rr}"
               mkdir -p "$trace_dir"
               export _RR_TRACE_DIR="$trace_dir"
+              rr_record_args=(
+                record
+                # Tell rr to ignore SIGUSR1 so as to not get tripped up by XWayland emitting it during its normal startup
+                -i
+                SIGUSR1
+              )
 
               echo "rr trace directory: $trace_dir"
               echo "Using Godot binary: $GODOT_BINARY"
               echo "Using project path: $PROJECT_PATH"
 
               if grep -qi NixOS /etc/os-release; then
-                # Tell rr to ignore SIGUSR1 so as to not get tripped up by XWayland emitting it during its normal startup
-                exec ${pkgs.rr}/bin/rr record -i SIGUSR1 "$GODOT_BINARY" --args -m "$PROJECT_PATH" "$@"
+                exec ${pkgs.rr}/bin/rr "''${rr_record_args[@]}" "$GODOT_BINARY" --args -m "$PROJECT_PATH" "$@"
               else
                 echo "Detected non-NixOS distribution, so running Simula with nixGL"
-                # Tell rr to ignore SIGUSR1 so as to not get tripped up by XWayland emitting it during its normal startup
-                exec nix run --impure github:nix-community/nixGL -- ${pkgs.rr}/bin/rr record -i SIGUSR1 "$GODOT_BINARY" --args -m "$PROJECT_PATH" "$@"
+                exec nix run --impure github:nix-community/nixGL -- ${pkgs.rr}/bin/rr "''${rr_record_args[@]}" "$GODOT_BINARY" --args -m "$PROJECT_PATH" "$@"
               fi
             '';
 
@@ -556,6 +707,7 @@
                 godot-haskell-plugin
                 godot-openxr
                 ;
+              simula-pernosco-submit = simulaPernoscoSubmit;
               simula-rgp = simulaRgpTool;
               simula-monado-service-rgp = simulaMonadoServiceRgpTool;
               default = simula;
@@ -563,6 +715,10 @@
             };
 
             apps = {
+              simula-pernosco-submit = {
+                type = "app";
+                program = "${simulaPernoscoSubmit}";
+              };
               simula-rgp = {
                 type = "app";
                 program = "${simulaRgpTool}/bin/simula-rgp";

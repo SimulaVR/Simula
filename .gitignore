@@ -20,6 +20,7 @@ dist-newstyle
 # Nix's result
 result
 result-*
+simula-pernosco-submit
 
 # nix-direnv
 .direnv/

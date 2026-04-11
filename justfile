@@ -24,6 +24,9 @@ build-simula-rgp:
 build-simula-monado-service-rgp:
   nix build .#simula-monado-service-rgp --out-link result-simula-monado-service-rgp
 
+build-simula-pernosco-submit:
+  nix build .#simula-pernosco-submit --out-link simula-pernosco-submit
+
 direnv_allow:
   find . -name '.envrc' -execdir direnv allow \;
 
