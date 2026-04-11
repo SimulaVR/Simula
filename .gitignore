@@ -19,9 +19,13 @@ dist-newstyle
 
 # Nix's result
 result
+result-*
 
 # nix-direnv
 .direnv/
 
 # Local profiling output
 profiling/
+
+# rr traces
+rr/

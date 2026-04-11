@@ -253,6 +253,7 @@
                 || builtins.match "^\\.sw[a-z]$" baseName != null
                 || builtins.match "^\\..*\\.sw[a-z]$" baseName != null
                 || lib.hasSuffix ".o" baseName
+                || (baseName == "rr")
                 #|| lib.hasSuffix ".so" baseName # ".so" cannot remove because dynamic libraries is used by Godot plugins
                 || (type == "symlink" && lib.hasPrefix "result" baseName)
                 || (type == "unknown")
@@ -282,7 +283,7 @@
             '';
 
             initiateSimulaRunner = ''
-              #!/usr/bin/env sh
+              #!/usr/bin/env bash
 
               # Exit `simula` launcher early if anything weird happens
               set -o errexit
@@ -290,35 +291,43 @@
               set -o pipefail
             '';
 
-            monadoEnvVars = ''
-              export SIMULA_CONFIG_PATH=@out@/opt/simula/config/simula_monado_config.json
-              export XRT_COMPOSITOR_LOG=debug
-              export XRT_COMPOSITOR_SCALE_PERCENTAGE=100
-            '';
+            mkMonadoEnvVars =
+              simulaRoot:
+              ''
+                export SIMULA_CONFIG_PATH=${simulaRoot}/opt/simula/config/simula_monado_config.json
+                export XRT_COMPOSITOR_LOG=debug
+                export XRT_COMPOSITOR_SCALE_PERCENTAGE=100
+              '';
 
-            xdgAndSimulaEnvVars = ''
-              export XDG_CACHE_HOME=''${XDG_CACHE_HOME:-$HOME/.cache}
-              export XDG_DATA_HOME=''${XDG_DATA_HOME:-$HOME/.local/share}
-              export XDG_CONFIG_HOME=''${XDG_CONFIG_HOME:-$HOME/.config}
+            monadoEnvVars = mkMonadoEnvVars "@out@";
 
-              export SIMULA_NIX_DIR="$(dirname "$(dirname "$(readlink -f "$0")")")"
-              export SIMULA_LOG_DIR="$XDG_CACHE_HOME/Simula"
-              export SIMULA_DATA_DIR="$XDG_DATA_HOME/Simula"
-              export SIMULA_CONFIG_DIR="$XDG_CONFIG_HOME/Simula"
+            mkXdgAndSimulaEnvVars =
+              simulaRoot:
+              ''
+                export XDG_CACHE_HOME=''${XDG_CACHE_HOME:-$HOME/.cache}
+                export XDG_DATA_HOME=''${XDG_DATA_HOME:-$HOME/.local/share}
+                export XDG_CONFIG_HOME=''${XDG_CONFIG_HOME:-$HOME/.config}
 
-              echo "XDG_CACHE_HOME: $XDG_CACHE_HOME"
-              echo "XDG_DATA_HOME: $XDG_DATA_HOME"
-              echo "XDG_CONFIG_HOME: $XDG_CONFIG_HOME"
-              echo "SIMULA_NIX_DIR: $SIMULA_NIX_DIR"
-              echo "SIMULA_LOG_DIR: $SIMULA_LOG_DIR"
-              echo "SIMULA_DATA_DIR: $SIMULA_DATA_DIR"
-              echo "SIMULA_CONFIG_DIR: $SIMULA_CONFIG_DIR"
-            '';
+                export SIMULA_NIX_DIR="${simulaRoot}"
+                export SIMULA_LOG_DIR="$XDG_CACHE_HOME/Simula"
+                export SIMULA_DATA_DIR="$XDG_DATA_HOME/Simula"
+                export SIMULA_CONFIG_DIR="$XDG_CONFIG_HOME/Simula"
+
+                echo "XDG_CACHE_HOME: $XDG_CACHE_HOME"
+                echo "XDG_DATA_HOME: $XDG_DATA_HOME"
+                echo "XDG_CONFIG_HOME: $XDG_CONFIG_HOME"
+                echo "SIMULA_NIX_DIR: $SIMULA_NIX_DIR"
+                echo "SIMULA_LOG_DIR: $SIMULA_LOG_DIR"
+                echo "SIMULA_DATA_DIR: $SIMULA_DATA_DIR"
+                echo "SIMULA_CONFIG_DIR: $SIMULA_CONFIG_DIR"
+              '';
+
+            xdgAndSimulaEnvVars = mkXdgAndSimulaEnvVars ''$(dirname "$(dirname "$(readlink -f "$0")")")'';
 
             ensureRuntimePaths = binPath: libPath: ''
               # Ensure runtime tools/libs are visible to Godot and its child shells
-              export PATH="${binPath}:$PATH"
-              export LD_LIBRARY_PATH="${libPath}:$LD_LIBRARY_PATH"
+              export PATH="${binPath}''${PATH:+:$PATH}"
+              export LD_LIBRARY_PATH="${libPath}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
             '';
 
             # Needed to ensure fonts don't show up as blocks on certain non-NixOS distributions, IIRC
@@ -344,14 +353,45 @@
               fi
             '';
 
-            launchSimula = ''
+            parseSimulaLaunchArgs = ''
+              # Support e.g. `./result/bin/simula --local --rr -- --godot --args --here`
+              LAUNCH_LOCAL=0
+              RUN_UNDER_RR=0
+              simula_args=()
+
+              while [ "$#" -gt 0 ]; do
+                case "$1" in
+                  --local)
+                    LAUNCH_LOCAL=1
+                    ;;
+                  --rr)
+                    RUN_UNDER_RR=1
+                    ;;
+                  --)
+                    shift
+                    while [ "$#" -gt 0 ]; do
+                      simula_args+=("$1")
+                      shift
+                    done
+                    break
+                    ;;
+                  *)
+                    simula_args+=("$1")
+                    ;;
+                esac
+                shift
+              done
+
+              set -- "''${simula_args[@]}"
+            '';
+
+            resolveSimulaLaunchTarget = ''
               # Use --local if you want to launch Simula locally (with godot binary from ./submodules/godot)
-              if [ "''${1:-}" = "--local" ]; then
+              if [ "$LAUNCH_LOCAL" -eq 1 ]; then
                 export IPC_IGNORE_VERSION=1
                 export XR_RUNTIME_JSON="./config/active_runtime.json"
                 GODOT_BINARY="./submodules/godot/bin/godot.x11.tools.64"
                 PROJECT_PATH="./."
-                shift  # remove --local so $@ now contains only user args
               # Otherwise, use the nix store for everything
               else
                 export XR_RUNTIME_JSON="${monado}/share/openxr/1/openxr_monado.json"
@@ -363,13 +403,45 @@
                 cd "$PROJECT_PATH"
                 PROJECT_PATH="./."
               fi
+            '';
 
+            launchResolvedSimula = ''
               # We `script` (+ stdbuf and ansi2text) to tee the output into the console (colorized) and into our log files (non-colorized)
               if grep -qi NixOS /etc/os-release; then
                 ${pkgs.util-linux}/bin/script -qfc "$GODOT_BINARY -m \"$PROJECT_PATH\" $@" >(${pkgs.coreutils}/bin/stdbuf -oL -eL ${pkgs.colorized-logs}/bin/ansi2txt > "$SIMULA_DATA_DIR/log/output.file")
               else
                 echo "Detected non-NixOS distribution, so running Simula with nixGL"
                 nix run --impure github:nix-community/nixGL -- ${pkgs.util-linux}/bin/script -qfc "$GODOT_BINARY -m \"$PROJECT_PATH\" $@" >(${pkgs.coreutils}/bin/stdbuf -oL -eL ${pkgs.colorized-logs}/bin/ansi2txt > "$SIMULA_DATA_DIR/log/output.file")
+              fi
+            '';
+
+            launchSimulaWithRr = ''
+              trace_dir="''${SIMULA_RR_TRACE_DIR:-$PWD/rr}"
+              mkdir -p "$trace_dir"
+              export _RR_TRACE_DIR="$trace_dir"
+
+              echo "rr trace directory: $trace_dir"
+              echo "Using Godot binary: $GODOT_BINARY"
+              echo "Using project path: $PROJECT_PATH"
+
+              if grep -qi NixOS /etc/os-release; then
+                # Tell rr to ignore SIGUSR1 so as to not get tripped up by XWayland emitting it during its normal startup
+                exec ${pkgs.rr}/bin/rr record -i SIGUSR1 "$GODOT_BINARY" --args -m "$PROJECT_PATH" "$@"
+              else
+                echo "Detected non-NixOS distribution, so running Simula with nixGL"
+                # Tell rr to ignore SIGUSR1 so as to not get tripped up by XWayland emitting it during its normal startup
+                exec nix run --impure github:nix-community/nixGL -- ${pkgs.rr}/bin/rr record -i SIGUSR1 "$GODOT_BINARY" --args -m "$PROJECT_PATH" "$@"
+              fi
+            '';
+
+            launchSimula = ''
+              ${parseSimulaLaunchArgs}
+              ${resolveSimulaLaunchTarget}
+
+              if [ "$RUN_UNDER_RR" -eq 1 ]; then
+                ${launchSimulaWithRr}
+              else
+                ${launchResolvedSimula}
               fi
             '';
 
@@ -464,6 +536,7 @@
                 platforms = lib.platforms.linux;
               };
             };
+
           in
           {
             _module.args.pkgs = import inputs.nixpkgs {

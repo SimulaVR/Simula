@@ -19,10 +19,10 @@ build-profiling:
   just switch-to-local-profiling
 
 build-simula-rgp:
-  nix build .#simula-rgp
+  nix build .#simula-rgp --out-link result-simula-rgp
 
 build-simula-monado-service-rgp:
-  nix build .#simula-monado-service-rgp
+  nix build .#simula-monado-service-rgp --out-link result-simula-monado-service-rgp
 
 direnv_allow:
   find . -name '.envrc' -execdir direnv allow \;
