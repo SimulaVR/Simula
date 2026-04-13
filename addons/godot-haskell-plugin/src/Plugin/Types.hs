@@ -46,7 +46,7 @@ import           Godot.Nativescript as NativeScript
 import qualified Godot.Core.GodotImage       as G
 import           Control.Lens                hiding (Context)
 
-import           Foreign
+import           Foreign hiding (void)
 import           Foreign.C
 import           Foreign.Ptr
 import           Foreign.Marshal.Alloc
@@ -55,10 +55,13 @@ import           Foreign.C.Types
 import qualified Language.C.Inline as C
 
 import           System.IO.Unsafe
+import           System.IO
+import           System.Mem (performGC)
 import           Data.Monoid
 import           Data.List
 import qualified Data.List as List
 import qualified Data.Char as Char
+import           Numeric (showFFloat)
 import           Data.Text.Encoding
 import           Data.Text hiding (show)
 import qualified System.Process.ByteString as B
@@ -78,7 +81,7 @@ import GHC.IO.Handle
 import Godot.Core.GodotViewport as G
 
 import Data.Map.Ordered as MO
-import Dhall
+import Dhall hiding (void)
 import qualified Data.Vector as V
 import System.IO.Streams.Process
 import System.IO.Streams.Internal
@@ -221,6 +224,10 @@ data HUD = HUD
   , _hudSvrTexture   :: GodotTexture
   , _hudDynamicFont  :: GodotDynamicFont
   , _hudI3Status     :: String
+  , _hudDebugMemoryEnabled :: Bool
+  , _hudLastRssSample :: Maybe (UTCTime, Int)
+  , _hudRssKb         :: Int
+  , _hudMemoryDelta   :: String
   }
 
 data PhysicsBodyConfig = PhysicsBodyConfig
@@ -2015,6 +2022,48 @@ logMemPid gss = do
   -- logMemPid gss
   return (pidMem / 1000) -- return ~MB
 
+getRssKbAfterGC :: IO Int
+getRssKbAfterGC = do
+  performGC -- Force GHC GC before reading RSS
+  getRssKb
+
+-- Read process RSS from /proc/self/status. Returns KB, or -1 on failure.
+getRssKb :: IO Int
+getRssKb = do
+  result <- try (readFile "/proc/self/status") :: IO (Either SomeException String)
+  case result of
+    Left _ -> return (-1)
+    Right txt ->
+      case List.find ("VmRSS:" `List.isPrefixOf`) (List.lines txt) of
+        Nothing -> return (-1)
+        Just line ->
+          case List.words line of
+            (_ : val : _) ->
+              case reads val of
+                [(rssKb, "")] -> return rssKb
+                _ -> return (-1)
+            _ -> return (-1)
+
+formatRssMb :: Int -> String
+formatRssMb rssKb
+  | rssKb < 0 = "? MB"
+  | otherwise = show (round (fromIntegral rssKb / 1000 :: Double)) ++ " MB"
+
+formatMemoryDelta :: Maybe (UTCTime, Int) -> UTCTime -> Int -> String
+formatMemoryDelta Nothing _ _ = ""
+formatMemoryDelta _ _ rssKb | rssKb < 0 = ""
+formatMemoryDelta (Just (prevTime, prevRssKb)) now rssKb
+  | prevRssKb < 0 = ""
+  | elapsedSeconds <= 0 = ""
+  | rssKb > prevRssKb = " @ [color=red]" ++ signedRate ++ " MB/s[/color]"
+  | rssKb < prevRssKb = " @ [color=green]" ++ signedRate ++ " MB/s[/color]"
+  | otherwise = " @ " ++ signedRate ++ " MB/s"
+  where
+    elapsedSeconds = realToFrac (diffUTCTime now prevTime) :: Double
+    deltaMbPerSecond = fromIntegral (rssKb - prevRssKb) / 1000 / elapsedSeconds
+    signedRate =
+      (if deltaMbPerSecond >= 0 then "+" else "") ++ showFFloat (Just 1) deltaMbPerSecond ""
+
 forkUpdateHUDRecursively :: GodotSimulaServer -> IO ()
 forkUpdateHUDRecursively gss = do
   debugPutStrLn "Plugin.Types.forkUpdateHUDRecursively"
@@ -2064,34 +2113,16 @@ forkUpdateHUDRecursively gss = do
 updateWorkspaceHUD :: GodotSimulaServer -> IO ()
 updateWorkspaceHUD gss = do
   debugPutStrLn "Plugin.Types.updateWorkspaceHUD"
-  (currentWorkspace, currentWorkspaceStr) <- readTVarIO (gss ^. gssWorkspace)
   hud <- readTVarIO (gss ^. gssHUD)
-  let canvasLayer = (hud ^. hudCanvasLayer)
-  let rtLabelW = (hud ^. hudRtlWorkspace)
-  let svr = (hud ^. hudSvrTexture)
-  let dynamicFont = (hud ^. hudDynamicFont)
-  fps <- getSingleton Godot_Engine "Engine" >>= (\engine -> G.get_frames_per_second engine)
-  simulaMemoryUsage <- logMemPid gss
-  screenRecorder <- readTVarIO (gss ^. gssScreenRecorder)
-
-  G.clear rtLabelW
-  G.push_font rtLabelW (safeCast dynamicFont)
-  G.append_bbcode rtLabelW `withGodotString` (pack currentWorkspaceStr)
-  G.append_bbcode rtLabelW `withGodotString` " | "
-  G.add_image rtLabelW svr 19 19
-  G.append_bbcode rtLabelW `withGodotString` " "
-  G.append_bbcode rtLabelW `withGodotString` (pack $ (show $ round fps) ++ " FPS ")
-  G.append_bbcode rtLabelW `withGodotString` (pack ("@ " ++ (show $ round simulaMemoryUsage) ++ " MB"))
-  G.append_bbcode rtLabelW `withGodotString` " |"
-  case screenRecorder of
-    Nothing -> return ()
-    Just ph -> do
-      redColor <- (toLowLevel $ (rgb 1.0 0.0 0.0) `withOpacity` 1.0) :: IO GodotColor
-      G.push_color rtLabelW redColor
-      G.append_bbcode rtLabelW `withGodotString` " ⚬ "
-      G.pop rtLabelW
-      return ()
-  G.pop rtLabelW
+  let debugMemoryEnabled = hud ^. hudDebugMemoryEnabled
+  rssKb <- if debugMemoryEnabled then getRssKbAfterGC else getRssKb
+  now <- getCurrentTime
+  let memoryDelta = if debugMemoryEnabled then formatMemoryDelta (hud ^. hudLastRssSample) now rssKb else ""
+  let nextRssSample =
+        if debugMemoryEnabled && rssKb >= 0
+          then Just (now, rssKb)
+          else Nothing
+  atomically $ writeTVar (gss ^. gssHUD) (hud { _hudLastRssSample = nextRssSample, _hudRssKb = rssKb, _hudMemoryDelta = memoryDelta })
 
 updatei3StatusHUD :: GodotSimulaServer -> (OutputStream B.ByteString, InputStream B.ByteString, InputStream B.ByteString, ProcessHandle) -> IO ()
 updatei3StatusHUD gss res@(inp,out,err,pid) = do

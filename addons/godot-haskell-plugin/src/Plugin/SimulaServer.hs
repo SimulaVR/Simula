@@ -85,7 +85,7 @@ import           Control.Monad.Extra
 
 import Godot.Core.GodotGlobalConstants as G
 import Godot.Core.GodotInput as G
-import Dhall
+import Dhall hiding (void)
 import Control.Exception
 import qualified Data.Vector as V
 
@@ -714,21 +714,50 @@ process gss gvArgs@[deltaGV] = do
 
   wasdMode <- readTVarIO (gss ^. gssWasdMode)
   delta <- fromGodotVariant deltaGV :: IO Float
-  wasdMode <- readTVarIO (gss ^. gssWasdMode)
   when wasdMode $ processWASDMovement gss delta
 
   -- Update Simula HUD
+  (currentWorkspace, currentWorkspaceStr) <- readTVarIO (gss ^. gssWorkspace)
   hud <- readTVarIO (gss ^. gssHUD)
   let canvasLayer = (hud ^. hudCanvasLayer)
   let rtLabel = (hud ^. hudRtlI3)
+  let rtLabelW = (hud ^. hudRtlWorkspace)
   let dynamicFont = (hud ^. hudDynamicFont)
   let i3status = (hud ^. hudI3Status)
+  let svr = (hud ^. hudSvrTexture)
+  let rssKb = (hud ^. hudRssKb)
+  let memoryDelta = (hud ^. hudMemoryDelta)
+  screenRecorder <- readTVarIO (gss ^. gssScreenRecorder)
+  fps <- getSingleton Godot_Engine "Engine" >>= (\engine -> G.get_frames_per_second engine)
+
+  -- Render i3status HUD
   G.clear rtLabel
   G.push_font rtLabel (safeCast dynamicFont)
   G.push_align rtLabel 2
   G.append_bbcode rtLabel `withGodotString` (pack i3status)
   G.pop rtLabel
   G.pop rtLabel
+
+  -- Render Workspace HUD
+  G.clear rtLabelW
+  G.push_font rtLabelW (safeCast dynamicFont)
+  G.append_bbcode rtLabelW `withGodotString` (pack currentWorkspaceStr)
+  G.append_bbcode rtLabelW `withGodotString` " | "
+  G.add_image rtLabelW svr 19 19
+  G.append_bbcode rtLabelW `withGodotString` " "
+  G.append_bbcode rtLabelW `withGodotString` (pack $ (show $ round fps) ++ " FPS ")
+  G.append_bbcode rtLabelW `withGodotString` (pack ("| RSS: " ++ formatRssMb rssKb))
+  unless (memoryDelta == "") $
+    void $ G.append_bbcode rtLabelW `withGodotString` (pack memoryDelta)
+  case screenRecorder of
+    Nothing -> return ()
+    Just ph -> do
+      redColor <- (toLowLevel $ (rgb 1.0 0.0 0.0) `withOpacity` 1.0) :: IO GodotColor
+      G.push_color rtLabelW redColor
+      G.append_bbcode rtLabelW `withGodotString` " ⚬ "
+      G.pop rtLabelW
+  G.pop rtLabelW
+
   mapM_ Api.godot_variant_destroy gvArgs
 
 ready :: GodotSimulaServer -> [GodotVariant] -> IO ()
@@ -1141,6 +1170,8 @@ initGodotSimulaServer obj = do
       G.set_font_data dynamicFont dynamicFontData
       G.set_size dynamicFont 24
 
+      debugMemoryEnabled <- (== Just "1") <$> lookupEnv "SIMULA_DEBUG_MEMORY"
+
       let hud = HUD {
           _hudCanvasLayer = canvasLayer :: GodotCanvasLayer
         , _hudRtlWorkspace = rtLabelW   :: GodotRichTextLabel
@@ -1148,6 +1179,10 @@ initGodotSimulaServer obj = do
         , _hudSvrTexture = svr          :: GodotTexture
         , _hudDynamicFont = dynamicFont :: GodotDynamicFont
         , _hudI3Status = ""             :: String
+        , _hudDebugMemoryEnabled = debugMemoryEnabled :: Bool
+        , _hudLastRssSample = Nothing :: Maybe (UTCTime, Int)
+        , _hudRssKb         = 0       :: Int
+        , _hudMemoryDelta   = ""      :: String
       }
       gssHUD' <- newTVarIO hud
 
