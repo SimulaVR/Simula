@@ -566,22 +566,28 @@
               trace_dir="''${SIMULA_RR_TRACE_DIR:-$PWD/rr}"
               mkdir -p "$trace_dir"
               export _RR_TRACE_DIR="$trace_dir"
+              # Let godot/simula know we're running under rr (which skips VR init and enables debug printing)
+              export RUNNING_UNDER_RR=1
+              # Skip detect_prime() GLX forks, which uses MIT-SHM and cause rr replay issues
+              export DRI_PRIME=0
               rr_record_args=(
                 record
                 # Tell rr to ignore SIGUSR1 so as to not get tripped up by XWayland emitting it during its normal startup
                 -i
                 SIGUSR1
               )
+              # Prevent PipeWire from using shared memory (which causes rr replay issues)
+              godot_rr_args=(--audio-driver Dummy)
 
               echo "rr trace directory: $trace_dir"
               echo "Using Godot binary: $GODOT_BINARY"
               echo "Using project path: $PROJECT_PATH"
 
               if grep -qi NixOS /etc/os-release; then
-                exec ${pkgs.rr}/bin/rr "''${rr_record_args[@]}" "$GODOT_BINARY" --args -m "$PROJECT_PATH" "$@"
+                exec ${pkgs.rr}/bin/rr "''${rr_record_args[@]}" "$GODOT_BINARY" --args -m "$PROJECT_PATH" "''${godot_rr_args[@]}" "$@"
               else
                 echo "Detected non-NixOS distribution, so running Simula with nixGL"
-                exec nix run --impure github:nix-community/nixGL -- ${pkgs.rr}/bin/rr "''${rr_record_args[@]}" "$GODOT_BINARY" --args -m "$PROJECT_PATH" "$@"
+                exec nix run --impure github:nix-community/nixGL -- ${pkgs.rr}/bin/rr "''${rr_record_args[@]}" "$GODOT_BINARY" --args -m "$PROJECT_PATH" "''${godot_rr_args[@]}" "$@"
               fi
             '';
 
