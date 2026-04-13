@@ -115,6 +115,7 @@ instance NativeScript GodotSimulaViewSprite where
 -- | Intended to be called every frame.
 updateSimulaViewSprite :: GodotSimulaViewSprite -> IO ()
 updateSimulaViewSprite gsvs = do
+  debugPutStrLn "Plugin.SimulaViewSprite.updateSimulaViewSprite"
   setTargetDimensions gsvs
   applyViewportBaseTexture gsvs
   setBoxShapeExtentsToMatchAABB gsvs
@@ -165,6 +166,7 @@ updateSimulaViewSprite gsvs = do
   where -- Necessary for window manipulation to function
         setBoxShapeExtentsToMatchAABB :: GodotSimulaViewSprite -> IO ()
         setBoxShapeExtentsToMatchAABB gsvs = do
+          debugPutStrLn "Plugin.SimulaViewSprite.setBoxShapeExtentsToMatchAABB"
           meshInstance <- atomically $ readTVar (_gsvsMeshInstance gsvs)
           aabb <- G.get_aabb meshInstance
           size <- godot_aabb_get_size aabb
@@ -179,6 +181,7 @@ updateSimulaViewSprite gsvs = do
 
 spriteReadyToMove :: GodotSimulaViewSprite -> IO Bool
 spriteReadyToMove gsvs = do
+  debugPutStrLn "Plugin.SimulaViewSprite.spriteReadyToMove"
   shouldMove <- atomically $ readTVar (_gsvsShouldMove gsvs)
   if shouldMove then do meshInstance <- atomically $ readTVar (_gsvsMeshInstance gsvs)
                         aabb <- G.get_aabb meshInstance
@@ -189,6 +192,7 @@ spriteReadyToMove gsvs = do
 
 moveToStartingPosition :: GodotSimulaViewSprite -> String -> IO ()
 moveToStartingPosition gsvs appLocation = do
+  debugPutStrLn "Plugin.SimulaViewSprite.moveToStartingPosition"
   gss <- readTVarIO (gsvs ^. gsvsServer)
   meshInstance <- atomically $ readTVar (gsvs ^. gsvsMeshInstance)
   aabb   <- G.get_aabb meshInstance
@@ -220,6 +224,7 @@ moveToStartingPosition gsvs appLocation = do
 -- gsvsTargetSize every frame
 setTargetDimensions :: GodotSimulaViewSprite -> IO ()
 setTargetDimensions gsvs = do
+  debugPutStrLn "Plugin.SimulaViewSprite.setTargetDimensions"
   cb <- readTVarIO (gsvs ^. gsvsCanvasBase)
   renderTargetBase <- readTVarIO (cb ^. cbViewport)
   cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
@@ -311,6 +316,7 @@ setTargetDimensions gsvs = do
 
 ready :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 ready self gvArgs = do
+  debugPutStrLn "Plugin.SimulaViewSprite.ready"
   -- putStrLn "ready in SimulaViewSprite.hs"
   G.set_mode self RigidBody.MODE_KINEMATIC
   mapM_ Api.godot_variant_destroy gvArgs
@@ -318,6 +324,7 @@ ready self gvArgs = do
 
 inputEvent :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 inputEvent self gvArgs@[_cam, evObj, clickPosObj, _clickNormal, _shapeIdx] = do
+  debugPutStrLn "Plugin.SimulaViewSprite.inputEvent"
   ev <- fromGodotVariant evObj
   clickPos <- fromGodotVariant clickPosObj
   processInputEvent self ev clickPos
@@ -333,6 +340,7 @@ data InputEventType
 -- | Handles mouse (i.e., non-VR controller) events in pancake mode.
 processInputEvent :: GodotSimulaViewSprite -> GodotObject -> GodotVector3 -> IO ()
 processInputEvent gsvs ev clickPos = do
+  debugPutStrLn "Plugin.SimulaViewSprite.processInputEvent"
   -- putStrLn "processInputEvent"
   whenM (ev `isClass` "InputEventMouseMotion") $ processClickEvent gsvs Motion clickPos
   whenM (ev `isClass` "InputEventMouseButton") $ do
@@ -344,6 +352,7 @@ processInputEvent gsvs ev clickPos = do
 
 newGodotSimulaViewSprite :: GodotSimulaServer -> SimulaView -> IO (GodotSimulaViewSprite)
 newGodotSimulaViewSprite gss simulaView = do
+  debugPutStrLn "Plugin.SimulaViewSprite.newGodotSimulaViewSprite"
   gsvsObj <- "res://addons/godot-haskell-plugin/SimulaViewSprite.gdns"
     & newNS' [] :: IO GodotObject
   maybeGSVS <- asNativeScript gsvsObj :: IO (Maybe GodotSimulaViewSprite)
@@ -391,6 +400,7 @@ newGodotSimulaViewSprite gss simulaView = do
 
 focus :: GodotSimulaViewSprite -> IO ()
 focus gsvs = do
+  debugPutStrLn "Plugin.SimulaViewSprite.focus"
   simulaView  <- atomically $ readTVar (gsvs ^. gsvsView)
   gss         <- atomically $ readTVar (gsvs ^. gsvsServer)
   wlrSeat     <- atomically $ readTVar (gss ^. gssWlrSeat)
@@ -463,6 +473,7 @@ processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)
 -- | TODO: Use _xdg_surface_at*
 getXdgSubsurfaceAndCoords :: GodotWlrXdgSurface -> SurfaceLocalCoordinates -> IO (GodotWlrSurface, SubSurfaceLocalCoordinates)
 getXdgSubsurfaceAndCoords wlrXdgSurface cursorCoords@(SurfaceLocalCoordinates (sx, sy)) = do
+  debugPutStrLn "Plugin.SimulaViewSprite.getXdgSubsurfaceAndCoords"
   rect2@(V2 (V2 posX posY) (V2 xdgWidth xdgHeight)) <- G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
   wlrSurfaceAtResult   <- G.surface_at wlrXdgSurface sx sy
   wlrSurfaceSubSurface <- G.get_surface wlrSurfaceAtResult >>= validateSurfaceE
@@ -474,6 +485,7 @@ getXdgSubsurfaceAndCoords wlrXdgSurface cursorCoords@(SurfaceLocalCoordinates (s
 
 keyboardNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> IO ()
 keyboardNotifyEnter wlrSeat wlrSurface = do
+  debugPutStrLn "Plugin.SimulaViewSprite.keyboardNotifyEnter"
   G.keyboard_notify_enter wlrSeat wlrSurface
 
 -- | This function conspiciously lacks a GodotWlrSurface argument, but doesn't
@@ -481,11 +493,13 @@ keyboardNotifyEnter wlrSeat wlrSurface = do
 -- | active surface is.
 pointerNotifyMotion :: GodotWlrSeat -> SubSurfaceLocalCoordinates -> IO ()
 pointerNotifyMotion wlrSeat (SubSurfaceLocalCoordinates (ssx, ssy)) = do
+  debugPutStrLn "Plugin.SimulaViewSprite.pointerNotifyMotion"
   G.pointer_notify_motion wlrSeat ssx ssy
   -- putStrLn $ "G.point_notify_motion: " ++ "(" ++ (show ssx) ++ ", " ++ (show ssy) ++ ")"
 
 pointerNotifyButton :: GodotWlrSeat -> InputEventType -> IO ()
 pointerNotifyButton wlrSeat inputEventType = do
+  debugPutStrLn "Plugin.SimulaViewSprite.pointerNotifyButton"
   case inputEventType of
       Motion -> return ()
       Button pressed buttonIndex -> pointerNotifyButton' pressed buttonIndex
@@ -498,6 +512,7 @@ pointerNotifyButton wlrSeat inputEventType = do
 -- | use it regardless.
 pointerNotifyFrame :: GodotWlrSeat -> IO ()
 pointerNotifyFrame wlrSeat = do
+  debugPutStrLn "Plugin.SimulaViewSprite.pointerNotifyFrame"
   G.pointer_notify_frame wlrSeat
 
 -- | Let wlroots know we have entered a new surface. We can safely call this
@@ -505,11 +520,12 @@ pointerNotifyFrame wlrSeat = do
 -- | and, if so, returns early.
 pointerNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> SubSurfaceLocalCoordinates -> IO ()
 pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (ssx, ssy)) = do
+  debugPutStrLn "Plugin.SimulaViewSprite.pointerNotifyEnter"
   G.pointer_notify_enter wlrSeat wlrSurface ssx ssy -- Causing a crash
 
 _handle_map :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 _handle_map gsvs _ = do
-  putStrLn $ "_handle_map"
+  debugPutStrLn "Plugin.SimulaViewSprite._handle_map"
   gss <- readTVarIO (gsvs ^. gsvsServer)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
@@ -561,12 +577,13 @@ _handle_map gsvs _ = do
 
 handle_unmap :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_unmap self args@[wlrXWaylandSurfaceVariant] = do
-  putStrLn "handle_unmap"
+  debugPutStrLn "Plugin.SimulaViewSprite.handle_unmap"
   handle_unmap_base self args
 
 -- Passes control entirely to updateSimulaViewSprite.
 _process :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 _process self gvArgs = do
+  debugPutStrLn "Plugin.SimulaViewSprite._process"
   simulaView <- readTVarIO (self ^. gsvsView)
   mapped <- atomically $ readTVar (simulaView ^. svMapped)
   isAtTargetDims <- readTVarIO (self ^. gsvsIsAtTargetDims)
@@ -632,7 +649,7 @@ _process self gvArgs = do
 
 _handle_destroy :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 _handle_destroy gsvs [_gsvsGV] = do
-  putStrLn "_handle_destroy"
+  debugPutStrLn "Plugin.SimulaViewSprite._handle_destroy"
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
   gss <- readTVarIO (gsvs ^. gsvsServer)
@@ -659,6 +676,7 @@ _handle_destroy gsvs [_gsvsGV] = do
 -- | towards the user.
 moveSpriteAlongObjectZAxis :: GodotSimulaViewSprite -> Float -> IO ()
 moveSpriteAlongObjectZAxis gsvs dist = do
+  debugPutStrLn "Plugin.SimulaViewSprite.moveSpriteAlongObjectZAxis"
   orientSpriteTowardsGaze gsvs
   pushBackVector <- toLowLevel (V3 0 0 dist) :: IO GodotVector3 -- For some reason we also have to shift the vector 0.5 units to the right
   G.translate_object_local gsvs pushBackVector
@@ -666,6 +684,7 @@ moveSpriteAlongObjectZAxis gsvs dist = do
 
 setInFrontOfUser :: GodotSimulaViewSprite -> Float -> IO ()
 setInFrontOfUser gsvs zAxisDist = do
+  debugPutStrLn "Plugin.SimulaViewSprite.setInFrontOfUser"
   gsvsScale <- G.get_scale (safeCast gsvs :: GodotSpatial)
   gss <- readTVarIO (gsvs ^. gsvsServer)
   rotationAxisY <- toLowLevel (V3 0 1 0) :: IO GodotVector3
@@ -678,6 +697,7 @@ setInFrontOfUser gsvs zAxisDist = do
 
 safeSetActivated :: GodotSimulaViewSprite -> Bool -> IO ()
 safeSetActivated gsvs active = do
+  debugPutStrLn "Plugin.SimulaViewSprite.safeSetActivated"
   simulaView <- readTVarIO $ (gsvs ^. gsvsView)
   let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
   isMapped <- readTVarIO $ (simulaView ^. svMapped)
@@ -694,6 +714,7 @@ safeSetActivated gsvs active = do
 
 safeSurfaceAt :: GodotSimulaViewSprite -> Float -> Float -> IO (Maybe GodotWlrSurfaceAtResult)
 safeSurfaceAt gsvs sx sy = do
+  debugPutStrLn "Plugin.SimulaViewSprite.safeSurfaceAt"
   simulaView <- readTVarIO $ (gsvs ^. gsvsView)
   let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
   isMapped <- readTVarIO $ (simulaView ^. svMapped)
@@ -705,6 +726,7 @@ safeSurfaceAt gsvs sx sy = do
 
 applyViewportBaseTexture :: GodotSimulaViewSprite -> IO ()
 applyViewportBaseTexture gsvs = do
+  debugPutStrLn "Plugin.SimulaViewSprite.applyViewportBaseTexture"
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
   wlrSurface <- (getWlrSurface eitherSurface) >>= validateSurfaceE
@@ -724,6 +746,7 @@ applyViewportBaseTexture gsvs = do
 
 handle_map_free_child :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_map_free_child gsvsInvisible gvArgs@[wlrXWaylandSurfaceVariant] = do
+  debugPutStrLn "Plugin.SimulaViewSprite.handle_map_free_child"
   wlrXWaylandSurface <- (fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface) >>= validateSurfaceE
   surfaceWasMappedAndReferenced <- handle_map_free_child_impl gsvsInvisible wlrXWaylandSurface
   when surfaceWasMappedAndReferenced $ mapM_ Api.godot_variant_destroy gvArgs
@@ -732,6 +755,7 @@ handle_map_free_child gsvsInvisible gvArgs@[wlrXWaylandSurfaceVariant] = do
 -- Returns True if the surface gets `G.reference`'ed
 handle_map_free_child_impl :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> IO Bool
 handle_map_free_child_impl gsvsInvisible wlrXWaylandSurface = do
+  debugPutStrLn "Plugin.SimulaViewSprite.handle_map_free_child_impl"
   gss <- readTVarIO $ (gsvsInvisible ^. gsvsServer)
   maybeActiveCursorGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
   surfaceMappedAndReferenced <- case maybeActiveCursorGSVS of
@@ -772,6 +796,7 @@ handle_map_free_child_impl gsvsInvisible wlrXWaylandSurface = do
   where
         computeSurfaceLocalCoordinates :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> IO (Maybe (Int, Int))
         computeSurfaceLocalCoordinates gsvs child = do
+          debugPutStrLn "Plugin.SimulaViewSprite.computeSurfaceLocalCoordinates"
           localX <- G.get_x child
           localY <- G.get_y child
 
@@ -790,6 +815,7 @@ handle_map_free_child_impl gsvsInvisible wlrXWaylandSurface = do
 
 getAdjustedXY :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> IO GodotVector2
 getAdjustedXY gsvs wlrXWaylandSurface = do
+  debugPutStrLn "Plugin.SimulaViewSprite.getAdjustedXY"
   childSX <- G.get_x wlrXWaylandSurface
   childSY <- G.get_y wlrXWaylandSurface
   childWidth <- G.get_width wlrXWaylandSurface
@@ -832,6 +858,7 @@ getAdjustedXY gsvs wlrXWaylandSurface = do
 
 getAdjustedXYFreeChild :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> IO GodotVector2
 getAdjustedXYFreeChild gsvs wlrXWaylandSurface = do
+  debugPutStrLn "Plugin.SimulaViewSprite.getAdjustedXYFreeChild"
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
   (V2 parentX parentY) <- case eitherSurface of
@@ -890,6 +917,7 @@ getAdjustedXYFreeChild gsvs wlrXWaylandSurface = do
 
 getParentGSVS :: GodotSimulaServer -> GodotWlrXWaylandSurface -> IO (Maybe GodotSimulaViewSprite)
 getParentGSVS gss wlrXWaylandSurface = do
+  debugPutStrLn "Plugin.SimulaViewSprite.getParentGSVS"
   simulaViewMap <- readTVarIO (gss ^. gssViews)
   parentWlrXWaylandSurface <- (G.get_parent wlrXWaylandSurface) >>= validateSurfaceE
   let simulaViews = M.keys simulaViewMap
@@ -904,7 +932,7 @@ getParentGSVS gss wlrXWaylandSurface = do
 
 handle_map_child :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_map_child gsvsInvisible gvArgs@[wlrXWaylandSurfaceVariant] = do
-  putStrLn "handle_map_child"
+  debugPutStrLn "Plugin.SimulaViewSprite.handle_map_child"
   gss <- readTVarIO $ (gsvsInvisible ^. gsvsServer)
   wlrXWaylandSurface <- (fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface) >>= validateSurfaceE
   gss <- readTVarIO (gsvsInvisible ^. gsvsServer)
@@ -925,6 +953,7 @@ handle_map_child gsvsInvisible gvArgs@[wlrXWaylandSurfaceVariant] = do
   where
         computeSurfaceLocalCoordinates :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> IO (Maybe (Int, Int))
         computeSurfaceLocalCoordinates gsvs child = do
+          debugPutStrLn "Plugin.SimulaViewSprite.computeSurfaceLocalCoordinates"
           localX <- G.get_x child
           localY <- G.get_y child
 
@@ -943,20 +972,21 @@ handle_map_child gsvsInvisible gvArgs@[wlrXWaylandSurfaceVariant] = do
 
 handle_set_parent :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_set_parent gsvs [wlrXWaylandSurfaceVariant] = do
+  debugPutStrLn "Plugin.SimulaViewSprite.handle_set_parent"
   -- Intentionally empty for now
   wlrXWaylandSurface <- (fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface) >>= validateSurfaceE
   return ()
 
 handle_unmap_child :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_unmap_child self gvArgs@[wlrXWaylandSurfaceVariant] = do
-  putStrLn "_handle_unmap_child"
+  debugPutStrLn "Plugin.SimulaViewSprite.handle_unmap_child"
   atomically $ writeTVar (self ^. gsvsIsDamaged) True
   handle_unmap_base self gvArgs
   mapM_ Api.godot_variant_destroy gvArgs
 
 handle_unmap_free_child :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_unmap_free_child self gvArgs@[wlrXWaylandSurfaceVariant] = do
-  putStrLn "_handle_unmap_free_child"
+  debugPutStrLn "Plugin.SimulaViewSprite.handle_unmap_free_child"
   atomically $ writeTVar (self ^. gsvsIsDamaged) True
   handle_unmap_base self gvArgs
   mapM_ Api.godot_variant_destroy gvArgs
@@ -964,7 +994,7 @@ handle_unmap_free_child self gvArgs@[wlrXWaylandSurfaceVariant] = do
 
 handle_unmap_base :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_unmap_base self [wlrXWaylandSurfaceVariant] = do
-  putStrLn "handle_unmap_base"
+  debugPutStrLn "Plugin.SimulaViewSprite.handle_unmap_base"
   gss <- readTVarIO (self ^. gsvsServer)
   simulaView <- atomically $ readTVar (self ^. gsvsView)
   freeChildrenMap <- readTVarIO (gss ^. gssFreeChildren)
@@ -1013,6 +1043,7 @@ handle_unmap_base self [wlrXWaylandSurfaceVariant] = do
 
 getXWaylandSubsurfaceAndCoords :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> SurfaceLocalCoordinates -> IO (GodotWlrSurface, SubSurfaceLocalCoordinates)
 getXWaylandSubsurfaceAndCoords gsvs wlrXWaylandSurface coords@(SurfaceLocalCoordinates (sx, sy)) = do
+  debugPutStrLn "Plugin.SimulaViewSprite.getXWaylandSubsurfaceAndCoords"
   xRet@(wlrSurface', SubSurfaceLocalCoordinates (subX, subY)) <- withGodot
     (G.surface_at wlrXWaylandSurface sx sy)
     (destroyMaybe . safeCast)
@@ -1034,6 +1065,7 @@ getXWaylandSubsurfaceAndCoords gsvs wlrXWaylandSurface coords@(SurfaceLocalCoord
 
 getFreeChildCoords :: GodotWlrXWaylandSurface -> SurfaceLocalCoordinates -> GodotWlrXWaylandSurface -> IO (Maybe (GodotWlrSurface, SubSurfaceLocalCoordinates, Maybe GodotWlrXWaylandSurface))
 getFreeChildCoords parentWlrXWaylandSurface (SurfaceLocalCoordinates (cx, cy)) wlrXWaylandSurface = do
+  debugPutStrLn "Plugin.SimulaViewSprite.getFreeChildCoords"
   freeChildSurface <- G.get_wlr_surface wlrXWaylandSurface
   fsx' <- G.get_x wlrXWaylandSurface
   fsy' <- G.get_y wlrXWaylandSurface
@@ -1050,6 +1082,7 @@ getFreeChildCoords parentWlrXWaylandSurface (SurfaceLocalCoordinates (cx, cy)) w
 
 getFreeChildrenCoords :: GodotWlrXWaylandSurface -> SurfaceLocalCoordinates -> [GodotWlrXWaylandSurface] -> IO (Maybe (GodotWlrSurface, SubSurfaceLocalCoordinates, Maybe GodotWlrXWaylandSurface))
 getFreeChildrenCoords parentWlrXWaylandSurface coords@(SurfaceLocalCoordinates (cx, cy)) freeChildren = do
+  debugPutStrLn "Plugin.SimulaViewSprite.getFreeChildrenCoords"
   let freeChildren' = Data.List.reverse freeChildren
   case (freeChildren' == []) of
     True -> return Nothing
@@ -1061,6 +1094,7 @@ getFreeChildrenCoords parentWlrXWaylandSurface coords@(SurfaceLocalCoordinates (
 
 getWlrSurfaceCoords :: SurfaceLocalCoordinates -> (GodotWlrSurface, Int, Int)-> IO (Maybe (GodotWlrSurface, SubSurfaceLocalCoordinates))
 getWlrSurfaceCoords cursorCoords@(SurfaceLocalCoordinates (cx, cy)) (wlrSurfaceFree, fsx', fsy') = do
+  debugPutStrLn "Plugin.SimulaViewSprite.getWlrSurfaceCoords"
   (fLengthX', fLengthY') <- getBufferDimensions wlrSurfaceFree
   let (fLengthX, fLengthY) = (fromIntegral fLengthX', fromIntegral fLengthY')
   let (fsx, fsy) = (fromIntegral fsx', fromIntegral fsy')
@@ -1073,20 +1107,20 @@ getWlrSurfaceCoords cursorCoords@(SurfaceLocalCoordinates (cx, cy)) (wlrSurfaceF
 
 handle_new_popup :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_new_popup gsvs [_wlrXdgSurfaceParentVariant] = do
-  putStrLn "handle_new_popup"
+  debugPutStrLn "Plugin.SimulaViewSprite.handle_new_popup"
   atomically $ writeTVar (gsvs ^. gsvsIsDamaged) True
   return ()
 
 handle_window_menu :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_window_menu gsvsInvisible gvArgs@[wlrXdgToplevel, serial, x, y] = do
+  debugPutStrLn "Plugin.SimulaViewSprite.handle_window_menu"
   atomically $ writeTVar (gsvsInvisible ^. gsvsIsDamaged) True
-  putStrLn "handle_new_menu"
   mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
 handle_wlr_surface_new_subsurface :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_wlr_surface_new_subsurface gsvs [wlrSubsurfaceVariant] = do
-  putStrLn "handle_wlr_surface_new_subsurface"
+  debugPutStrLn "Plugin.SimulaViewSprite.handle_wlr_surface_new_subsurface"
   wlrSubsurface <- (fromGodotVariant wlrSubsurfaceVariant :: IO GodotWlrSubsurface) >>= validateSurfaceE
   connectGodotSignal wlrSubsurface "destroy" gsvs "handle_wlr_subsurface_destroy" []
   atomically $ writeTVar (gsvs ^. gsvsIsDamaged) True
@@ -1103,14 +1137,17 @@ handle_wlr_surface_new_subsurface gsvs [wlrSubsurfaceVariant] = do
 
 handle_wlr_subsurface_destroy :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_wlr_subsurface_destroy gsvs [_wlrSubsurfaceVariant] = do
+  debugPutStrLn "Plugin.SimulaViewSprite.handle_wlr_subsurface_destroy"
   atomically $ writeTVar (gsvs ^. gsvsIsDamaged) True
   return ()
 
 handle_wlr_surface_commit :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_wlr_surface_commit gsvs [_wlrSurfaceVariant] = do
+  debugPutStrLn "Plugin.SimulaViewSprite.handle_wlr_surface_commit"
   return ()
 
 handle_wlr_surface_destroy :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_wlr_surface_destroy gsvs [_wlrSurfaceVariant] = do
+  debugPutStrLn "Plugin.SimulaViewSprite.handle_wlr_surface_destroy"
   atomically $ writeTVar (gsvs ^. gsvsIsDamaged) True
   return ()

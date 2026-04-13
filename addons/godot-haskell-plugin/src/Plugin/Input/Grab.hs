@@ -60,6 +60,7 @@ processGrabEvent gsc maybeWindow pressed = \case
 handleState :: GrabState -> IO GrabState
 handleState = \case
   Resizing (ct1, ct2) window origDistance -> do
+    debugPutStrLn "Plugin.Input.Grab.handleState"
     newpos1 <- G.get_global_transform ct1 >>= Api.godot_transform_get_origin
     newpos2 <- G.get_global_transform ct2 >>= Api.godot_transform_get_origin
     dist    <- realToFrac <$> Api.godot_vector3_distance_to newpos1 newpos2
@@ -69,4 +70,6 @@ handleState = \case
 
     return $ Resizing (ct1, ct2) window dist
 
-  state -> return state
+  state -> do
+    debugPutStrLn "Plugin.Input.Grab.handleState"
+    return state

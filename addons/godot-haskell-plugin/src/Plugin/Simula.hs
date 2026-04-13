@@ -61,6 +61,7 @@ instance HasBaseClass GodotSimula where
 
 ready :: GodotSimula -> [GodotVariant] -> IO ()
 ready self gvArgs = do
+  debugPutStrLn "Plugin.Simula.ready"
   -- OpenHMD is unfortunately not yet a working substitute for OpenVR
   -- https://github.com/SimulaVR/Simula/issues/72
 
@@ -130,6 +131,7 @@ ready self gvArgs = do
   --   tex.create_from_image(img)
   getTextureFromURL :: String -> IO (GodotTexture)
   getTextureFromURL urlStr = do
+    debugPutStrLn $ "Plugin.Simula.getTextureFromURL " ++ urlStr
     -- instance new types
     godotImage <- unsafeInstance GodotImage "Image" :: IO GodotImage
     godotImageTexture <- unsafeInstance GodotImageTexture "ImageTexture"
@@ -144,6 +146,7 @@ ready self gvArgs = do
 
   addSimulaServerNode :: IO GodotSpatial
   addSimulaServerNode = do
+    debugPutStrLn "Plugin.Simula.addSimulaServerNode"
     gss <- "res://addons/godot-haskell-plugin/SimulaServer.gdns"
       & newNS'' GodotSpatial "Spatial" []
 
@@ -156,6 +159,7 @@ ready self gvArgs = do
 
   connectController :: GodotSimulaController -> IO ()
   connectController ct = do
+    debugPutStrLn "Plugin.Simula.connectController"
     -- putStrLn "connectController"
     argsPressed <- Api.godot_array_new
     ctA <- toLowLevel $ toVariant $ asObj ct :: IO GodotVariant
@@ -186,6 +190,7 @@ ready self gvArgs = do
 
 on_button_signal :: GodotSimula -> [GodotVariant] -> IO ()
 on_button_signal self gvArgs@[buttonVar, controllerVar, pressedVar] = do
+  debugPutStrLn "Plugin.Simula.on_button_signal"
   -- putStrLn "on_button_signal in Simula.hs"
   button <- fromGodotVariant buttonVar
   controllerObj <- fromGodotVariant controllerVar
@@ -200,6 +205,7 @@ on_button_signal self gvArgs@[buttonVar, controllerVar, pressedVar] = do
 
 onButton :: GodotSimula -> GodotSimulaController -> Int -> Bool -> IO ()
 onButton self gsc button pressed = do
+  debugPutStrLn $ "Plugin.Simula.onButton button=" ++ show button ++ " pressed=" ++ show pressed
   -- putStrLn "onButton in Simula.hs"
   case (button, pressed) of
     (OVR_Button_Grip, False) -> -- Release grabbed
@@ -218,7 +224,8 @@ onButton self gsc button pressed = do
           -- >>= maybe (return ()) (onSpriteInput rc)
  where
   gst = _sGrabState self
-  onSpriteInput rc sprite =
+  onSpriteInput rc sprite = do
+    debugPutStrLn $ "Plugin.Simula.onSpriteInput button=" ++ show button ++ " pressed=" ++ show pressed
     G.get_collision_point rc >>= case button of
       OVR_Button_Trigger -> processClickEvent sprite (Button pressed G.BUTTON_LEFT)
       OVR_Button_AppMenu -> processClickEvent sprite (Button pressed G.BUTTON_RIGHT)
@@ -232,6 +239,7 @@ onButton self gsc button pressed = do
 
 process :: GodotSimula -> [GodotVariant] -> IO ()
 process self gvArgs = do
+  debugPutStrLn "Plugin.Simula.process"
   -- putStrLn "process in Simula.hs"
   let gst = _sGrabState self
   atomically (readTVar gst)

@@ -117,6 +117,7 @@ instance HasBaseClass GodotSimulaController where
 
 loadOpenVRControllerMesh :: Text -> IO (Maybe GodotMesh)
 loadOpenVRControllerMesh name = do
+  debugPutStrLn "Plugin.SimulaController.loadOpenVRControllerMesh"
   -- "res://addons/godot-openvr/OpenVRRenderModel.gdns"
   --   & newNS GodotArrayMesh "ArrayMesh" [] >>= \case
 
@@ -145,6 +146,7 @@ loadOpenVRControllerMesh name = do
 -- Because the ARVRController member method is_button_pressed returns Int, not Bool
 isButtonPressed :: Int -> GodotSimulaController -> IO Bool
 isButtonPressed btnId gsc = do
+  debugPutStrLn "Plugin.SimulaController.isButtonPressed"
   -- putStrLn "isButtonPressed"
   ctId <- G.get_joystick_id $ (safeCast gsc :: GodotARVRController)
   getSingleton GodotInput "Input" >>= \inp -> G.is_joy_button_pressed inp ctId btnId
@@ -153,6 +155,7 @@ isButtonPressed btnId gsc = do
 -- | Get the window pointed at if any.
 pointerWindow :: GodotSimulaController -> IO (Maybe GodotSimulaViewSprite)
 pointerWindow gsc = do
+  debugPutStrLn "Plugin.SimulaController.pointerWindow"
   -- putStrLn "pointerWindow"
   G.force_raycast_update (_gscRayCast gsc)
   isColliding <- G.is_colliding $ _gscRayCast gsc
@@ -162,6 +165,7 @@ pointerWindow gsc = do
 
 updateTouchpadState :: GodotSimulaController -> IO ()
 updateTouchpadState gsc = do
+  debugPutStrLn "Plugin.SimulaController.updateTouchpadState"
   -- oldLastPos <- readTVarIO (_gscLastScrollPos gsc)
   oldCurPos <- readTVarIO (_gscCurrentPos gsc)
   newCurPos <- V2 <$> (gsc `G.get_joystick_axis` 0) <*> (gsc `G.get_joystick_axis` 1)
@@ -174,6 +178,7 @@ updateTouchpadState gsc = do
 -- | Change the scale of the grabbed object
 rescaleOrScroll :: GodotSimulaController -> Float -> IO ()
 rescaleOrScroll ct delta = do
+  debugPutStrLn "Plugin.SimulaController.rescaleOrScroll"
   curPos <- readTVarIO (_gscCurrentPos ct)
   lastPos <- readTVarIO (_gscLastScrollPos ct) -- Going to be same as curPos..
   diff <- readTVarIO (_gscDiff ct)
@@ -203,6 +208,7 @@ rescaleOrScroll ct delta = do
  where
   scrollWindow :: V2 (Float) -> IO ()
   scrollWindow diff = do
+    debugPutStrLn "Plugin.SimulaController.scrollWindow"
     maybeWindow <- pointerWindow ct
     wlrSeat <- getWlrSeatFromPath ct
     case maybeWindow of
@@ -210,6 +216,7 @@ rescaleOrScroll ct delta = do
       _ -> G.pointer_notify_axis_continuous wlrSeat (diff ^. _x) (diff ^. _y)
   rescaleBy :: (GodotSpatial :< child) => V2 Float -> child -> IO ()
   rescaleBy (V2 _ y) a = do
+    debugPutStrLn "Plugin.SimulaController.rescaleBy"
     -- maybeWindow <- pointerWindow ct
     -- case maybeWindow of
     --   Nothing -> putStrLn "Couldn't get a window!"
@@ -220,6 +227,7 @@ rescaleOrScroll ct delta = do
 
 addSimulaController :: GodotARVROrigin -> Text -> Int -> IO GodotSimulaController
 addSimulaController originNode nodeName ctID = do
+  debugPutStrLn "Plugin.SimulaController.addSimulaController"
   -- putStrLn "addSimulaController"
   -- Requires too "large" of a type constructor:
   -- ct <- "res://addons/godot-haskell-plugin/SimulaController.gdns"
@@ -241,6 +249,7 @@ addSimulaController originNode nodeName ctID = do
 
 process :: GodotSimulaController -> [GodotVariant] -> IO ()
 process self gvArgs@[deltaGV] = do
+  debugPutStrLn "Plugin.SimulaController.process"
   delta <- fromGodotVariant deltaGV :: IO Float
   active <- G.get_is_active self
   visible <- G.is_visible self
@@ -276,6 +285,7 @@ process self gvArgs@[deltaGV] = do
 
 getWlrSeatFromPath :: GodotSimulaController -> IO GodotWlrSeat
 getWlrSeatFromPath self = do
+  debugPutStrLn "Plugin.SimulaController.getWlrSeatFromPath"
   -- putStrLn "getWlrSeatFromPath"
   let nodePathStr = "/root/Root/SimulaServer" -- I'm not 100% sure this is correct!
   nodePath <- (toLowLevel (pack nodePathStr))
@@ -289,6 +299,7 @@ getWlrSeatFromPath self = do
 
 physicsProcess :: GodotSimulaController -> [GodotVariant] -> IO ()
 physicsProcess self gvArgs = do
+  debugPutStrLn "Plugin.SimulaController.physicsProcess"
   whenM (G.get_is_active self) $ do
     isGripPressed <- isButtonPressed 2 self
     triggerPull <- G.get_joystick_axis self 2

@@ -14,6 +14,7 @@ import           Plugin.CanvasAR
 
 registerClasses :: GdnativeHandle -> IO ()
 registerClasses desc = do
+  debugPutStrLn "Plugin.registerClasses"
   let reg constr = registerClass $ RegClass desc constr
   reg $ classInit @GodotSimula
   reg $ classInit @GodotSimulaController

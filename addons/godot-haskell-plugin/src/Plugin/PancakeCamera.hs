@@ -63,12 +63,14 @@ instance HasBaseClass GodotPancakeCamera where
 
 _ready :: GodotPancakeCamera -> [GodotVariant] -> IO ()
 _ready gpc gvArgs = do
+  debugPutStrLn "Plugin.PancakeCamera._ready"
   mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
 -- | Take the PoV of the ARVRCamera, if it exists.
 _process :: GodotPancakeCamera -> [GodotVariant] -> IO ()
 _process gpc gvArgs = do
+  debugPutStrLn "Plugin.PancakeCamera._process"
   maybeARVRTransform <- getARVRCameraTransform gpc
   case maybeARVRTransform of
     (Just transform) -> G.set_global_transform gpc transform

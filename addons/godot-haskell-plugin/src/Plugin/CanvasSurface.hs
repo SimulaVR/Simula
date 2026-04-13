@@ -72,6 +72,7 @@ instance NativeScript CanvasSurface where
 
 _ready :: CanvasSurface -> [GodotVariant] -> IO ()
 _ready self gvArgs = do
+  debugPutStrLn "Plugin.CanvasSurface._ready"
   clearshm <- load GodotShaderMaterial "ShaderMaterial" "res://addons/godot-haskell-plugin/CanvasClearShader.tres"
   premulshm <- load GodotShaderMaterial "ShaderMaterial" "res://addons/godot-haskell-plugin/CanvasPremulShader.tres"
   case (clearshm, premulshm) of
@@ -87,6 +88,7 @@ _ready self gvArgs = do
 
 _process :: CanvasSurface -> [GodotVariant] -> IO ()
 _process self gvArgs = do
+  debugPutStrLn "Plugin.CanvasSurface._process"
   gsvs <- readTVarIO (self ^. csGSVS)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   mapped <- readTVarIO (simulaView ^. svMapped)
@@ -96,6 +98,7 @@ _process self gvArgs = do
 
 _draw :: CanvasSurface -> [GodotVariant] -> IO ()
 _draw cs gvArgs = do
+  debugPutStrLn "Plugin.CanvasSurface._draw"
   gsvs <- readTVarIO (cs ^. csGSVS)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   mapped <- readTVarIO (simulaView ^. svMapped)
@@ -139,6 +142,7 @@ _draw cs gvArgs = do
 
     savePngCS :: (GodotWlrSurface, CanvasSurface) -> IO ()
     savePngCS arg@((wlrSurface, cs)) = do
+      debugPutStrLn "Plugin.CanvasSurface.savePngCS"
       validateSurfaceE wlrSurface
       viewportSurface <- readTVarIO (cs ^. csViewport) :: IO GodotViewport
       viewportSurfaceTexture <- (G.get_texture (viewportSurface :: GodotViewport)) :: IO GodotViewportTexture
@@ -147,6 +151,7 @@ _draw cs gvArgs = do
 
     drawWlrSurface :: CanvasSurface -> (GodotWlrSurface, Int, Int) -> IO ()
     drawWlrSurface cs (wlrSurface, x, y) = do
+      debugPutStrLn "Plugin.CanvasSurface.drawWlrSurface"
       validateSurfaceE wlrSurface
       gsvs <- readTVarIO (cs ^. csGSVS)
       gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
@@ -160,12 +165,14 @@ _draw cs gvArgs = do
 
     getTransparency :: CanvasSurface -> IO Double
     getTransparency cs = do
+      debugPutStrLn "Plugin.CanvasSurface.getTransparency"
       gsvs <- readTVarIO (cs ^. csGSVS)
       gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
       return (realToFrac gsvsTransparency)
 
     drawWlrSurfaceRegions :: CanvasSurface -> [GodotRect2] -> (GodotWlrSurface, Int, Int) -> IO ()
     drawWlrSurfaceRegions cs regions (wlrSurface, x, y) = do
+      debugPutStrLn "Plugin.CanvasSurface.drawWlrSurfaceRegions"
       gsvs <- readTVarIO (cs ^. csGSVS)
       gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
       validateSurfaceE wlrSurface
@@ -190,6 +197,7 @@ _draw cs gvArgs = do
 
     getSurfaceRegion :: GodotSimulaViewSprite -> GodotRect2 -> (GodotWlrSurface, Int, Int) -> IO (Maybe GodotRect2)
     getSurfaceRegion gsvs regionGSVS (wlrSurface, x, y) = do
+      debugPutStrLn "Plugin.CanvasSurface.getSurfaceRegion"
       V2 (V2 rx ry) (V2 rWidth rHeight) <- fromLowLevel regionGSVS
       regionSurfaceRect2 <- toLowLevel $ V2 (V2 (rx - (fromIntegral x)) (ry - (fromIntegral y))) (V2 rWidth rHeight)
       (wlrSurfaceWidth, wlrSurfaceHeight) <- getBufferDimensions wlrSurface
@@ -207,6 +215,7 @@ _draw cs gvArgs = do
     -- | Returns intersection of wlrSurface with damage region in gsvs local coordinates
     getIntersectedGSVSRegion :: GodotRect2 -> (GodotWlrSurface, Int, Int) -> IO (Maybe GodotRect2)
     getIntersectedGSVSRegion regionGSVS (wlrSurface, x, y) = do
+      debugPutStrLn "Plugin.CanvasSurface.getIntersectedGSVSRegion"
       (wlrSurfaceWidth, wlrSurfaceHeight) <- getBufferDimensions wlrSurface
       wlrSurfaceRect2 <- toLowLevel $ V2 (V2 (fromIntegral x) (fromIntegral y)) (V2 (fromIntegral wlrSurfaceWidth) (fromIntegral wlrSurfaceHeight))
       regionSurfaceIntersected <- Api.godot_rect2_clip wlrSurfaceRect2 regionGSVS

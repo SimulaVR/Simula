@@ -91,6 +91,7 @@ import System.FilePath ((</>))
 
 debugLaunchApp :: GodotSimulaServer -> String -> IO GodotSimulaViewSprite
 debugLaunchApp gss app = do
+  debugPutStrLn "Plugin.Debug.debugLaunchApp"
   appLaunch gss app Nothing
   gsvs <- waitUntilAppLaunchSuccessful gss
   return gsvs
@@ -106,6 +107,7 @@ debugLaunchApp gss app = do
 
 debugWaitFrames :: GodotSimulaViewSprite -> Integer -> IO ()
 debugWaitFrames gsvs n = do
+  debugPutStrLn "Plugin.Debug.debugWaitFrames"
   gsvsOriginalFrameCount <- readTVarIO (gsvs ^. gsvsFrameCount)
   debugWaitFrames' gsvs gsvsOriginalFrameCount n
   where debugWaitFrames' :: GodotSimulaViewSprite -> Integer -> Integer -> IO ()
@@ -119,6 +121,7 @@ debugWaitFrames gsvs n = do
 -- https://docs.godotengine.org/en/stable/classes/class_@globalscope.html#enum-globalscope-buttonlist
 debugMouseClick :: Int -> Bool -> IO ()
 debugMouseClick button pressed = do
+  debugPutStrLn "Plugin.Debug.debugMouseClick"
   a <- unsafeInstance GodotInputEventMouseButton "InputEventMouseButton"
   G.set_button_index a button
   -- G.position a =<< toLowLevel V2 520 520
@@ -127,16 +130,19 @@ debugMouseClick button pressed = do
 
 debugLeftClick :: IO ()
 debugLeftClick = do
+  debugPutStrLn "Plugin.Debug.debugLeftClick"
   debugMouseClick 1 True
   debugMouseClick 1 False
 
 debugRightClick :: IO ()
 debugRightClick = do
+  debugPutStrLn "Plugin.Debug.debugRightClick"
   debugMouseClick 2 True
   debugMouseClick 2 False
 
 debugKeyboardPress :: Scancode -> Bool -> IO ()
 debugKeyboardPress button pressed = do
+  debugPutStrLn "Plugin.Debug.debugKeyboardPress"
   a <- unsafeInstance GodotInputEventKey "InputEventKey"
   G.set_scancode a button
   G.set_pressed a pressed
@@ -144,11 +150,13 @@ debugKeyboardPress button pressed = do
 
 debugMoveCursor :: GodotSimulaViewSprite -> (Float, Float) -> IO ()
 debugMoveCursor gsvs (sx, sy) = do
+  debugPutStrLn "Plugin.Debug.debugMoveCursor"
   processClickEvent' gsvs Motion (SurfaceLocalCoordinates (sx, sy))
   atomically $ writeTVar (gsvs ^. gsvsCursorCoordinates) (SurfaceLocalCoordinates (sx, sy))
 
 debugTerminateSimula :: GodotSimulaServer -> IO ()
 debugTerminateSimula gss = do
+  debugPutStrLn "Plugin.Debug.debugTerminateSimula"
   let pid = (gss ^. gssPid)
   -- logStr $ "Terminating Simula with pid: " ++ (show pid)
   createProcess (shell $ "kill " ++ (show pid))
@@ -156,6 +164,7 @@ debugTerminateSimula gss = do
 
 testRightclickPopup :: GodotSimulaServer -> String -> ScreenshotBaseName -> IO ((Float, Float), (Float, Float), ScreenshotFullPath)
 testRightclickPopup gss app screenshotBase = do
+  debugPutStrLn "Plugin.Debug.testRightclickPopup"
   Control.Concurrent.threadDelay (2 * 1000000)
   gsvs <- debugLaunchApp gss app
   debugMoveCursor gsvs (300,300)
@@ -198,6 +207,7 @@ testRightclickPopup gss app screenshotBase = do
   
 testAppMemory :: GodotSimulaServer -> String -> Int -> IO (Float, Float)
 testAppMemory gss app sec = do
+  debugPutStrLn "Plugin.Debug.testAppMemory"
   pid1 <- logMemPid gss
   Control.Concurrent.threadDelay (2 * 1000000)
   gsvs <- debugLaunchApp gss app
@@ -211,6 +221,7 @@ testAppMemory gss app sec = do
 
 debugTerminateApps :: GodotSimulaServer -> IO ()
 debugTerminateApps gss = do
+  debugPutStrLn "Plugin.Debug.debugTerminateApps"
   views <- readTVarIO (gss ^. gssViews)
   let gsvsLst = fmap snd (M.toList views)
   mapM_ debugTerminateGSVS gsvsLst
@@ -220,6 +231,7 @@ debugTerminateApps gss = do
 -- | Suffers from threading issues, even with liberal threadDelay hack calls.
 debugTerminateGSVS :: GodotSimulaViewSprite -> IO ()
 debugTerminateGSVS gsvs = do
+  debugPutStrLn "Plugin.Debug.debugTerminateGSVS"
   Control.Concurrent.threadDelay (2 * 1000000)
   gss <- readTVarIO (gsvs ^. gsvsServer)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
@@ -244,6 +256,7 @@ debugTerminateGSVS gsvs = do
 
 testPopups :: GodotSimulaServer -> IO ()
 testPopups gss = do
+  debugPutStrLn "Plugin.Debug.testPopups"
   let app = "firefox"
   -- let config = defaultConfig { configOutputFile = Right $ "./hspec_output.txt" }
   let config = defaultConfig
@@ -255,6 +268,7 @@ testPopups gss = do
 
 testMemoryUsage :: GodotSimulaServer -> IO ()
 testMemoryUsage gss = do
+  debugPutStrLn "Plugin.Debug.testMemoryUsage"
   -- let config = defaultConfig { configOutputFile = Right $ "./hspec_output.txt" }
   let config = defaultConfig
   pid1 <- logMemPid gss
@@ -269,6 +283,7 @@ testMemoryUsage gss = do
 
 testMemoryUsageWithApp :: GodotSimulaServer -> String -> Int -> IO ()
 testMemoryUsageWithApp gss app sec = do
+  debugPutStrLn "Plugin.Debug.testMemoryUsageWithApp"
   -- let config = defaultConfig { configOutputFile = Right $ "./hspec_output.txt" }
   let config = defaultConfig
 
@@ -282,6 +297,7 @@ testMemoryUsageWithApp gss app sec = do
 
 logMemRecursively :: IO ()
 logMemRecursively = do
+  debugPutStrLn "Plugin.Debug.logMemRecursively"
   memoryUsage <- getSingleton Godot_OS "OS" >>= G.get_static_memory_usage
   logStr $ "G.get_static_memory_usage: " ++ (show memoryUsage)
   Control.Concurrent.threadDelay (1 * 1000000)
@@ -289,6 +305,7 @@ logMemRecursively = do
 
 debugLogDepthFirstSurfaces :: GodotSimulaViewSprite -> IO ()
 debugLogDepthFirstSurfaces gsvs = do
+  debugPutStrLn "Plugin.Debug.debugLogDepthFirstSurfaces"
   cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
   frame <- readTVarIO (gsvs ^. gsvsFrameCount)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
@@ -321,6 +338,7 @@ debugLogDepthFirstSurfaces gsvs = do
 
         saveWlrSurfacePng :: CanvasSurface -> GodotWlrSurface -> IO String
         saveWlrSurfacePng cs wlrSurface = do
+          debugPutStrLn "Plugin.Debug.saveWlrSurfacePng"
           validateSurfaceE wlrSurface
           gsvs <- readTVarIO (cs ^. csGSVS)
           visualServer <- getVisualServer gsvs
@@ -344,12 +362,14 @@ debugLogDepthFirstSurfaces gsvs = do
 
         getVisualServer :: GodotSimulaViewSprite -> IO GodotVisualServer
         getVisualServer gsvs = do
+          debugPutStrLn "Plugin.Debug.getVisualServer"
           gss <- readTVarIO (gsvs ^. gsvsServer)
           visualServer <- readTVarIO (gss ^. gssVisualServer)
           return visualServer
           
 debugFunc :: GodotSimulaServer -> IO ()
 debugFunc gss = do
+  debugPutStrLn "Plugin.Debug.debugFunc"
   (catch :: IO a -> (System.Exit.ExitCode -> IO a) -> IO a) (do -- testPopups gss
                                                                 -- testMemoryUsage gss
                                                                 -- testMemoryUsageWithApp gss "firefox" (60*1)

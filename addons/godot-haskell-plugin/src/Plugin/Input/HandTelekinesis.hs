@@ -10,6 +10,7 @@ import           Plugin.Input.Telekinesis
 
 initHandTk :: (GodotSpatial :< a) => a -> IO (HandTelekinesis)
 initHandTk hand = do
+  debugPutStrLn "Plugin.Input.HandTelekinesis.initHandTk"
   -- Useful when debugging in pancake mode to modulate impulse forces:
   getSingleton Godot_Engine "Engine" >>= (`G.set_target_fps` 90)
 
@@ -22,6 +23,7 @@ initHandTk hand = do
 
 handGrab :: GodotSimulaServer -> GodotRigidBody -> HandTelekinesis -> IO HandTelekinesis
 handGrab gss body htk = do
+  debugPutStrLn "Plugin.Input.HandTelekinesis.handGrab"
   tf  <- htk & _htkHand & G.get_global_transform >>= fromLowLevel
   -- Get current values before overwriting
   cfg <- getPhysicsConfig body
@@ -31,6 +33,7 @@ handGrab gss body htk = do
 
 handLetGo :: HandTelekinesis -> IO HandTelekinesis
 handLetGo htk = do
+  debugPutStrLn "Plugin.Input.HandTelekinesis.handLetGo"
   htk
     & _htkBody
     & \case
@@ -44,6 +47,7 @@ handLetGo htk = do
 
 handManipulate :: Bool -> Float -> HandTelekinesis -> IO HandTelekinesis
 handManipulate isMove factor htk = do
+  debugPutStrLn "Plugin.Input.HandTelekinesis.handManipulate"
   tf@(TF bs pos) <- htk & _htkHand & G.get_global_transform >>= fromLowLevel
   htk
     & _htkBody
@@ -80,12 +84,15 @@ handManipulate isMove factor htk = do
         Nothing -> return htk { _htkLastHandTransform = tf }
 
 handTryGrab :: GodotSimulaServer -> HandTelekinesis -> GodotRigidBody -> IO HandTelekinesis
-handTryGrab gss htk rigidBody = htk & _htkBody & \case
+handTryGrab gss htk rigidBody = do
+  debugPutStrLn "Plugin.Input.HandTelekinesis.handTryGrab"
+  htk & _htkBody & \case
           Just _  -> return htk
           Nothing -> handGrab gss rigidBody htk
 
 handTelekinesis :: GodotSimulaServer -> HandTelekinesis -> IO HandTelekinesis
 handTelekinesis gss htk = do
+  debugPutStrLn "Plugin.Input.HandTelekinesis.handTelekinesis"
   let maybeRigidBody = (htk ^. htkBody)
   case maybeRigidBody of
     Just (rgb, pbc) -> handTryGrab gss htk rgb >>= handManipulate True 1

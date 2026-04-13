@@ -14,6 +14,7 @@ import           Plugin.Types
 
 defaultPointer :: IO GodotMeshInstance
 defaultPointer = do
+  debugPutStrLn "Plugin.Pointer.defaultPointer"
   cube <- unsafeInstance GodotCubeMesh "CubeMesh"
   G.set_size cube =<< toLowLevel (V3 0.002 0.002 10)
   G.set_material cube =<< safeCast <$> laserMat
@@ -26,6 +27,7 @@ defaultPointer = do
 
 laserMat :: IO GodotSpatialMaterial
 laserMat = do
+  debugPutStrLn "Plugin.Pointer.laserMat"
   mat <- unsafeInstance GodotSpatialMaterial "SpatialMaterial"
   clr <- toLowLevel $ opaque $ sRGB24read "8539ff" :: IO GodotColor
   G.set_albedo mat clr

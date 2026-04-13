@@ -75,6 +75,7 @@ instance NativeScript CanvasBase where
 
 newCanvasBase :: GodotSimulaViewSprite -> IO (CanvasBase)
 newCanvasBase gsvs = do
+  debugPutStrLn "Plugin.CanvasBase.newCanvasBase"
   cb <- "res://addons/godot-haskell-plugin/CanvasBase.gdns"
     & newNS' []
     >>= godot_nativescript_get_userdata
@@ -89,17 +90,20 @@ newCanvasBase gsvs = do
 
 _ready :: CanvasBase -> [GodotVariant] -> IO ()
 _ready cb gvArgs = do
+  debugPutStrLn "Plugin.CanvasBase._ready"
   G.set_process cb True
   mapM_ Api.godot_variant_destroy gvArgs
 
 _process :: CanvasBase -> [GodotVariant] -> IO ()
 _process self gvArgs = do
+  debugPutStrLn "Plugin.CanvasBase._process"
   G.update self
   mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
 _draw :: CanvasBase -> [GodotVariant] -> IO ()
 _draw cb gvArgs = do
+  debugPutStrLn "Plugin.CanvasBase._draw"
   gsvs <- readTVarIO (cb ^. cbGSVS)
   gss <- readTVarIO (gsvs ^. gsvsServer)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
@@ -118,11 +122,13 @@ _draw cb gvArgs = do
   where
     getTransparency :: CanvasBase -> IO Double
     getTransparency cb = do
+      debugPutStrLn "Plugin.CanvasBase.getTransparency"
       gsvs <- readTVarIO (cb ^. cbGSVS)
       gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
       return (realToFrac gsvsTransparency)
     savePngCS :: (GodotWlrSurface, CanvasSurface) -> IO ()
     savePngCS arg@((wlrSurface, cs)) = do
+      debugPutStrLn "Plugin.CanvasBase.savePngCS"
       viewportSurface <- readTVarIO (cs ^. csViewport) :: IO GodotViewport
       viewportSurfaceTexture <- (G.get_texture (viewportSurface :: GodotViewport)) :: IO GodotViewportTexture
       savePng cs viewportSurfaceTexture wlrSurface
@@ -130,6 +136,7 @@ _draw cb gvArgs = do
 
     drawCanvasSurface :: CanvasBase -> GodotSimulaViewSprite -> IO ()
     drawCanvasSurface cb gsvs = do
+      debugPutStrLn "Plugin.CanvasBase.drawCanvasSurface"
       gss <- readTVarIO (gsvs ^. gsvsServer)
       cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
       viewportSurface <- readTVarIO (cs ^. csViewport)
@@ -142,6 +149,7 @@ _draw cb gvArgs = do
 
     drawCursor :: CanvasBase -> GodotSimulaViewSprite -> IO ()
     drawCursor cb gsvs = do
+      debugPutStrLn "Plugin.CanvasBase.drawCursor"
       activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
       gss <- readTVarIO (gsvs ^. gsvsServer)
       (maybeWlrSurfaceCursor, maybeCursorTexture) <- readTVarIO (gsvs ^. gsvsCursor)
