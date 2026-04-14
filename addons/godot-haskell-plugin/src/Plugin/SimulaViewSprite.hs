@@ -478,13 +478,13 @@ getXdgSubsurfaceAndCoords :: GodotWlrXdgSurface -> SurfaceLocalCoordinates -> IO
 getXdgSubsurfaceAndCoords wlrXdgSurface cursorCoords@(SurfaceLocalCoordinates (sx, sy)) = do
   debugPutStrLn "Plugin.SimulaViewSprite.getXdgSubsurfaceAndCoords"
   rect2@(V2 (V2 posX posY) (V2 xdgWidth xdgHeight)) <- G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
-  wlrSurfaceAtResult   <- G.surface_at wlrXdgSurface sx sy
-  wlrSurfaceSubSurface <- G.get_surface wlrSurfaceAtResult >>= validateSurfaceE
-  G.reference wlrSurfaceSubSurface
-  ssx                  <- G.get_sub_x wlrSurfaceAtResult
-  ssy                  <- G.get_sub_y wlrSurfaceAtResult
-  let ssCoordinates    = SubSurfaceLocalCoordinates (ssx, ssy)
-  return (wlrSurfaceSubSurface, SubSurfaceLocalCoordinates (ssx, ssy))
+  withGodotRef (G.surface_at wlrXdgSurface sx sy :: IO GodotWlrSurfaceAtResult) $ \wlrSurfaceAtResult -> do
+    wlrSurfaceSubSurface <- G.get_surface wlrSurfaceAtResult >>= validateSurfaceE
+    G.reference wlrSurfaceSubSurface
+    ssx <- G.get_sub_x wlrSurfaceAtResult
+    ssy <- G.get_sub_y wlrSurfaceAtResult
+    let ssCoordinates = SubSurfaceLocalCoordinates (ssx, ssy)
+    return (wlrSurfaceSubSurface, ssCoordinates)
 
 keyboardNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> IO ()
 keyboardNotifyEnter wlrSeat wlrSurface = do
@@ -713,18 +713,6 @@ safeSetActivated gsvs active = do
       toplevel    <- G.get_xdg_toplevel wlrXdgSurface :: IO GodotWlrXdgToplevel
       return ()
       -- G.set_activated toplevel True
-
-safeSurfaceAt :: GodotSimulaViewSprite -> Float -> Float -> IO (Maybe GodotWlrSurfaceAtResult)
-safeSurfaceAt gsvs sx sy = do
-  debugPutStrLn "Plugin.SimulaViewSprite.safeSurfaceAt"
-  simulaView <- readTVarIO $ (gsvs ^. gsvsView)
-  let wlrEitherSurface = (simulaView ^. svWlrEitherSurface)
-  isMapped <- readTVarIO $ (simulaView ^. svMapped)
-  ret <- case (isMapped, wlrEitherSurface) of
-            (True, Right wlrXWaylandSurface) -> do surfaceAtRes <- G.surface_at wlrXWaylandSurface sx sy :: IO GodotWlrSurfaceAtResult
-                                                   return (Just surfaceAtRes)
-            _ -> return Nothing
-  return ret
 
 applyViewportBaseTexture :: GodotSimulaViewSprite -> IO ()
 applyViewportBaseTexture gsvs = do
@@ -1051,15 +1039,12 @@ getXWaylandSubsurfaceAndCoords gsvs wlrXWaylandSurface coords@(SurfaceLocalCoord
        return (wlrSurface, SubSurfaceLocalCoordinates (x, y))
      Nothing -> do
        safeSetActivated gsvs True -- G.set_activated godotWlrXWaylandSurface True
-       withGodot
-         (G.surface_at wlrXWaylandSurface sx sy)
-         (destroyMaybe . safeCast)
-         (\wlrSurfaceAtResult -> do G.reference wlrSurfaceAtResult
-                                    subX <- G.get_sub_x wlrSurfaceAtResult
-                                    subY <- G.get_sub_y wlrSurfaceAtResult
-                                    wlrSurface' <- (G.get_surface wlrSurfaceAtResult) >>= validateSurfaceE
-                                    G.reference wlrSurface' -- Ensures the wlrSurface' is live when we return it from this function; caller is responsible for unreferencing it
-                                    return (wlrSurface', SubSurfaceLocalCoordinates (subX, subY)))
+       withGodotRef (G.surface_at wlrXWaylandSurface sx sy :: IO GodotWlrSurfaceAtResult) $ \wlrSurfaceAtResult -> do
+         subX <- G.get_sub_x wlrSurfaceAtResult
+         subY <- G.get_sub_y wlrSurfaceAtResult
+         wlrSurface' <- G.get_surface wlrSurfaceAtResult >>= validateSurfaceE
+         G.reference wlrSurface' -- Ensures the wlrSurface' is live when we return it from this function; caller is responsible for unreferencing it
+         return (wlrSurface', SubSurfaceLocalCoordinates (subX, subY))
 
 -- Returns referenced surface if it succeeds; caller is responsible for unreferencing it
 getFreeChildCoords :: GodotWlrXWaylandSurface -> SurfaceLocalCoordinates -> GodotWlrXWaylandSurface -> IO (Maybe (GodotWlrSurface, SubSurfaceLocalCoordinates, Maybe GodotWlrXWaylandSurface))
