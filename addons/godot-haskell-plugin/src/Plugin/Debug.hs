@@ -342,23 +342,23 @@ debugLogDepthFirstSurfaces gsvs = do
           validateSurfaceE wlrSurface
           gsvs <- readTVarIO (cs ^. csGSVS)
           visualServer <- getVisualServer gsvs
-          wlrSurfaceTexture <- G.get_texture wlrSurface
-          rid <- G.get_rid wlrSurfaceTexture
-          wlrSurfaceImage <- G.texture_get_data visualServer rid 0
+          withGodotRef (G.get_texture wlrSurface :: IO GodotTexture) $ \wlrSurfaceTexture -> do
+            rid <- G.get_rid wlrSurfaceTexture
+            wlrSurfaceImage <- G.texture_get_data visualServer rid 0
 
-          -- Get file path
-          frame <- readTVarIO (gsvs ^. gsvsFrameCount)
-          maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
-          let dataDir = fromMaybe "./.local/share/Simula" maybeDataDir
-          createDirectoryIfMissing True (dataDir </> "media")
-          let fileName = (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
-          let pathStr = dataDir </> "media" </> fileName
-          canonicalPath <- canonicalizePath pathStr
-          pathStr' <- toLowLevel (pack pathStr)
+            -- Get file path
+            frame <- readTVarIO (gsvs ^. gsvsFrameCount)
+            maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
+            let dataDir = fromMaybe "./.local/share/Simula" maybeDataDir
+            createDirectoryIfMissing True (dataDir </> "media")
+            let fileName = (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
+            let pathStr = dataDir </> "media" </> fileName
+            canonicalPath <- canonicalizePath pathStr
+            pathStr' <- toLowLevel (pack pathStr)
 
-          -- Save as png
-          G.save_png wlrSurfaceImage pathStr'
-          return canonicalPath
+            -- Save as png
+            G.save_png wlrSurfaceImage pathStr'
+            return canonicalPath
 
         getVisualServer :: GodotSimulaViewSprite -> IO GodotVisualServer
         getVisualServer gsvs = do

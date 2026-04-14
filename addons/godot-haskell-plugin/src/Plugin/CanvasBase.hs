@@ -130,9 +130,8 @@ _draw cb gvArgs = do
     savePngCS arg@((wlrSurface, cs)) = do
       debugPutStrLn "Plugin.CanvasBase.savePngCS"
       viewportSurface <- readTVarIO (cs ^. csViewport) :: IO GodotViewport
-      viewportSurfaceTexture <- (G.get_texture (viewportSurface :: GodotViewport)) :: IO GodotViewportTexture
-      savePng cs viewportSurfaceTexture wlrSurface
-      return ()
+      withGodotRef (G.get_texture (viewportSurface :: GodotViewport) :: IO GodotViewportTexture) $ \viewportSurfaceTexture ->
+        savePng cs viewportSurfaceTexture wlrSurface >> return ()
 
     drawCanvasSurface :: CanvasBase -> GodotSimulaViewSprite -> IO ()
     drawCanvasSurface cb gsvs = do
@@ -140,12 +139,12 @@ _draw cb gvArgs = do
       gss <- readTVarIO (gsvs ^. gsvsServer)
       cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
       viewportSurface <- readTVarIO (cs ^. csViewport)
-      viewportSurfaceTexture <- G.get_texture viewportSurface
       renderPosition <- toLowLevel (V2 0 0) :: IO GodotVector2
       gsvsTransparency <- getTransparency cb
       modulateColor <- (toLowLevel $ (rgb 1.0 1.0 (1.0 :: Double)) `withOpacity` gsvsTransparency) :: IO GodotColor
 
-      G.draw_texture cb ((safeCast viewportSurfaceTexture) :: GodotTexture)  renderPosition modulateColor (coerce nullPtr)
+      withGodotRef (G.get_texture viewportSurface :: IO GodotViewportTexture) $ \viewportSurfaceTexture ->
+        G.draw_texture cb ((safeCast viewportSurfaceTexture) :: GodotTexture) renderPosition modulateColor (coerce nullPtr)
 
     drawCursor :: CanvasBase -> GodotSimulaViewSprite -> IO ()
     drawCursor cb gsvs = do
@@ -161,10 +160,10 @@ _draw cb gvArgs = do
         (False, Just wlrSurfaceCursor, _, _) -> do
            -- Draw client provided cursor
            validateSurfaceE wlrSurfaceCursor
-           cursorTexture <- G.get_texture wlrSurfaceCursor
            cursorRenderPosition <- toLowLevel (V2 sx sy) :: IO GodotVector2
            godotColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1.0) :: IO GodotColor
-           G.draw_texture cb cursorTexture cursorRenderPosition godotColor (coerce nullPtr)
+           withGodotRef (G.get_texture wlrSurfaceCursor :: IO GodotTexture) $ \cursorTexture ->
+             G.draw_texture cb cursorTexture cursorRenderPosition godotColor (coerce nullPtr)
            G.send_frame_done wlrSurfaceCursor
         (False, Nothing, _, Just cursorTexture) -> do
            -- Draw default cursor
@@ -194,8 +193,8 @@ _draw cb gvArgs = do
                -- Take screenshot & save to X clipboard
                let m22Rect = V2 (V2 ox oy) (V2 (ex - ox) (ey - oy))
                viewportSurface <- readTVarIO (cb ^. cbViewport) :: IO GodotViewport
-               viewportSurfaceTexture <- (G.get_texture (viewportSurface :: GodotViewport)) :: IO GodotViewportTexture
-               saveViewportAsPngAndLaunch gsvs viewportSurfaceTexture m22Rect
+               withGodotRef (G.get_texture (viewportSurface :: GodotViewport) :: IO GodotViewportTexture) $ \viewportSurfaceTexture ->
+                 saveViewportAsPngAndLaunch gsvs viewportSurfaceTexture m22Rect
 
                -- Disable screenshot
                atomically $ writeTVar (gsvs ^. gsvsScreenshotMode) False

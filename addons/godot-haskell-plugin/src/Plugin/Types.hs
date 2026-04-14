@@ -978,16 +978,16 @@ savePngPancake :: GodotSimulaServer -> ScreenshotBaseName -> IO (ScreenshotFullP
 savePngPancake gss screenshotBaseName = do
   debugPutStrLn "Plugin.Types.savePngPancake"
   viewport <- G.get_viewport gss :: IO GodotViewport
-  viewportTexture <- G.get_texture viewport
-  pancakeImg <- G.get_data viewportTexture
-  G.flip_y pancakeImg
-  maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
-  let dataDir = fromMaybe "." maybeDataDir
-  createDirectoryIfMissing False (dataDir ++ "/media")
-  let relativePath = (dataDir ++ "/media/" <> screenshotBaseName <> ".png")
-  fullPath <- System.Directory.canonicalizePath relativePath
-  G.save_png pancakeImg =<< toLowLevel (pack relativePath)
-  return fullPath
+  withGodotRef (G.get_texture viewport :: IO GodotViewportTexture) $ \viewportTexture -> do
+    pancakeImg <- G.get_data viewportTexture
+    G.flip_y pancakeImg
+    maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
+    let dataDir = fromMaybe "." maybeDataDir
+    createDirectoryIfMissing False (dataDir ++ "/media")
+    let relativePath = (dataDir ++ "/media/" <> screenshotBaseName <> ".png")
+    fullPath <- System.Directory.canonicalizePath relativePath
+    G.save_png pancakeImg =<< toLowLevel (pack relativePath)
+    return fullPath
 
 -- Run shell command with DISPLAY set to our XWayland server value (typically
 -- :2)
