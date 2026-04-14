@@ -724,14 +724,14 @@ applyViewportBaseTexture gsvs = do
   cb <- readTVarIO (gsvs ^. gsvsCanvasBase)
   viewportBase <- readTVarIO (cb ^. cbViewport)
 
-  shm <- G.get_material quadMesh >>= asClass' GodotShaderMaterial "ShaderMaterial" :: IO GodotShaderMaterial
-
-  withGodotRef (G.get_texture viewportBase :: IO GodotViewportTexture) $ \viewportBaseTexture -> do
-    viewportBaseTextureGV <- (toLowLevel (toVariant ((safeCast viewportBaseTexture) :: GodotObject))) :: IO GodotVariant
-    texture_albedo <- toLowLevel (pack "texture_albedo") :: IO GodotString
-    G.set_shader_param shm texture_albedo viewportBaseTextureGV
-    Api.godot_variant_destroy viewportBaseTextureGV
-    Api.godot_string_destroy texture_albedo
+  withGodotRef (G.get_material quadMesh :: IO GodotMaterial) $ \material -> do
+    shm <- asClass' GodotShaderMaterial "ShaderMaterial" material :: IO GodotShaderMaterial
+    withGodotRef (G.get_texture viewportBase :: IO GodotViewportTexture) $ \viewportBaseTexture -> do
+      viewportBaseTextureGV <- (toLowLevel (toVariant ((safeCast viewportBaseTexture) :: GodotObject))) :: IO GodotVariant
+      texture_albedo <- toLowLevel (pack "texture_albedo") :: IO GodotString
+      G.set_shader_param shm texture_albedo viewportBaseTextureGV
+      Api.godot_variant_destroy viewportBaseTextureGV
+      Api.godot_string_destroy texture_albedo
 
 handle_map_free_child :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_map_free_child gsvsInvisible gvArgs@[wlrXWaylandSurfaceVariant] = do
