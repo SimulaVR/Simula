@@ -1291,24 +1291,25 @@ _on_WlrXdgShell_new_surface gss [wlrXdgSurfaceVariant] = do
         return ()
       1 -> do -- XDG_SURFACE_ROLE_TOPLEVEL
               wlrXdgToplevel <- G.get_xdg_toplevel wlrXdgSurface >>= validateSurfaceE
-              wlrSurface <- G.get_wlr_surface wlrXdgSurface >>= validateSurfaceE
-              G.set_tiled wlrXdgToplevel True
-              simulaView <- newSimulaView gss wlrXdgSurface
-              gsvs <- newGodotSimulaViewSprite gss simulaView
+              withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
+                wlrSurface <- validateSurfaceE wlrSurface
+                G.set_tiled wlrXdgToplevel True
+                simulaView <- newSimulaView gss wlrXdgSurface
+                gsvs <- newGodotSimulaViewSprite gss simulaView
 
-              connectGodotSignal gsvs "map" gss "handle_map_surface" []
-              connectGodotSignal wlrXdgSurface "destroy" gsvs "_handle_destroy" []
-              connectGodotSignal wlrXdgSurface "map" gsvs "_handle_map" []
-              connectGodotSignal wlrXdgSurface "unmap" gsvs "handle_unmap" []
-              connectGodotSignal wlrXdgSurface "new_popup" gsvs "handle_new_popup" []
-              connectGodotSignal wlrXdgToplevel "request_show_window_menu" gsvs "handle_window_menu" []
-              connectGodotSignal wlrSurface "new_subsurface" gsvs "handle_wlr_surface_new_subsurface" []
-              connectGodotSignal wlrSurface "commit" gsvs "handle_wlr_surface_commit" []
-              connectGodotSignal wlrSurface "destroy" gsvs "handle_wlr_surface_destroy" []
+                connectGodotSignal gsvs "map" gss "handle_map_surface" []
+                connectGodotSignal wlrXdgSurface "destroy" gsvs "_handle_destroy" []
+                connectGodotSignal wlrXdgSurface "map" gsvs "_handle_map" []
+                connectGodotSignal wlrXdgSurface "unmap" gsvs "handle_unmap" []
+                connectGodotSignal wlrXdgSurface "new_popup" gsvs "handle_new_popup" []
+                connectGodotSignal wlrXdgToplevel "request_show_window_menu" gsvs "handle_window_menu" []
+                connectGodotSignal wlrSurface "new_subsurface" gsvs "handle_wlr_surface_new_subsurface" []
+                connectGodotSignal wlrSurface "commit" gsvs "handle_wlr_surface_commit" []
+                connectGodotSignal wlrSurface "destroy" gsvs "handle_wlr_surface_destroy" []
 
-              -- We G.set_activated early to prevent weird behavior (e.g. file pickers failing to spawn)
-              G.set_activated wlrXdgToplevel True
-              return ()
+                -- We G.set_activated early to prevent weird behavior (e.g. file pickers failing to spawn)
+                G.set_activated wlrXdgToplevel True
+                return ()
    where
          xdgRoleName :: Int -> String
          xdgRoleName 0 = "none"

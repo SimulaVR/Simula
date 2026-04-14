@@ -683,16 +683,29 @@ godotPrint str = do
   debugPutStrLn "Plugin.Types.godotPrint"
   Api.godot_print =<< toLowLevel str
 
+withWlrSurface
+  :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface
+  -> (GodotWlrSurface -> IO a)
+  -> IO a
+withWlrSurface eitherSurface action = do
+  debugPutStrLn "Plugin.Types.withWlrSurface"
+  case eitherSurface of
+    Left wlrXdgSurface -> do
+      wlrXdgSurface <- validateSurfaceE wlrXdgSurface
+      withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) action
+    Right wlrXWaylandSurface -> do
+      wlrXWaylandSurface <- validateSurfaceE wlrXWaylandSurface
+      withGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface) action
+
+
+-- The returned GodotWlrSurface will have a +1'ed reference count when this function returns it
+-- so that the caller is responsible for unreferencing it
 getWlrSurface :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO GodotWlrSurface
 getWlrSurface eitherSurface = do
   debugPutStrLn "Plugin.Types.getWlrSurface"
-  case eitherSurface of
-    (Left wlrXdgSurface) -> do
-      validateSurfaceE wlrXdgSurface
-      G.get_wlr_surface wlrXdgSurface
-    (Right wlrXWaylandSurface) -> do
-      validateSurfaceE wlrXWaylandSurface
-      G.get_wlr_surface wlrXWaylandSurface
+  withWlrSurface eitherSurface $ \wlrSurface -> do
+    G.reference wlrSurface
+    return wlrSurface
 
 
 -- | Used to supply GodotVector2 to
@@ -727,6 +740,16 @@ destroyMaybe ref = do
 withGodotRef :: (GodotReference :< a) => IO a -> (a -> IO b) -> IO b
 withGodotRef alloc =
   bracket alloc (destroyMaybe . safeCast)
+
+retainGodotRef :: (GodotReference :< a) => IO a -> IO a
+retainGodotRef alloc =
+  withGodotRef alloc $ \ref -> do
+    _ <- G.reference ((safeCast ref) :: GodotReference)
+    return ref
+
+destroyWlrSurfacesWithCoords :: [(GodotWlrSurface, Int, Int)] -> IO ()
+destroyWlrSurfacesWithCoords =
+  mapM_ (\(wlrSurface, _, _) -> destroyMaybe (safeCast wlrSurface))
 
 withGodotRef2
   :: (GodotReference :< a, GodotReference :< b)
@@ -835,11 +858,11 @@ logGSVS str gsvs = do
      (Just id) -> do appendFile "log.txt" $ "  gsvs id: " ++ (show id) ++ "\n"
                      case eitherSurface of
                        Left wlrXdgSurface -> do appendFile "log.txt" $ ("  wlrXdgSurface: " ++ (show wlrXdgSurface)) ++ "\n"
-                                                wlrSurface <- G.get_wlr_surface wlrXdgSurface
-                                                appendFile "log.txt" $ ("  wlrSurface: " ++ (show wlrSurface)) ++ "\n"
+                                                withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) $ \wlrSurface ->
+                                                  appendFile "log.txt" $ ("  wlrSurface: " ++ (show wlrSurface)) ++ "\n"
                        Right wlrXWaylandSurface -> do appendFile "log.txt" $ ("  wlrXWaylandSurface: " ++ (show wlrXWaylandSurface)) ++ "\n"
-                                                      wlrSurface <- G.get_wlr_surface wlrXWaylandSurface
-                                                      appendFile "log.txt" $ ("  wlrSurface: " ++ (show wlrSurface)) ++ "\n"
+                                                      withGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface) $ \wlrSurface ->
+                                                        appendFile "log.txt" $ ("  wlrSurface: " ++ (show wlrSurface)) ++ "\n"
   appendFile "log.txt" $ "  isMapped: " ++ (show isMapped) ++ "\n"
 
 logStr :: String -> IO ()
@@ -892,23 +915,23 @@ initializeRenderTarget gsvs viewportType = do
   debugPutStrLn "Plugin.Types.initializeRenderTarget"
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
-  wlrSurface <- getWlrSurface eitherSurface
   renderTarget <- unsafeInstance GodotViewport "Viewport"
-  dimensions@(width, height) <- getBufferDimensions wlrSurface
-  pixelDimensionsOfWlrSurface <- toGodotVector2 dimensions
+  withWlrSurface eitherSurface $ \wlrSurface -> do
+    dimensions <- getBufferDimensions wlrSurface
+    pixelDimensionsOfWlrSurface <- toGodotVector2 dimensions
 
-  G.set_disable_input renderTarget True
-  G.set_usage renderTarget G.USAGE_2D
-  G.set_update_mode renderTarget G.UPDATE_WHEN_VISIBLE
-  G.set_vflip renderTarget True
-  G.set_size renderTarget pixelDimensionsOfWlrSurface
+    G.set_disable_input renderTarget True
+    G.set_usage renderTarget G.USAGE_2D
+    G.set_update_mode renderTarget G.UPDATE_WHEN_VISIBLE
+    G.set_vflip renderTarget True
+    G.set_size renderTarget pixelDimensionsOfWlrSurface
 
-  case viewportType of
-    ViewportSurface -> G.set_clear_mode renderTarget G.CLEAR_MODE_NEVER
-    ViewportBase -> G.set_clear_mode renderTarget G.CLEAR_MODE_ALWAYS
-  G.set_transparent_background renderTarget True
+    case viewportType of
+      ViewportSurface -> G.set_clear_mode renderTarget G.CLEAR_MODE_NEVER
+      ViewportBase -> G.set_clear_mode renderTarget G.CLEAR_MODE_ALWAYS
+    G.set_transparent_background renderTarget True
 
-  return renderTarget
+    return renderTarget
 
 getBufferDimensions :: GodotWlrSurface -> IO (Int, Int)
 getBufferDimensions wlrSurface = do
@@ -1279,9 +1302,9 @@ resizeGSVS gsvs resizeMethod factor = do
     Just oldTargetDims' -> return oldTargetDims'
     Nothing -> do simulaView <- readTVarIO (gsvs ^. gsvsView)
                   let eitherSurface = (simulaView ^. svWlrEitherSurface)
-                  wlrSurface <- getWlrSurface eitherSurface
-                  (x, y) <- getBufferDimensions wlrSurface
-                  return $ SpriteDimensions (x, y)
+                  withWlrSurface eitherSurface $ \wlrSurface -> do
+                    (x, y) <- getBufferDimensions wlrSurface
+                    return $ SpriteDimensions (x, y)
 
   newTargetDims@(SpriteDimensions (wTarget, hTarget)) <- case resizeMethod of
          Horizontal -> do
@@ -1380,29 +1403,30 @@ getDepthFirstSurfaces gsvs = do
     Left _ -> do
       depthFirstWlrSurfaces <- fmap List.concat $ forM depthFirstBaseSurfaces $ \(wlrSurface, x, y) ->
         getDepthFirstWlrSurfacesFrom x y wlrSurface
-      return $ dedupeDepthFirstSurfaces (depthFirstBaseSurfaces ++ depthFirstWlrSurfaces)
+      dedupeDepthFirstSurfaces (depthFirstBaseSurfaces ++ depthFirstWlrSurfaces)
     Right _ -> do
-      wlrSurfaceParent <- (getWlrSurface eitherSurface) >>= validateSurfaceE
-      depthFirstWlrSurfaces <- getDepthFirstWlrSurfaces wlrSurfaceParent
-      return (depthFirstBaseSurfaces ++ depthFirstWlrSurfaces)
+      withWlrSurface eitherSurface $ \wlrSurfaceParent -> do
+        depthFirstWlrSurfaces <- getDepthFirstWlrSurfaces wlrSurfaceParent
+        return (depthFirstBaseSurfaces ++ depthFirstWlrSurfaces)
   return depthFirstSurfaces
   where
     sameWlrSurface :: GodotWlrSurface -> GodotWlrSurface -> Bool
     sameWlrSurface surfaceA surfaceB = ((coerce surfaceA) :: Ptr ()) == ((coerce surfaceB) :: Ptr ())
 
-    dedupeDepthFirstSurfaces :: [(GodotWlrSurface, Int, Int)] -> [(GodotWlrSurface, Int, Int)]
-    dedupeDepthFirstSurfaces = List.foldl' keepFirst []
+    dedupeDepthFirstSurfaces :: [(GodotWlrSurface, Int, Int)] -> IO [(GodotWlrSurface, Int, Int)]
+    dedupeDepthFirstSurfaces = foldM keepFirst []
       where
         keepFirst acc surfaceWithCoords@(surface, _, _)
-          | List.any (\(seenSurface, _, _) -> sameWlrSurface seenSurface surface) acc = acc
-          | otherwise = acc ++ [surfaceWithCoords]
+          | List.any (\(seenSurface, _, _) -> sameWlrSurface seenSurface surface) acc = do
+              destroyMaybe (safeCast surface)
+              return acc
+          | otherwise = return (acc ++ [surfaceWithCoords])
 
 getDepthFirstBaseSurfaces :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
 getDepthFirstBaseSurfaces gsvs = do
   debugPutStrLn "Plugin.Types.getDepthFirstBaseSurfaces"
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
-  wlrSurfaceParent <- getWlrSurface eitherSurface
   depthFirstBaseSurfaces <- case eitherSurface of
     Left wlrXdgSurface -> do
       ret <- getDepthFirstXdgSurfaces wlrXdgSurface :: IO [(GodotWlrSurface, Int, Int)]
@@ -1411,7 +1435,7 @@ getDepthFirstBaseSurfaces gsvs = do
       freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
       freeChildren' <- mapM (\wlrXWaylandSurfaceFC -> do x <- G.get_x wlrXWaylandSurfaceFC
                                                          y <- G.get_y wlrXWaylandSurfaceFC
-                                                         wlrSurface <- G.get_wlr_surface wlrXWaylandSurfaceFC
+                                                         wlrSurface <- retainGodotRef (G.get_wlr_surface wlrXWaylandSurfaceFC :: IO GodotWlrSurface)
                                                          return (wlrSurface, x, y))
                             freeChildren
       depthFirstXWaylandSurfaces <- getDepthFirstXWaylandSurfaces wlrXWaylandSurface :: IO [(GodotWlrSurface, Int, Int)]
@@ -1424,13 +1448,13 @@ getDepthFirstXWaylandSurfaces :: GodotWlrXWaylandSurface -> IO [(GodotWlrSurface
 getDepthFirstXWaylandSurfaces wlrXWaylandSurface = do
   debugPutStrLn "Plugin.Types.getDepthFirstXWaylandSurfaces"
   xwaylandMappedChildrenAndCoords <- getXWaylandMappedChildren wlrXWaylandSurface :: IO [(GodotWlrXWaylandSurface, Int, Int)]
-  wlrSurface <- G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface
+  wlrSurface <- retainGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface)
   foldM appendXWaylandSurfaceAndChildren [(wlrSurface, 0, 0)] xwaylandMappedChildrenAndCoords
   where
         appendXWaylandSurfaceAndChildren :: [(GodotWlrSurface, Int, Int)] -> (GodotWlrXWaylandSurface, Int, Int) -> IO [(GodotWlrSurface, Int, Int)]
         appendXWaylandSurfaceAndChildren oldList arg@(wlrXWaylandSurface, x, y) = do
           debugPutStrLn "Plugin.Types.appendXWaylandSurfaceAndChildren"
-          xwaylandChildSurface <- G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface
+          xwaylandChildSurface <- retainGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface)
           appendSurfaceAndChildren oldList (xwaylandChildSurface, x, y)
 
         appendSurfaceAndChildren :: [(GodotWlrSurface, Int, Int)] -> (GodotWlrSurface, Int, Int) -> IO [(GodotWlrSurface, Int, Int)]
@@ -1448,7 +1472,7 @@ getDepthFirstXWaylandSurfaces wlrXWaylandSurface = do
           childrenSubsurfaces <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrSubsurface]
           childrenSSX <- mapM G.get_ssx childrenSubsurfaces
           childrenSSY <- mapM G.get_ssy childrenSubsurfaces
-          children <- mapM G.getWlrSurface childrenSubsurfaces
+          children <- mapM (\childSubsurface -> retainGodotRef (G.getWlrSurface childSubsurface :: IO GodotWlrSurface)) childrenSubsurfaces
           let childrenWithCoords = zip3 children childrenSSX childrenSSY
           Api.godot_array_destroy arrayOfChildren
           mapM_ Api.godot_variant_destroy arrayOfChildrenGV
@@ -1476,7 +1500,7 @@ getDepthFirstXdgSurfaces wlrXdgSurface = do
   mapM convertToWlrSurfaceDepthFirstSurfaces depthFirstXdgSurfaces
   where convertToWlrSurfaceDepthFirstSurfaces :: (GodotWlrXdgSurface, Int, Int) -> IO (GodotWlrSurface, Int, Int)
         convertToWlrSurfaceDepthFirstSurfaces (wlrXdgSurface, x, y) = do
-          wlrSurface <- G.get_wlr_surface wlrXdgSurface
+          wlrSurface <- retainGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface)
           return (wlrSurface, x, y)
 
         getXdgPopups :: GodotWlrXdgSurface -> IO [(GodotWlrXdgSurface, Int, Int)]
@@ -1517,7 +1541,9 @@ getDepthFirstWlrSurfacesFrom rootX rootY wlrSurface = do
 
         appendSurfaceAndChildren :: ([GodotWlrSurface], [(GodotWlrSurface, Int, Int)]) -> (GodotWlrSurface, Int, Int) -> IO ([GodotWlrSurface], [(GodotWlrSurface, Int, Int)])
         appendSurfaceAndChildren (visited, oldList) arg@(wlrSurface, x, y)
-          | List.any (`sameWlrSurface` wlrSurface) visited = return (visited, oldList)
+          | List.any (`sameWlrSurface` wlrSurface) visited = do
+              destroyMaybe (safeCast wlrSurface)
+              return (visited, oldList)
           | otherwise = do
               surfacesAndCoords <- getSurfaceChildren wlrSurface :: IO [(GodotWlrSurface, Int, Int)]
               let rootRelativeSurfacesAndCoords = fmap (\(childSurface, childX, childY) -> (childSurface, x + childX, y + childY)) surfacesAndCoords
@@ -1532,7 +1558,7 @@ getDepthFirstWlrSurfacesFrom rootX rootY wlrSurface = do
           childrenSubsurfaces <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrSubsurface]
           childrenSSX <- mapM G.get_ssx childrenSubsurfaces
           childrenSSY <- mapM G.get_ssy childrenSubsurfaces
-          children <- mapM G.getWlrSurface childrenSubsurfaces
+          children <- mapM (\childSubsurface -> retainGodotRef (G.getWlrSurface childSubsurface :: IO GodotWlrSurface)) childrenSubsurfaces
           let childrenWithCoords = zip3 children childrenSSX childrenSSY
           Api.godot_array_destroy arrayOfChildren
           mapM_ Api.godot_variant_destroy arrayOfChildrenGV
@@ -1545,18 +1571,20 @@ getBaseDimensions gsvs = do
   debugPutStrLn "Plugin.Types.getBaseDimensions"
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
-  wlrSurfaceParent <- getWlrSurface eitherSurface
-  (parentWidth, parentHeight) <- getBufferDimensions wlrSurfaceParent
-  return (parentWidth, parentHeight)
+  withWlrSurface eitherSurface $ \wlrSurfaceParent ->
+    getBufferDimensions wlrSurfaceParent
 
 getSpilloverDims :: GodotSimulaViewSprite -> IO (Int, Int)
 getSpilloverDims gsvs = do
   debugPutStrLn "Plugin.Types.getSpilloverDims"
-  depthFirstSurfaces <- getDepthFirstSurfaces gsvs :: IO [(GodotWlrSurface, Int, Int)]
-  spilloverDims <- mapM (getSpilloverDims gsvs) depthFirstSurfaces
-  let spilloverWidth = Data.List.maximum $ fmap fst spilloverDims
-  let spilloverHeight = Data.List.maximum $ fmap snd spilloverDims
-  return (spilloverWidth, spilloverHeight)
+  bracket
+    (getDepthFirstSurfaces gsvs :: IO [(GodotWlrSurface, Int, Int)])
+    destroyWlrSurfacesWithCoords
+    (\depthFirstSurfaces -> do
+      spilloverDims <- mapM (getSpilloverDims gsvs) depthFirstSurfaces
+      let spilloverWidth = Data.List.maximum $ fmap fst spilloverDims
+      let spilloverHeight = Data.List.maximum $ fmap snd spilloverDims
+      return (spilloverWidth, spilloverHeight))
   where getSpilloverDims :: GodotSimulaViewSprite -> (GodotWlrSurface, Int, Int) -> IO (Int, Int)
         getSpilloverDims gsvs (wlrSurface, sx, sy) = do
           (baseWidth, baseHeight) <- getBaseDimensions gsvs

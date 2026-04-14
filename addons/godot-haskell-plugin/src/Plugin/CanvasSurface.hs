@@ -102,38 +102,40 @@ _draw cs gvArgs = do
   gsvs <- readTVarIO (cs ^. csGSVS)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   mapped <- readTVarIO (simulaView ^. svMapped)
-  when mapped $ do
-    depthFirstSurfaces <- getDepthFirstSurfaces gsvs
+  when mapped $
+    bracket
+      (getDepthFirstSurfaces gsvs)
+      destroyWlrSurfacesWithCoords
+      (\depthFirstSurfaces -> do
+        isEntirelyDamaged <- readTVarIO (gsvs ^. gsvsIsDamaged)
+        case isEntirelyDamaged of
+          True -> do
+            atomically $ writeTVar (gsvs ^. gsvsIsDamaged) False
+            mapM (drawWlrSurface cs) depthFirstSurfaces -- Just draw everything
+            return ()
+          False -> do
+            -- Only draw the damaged regions
+            let surfaces = fmap (tuple1) depthFirstSurfaces
+            let xs = fmap (tuple2) depthFirstSurfaces
+            let ys = fmap (tuple3) depthFirstSurfaces
+            surfacesVariants <- mapM (\surf -> toLowLevel $ toVariant $ surf) surfaces
+            let xsV = fmap toVariant xs
+            let ysV = fmap toVariant ys
+            xsVariant <- mapM toLowLevel xsV :: IO [GodotVariant]
+            ysVariant <- mapM toLowLevel ysV :: IO [GodotVariant]
+            surfacesVariantsArray <- toLowLevel surfacesVariants
+            xsVariantArray <- toLowLevel xsVariant
+            ysVariantArray <- toLowLevel ysVariant
+            let eitherSurface = (simulaView ^. svWlrEitherSurface)
+            regionsArray <- withWlrSurface eitherSurface $ \wlrSurfaceParent ->
+              G.accumulate_damage_regions wlrSurfaceParent surfacesVariantsArray xsVariantArray ysVariantArray
+            regions <- fromLowLevel regionsArray >>= mapM fromGodotVariant
+            atomically $ writeTVar (gsvs ^. gsvsDamagedRegions) regions
 
-    isEntirelyDamaged <- readTVarIO (gsvs ^. gsvsIsDamaged)
-    case isEntirelyDamaged of
-      True -> do
-        atomically $ writeTVar (gsvs ^. gsvsIsDamaged) False
-        mapM (drawWlrSurface cs) depthFirstSurfaces -- Just draw everything
-        return ()
-      False -> do
-        -- Only draw the damaged regions
-        let surfaces = fmap (tuple1) depthFirstSurfaces
-        let xs = fmap (tuple2) depthFirstSurfaces
-        let ys = fmap (tuple3) depthFirstSurfaces
-        surfacesVariants <- mapM (\surf -> toLowLevel $ toVariant $ surf) surfaces
-        let xsV = fmap toVariant xs
-        let ysV = fmap toVariant ys
-        xsVariant <- mapM toLowLevel xsV :: IO [GodotVariant]
-        ysVariant <- mapM toLowLevel ysV :: IO [GodotVariant]
-        surfacesVariantsArray <- toLowLevel surfacesVariants
-        xsVariantArray <- toLowLevel xsVariant
-        ysVariantArray <- toLowLevel ysVariant
-        let eitherSurface = (simulaView ^. svWlrEitherSurface)
-        wlrSurfaceParent <- getWlrSurface eitherSurface >>= validateSurfaceE
-        regionsArray <- G.accumulate_damage_regions wlrSurfaceParent surfacesVariantsArray xsVariantArray ysVariantArray
-        regions <- fromLowLevel regionsArray >>= mapM fromGodotVariant
-        atomically $ writeTVar (gsvs ^. gsvsDamagedRegions) regions
-
-        -- Draw surfaces
-        mapM (drawWlrSurfaceRegions cs regions) depthFirstSurfaces
-        mapM Api.godot_array_destroy [surfacesVariantsArray, xsVariantArray, ysVariantArray, regionsArray]
-        return ()
+            -- Draw surfaces
+            mapM (drawWlrSurfaceRegions cs regions) depthFirstSurfaces
+            mapM Api.godot_array_destroy [surfacesVariantsArray, xsVariantArray, ysVariantArray, regionsArray]
+            return ())
   mapM_ Api.godot_variant_destroy gvArgs
   where
     tuple1 (a1, b2, c3) = a1
@@ -154,7 +156,6 @@ _draw cs gvArgs = do
       validateSurfaceE wlrSurface
       gsvs <- readTVarIO (cs ^. csGSVS)
       gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
-      G.reference wlrSurface
       gsvsTransparency <- getTransparency cs
       modulateColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` gsvsTransparency) :: IO GodotColor
       renderPosition <- toLowLevel (V2 (fromIntegral x) (fromIntegral y))
@@ -175,8 +176,7 @@ _draw cs gvArgs = do
       gsvs <- readTVarIO (cs ^. csGSVS)
       gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
       validateSurfaceE wlrSurface
-      do G.reference wlrSurface
-         withGodotRef (G.get_texture wlrSurface :: IO GodotTexture) $ \surfaceTexture ->
+      do withGodotRef (G.get_texture wlrSurface :: IO GodotTexture) $ \surfaceTexture ->
            case (validateObject surfaceTexture) of
              Nothing -> return ()
              Just surfaceTexture -> do

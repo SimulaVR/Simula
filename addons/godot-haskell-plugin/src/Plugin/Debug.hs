@@ -182,28 +182,36 @@ testRightclickPopup gss app screenshotBase = do
   SurfaceLocalCoordinates (cx, cy) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
-  wlrSurfaceParent <- getWlrSurface eitherSurface
   depthFirstBaseSurfaces <- case eitherSurface of
     Left wlrXdgSurface -> getDepthFirstXdgSurfaces wlrXdgSurface :: IO [(GodotWlrSurface, Int, Int)]
     Right wlrXWaylandSurface -> getDepthFirstXWaylandSurfaces wlrXWaylandSurface :: IO [(GodotWlrSurface, Int, Int)]
-  depthFirstWlrSurfaces <- getDepthFirstWlrSurfaces wlrSurfaceParent
-  let depthFirstSurfaces = depthFirstBaseSurfaces ++ depthFirstWlrSurfaces
-  let len = Data.List.length depthFirstSurfaces
-  freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
-  popup@(popupWlrSurface, px, py) <- case (Data.List.length freeChildren > 0, (len >= 2)) of
-                                             (True, _) -> do let freeChild = Data.List.head freeChildren
-                                                             wlrSurface <- G.get_wlr_surface freeChild
-                                                             x <- G.get_x freeChild
-                                                             y <- G.get_y freeChild
-                                                             return (wlrSurface, x, y)
-                                             (_, True) -> return $ depthFirstSurfaces !! 1
-                                             _ -> return $ depthFirstSurfaces !! 0
+  ((withWlrSurface eitherSurface $ \wlrSurfaceParent ->
+      bracket
+        (getDepthFirstWlrSurfaces wlrSurfaceParent)
+        destroyWlrSurfacesWithCoords
+        (\depthFirstWlrSurfaces -> do
+          let depthFirstSurfaces = depthFirstBaseSurfaces ++ depthFirstWlrSurfaces
+          let len = Data.List.length depthFirstSurfaces
+          freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
+          (px, py) <- case (Data.List.length freeChildren > 0, len >= 2) of
+            (True, _) -> do
+              let freeChild = Data.List.head freeChildren
+              x <- G.get_x freeChild
+              y <- G.get_y freeChild
+              return (x, y)
+            (_, True) -> do
+              let (_, x, y) = depthFirstSurfaces !! 1
+              return (x, y)
+            _ -> do
+              let (_, x, y) = depthFirstSurfaces !! 0
+              return (x, y)
 
-  Control.Concurrent.threadDelay (1 * 1000000)
-  debugLogDepthFirstSurfaces gsvs
-  Control.Concurrent.threadDelay (2 * 1000000)
-  createProcess (shell $ "pkill " ++ app)
-  return ((cx, cy), (fromIntegral px, fromIntegral py), screenshotFullPath)
+          Control.Concurrent.threadDelay (1 * 1000000)
+          debugLogDepthFirstSurfaces gsvs
+          Control.Concurrent.threadDelay (2 * 1000000)
+          createProcess (shell $ "pkill " ++ app)
+          return ((cx, cy), (fromIntegral px, fromIntegral py), screenshotFullPath))))
+    `finally` destroyWlrSurfacesWithCoords depthFirstBaseSurfaces
   
 testAppMemory :: GodotSimulaServer -> String -> Int -> IO (Float, Float)
 testAppMemory gss app sec = do
@@ -310,24 +318,28 @@ debugLogDepthFirstSurfaces gsvs = do
   frame <- readTVarIO (gsvs ^. gsvsFrameCount)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
-  wlrSurfaceParent <- getWlrSurface eitherSurface
   depthFirstBaseSurfaces <- getDepthFirstBaseSurfaces gsvs
-  depthFirstWlrSurfaces <- getDepthFirstWlrSurfaces wlrSurfaceParent
-  let depthFirstSurfaces = depthFirstBaseSurfaces ++ depthFirstWlrSurfaces
+  ((withWlrSurface eitherSurface $ \wlrSurfaceParent ->
+      bracket
+        (getDepthFirstWlrSurfaces wlrSurfaceParent)
+        destroyWlrSurfacesWithCoords
+        (\depthFirstWlrSurfaces -> do
+          let depthFirstSurfaces = depthFirstBaseSurfaces ++ depthFirstWlrSurfaces
 
-  maybeLogDir <- lookupEnv "SIMULA_LOG_DIR"
-  let logDir = fromMaybe "./log" maybeLogDir
-  createDirectoryIfMissing True logDir
-  let logFile = logDir </> "debug_log.txt"
+          maybeLogDir <- lookupEnv "SIMULA_LOG_DIR"
+          let logDir = fromMaybe "./log" maybeLogDir
+          createDirectoryIfMissing True logDir
+          let logFile = logDir </> "debug_log.txt"
 
-  appendFile logFile $ "===debugLogDepthFirstSurfaces frame: " ++ (show frame) ++ " ===\n"
-  appendFile logFile $ "depthFirstSurfaces:" ++ (show $ length depthFirstSurfaces) ++ "\n"
-  appendFile logFile $ "  depthFirstBaseSurfaces:" ++ (show $ length depthFirstBaseSurfaces) ++ "\n"
-  appendFile logFile $ "  " ++ (show depthFirstBaseSurfaces) ++ "\n"
-  appendFile logFile $ "  depthFirstWlrSurfaces:" ++ (show $ length depthFirstWlrSurfaces) ++ "\n"
-  appendFile logFile $ "  " ++ (show depthFirstWlrSurfaces) ++ "\n"
+          appendFile logFile $ "===debugLogDepthFirstSurfaces frame: " ++ (show frame) ++ " ===\n"
+          appendFile logFile $ "depthFirstSurfaces:" ++ (show $ length depthFirstSurfaces) ++ "\n"
+          appendFile logFile $ "  depthFirstBaseSurfaces:" ++ (show $ length depthFirstBaseSurfaces) ++ "\n"
+          appendFile logFile $ "  " ++ (show depthFirstBaseSurfaces) ++ "\n"
+          appendFile logFile $ "  depthFirstWlrSurfaces:" ++ (show $ length depthFirstWlrSurfaces) ++ "\n"
+          appendFile logFile $ "  " ++ (show depthFirstWlrSurfaces) ++ "\n"
 
-  mapM_ (logWlrSurface cs) depthFirstSurfaces
+          mapM_ (logWlrSurface cs) depthFirstSurfaces)))
+    `finally` destroyWlrSurfacesWithCoords depthFirstBaseSurfaces
 
   where logWlrSurface :: CanvasSurface -> (GodotWlrSurface, Int, Int) -> IO ()
         logWlrSurface cs (wlrSurface, x, y) = do
