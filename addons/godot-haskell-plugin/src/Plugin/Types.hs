@@ -781,19 +781,19 @@ getSurfaceLocalCoordinates gsvs clickPos = do
   lpos <- G.to_local gsvs clickPos >>= fromLowLevel
   meshInstance <- atomically $ readTVar (_gsvsMeshInstance gsvs)
   aabb <- G.get_aabb meshInstance
-  quadMesh <- getQuadMesh gsvs
   aabbSize <- godot_aabb_get_size aabb >>= fromLowLevel
-  quadMeshSize <- G.get_size quadMesh >>= fromLowLevel
+  withQuadMesh gsvs $ \quadMesh -> do
+    quadMeshSize <- G.get_size quadMesh >>= fromLowLevel
 
-  let topLeftPos =
-        V2 (aabbSize ^. _x / 2 - lpos ^. _x) (aabbSize ^. _y / 2 - lpos ^. _y)
-  let scaledPos = liftI2 (/) topLeftPos (aabbSize ^. _xy)
-  let coords = liftI2 (*) quadMeshSize scaledPos
-  -- coords = surface coordinates in pixel with (0,0) at top left
-  let sx = fromIntegral $ truncate (1000 * coords ^. _x) -- Adjust by a factor of 1000 since we are dealing with Quad Mesh
-      sy = fromIntegral $ truncate (1000 * coords ^. _y) -- "
-  clickPos' <- fromLowLevel clickPos
-  return (SurfaceLocalCoordinates (sx, sy))
+    let topLeftPos =
+          V2 (aabbSize ^. _x / 2 - lpos ^. _x) (aabbSize ^. _y / 2 - lpos ^. _y)
+    let scaledPos = liftI2 (/) topLeftPos (aabbSize ^. _xy)
+    let coords = liftI2 (*) quadMeshSize scaledPos
+    -- coords = surface coordinates in pixel with (0,0) at top left
+    let sx = fromIntegral $ truncate (1000 * coords ^. _x) -- Adjust by a factor of 1000 since we are dealing with Quad Mesh
+        sy = fromIntegral $ truncate (1000 * coords ^. _y) -- "
+    clickPos' <- fromLowLevel clickPos
+    return (SurfaceLocalCoordinates (sx, sy))
 
 getARVRCameraOrPancakeCameraTransform :: GodotSimulaServer -> IO GodotTransform
 getARVRCameraOrPancakeCameraTransform gss = do
@@ -1344,12 +1344,22 @@ defaultSizeGSVS gsvs = do
   atomically $ do writeTVar (gsvs ^. gsvsTargetSize) (Just newTargetDims)
                   writeTVar (gsvs ^. gsvsIsDamaged) True
 
-getQuadMesh :: GodotSimulaViewSprite -> IO GodotQuadMesh
-getQuadMesh gsvs = do
-  debugPutStrLn "Plugin.Types.getQuadMesh"
+withQuadMesh :: GodotSimulaViewSprite -> (GodotQuadMesh -> IO a) -> IO a
+withQuadMesh gsvs action = do
+  debugPutStrLn "Plugin.Types.withQuadMesh"
   meshInstance <- readTVarIO (gsvs ^. gsvsMeshInstance)
-  quadMesh <- G.get_mesh meshInstance >>= asClass' GodotQuadMesh "QuadMesh"
-  return quadMesh
+  withGodotRef (G.get_mesh meshInstance :: IO GodotMesh) $ \mesh -> do
+    quadMesh <- asClass' GodotQuadMesh "QuadMesh" mesh
+    action quadMesh
+
+-- The returned GodotQuadMesh will have a +1'ed reference count when this function returns it,
+-- so the caller is responsible for unreferencing it.
+getRetainedQuadMesh :: GodotSimulaViewSprite -> IO GodotQuadMesh
+getRetainedQuadMesh gsvs = do
+  debugPutStrLn "Plugin.Types.getRetainedQuadMesh"
+  withQuadMesh gsvs $ \quadMesh -> do
+    _ <- G.reference ((safeCast quadMesh) :: GodotReference)
+    return quadMesh
 
 constrainTransparency :: Float -> Float
 constrainTransparency input =
@@ -1597,13 +1607,13 @@ setShader :: GodotSimulaViewSprite -> String -> IO ()
 setShader gsvs tres = do
   debugPutStrLn "Plugin.Types.setShader"
   putStrLn $ "setShader: " ++ tres
-  quadMesh <- getQuadMesh gsvs
   shader <- load GodotShader "Shader" (Data.Text.pack tres)
   case shader of
-    Just shader -> do
-      shm <- unsafeInstance GodotShaderMaterial "ShaderMaterial"
-      G.set_shader shm shader
-      G.set_material quadMesh (safeCast shm)
+    Just shader ->
+      withQuadMesh gsvs $ \quadMesh -> do
+        shm <- unsafeInstance GodotShaderMaterial "ShaderMaterial"
+        G.set_shader shm shader
+        G.set_material quadMesh (safeCast shm)
     Nothing -> error "couldn't fetch shader"
 
 getXWaylandWindowClass :: GodotWlrXWaylandSurface -> IO (Maybe String)

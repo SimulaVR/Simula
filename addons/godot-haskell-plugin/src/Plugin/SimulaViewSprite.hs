@@ -274,9 +274,9 @@ setTargetDimensions gsvs = do
   -- Set the corresponding Viewports to match our new target size
   G.set_size renderTargetBase spilloverDims'
   G.set_size renderTargetSurface spilloverDims'
-  quadMesh <- getQuadMesh gsvs
   -- QuadMesh need to be scaled down by a factor of 0.001 to be reasonably sized in Godot:
-  G.set_size quadMesh =<< (toLowLevel $ (V2 (0.001 * (fromIntegral spilloverWidth)) (0.001 * (fromIntegral spilloverHeight))))
+  withQuadMesh gsvs $ \quadMesh ->
+    G.set_size quadMesh =<< (toLowLevel $ (V2 (0.001 * (fromIntegral spilloverWidth)) (0.001 * (fromIntegral spilloverHeight))))
 
   -- Problem: Calls to `G.set_size quadMesh` cause gsvs to "jitter" (since
   -- they're resized from the center). We thus have to translate them to create
@@ -719,19 +719,18 @@ applyViewportBaseTexture gsvs = do
   debugPutStrLn "Plugin.SimulaViewSprite.applyViewportBaseTexture"
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
-  meshInstance <- readTVarIO (gsvs ^. gsvsMeshInstance)
-  quadMesh <- getQuadMesh gsvs
   cb <- readTVarIO (gsvs ^. gsvsCanvasBase)
   viewportBase <- readTVarIO (cb ^. cbViewport)
 
-  withGodotRef (G.get_material quadMesh :: IO GodotMaterial) $ \material -> do
-    shm <- asClass' GodotShaderMaterial "ShaderMaterial" material :: IO GodotShaderMaterial
-    withGodotRef (G.get_texture viewportBase :: IO GodotViewportTexture) $ \viewportBaseTexture -> do
-      viewportBaseTextureGV <- (toLowLevel (toVariant ((safeCast viewportBaseTexture) :: GodotObject))) :: IO GodotVariant
-      texture_albedo <- toLowLevel (pack "texture_albedo") :: IO GodotString
-      G.set_shader_param shm texture_albedo viewportBaseTextureGV
-      Api.godot_variant_destroy viewportBaseTextureGV
-      Api.godot_string_destroy texture_albedo
+  withQuadMesh gsvs $ \quadMesh ->
+    withGodotRef (G.get_material quadMesh :: IO GodotMaterial) $ \material -> do
+      shm <- asClass' GodotShaderMaterial "ShaderMaterial" material :: IO GodotShaderMaterial
+      withGodotRef (G.get_texture viewportBase :: IO GodotViewportTexture) $ \viewportBaseTexture -> do
+        viewportBaseTextureGV <- (toLowLevel (toVariant ((safeCast viewportBaseTexture) :: GodotObject))) :: IO GodotVariant
+        texture_albedo <- toLowLevel (pack "texture_albedo") :: IO GodotString
+        G.set_shader_param shm texture_albedo viewportBaseTextureGV
+        Api.godot_variant_destroy viewportBaseTextureGV
+        Api.godot_string_destroy texture_albedo
 
 handle_map_free_child :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_map_free_child gsvsInvisible gvArgs@[wlrXWaylandSurfaceVariant] = do
