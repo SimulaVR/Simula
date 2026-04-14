@@ -1272,7 +1272,7 @@ _on_WaylandDisplay_ready gss gvArgs = do
   return ()
 
 _on_WlrXdgShell_new_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
-_on_WlrXdgShell_new_surface gss [wlrXdgSurfaceVariant] = do
+_on_WlrXdgShell_new_surface gss gvArgs@[wlrXdgSurfaceVariant] = do
   debugPutStrLn "Plugin.SimulaServer._on_WlrXdgShell_new_surface"
   wlrXdgSurface <- (fromGodotVariant wlrXdgSurfaceVariant :: IO GodotWlrXdgSurface) >>= validateSurfaceE
   roleInt <- G.get_role wlrXdgSurface
@@ -1290,6 +1290,7 @@ _on_WlrXdgShell_new_surface gss [wlrXdgSurfaceVariant] = do
             return ()
         return ()
       1 -> do -- XDG_SURFACE_ROLE_TOPLEVEL
+              G.reference wlrXdgSurface
               wlrXdgToplevel <- G.get_xdg_toplevel wlrXdgSurface >>= validateSurfaceE
               withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
                 wlrSurface <- validateSurfaceE wlrSurface
@@ -1310,7 +1311,8 @@ _on_WlrXdgShell_new_surface gss [wlrXdgSurfaceVariant] = do
                 -- We G.set_activated early to prevent weird behavior (e.g. file pickers failing to spawn)
                 G.set_activated wlrXdgToplevel True
                 return ()
-   where
+  mapM_ Api.godot_variant_destroy gvArgs
+ where
          xdgRoleName :: Int -> String
          xdgRoleName 0 = "none"
          xdgRoleName 1 = "toplevel"
@@ -1710,7 +1712,7 @@ toggleGrabMode = do
   return ()
 
 handle_wlr_compositor_new_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
-handle_wlr_compositor_new_surface gss [wlrSurfaceVariant] = do
+handle_wlr_compositor_new_surface gss gvArgs@[wlrSurfaceVariant] = do
   debugPutStrLn "Plugin.SimulaServer.handle_wlr_compositor_new_surface"
   wlrSurface <- (fromGodotVariant wlrSurfaceVariant :: IO GodotWlrSurface) >>= validateSurfaceE
   maybeGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
@@ -1721,14 +1723,22 @@ handle_wlr_compositor_new_surface gss [wlrSurfaceVariant] = do
       connectGodotSignal wlrSurface "commit" gsvs "handle_wlr_surface_commit" []
       connectGodotSignal wlrSurface "destroy" gsvs "handle_wlr_surface_destroy" []
       return ()
+  mapM_ Api.godot_variant_destroy gvArgs
 
 seat_request_cursor :: GodotSimulaServer -> [GodotVariant] -> IO ()
-seat_request_cursor gss [wlrSurfaceCursorVariant] = do
+seat_request_cursor gss gvArgs@[wlrSurfaceCursorVariant] = do
   debugPutStrLn "Plugin.SimulaServer.seat_request_cursor"
-  wlrSurfaceCursor <- (fromGodotVariant wlrSurfaceCursorVariant :: IO GodotWlrSurface) >>= validateSurfaceE
+  wlrSurfaceCursor <- fromGodotVariant wlrSurfaceCursorVariant :: IO GodotWlrSurface
   maybeActiveCursorGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
   case maybeActiveCursorGSVS of
       Nothing -> do
         putStrLn "Unable to find active cursor gsvs; unable to load cursor texture."
-      Just gsvs -> atomically $ writeTVar (gsvs ^. gsvsCursor) ((Just wlrSurfaceCursor), Nothing)
+      Just gsvs -> do
+        case validateObject wlrSurfaceCursor of
+          Nothing -> clearCursorSurface gsvs
+          Just validCursorSurface -> do
+            validCursorSurface <- validateSurfaceE validCursorSurface
+            G.reference validCursorSurface
+            replaceCursorSurface gsvs (Just validCursorSurface)
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()
