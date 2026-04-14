@@ -719,7 +719,38 @@ withGodot allocatedType' destr action  = do
 destroyMaybe :: GodotReference -> IO ()
 destroyMaybe ref = do
   debugPutStrLn "Plugin.Types.destroyMaybe"
-  whenM (G.unreference @GodotReference ref) (Api.godot_object_destroy $ safeCast ref)
+  case validateObject ref of
+    Nothing -> return ()
+    Just validRef ->
+      whenM (G.unreference @GodotReference validRef) (Api.godot_object_destroy $ safeCast validRef)
+
+withGodotRef :: (GodotReference :< a) => IO a -> (a -> IO b) -> IO b
+withGodotRef alloc =
+  bracket alloc (destroyMaybe . safeCast)
+
+withGodotRef2
+  :: (GodotReference :< a, GodotReference :< b)
+  => IO a
+  -> IO b
+  -> (a -> b -> IO r)
+  -> IO r
+withGodotRef2 allocA allocB action =
+  withGodotRef allocA $ \a ->
+    withGodotRef allocB $ \b ->
+      action a b
+
+withGodotRef3
+  :: (GodotReference :< a, GodotReference :< b, GodotReference :< c)
+  => IO a
+  -> IO b
+  -> IO c
+  -> (a -> b -> c -> IO r)
+  -> IO r
+withGodotRef3 allocA allocB allocC action =
+  withGodotRef allocA $ \a ->
+    withGodotRef allocB $ \b ->
+      withGodotRef allocC $ \c ->
+        action a b c
 
 getSurfaceLocalCoordinates :: GodotSimulaViewSprite -> GodotVector3 -> IO (SurfaceLocalCoordinates)
 getSurfaceLocalCoordinates gsvs clickPos = do
