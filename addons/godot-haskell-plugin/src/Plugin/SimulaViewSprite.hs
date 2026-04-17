@@ -491,15 +491,13 @@ processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)
                  Just (godotWlrSurface, subSurfaceLocalCoords@(SubSurfaceLocalCoordinates (ssx, ssy))) ->
                    (do
                      wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
-                     pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
-                     pointerNotifyMotion wlrSeat subSurfaceLocalCoords
 
                      case evt of
-                       Motion -> return ()
+                       Motion -> do
+                         pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
+                         pointerNotifyMotion wlrSeat subSurfaceLocalCoords
                        Button _ _ -> do
-                         G.keyboard_notify_enter wlrSeat godotWlrSurface
                          pointerNotifyButton wlrSeat evt
-                         return ()
 
                      pointerNotifyFrame wlrSeat)
                      `finally` destroyMaybe (safeCast godotWlrSurface)
