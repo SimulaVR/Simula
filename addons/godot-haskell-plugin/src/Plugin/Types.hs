@@ -149,6 +149,8 @@ unfoldrM f b = f b >>= \case
 data SurfaceLocalCoordinates    = SurfaceLocalCoordinates (Float, Float)
 data SubSurfaceLocalCoordinates = SubSurfaceLocalCoordinates (Float, Float)
 data SpriteDimensions      = SpriteDimensions (Int, Int)
+fullRedrawFramesStartingAmount :: Int
+fullRedrawFramesStartingAmount = 2
 
 data ResizeMethod = Zoom | Horizontal | Vertical deriving (Eq)
 
@@ -335,13 +337,14 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsResizedLastFrame  :: TVar Bool
   , _gsvsCursor            :: TVar ((Maybe GodotWlrSurface), (Maybe GodotTexture))
   , _gsvsIsAtTargetDims    :: TVar Bool
+  , _gsvsFullRedrawFramesRemaining :: TVar Int
   , _gsvsDamagedRegions    :: TVar [GodotRect2]
   , _gsvsIsDamaged         :: TVar Bool
   }
 
 instance HasBaseClass GodotSimulaViewSprite where
   type BaseClass GodotSimulaViewSprite = GodotRigidBody
-  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotRigidBody obj
+  super gsvs = GodotRigidBody (_gsvsObj gsvs)
 
 data CanvasBase = CanvasBase {
     _cbObject       :: GodotObject
@@ -1323,6 +1326,7 @@ resizeGSVS gsvs resizeMethod factor = do
   atomically $ do if resizeMethod == Zoom then return () else writeTVar (gsvs ^. gsvsResizedLastFrame) True
                   writeTVar (gsvs ^. gsvsTargetSize) (Just newTargetDims)
                   writeTVar (gsvs ^. gsvsSpilloverDims) (Just (wTarget, hTarget))
+                  writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
                   writeTVar (gsvs ^. gsvsIsDamaged) True
 
 defaultSizeGSVS :: GodotSimulaViewSprite -> IO ()
@@ -1339,6 +1343,7 @@ defaultSizeGSVS gsvs = do
                                                      Nothing -> SpriteDimensions (900, 900)
 
   atomically $ do writeTVar (gsvs ^. gsvsTargetSize) (Just newTargetDims)
+                  writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
                   writeTVar (gsvs ^. gsvsIsDamaged) True
 
 withQuadMesh :: GodotSimulaViewSprite -> (GodotQuadMesh -> IO a) -> IO a

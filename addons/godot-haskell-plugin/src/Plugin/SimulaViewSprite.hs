@@ -83,6 +83,7 @@ instance NativeScript GodotSimulaViewSprite where
                       <*> atomically (newTVar False)
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar False)
+                      <*> atomically (newTVar 0)
                       <*> atomically (newTVar [])
                       <*> atomically (newTVar False)
   -- classExtends = "RigidBody"
@@ -260,6 +261,9 @@ setTargetDimensions gsvs = do
 
   spilloverDims@(spilloverWidth, spilloverHeight) <- getSpilloverDims gsvs
   spilloverDims' <- toLowLevel $ (V2 (fromIntegral spilloverWidth) (fromIntegral spilloverHeight))
+  V2 currentViewportWidth currentViewportHeight <- G.get_size renderTargetSurface >>= fromLowLevel :: IO (V2 Float)
+  let viewportDimsChanged =
+        ((round currentViewportWidth) /= spilloverWidth) || ((round currentViewportHeight) /= spilloverHeight)
 
   -- Set buffer dimensions to new target size
   case eitherSurface of
@@ -274,6 +278,10 @@ setTargetDimensions gsvs = do
   -- Set the corresponding Viewports to match our new target size
   G.set_size renderTargetBase spilloverDims'
   G.set_size renderTargetSurface spilloverDims'
+  when viewportDimsChanged $
+    atomically $ do
+      writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
+      writeTVar (gsvs ^. gsvsIsDamaged) True
   -- QuadMesh need to be scaled down by a factor of 0.001 to be reasonably sized in Godot:
   withQuadMesh gsvs $ \quadMesh ->
     G.set_size quadMesh =<< (toLowLevel $ (V2 (0.001 * (fromIntegral spilloverWidth)) (0.001 * (fromIntegral spilloverHeight))))
@@ -299,7 +307,9 @@ setTargetDimensions gsvs = do
                            case (transOld == 1) of
                              True -> do
                                setShader gsvs "res://addons/godot-haskell-plugin/TextShaderOpaque.tres"
-                               atomically $ writeTVar (gsvs ^. gsvsIsDamaged) True
+                               atomically $ do
+                                 writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
+                                 writeTVar (gsvs ^. gsvsIsDamaged) True
                              False -> return ()
         (True, False) -> do let pushX = spilloverWidth - oldSpilloverWidth
                             let pushY = spilloverHeight - oldSpilloverHeight
@@ -309,7 +319,9 @@ setTargetDimensions gsvs = do
                             case (transOld == 1, (spilloverWidth > targetWidth || spilloverHeight > targetHeight)) of
                               (True, False) ->  return () -- Avoid changing shader when apps first launch
                               (True, True) -> do setShader gsvs "res://addons/godot-haskell-plugin/TextShader.tres"
-                                                 atomically $ writeTVar (gsvs ^. gsvsIsDamaged) True
+                                                 atomically $ do
+                                                   writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
+                                                   writeTVar (gsvs ^. gsvsIsDamaged) True
                               (False, _) -> return ()
   return ()
 
@@ -605,6 +617,10 @@ _handle_map gsvs _ = do
   addChild gsvs viewportBase
   addChild viewportBase cb
 
+  atomically $ do
+    writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
+    writeTVar (gsvs ^. gsvsIsDamaged) True
+
   setInFrontOfUser gsvs (-2)
 
   V3 1 1 1 ^* (1 + 1 * 1) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
@@ -814,7 +830,9 @@ handle_map_free_child_impl gsvsInvisible wlrXWaylandSurface = do
                                            freeChildrenMapOld <- readTVarIO (gss ^. gssFreeChildren) :: IO (M.Map GodotWlrXWaylandSurface GodotSimulaViewSprite)
                                            let freeChildrenMapNew = M.insert wlrXWaylandSurface gsvs freeChildrenMapOld
                                            atomically $ writeTVar (gss ^. gssFreeChildren) freeChildrenMapNew
-                                           atomically $ writeTVar (gsvs ^. gsvsIsDamaged) True
+                                           atomically $ do
+                                             writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
+                                             writeTVar (gsvs ^. gsvsIsDamaged) True
                                            return True
 
   simulaView <- readTVarIO (gsvsInvisible ^. gsvsView)
@@ -970,7 +988,9 @@ handle_map_child gsvsInvisible gvArgs@[wlrXWaylandSurfaceVariant] = do
                             -- G.set_xy wlrXWaylandSurface adjustedXY
                             simulaView <- readTVarIO (gsvsInvisible ^. gsvsView)
                             atomically $ writeTVar (simulaView ^. svMapped) True
-                            atomically $ writeTVar (gsvsInvisible ^. gsvsIsDamaged) True
+                            atomically $ do
+                              writeTVar (gsvsInvisible ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
+                              writeTVar (gsvsInvisible ^. gsvsIsDamaged) True
                             return False
   when safeToDestroyArgs $ mapM_ Api.godot_variant_destroy gvArgs
   return ()
@@ -1137,7 +1157,9 @@ getWlrSurfaceCoords cursorCoords@(SurfaceLocalCoordinates (cx, cy)) (wlrSurfaceF
 handle_new_popup :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_new_popup gsvs gvArgs@[_wlrXdgSurfaceParentVariant] = do
   debugPutStrLn "Plugin.SimulaViewSprite.handle_new_popup"
-  atomically $ writeTVar (gsvs ^. gsvsIsDamaged) True
+  atomically $ do
+    writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
+    writeTVar (gsvs ^. gsvsIsDamaged) True
   mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
@@ -1153,7 +1175,9 @@ handle_wlr_surface_new_subsurface gsvs gvArgs@[wlrSubsurfaceVariant] = do
   debugPutStrLn "Plugin.SimulaViewSprite.handle_wlr_surface_new_subsurface"
   wlrSubsurface <- (fromGodotVariant wlrSubsurfaceVariant :: IO GodotWlrSubsurface) >>= validateSurfaceE
   connectGodotSignal wlrSubsurface "destroy" gsvs "handle_wlr_subsurface_destroy" []
-  atomically $ writeTVar (gsvs ^. gsvsIsDamaged) True
+  atomically $ do
+    writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
+    writeTVar (gsvs ^. gsvsIsDamaged) True
   mapM_ Api.godot_variant_destroy gvArgs
   return ()
 

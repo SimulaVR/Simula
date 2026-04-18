@@ -108,10 +108,18 @@ _draw cs gvArgs = do
       destroyWlrSurfacesWithCoords
       (\depthFirstSurfaces -> do
         isEntirelyDamaged <- readTVarIO (gsvs ^. gsvsIsDamaged)
-        case isEntirelyDamaged of
+        fullRedrawFramesRemaining <- readTVarIO (gsvs ^. gsvsFullRedrawFramesRemaining)
+        case (isEntirelyDamaged || fullRedrawFramesRemaining > 0) of
           True -> do
-            atomically $ writeTVar (gsvs ^. gsvsIsDamaged) False
-            mapM (drawWlrSurface cs) depthFirstSurfaces -- Just draw everything
+            atomically $ do
+              writeTVar (gsvs ^. gsvsIsDamaged) False
+              when (fullRedrawFramesRemaining > 0) $
+                writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) (fullRedrawFramesRemaining - 1)
+            drawResults <- mapM (drawWlrSurface cs) depthFirstSurfaces -- Just draw everything
+            when (not (and drawResults)) $ -- when at least one surface didn't have a valid texture this frame
+              atomically $ do
+                writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
+                writeTVar (gsvs ^. gsvsIsDamaged) True
             return ()
           False -> do
             -- Only draw the damaged regions
@@ -150,7 +158,7 @@ _draw cs gvArgs = do
       withGodotRef (G.get_texture (viewportSurface :: GodotViewport) :: IO GodotViewportTexture) $ \viewportSurfaceTexture ->
         savePng cs viewportSurfaceTexture wlrSurface >> return ()
 
-    drawWlrSurface :: CanvasSurface -> (GodotWlrSurface, Int, Int) -> IO ()
+    drawWlrSurface :: CanvasSurface -> (GodotWlrSurface, Int, Int) -> IO Bool
     drawWlrSurface cs (wlrSurface, x, y) = do
       debugPutStrLn "Plugin.CanvasSurface.drawWlrSurface"
       validateSurfaceE wlrSurface
@@ -159,9 +167,19 @@ _draw cs gvArgs = do
       gsvsTransparency <- getTransparency cs
       modulateColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` gsvsTransparency) :: IO GodotColor
       renderPosition <- toLowLevel (V2 (fromIntegral x) (fromIntegral y))
-      withGodotRef (G.get_texture wlrSurface :: IO GodotTexture) $ \surfaceTexture ->
-        G.draw_texture cs surfaceTexture renderPosition modulateColor (coerce nullPtr)
+      drewTexture <- withGodotRef (G.get_texture wlrSurface :: IO GodotTexture) $ \surfaceTexture ->
+        -- Don't draw when surfaceTexture is NULL to defend against potential flickering
+        case validateObject surfaceTexture of
+          Nothing -> do
+            atomically $ do
+              writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
+              writeTVar (gsvs ^. gsvsIsDamaged) True
+            return False
+          Just validSurfaceTexture -> do
+            G.draw_texture cs validSurfaceTexture renderPosition modulateColor (coerce nullPtr)
+            return True
       G.send_frame_done wlrSurface
+      return drewTexture
 
     getTransparency :: CanvasSurface -> IO Double
     getTransparency cs = do
@@ -178,7 +196,9 @@ _draw cs gvArgs = do
       validateSurfaceE wlrSurface
       do withGodotRef (G.get_texture wlrSurface :: IO GodotTexture) $ \surfaceTexture ->
            case (validateObject surfaceTexture) of
-             Nothing -> return ()
+             Nothing -> atomically $ do
+               writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
+               writeTVar (gsvs ^. gsvsIsDamaged) True
              Just surfaceTexture -> do
                  gsvsTransparency <- getTransparency cs
                  modulateColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` gsvsTransparency) :: IO GodotColor
