@@ -963,9 +963,6 @@ newCanvasSurface gsvs = do
     >>= deRefStablePtr . castPtrToStablePtr :: IO CanvasSurface
   viewport <- initializeRenderTarget gsvs ViewportSurface
 
-  addChild gsvs viewport
-  addChild viewport cs
-
   atomically $ writeTVar (_csGSVS cs) gsvs
   atomically $ writeTVar (_csViewport cs) viewport
 

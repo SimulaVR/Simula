@@ -589,19 +589,21 @@ _handle_map gsvs _ = do
               ((safeCast gsvs)      :: GodotNode)
               True
 
-  cb <- newCanvasBase gsvs
-  viewportBase <- readTVarIO (cb ^. cbViewport)
-  atomically $ writeTVar (gsvs ^. gsvsCanvasBase) cb
-  G.set_process cb True
-  addChild gsvs viewportBase
-  addChild viewportBase cb
-
+  -- We must add viewportSurface to the gsvs before the viewportBase,
+  -- since sibling order affects draw order and the latter samples from the former
   cs <- newCanvasSurface gsvs
   viewportSurface <- readTVarIO (cs ^. csViewport)
   atomically $ writeTVar (gsvs ^. gsvsCanvasSurface) cs
   G.set_process cs True
   addChild gsvs viewportSurface
   addChild viewportSurface cs
+
+  cb <- newCanvasBase gsvs
+  viewportBase <- readTVarIO (cb ^. cbViewport)
+  atomically $ writeTVar (gsvs ^. gsvsCanvasBase) cb
+  G.set_process cb True
+  addChild gsvs viewportBase
+  addChild viewportBase cb
 
   setInFrontOfUser gsvs (-2)
 
