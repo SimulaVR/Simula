@@ -84,6 +84,7 @@ instance NativeScript GodotSimulaViewSprite where
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar False)
                       <*> atomically (newTVar 0)
+                      <*> atomically (newTVar Nothing)
                       <*> atomically (newTVar [])
                       <*> atomically (newTVar False)
   -- classExtends = "RigidBody"
@@ -304,13 +305,10 @@ setTargetDimensions gsvs = do
         (False, _) -> return ()
         (True, True) -> do atomically $ do writeTVar (gsvs ^. gsvsResizedLastFrame) False
                                            writeTVar (gsvs ^. gsvsSpilloverDims) (Just spilloverDims)
-                           case (transOld == 1) of
-                             True -> do
-                               setShader gsvs "res://addons/godot-haskell-plugin/TextShaderOpaque.tres"
-                               atomically $ do
-                                 writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
-                                 writeTVar (gsvs ^. gsvsIsDamaged) True
-                             False -> return ()
+                           when (transOld == 1) $
+                             atomically $ do
+                               writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
+                               writeTVar (gsvs ^. gsvsIsDamaged) True
         (True, False) -> do let pushX = spilloverWidth - oldSpilloverWidth
                             let pushY = spilloverHeight - oldSpilloverHeight
                             pushBackVector <- toLowLevel (V3 (-0.5 * 0.001 * (fromIntegral pushX)) (-0.5 * 0.001 * (fromIntegral pushY)) 0) :: IO GodotVector3
@@ -318,12 +316,26 @@ setTargetDimensions gsvs = do
                             atomically $ writeTVar (gsvs ^. gsvsSpilloverDims) (Just spilloverDims)
                             case (transOld == 1, (spilloverWidth > targetWidth || spilloverHeight > targetHeight)) of
                               (True, False) ->  return () -- Avoid changing shader when apps first launch
-                              (True, True) -> do setShader gsvs "res://addons/godot-haskell-plugin/TextShader.tres"
-                                                 atomically $ do
-                                                   writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
-                                                   writeTVar (gsvs ^. gsvsIsDamaged) True
+                              (True, True) -> atomically $ do
+                                                 writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
+                                                 writeTVar (gsvs ^. gsvsIsDamaged) True
                               (False, _) -> return ()
+  updateQuadShader gsvs targetDims spilloverDims
   return ()
+
+updateQuadShader :: GodotSimulaViewSprite -> SpriteDimensions -> (Int, Int) -> IO ()
+updateQuadShader gsvs (SpriteDimensions (targetWidth, targetHeight)) (spilloverWidth, spilloverHeight) = do
+  gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
+  fullRedrawFramesRemaining <- readTVarIO (gsvs ^. gsvsFullRedrawFramesRemaining)
+  let shouldUseTransparentShader =
+        (gsvsTransparency < 1)
+        || (fullRedrawFramesRemaining > 0)
+        || (spilloverWidth > targetWidth)
+        || (spilloverHeight > targetHeight)
+  setShader gsvs $
+    if shouldUseTransparentShader
+      then "res://addons/godot-haskell-plugin/TextShader.tres"
+      else "res://addons/godot-haskell-plugin/TextShaderOpaque.tres"
 
 ready :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 ready self gvArgs = do

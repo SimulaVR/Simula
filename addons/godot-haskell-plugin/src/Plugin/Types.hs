@@ -338,6 +338,7 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsCursor            :: TVar ((Maybe GodotWlrSurface), (Maybe GodotTexture))
   , _gsvsIsAtTargetDims    :: TVar Bool
   , _gsvsFullRedrawFramesRemaining :: TVar Int
+  , _gsvsShaderPath        :: TVar (Maybe String)
   , _gsvsDamagedRegions    :: TVar [GodotRect2]
   , _gsvsIsDamaged         :: TVar Bool
   }
@@ -1608,15 +1609,21 @@ getSpilloverDims gsvs = do
 setShader :: GodotSimulaViewSprite -> String -> IO ()
 setShader gsvs tres = do
   debugPutStrLn "Plugin.Types.setShader"
-  putStrLn $ "setShader: " ++ tres
-  shader <- load GodotShader "Shader" (Data.Text.pack tres)
-  case shader of
-    Just shader ->
-      withQuadMesh gsvs $ \quadMesh -> do
-        shm <- unsafeInstance GodotShaderMaterial "ShaderMaterial"
-        G.set_shader shm shader
-        G.set_material quadMesh (safeCast shm)
-    Nothing -> error "couldn't fetch shader"
+  currentShaderPath <- readTVarIO (gsvs ^. gsvsShaderPath)
+  unless (currentShaderPath == Just tres) $ do
+    putStrLn $ "setShader: " ++ tres
+    shader <- load GodotShader "Shader" (Data.Text.pack tres)
+    case shader of
+      Just shader ->
+        withQuadMesh gsvs $ \quadMesh -> do
+          shm <- withGodotRef (G.get_material quadMesh :: IO GodotMaterial) $ \material ->
+            case validateObject material of
+              Just validMaterial -> asClass' GodotShaderMaterial "ShaderMaterial" validMaterial
+              Nothing -> unsafeInstance GodotShaderMaterial "ShaderMaterial"
+          G.set_shader shm shader
+          G.set_material quadMesh (safeCast shm)
+          atomically $ writeTVar (gsvs ^. gsvsShaderPath) (Just tres)
+      Nothing -> error "couldn't fetch shader"
 
 getXWaylandWindowClass :: GodotWlrXWaylandSurface -> IO (Maybe String)
 getXWaylandWindowClass wlrXWaylandSurface = do
