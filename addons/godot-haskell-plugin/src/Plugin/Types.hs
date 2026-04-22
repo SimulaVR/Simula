@@ -103,6 +103,13 @@ debugOutputEnabled = unsafePerformIO $ do
   return $ simulaDebug == Just "1" || runningUnderRr == Just "1"
 {-# NOINLINE debugOutputEnabled #-}
 
+debugSurfaceCreationsEnabled :: Bool
+debugSurfaceCreationsEnabled = unsafePerformIO $ do
+  simulaDebug <- lookupEnv "SIMULA_DEBUG"
+  simulaDebugSurfaceCreations <- lookupEnv "SIMULA_DEBUG_SURFACE_CREATIONS"
+  return $ simulaDebug == Just "1" || simulaDebugSurfaceCreations == Just "1"
+{-# NOINLINE debugSurfaceCreationsEnabled #-}
+
 debugPutStrLn :: String -> IO ()
 debugPutStrLn msg =
   when debugOutputEnabled $

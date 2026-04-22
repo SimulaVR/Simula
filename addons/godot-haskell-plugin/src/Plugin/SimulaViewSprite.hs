@@ -526,6 +526,89 @@ processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)
                      pointerNotifyFrame wlrSeat)
                      `finally` destroyMaybe (safeCast godotWlrSurface)
 
+debugPrintWlrSurfaceMapDetails :: String -> GodotWlrSurface -> IO ()
+debugPrintWlrSurfaceMapDetails prefix wlrSurface =
+  when debugSurfaceCreationsEnabled $ do
+    (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+    putStrLn $
+      prefix
+        ++ " surface="
+        ++ show wlrSurface
+        ++ " buffer="
+        ++ show bufferWidth
+        ++ "x"
+        ++ show bufferHeight
+
+debugPrintXWaylandMapDetails :: String -> GodotWlrXWaylandSurface -> IO ()
+debugPrintXWaylandMapDetails prefix wlrXWaylandSurface =
+  when debugSurfaceCreationsEnabled $ do
+    x <- G.get_x wlrXWaylandSurface
+    y <- G.get_y wlrXWaylandSurface
+    width <- G.get_width wlrXWaylandSurface
+    height <- G.get_height wlrXWaylandSurface
+    pid <- G.get_pid wlrXWaylandSurface
+    putStrLn $
+      prefix
+        ++ " protocol=xwayland pid="
+        ++ show pid
+        ++ " surface="
+        ++ show wlrXWaylandSurface
+        ++ " geometry=("
+        ++ show x
+        ++ ","
+        ++ show y
+        ++ " "
+        ++ show width
+        ++ "x"
+        ++ show height
+        ++ ")"
+
+debugPrintXdgMapDetails :: String -> GodotWlrXdgSurface -> IO ()
+debugPrintXdgMapDetails prefix wlrXdgSurface =
+  when debugSurfaceCreationsEnabled $ do
+    roleInt <- G.get_role wlrXdgSurface
+    pid <- G.get_pid wlrXdgSurface
+    V2 (V2 posX posY) (V2 width height) <- G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+    withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
+      (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+      putStrLn $
+        prefix
+          ++ " protocol=xdg role="
+          ++ xdgRoleName roleInt
+          ++ " pid="
+          ++ show pid
+          ++ " surface="
+          ++ show wlrXdgSurface
+          ++ " geometry=("
+          ++ show posX
+          ++ ","
+          ++ show posY
+          ++ " "
+          ++ show width
+          ++ "x"
+          ++ show height
+          ++ ") buffer="
+          ++ show bufferWidth
+          ++ "x"
+          ++ show bufferHeight
+ where
+  xdgRoleName 0 = "none"
+  xdgRoleName 1 = "toplevel"
+  xdgRoleName 2 = "popup"
+  xdgRoleName role = "unknown(" ++ show role ++ ")"
+
+debugPrintCurrentMappedSurface :: String -> GodotSimulaViewSprite -> IO ()
+debugPrintCurrentMappedSurface prefix gsvs =
+  when debugSurfaceCreationsEnabled $ do
+    simulaView <- readTVarIO (gsvs ^. gsvsView)
+    case simulaView ^. svWlrEitherSurface of
+      Left wlrXdgSurface -> do
+        wlrXdgSurface <- validateSurfaceE wlrXdgSurface
+        debugPrintXdgMapDetails prefix wlrXdgSurface
+      Right wlrXWaylandSurface -> do
+        wlrXWaylandSurface <- validateSurfaceE wlrXWaylandSurface
+        debugPrintXWaylandMapDetails prefix wlrXWaylandSurface
+
 -- | Takes a GodotWlrXdgSurface and returns the subsurface at point (which is likely the surface itself, or one of its popups).
 -- | TODO: This function just returns parent surface/coords. Fix!
 -- | TODO: Use _xdg_surface_at*
@@ -588,6 +671,7 @@ pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (ssx, ssy)) = 
 _handle_map :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 _handle_map gsvs _ = do
   debugPutStrLn "Plugin.SimulaViewSprite._handle_map"
+  debugPrintCurrentMappedSurface "Plugin.SimulaViewSprite._handle_map" gsvs
   gss <- readTVarIO (gsvs ^. gsvsServer)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
@@ -804,6 +888,7 @@ handle_map_free_child :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_map_free_child gsvsInvisible gvArgs@[wlrXWaylandSurfaceVariant] = do
   debugPutStrLn "Plugin.SimulaViewSprite.handle_map_free_child"
   wlrXWaylandSurface <- (fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface) >>= validateSurfaceE
+  debugPrintXWaylandMapDetails "Plugin.SimulaViewSprite.handle_map_free_child" wlrXWaylandSurface
   surfaceWasMappedAndReferenced <- handle_map_free_child_impl gsvsInvisible wlrXWaylandSurface
   when surfaceWasMappedAndReferenced $ mapM_ Api.godot_variant_destroy gvArgs
   return ()
@@ -812,6 +897,7 @@ handle_map_free_child gsvsInvisible gvArgs@[wlrXWaylandSurfaceVariant] = do
 handle_map_free_child_impl :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> IO Bool
 handle_map_free_child_impl gsvsInvisible wlrXWaylandSurface = do
   debugPutStrLn "Plugin.SimulaViewSprite.handle_map_free_child_impl"
+  debugPrintXWaylandMapDetails "Plugin.SimulaViewSprite.handle_map_free_child_impl" wlrXWaylandSurface
   gss <- readTVarIO $ (gsvsInvisible ^. gsvsServer)
   maybeActiveCursorGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
   surfaceMappedAndReferenced <- case maybeActiveCursorGSVS of
@@ -989,6 +1075,7 @@ handle_map_child gsvsInvisible gvArgs@[wlrXWaylandSurfaceVariant] = do
   debugPutStrLn "Plugin.SimulaViewSprite.handle_map_child"
   gss <- readTVarIO $ (gsvsInvisible ^. gsvsServer)
   wlrXWaylandSurface <- (fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface) >>= validateSurfaceE
+  debugPrintXWaylandMapDetails "Plugin.SimulaViewSprite.handle_map_child" wlrXWaylandSurface
   gss <- readTVarIO (gsvsInvisible ^. gsvsServer)
   maybeParentGSVS <- getParentGSVS gss wlrXWaylandSurface
   safeToDestroyArgs <- case maybeParentGSVS of
@@ -1169,6 +1256,7 @@ getWlrSurfaceCoords cursorCoords@(SurfaceLocalCoordinates (cx, cy)) (wlrSurfaceF
 handle_new_popup :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_new_popup gsvs gvArgs@[_wlrXdgSurfaceParentVariant] = do
   debugPutStrLn "Plugin.SimulaViewSprite.handle_new_popup"
+  debugPrintCurrentMappedSurface "Plugin.SimulaViewSprite.handle_new_popup" gsvs
   atomically $ do
     writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
     writeTVar (gsvs ^. gsvsIsDamaged) True
@@ -1186,6 +1274,10 @@ handle_wlr_surface_new_subsurface :: GodotSimulaViewSprite -> [GodotVariant] -> 
 handle_wlr_surface_new_subsurface gsvs gvArgs@[wlrSubsurfaceVariant] = do
   debugPutStrLn "Plugin.SimulaViewSprite.handle_wlr_surface_new_subsurface"
   wlrSubsurface <- (fromGodotVariant wlrSubsurfaceVariant :: IO GodotWlrSubsurface) >>= validateSurfaceE
+  withGodotRef (G.get_wlr_surface wlrSubsurface :: IO GodotWlrSurface) $ \wlrSurface ->
+    debugPrintWlrSurfaceMapDetails "Plugin.SimulaViewSprite.handle_wlr_surface_new_subsurface.child" wlrSurface
+  withGodotRef (G.get_wlr_surface_parent wlrSubsurface :: IO GodotWlrSurface) $ \wlrSurfaceParent ->
+    debugPrintWlrSurfaceMapDetails "Plugin.SimulaViewSprite.handle_wlr_surface_new_subsurface.parent" wlrSurfaceParent
   connectGodotSignal wlrSubsurface "destroy" gsvs "handle_wlr_subsurface_destroy" []
   atomically $ do
     writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount

@@ -1271,10 +1271,82 @@ _on_WaylandDisplay_ready gss gvArgs = do
   mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
+debugPrintWlrSurfaceDetails :: String -> GodotWlrSurface -> IO ()
+debugPrintWlrSurfaceDetails prefix wlrSurface =
+  when debugSurfaceCreationsEnabled $ do
+    (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+    putStrLn $
+      prefix
+        ++ " surface="
+        ++ show wlrSurface
+        ++ " buffer="
+        ++ show bufferWidth
+        ++ "x"
+        ++ show bufferHeight
+
+debugPrintXdgSurfaceDetails :: String -> GodotWlrXdgSurface -> IO ()
+debugPrintXdgSurfaceDetails prefix wlrXdgSurface =
+  when debugSurfaceCreationsEnabled $ do
+    roleInt <- G.get_role wlrXdgSurface
+    pid <- G.get_pid wlrXdgSurface
+    V2 (V2 posX posY) (V2 xdgWidth xdgHeight) <- G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+    withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
+      (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+      putStrLn $
+        prefix
+          ++ " protocol=xdg role="
+          ++ xdgRoleName roleInt
+          ++ " pid="
+          ++ show pid
+          ++ " surface="
+          ++ show wlrXdgSurface
+          ++ " geometry=("
+          ++ show posX
+          ++ ","
+          ++ show posY
+          ++ " "
+          ++ show xdgWidth
+          ++ "x"
+          ++ show xdgHeight
+          ++ ") buffer="
+          ++ show bufferWidth
+          ++ "x"
+          ++ show bufferHeight
+ where
+  xdgRoleName 0 = "none"
+  xdgRoleName 1 = "toplevel"
+  xdgRoleName 2 = "popup"
+  xdgRoleName role = "unknown(" ++ show role ++ ")"
+
+debugPrintXWaylandSurfaceDetails :: String -> GodotWlrXWaylandSurface -> IO ()
+debugPrintXWaylandSurfaceDetails prefix wlrXWaylandSurface =
+  when debugSurfaceCreationsEnabled $ do
+    x <- G.get_x wlrXWaylandSurface
+    y <- G.get_y wlrXWaylandSurface
+    width <- G.get_width wlrXWaylandSurface
+    height <- G.get_height wlrXWaylandSurface
+    pid <- G.get_pid wlrXWaylandSurface
+    putStrLn $
+      prefix
+        ++ " protocol=xwayland pid="
+        ++ show pid
+        ++ " surface="
+        ++ show wlrXWaylandSurface
+        ++ " geometry=("
+        ++ show x
+        ++ ","
+        ++ show y
+        ++ " "
+        ++ show width
+        ++ "x"
+        ++ show height
+        ++ ")"
+
 _on_WlrXdgShell_new_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_WlrXdgShell_new_surface gss gvArgs@[wlrXdgSurfaceVariant] = do
   debugPutStrLn "Plugin.SimulaServer._on_WlrXdgShell_new_surface"
   wlrXdgSurface <- (fromGodotVariant wlrXdgSurfaceVariant :: IO GodotWlrXdgSurface) >>= validateSurfaceE
+  debugPrintXdgSurfaceDetails "Plugin.SimulaServer._on_WlrXdgShell_new_surface" wlrXdgSurface
   roleInt <- G.get_role wlrXdgSurface
   putStrLn $ "new surface protocol=xdg role=" ++ xdgRoleName roleInt ++ " surface=" ++ show wlrXdgSurface
   case roleInt of
@@ -1355,6 +1427,7 @@ _on_WlrXWayland_new_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_WlrXWayland_new_surface gss gvArgs@[wlrXWaylandSurfaceVariant] = do
   debugPutStrLn "Plugin.SimulaServer._on_WlrXWayland_new_surface"
   wlrXWaylandSurface <- (fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface) >>= validateSurfaceE
+  debugPrintXWaylandSurfaceDetails "Plugin.SimulaServer._on_WlrXWayland_new_surface" wlrXWaylandSurface
   putStrLn $ "new surface protocol=xwayland surface=" ++ show wlrXWaylandSurface
   G.reference wlrXWaylandSurface
   simulaView <- newSimulaView gss wlrXWaylandSurface
