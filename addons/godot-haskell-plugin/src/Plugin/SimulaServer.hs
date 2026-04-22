@@ -185,11 +185,11 @@ getKeyboardAction gss keyboardShortcut =
         leftClick (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
           debugPutStrLn "Plugin.SimulaServer.leftClick"
           putStrLn $ "leftClick True"
-          -- updateCursorStateAbsolute gsvs sx sy
-          -- sendWlrootsMotion gsvs
+          updateCursorStateAbsolute gsvs sx sy
           processClickEvent' gsvs (Button True 1) coords -- BUTTON_LEFT = 1
         leftClick (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) False = do
           putStrLn $ "leftClick False"
+          updateCursorStateAbsolute gsvs sx sy
           processClickEvent' gsvs (Button False 1) coords -- BUTTON_LEFT = 1
         leftClick _ _ = return ()
 
@@ -197,9 +197,9 @@ getKeyboardAction gss keyboardShortcut =
         rightClick (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
           debugPutStrLn "Plugin.SimulaServer.rightClick"
           updateCursorStateAbsolute gsvs sx sy
-          sendWlrootsMotion gsvs
           processClickEvent' gsvs (Button True 2) coords -- BUTTON_RIGHT = 2
         rightClick (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) False = do
+          updateCursorStateAbsolute gsvs sx sy
           processClickEvent' gsvs (Button False 2) coords -- BUTTON_RIGHT = 2
         rightClick _ _ = return ()
 
@@ -1346,9 +1346,8 @@ _on_WlrXdgShell_new_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_WlrXdgShell_new_surface gss gvArgs@[wlrXdgSurfaceVariant] = do
   debugPutStrLn "Plugin.SimulaServer._on_WlrXdgShell_new_surface"
   wlrXdgSurface <- (fromGodotVariant wlrXdgSurfaceVariant :: IO GodotWlrXdgSurface) >>= validateSurfaceE
-  debugPrintXdgSurfaceDetails "Plugin.SimulaServer._on_WlrXdgShell_new_surface" wlrXdgSurface
   roleInt <- G.get_role wlrXdgSurface
-  putStrLn $ "new surface protocol=xdg role=" ++ xdgRoleName roleInt ++ " surface=" ++ show wlrXdgSurface
+  debugPrintXdgSurfaceDetails "Plugin.SimulaServer._on_WlrXdgShell_new_surface" wlrXdgSurface
   case roleInt of
       0 -> return () -- XDG_SURFACE_ROLE_NONE
       2 -> do -- XDG_SURFACE_ROLE_POPUP
@@ -1428,7 +1427,6 @@ _on_WlrXWayland_new_surface gss gvArgs@[wlrXWaylandSurfaceVariant] = do
   debugPutStrLn "Plugin.SimulaServer._on_WlrXWayland_new_surface"
   wlrXWaylandSurface <- (fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface) >>= validateSurfaceE
   debugPrintXWaylandSurfaceDetails "Plugin.SimulaServer._on_WlrXWayland_new_surface" wlrXWaylandSurface
-  putStrLn $ "new surface protocol=xwayland surface=" ++ show wlrXWaylandSurface
   G.reference wlrXWaylandSurface
   simulaView <- newSimulaView gss wlrXWaylandSurface
   gsvs <- newGodotSimulaViewSprite gss simulaView
@@ -1477,6 +1475,8 @@ _input gss gvArgs@[eventGV] = do
        False -> case maybeActiveGSVS of
                      Nothing -> return ()
                      (Just gsvs) -> do updateCursorStateRelative gsvs (dx * (realToFrac mouseSensitivityScaler)) (dy * (realToFrac mouseSensitivityScaler))
+                                       activeGSVSCursorPos <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+                                       debugPrintPointerSeatState gsvs Motion activeGSVSCursorPos
                                        sendWlrootsMotion gsvs
   whenM (event `isClass` "InputEventMouseButton") $ do
     let event' = GodotInputEventMouseButton (coerce event)
@@ -1487,20 +1487,17 @@ _input gss gvArgs@[eventGV] = do
            when pressed $ do
              screenshotMode <- readTVarIO (gsvs ^. gsvsScreenshotMode)
              unless screenshotMode $ do
-               activeGSVSCursorPos <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
-               processClickEvent' gsvs (Button True G.BUTTON_WHEEL_UP) activeGSVSCursorPos
+               processPointerButtonEvent gsvs (Button True G.BUTTON_WHEEL_UP)
          (Just gsvs, G.BUTTON_WHEEL_DOWN) -> do
            when pressed $ do
              screenshotMode <- readTVarIO (gsvs ^. gsvsScreenshotMode)
              unless screenshotMode $ do
-               activeGSVSCursorPos <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
-               processClickEvent' gsvs (Button True G.BUTTON_WHEEL_DOWN) activeGSVSCursorPos
+               processPointerButtonEvent gsvs (Button True G.BUTTON_WHEEL_DOWN)
          (Just gsvs, _) -> do
            putStrLn $ "Mouse event button: " ++ show button
            screenshotMode <- readTVarIO (gsvs ^. gsvsScreenshotMode)
            case screenshotMode of
-             False -> do activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
-                         processClickEvent' gsvs (Button pressed button) activeGSVSCursorPos
+             False -> processPointerButtonEvent gsvs (Button pressed button)
              True -> do activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
                         case pressed of
                           True -> do atomically $ writeTVar (gsvs ^. gsvsScreenshotCoords) (Just activeGSVSCursorPos, Nothing)
@@ -1788,6 +1785,7 @@ handle_wlr_compositor_new_surface :: GodotSimulaServer -> [GodotVariant] -> IO (
 handle_wlr_compositor_new_surface gss gvArgs@[wlrSurfaceVariant] = do
   debugPutStrLn "Plugin.SimulaServer.handle_wlr_compositor_new_surface"
   wlrSurface <- (fromGodotVariant wlrSurfaceVariant :: IO GodotWlrSurface) >>= validateSurfaceE
+  debugPrintWlrSurfaceDetails "Plugin.SimulaServer.handle_wlr_compositor_new_surface" wlrSurface
   maybeGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
   case maybeGSVS of
     Nothing -> return () -- putStrLn "Unable to handle_wlr_compositor_new_surface; no gssActiveCursorGSVS!"

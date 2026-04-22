@@ -217,11 +217,13 @@ onButton self gsc button pressed = do
     _ -> do
       let rc = _gscRayCast gsc
       G.force_raycast_update rc
-      whenM (G.is_colliding rc) $ do
-        maybeSprite <- G.get_collider rc >>= asNativeScript :: IO (Maybe GodotSimulaViewSprite) --fromNativeScript
-        -- let sprite = Data.Maybe.fromJust maybeSprite
-        maybe (return ()) (onSpriteInput rc) maybeSprite
-          -- >>= maybe (return ()) (onSpriteInput rc)
+      isColliding <- G.is_colliding rc
+      if isColliding
+        then do
+          maybeSprite <- G.get_collider rc >>= asNativeScript :: IO (Maybe GodotSimulaViewSprite) --fromNativeScript
+          maybe (return ()) (onSpriteInput rc) maybeSprite
+        else
+          onOffSpriteInput button pressed
  where
   gst = _sGrabState self
   onSpriteInput rc sprite = do
@@ -235,6 +237,30 @@ onButton self gsc button pressed = do
           >>= atomically
           .   writeTVar gst
       _                  -> const $ return ()
+
+  onOffSpriteInput :: Int -> Bool -> IO ()
+  onOffSpriteInput button pressed =
+    case button of
+      OVR_Button_Trigger -> sendOutsideClick G.BUTTON_LEFT pressed
+      OVR_Button_AppMenu -> sendOutsideClick G.BUTTON_RIGHT pressed
+      _ -> return ()
+
+  sendOutsideClick :: Int -> Bool -> IO ()
+  sendOutsideClick buttonIndex pressed = do
+    wlrSeat <- getWlrSeatFromPath self
+    G.pointer_clear_focus wlrSeat
+    G.pointer_notify_button wlrSeat (fromIntegral buttonIndex) pressed
+    G.pointer_notify_frame wlrSeat
+
+  getWlrSeatFromPath :: GodotSimula -> IO GodotWlrSeat
+  getWlrSeatFromPath self = do
+    let nodePathStr = "/root/Root/SimulaServer"
+    nodePath <- toLowLevel (pack nodePathStr) :: IO GodotNodePath
+    gssNode <- G.get_node ((safeCast self) :: GodotNode) nodePath
+    Api.godot_node_path_destroy nodePath
+    maybeGSS <- asNativeScript (safeCast gssNode) :: IO (Maybe GodotSimulaServer)
+    let gss = Data.Maybe.fromJust maybeGSS
+    readTVarIO (gss ^. gssWlrSeat)
 
 
 process :: GodotSimula -> [GodotVariant] -> IO ()

@@ -267,9 +267,8 @@ process self gvArgs@[deltaGV] = do
           --processTouchpadScroll self window pos
         Nothing -> do
           -- If we aren't pointing at anything, clear the wlroots seat pointer focus.
-          -- TODO: See what happens if we omit this; might not need it.
-          -- wlrSeat <- getWlrSeatFromPath self
-          -- G.pointer_clear_focus wlrSeat -- pointer_clear_focus :: GodotWlrSeat -> IO ()
+          wlrSeat <- getWlrSeatFromPath self
+          G.pointer_clear_focus wlrSeat -- pointer_clear_focus :: GodotWlrSeat -> IO ()
 
           G.set_visible (_gscLaser self) False
           return ()

@@ -365,13 +365,37 @@ processInputEvent :: GodotSimulaViewSprite -> GodotObject -> GodotVector3 -> IO 
 processInputEvent gsvs ev clickPos = do
   debugPutStrLn "Plugin.SimulaViewSprite.processInputEvent"
   -- putStrLn "processInputEvent"
-  whenM (ev `isClass` "InputEventMouseMotion") $ processClickEvent gsvs Motion clickPos
+  whenM (ev `isClass` "InputEventMouseMotion") $ processPointerMotionEvent gsvs clickPos
   whenM (ev `isClass` "InputEventMouseButton") $ do
     let ev' = GodotInputEventMouseButton (coerce ev)
     pressed <- G.is_pressed ev'
     button <- G.get_button_index ev'
-    processClickEvent gsvs (Button pressed button) clickPos
+    processPointerButtonEvent gsvs (Button pressed button)
     return ()
+
+processPointerMotionEvent :: GodotSimulaViewSprite -> GodotVector3 -> IO ()
+processPointerMotionEvent gsvs clickPos = do
+  debugPutStrLn "Plugin.SimulaViewSprite.processPointerMotionEvent"
+  surfaceLocalCoords <- getSurfaceLocalCoordinates gsvs clickPos
+  debugPrintPointerSeatState gsvs Motion surfaceLocalCoords
+  processClickEvent' gsvs Motion surfaceLocalCoords
+
+processPointerButtonEvent :: GodotSimulaViewSprite -> InputEventType -> IO ()
+processPointerButtonEvent gsvs evt = do
+  debugPutStrLn "Plugin.SimulaViewSprite.processPointerButtonEvent"
+  gss <- readTVarIO (gsvs ^. gsvsServer)
+  wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+  surfaceLocalCoords <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+  debugPrintPointerSeatState gsvs evt surfaceLocalCoords
+  maybeSerial <- notifyMouseButtonWithMaybeSerial wlrSeat evt
+  when debugMouseEventsEnabled $
+    mapM_
+      (\serial ->
+        putStrLn $
+          "Mouse button delivery serial="
+            ++ show serial)
+      maybeSerial
+  pointerNotifyFrame wlrSeat
 
 newGodotSimulaViewSprite :: GodotSimulaServer -> SimulaView -> IO (GodotSimulaViewSprite)
 newGodotSimulaViewSprite gss simulaView = do
@@ -509,9 +533,17 @@ processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)
                  case wlrEitherSurface of
                    Right godotWlrXWaylandSurface -> do
                      getXWaylandSubsurfaceAndCoords gsvs godotWlrXWaylandSurface surfaceLocalCoords
-                   Left godotWlrXdgSurface -> getXdgSubsurfaceAndCoords godotWlrXdgSurface surfaceLocalCoords
+                   Left godotWlrXdgSurface ->
+                     getXdgSubsurfaceAndCoords godotWlrXdgSurface surfaceLocalCoords
                case maybeSurfaceAndCoords of
-                 Nothing -> return ()
+                 Nothing -> do
+                   wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+                   clearActiveSurface gsvs
+                   G.pointer_clear_focus wlrSeat
+                   case evt of
+                     Motion -> return ()
+                     Button _ _ -> pointerNotifyButton wlrSeat evt
+                   pointerNotifyFrame wlrSeat
                  Just (godotWlrSurface, subSurfaceLocalCoords@(SubSurfaceLocalCoordinates (ssx, ssy))) ->
                    (do
                      wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
@@ -521,10 +553,121 @@ processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)
                          pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
                          pointerNotifyMotion wlrSeat subSurfaceLocalCoords
                        Button _ _ -> do
+                         pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
+                         pointerNotifyMotion wlrSeat subSurfaceLocalCoords
+                         debugPrintMouseButtonIntercept evt godotWlrSurface surfaceLocalCoords subSurfaceLocalCoords
                          pointerNotifyButton wlrSeat evt
 
                      pointerNotifyFrame wlrSeat)
                      `finally` destroyMaybe (safeCast godotWlrSurface)
+
+
+debugPrintMouseButtonIntercept :: InputEventType -> GodotWlrSurface -> SurfaceLocalCoordinates -> SubSurfaceLocalCoordinates -> IO ()
+debugPrintMouseButtonIntercept inputEventType wlrSurface (SurfaceLocalCoordinates (sx, sy)) (SubSurfaceLocalCoordinates (ssx, ssy)) =
+  when debugMouseEventsEnabled $ do
+    case inputEventType of
+      Motion -> return ()
+      Button pressed buttonIndex -> do
+        (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+        putStrLn $
+          "Mouse button intercepted by surface="
+            ++ show wlrSurface
+            ++ " button="
+            ++ show buttonIndex
+            ++ " pressed="
+            ++ show pressed
+            ++ " surfaceLocal=("
+            ++ show sx
+            ++ ","
+            ++ show sy
+            ++ ") subSurfaceLocal=("
+            ++ show ssx
+            ++ ","
+            ++ show ssy
+            ++ ") buffer="
+            ++ show bufferWidth
+            ++ "x"
+            ++ show bufferHeight
+
+debugPrintPointerSeatState :: GodotSimulaViewSprite -> InputEventType -> SurfaceLocalCoordinates -> IO ()
+debugPrintPointerSeatState gsvs inputEventType surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)) =
+  when debugMouseEventsEnabled $ do
+    case inputEventType of
+      Motion -> do
+        gss <- readTVarIO (gsvs ^. gsvsServer)
+        wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+        focusedSurfaceSummary <- getFocusedSurfaceSummary wlrSeat
+        hitSurfaceSummary <- getHitSurfaceSummary gsvs surfaceLocalCoords
+        putStrLn $
+          "Mouse motion seat state surfaceLocal=("
+            ++ show sx
+            ++ ","
+            ++ show sy
+            ++ ") focused="
+            ++ focusedSurfaceSummary
+            ++ " freshHit="
+            ++ hitSurfaceSummary
+      Button pressed buttonIndex -> do
+        gss <- readTVarIO (gsvs ^. gsvsServer)
+        wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+        focusedSurfaceSummary <- getFocusedSurfaceSummary wlrSeat
+        hitSurfaceSummary <- getHitSurfaceSummary gsvs surfaceLocalCoords
+        putStrLn $
+          "Mouse button seat state button="
+            ++ show buttonIndex
+            ++ " pressed="
+            ++ show pressed
+            ++ " surfaceLocal=("
+            ++ show sx
+            ++ ","
+            ++ show sy
+            ++ ") focused="
+            ++ focusedSurfaceSummary
+            ++ " freshHit="
+            ++ hitSurfaceSummary
+  where
+    getFocusedSurfaceSummary :: GodotWlrSeat -> IO String
+    getFocusedSurfaceSummary wlrSeat =
+      withGodotRef (G.get_pointer_focused_surface wlrSeat :: IO GodotWlrSurface) $ \focusedSurface ->
+        case validateObject focusedSurface of
+          Nothing -> return "nothing"
+          Just validFocusedSurface -> do
+            validFocusedSurface <- validateSurfaceE validFocusedSurface
+            (bufferWidth, bufferHeight) <- getBufferDimensions validFocusedSurface
+            return $
+              "surface="
+                ++ show validFocusedSurface
+                ++ " buffer="
+                ++ show bufferWidth
+                ++ "x"
+                ++ show bufferHeight
+
+    getHitSurfaceSummary :: GodotSimulaViewSprite -> SurfaceLocalCoordinates -> IO String
+    getHitSurfaceSummary gsvs' coords = do
+      simulaView <- readTVarIO (gsvs' ^. gsvsView)
+      let wlrEitherSurface = simulaView ^. svWlrEitherSurface
+      maybeSurfaceAndCoords <-
+        case wlrEitherSurface of
+          Right godotWlrXWaylandSurface ->
+            getXWaylandSubsurfaceAndCoords gsvs' godotWlrXWaylandSurface coords
+          Left godotWlrXdgSurface ->
+            getXdgSubsurfaceAndCoords godotWlrXdgSurface coords
+      case maybeSurfaceAndCoords of
+        Nothing -> return "nothing"
+        Just (godotWlrSurface, SubSurfaceLocalCoordinates (ssx, ssy)) ->
+          (`finally` destroyMaybe (safeCast godotWlrSurface)) $ do
+            (bufferWidth, bufferHeight) <- getBufferDimensions godotWlrSurface
+            return $
+              "surface="
+                ++ show godotWlrSurface
+                ++ " subSurfaceLocal=("
+                ++ show ssx
+                ++ ","
+                ++ show ssy
+                ++ ") buffer="
+                ++ show bufferWidth
+                ++ "x"
+                ++ show bufferHeight
 
 debugPrintWlrSurfaceMapDetails :: String -> GodotWlrSurface -> IO ()
 debugPrintWlrSurfaceMapDetails prefix wlrSurface =
@@ -646,10 +789,21 @@ pointerNotifyMotion wlrSeat (SubSurfaceLocalCoordinates (ssx, ssy)) = do
 pointerNotifyButton :: GodotWlrSeat -> InputEventType -> IO ()
 pointerNotifyButton wlrSeat inputEventType = do
   debugPutStrLn "Plugin.SimulaViewSprite.pointerNotifyButton"
+  notifyMouseButtonWithMaybeSerial wlrSeat inputEventType >> return ()
+
+notifyMouseButtonWithMaybeSerial :: GodotWlrSeat -> InputEventType -> IO (Maybe Int)
+notifyMouseButtonWithMaybeSerial wlrSeat inputEventType =
   case inputEventType of
-      Motion -> return ()
-      Button pressed buttonIndex -> pointerNotifyButton' pressed buttonIndex
-  where pointerNotifyButton' pressed buttonIndex = do
+    Motion -> return Nothing
+    Button pressed buttonIndex ->
+      case buttonIndex of
+        BUTTON_WHEEL_UP -> pointerNotifyButton' >> return Nothing
+        BUTTON_WHEEL_DOWN -> pointerNotifyButton' >> return Nothing
+        BUTTON_WHEEL_LEFT -> pointerNotifyButton' >> return Nothing
+        BUTTON_WHEEL_RIGHT -> pointerNotifyButton' >> return Nothing
+        _ -> Just <$> (G.pointer_notify_button wlrSeat (fromIntegral buttonIndex) pressed :: IO Int)
+      where
+        pointerNotifyButton' = do
           G.pointer_notify_button wlrSeat (fromIntegral buttonIndex) pressed
           return ()
 
