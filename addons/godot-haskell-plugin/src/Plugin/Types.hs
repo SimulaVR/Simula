@@ -927,22 +927,22 @@ initializeRenderTarget gsvs viewportType = do
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
   renderTarget <- unsafeInstance GodotViewport "Viewport"
-  withWlrSurface eitherSurface $ \wlrSurface -> do
-    dimensions <- getBufferDimensions wlrSurface
-    pixelDimensionsOfWlrSurface <- toGodotVector2 dimensions
+  dimensions <- withWlrSurface eitherSurface $ \wlrSurface -> do
+    getBufferDimensions wlrSurface
+  pixelDimensionsOfWlrSurface <- toGodotVector2 dimensions
 
-    G.set_disable_input renderTarget True
-    G.set_usage renderTarget G.USAGE_2D
-    G.set_update_mode renderTarget G.UPDATE_WHEN_VISIBLE
-    G.set_vflip renderTarget True
-    G.set_size renderTarget pixelDimensionsOfWlrSurface
+  G.set_disable_input renderTarget True
+  G.set_usage renderTarget G.USAGE_2D
+  G.set_update_mode renderTarget G.UPDATE_WHEN_VISIBLE
+  G.set_vflip renderTarget True
+  G.set_size renderTarget pixelDimensionsOfWlrSurface
 
-    case viewportType of
-      ViewportSurface -> G.set_clear_mode renderTarget G.CLEAR_MODE_NEVER
-      ViewportBase -> G.set_clear_mode renderTarget G.CLEAR_MODE_ALWAYS
-    G.set_transparent_background renderTarget True
+  case viewportType of
+    ViewportSurface -> G.set_clear_mode renderTarget G.CLEAR_MODE_NEVER
+    ViewportBase -> G.set_clear_mode renderTarget G.CLEAR_MODE_ALWAYS
+  G.set_transparent_background renderTarget True
 
-    return renderTarget
+  return renderTarget
 
 getBufferDimensions :: GodotWlrSurface -> IO (Int, Int)
 getBufferDimensions wlrSurface = do
@@ -1507,7 +1507,20 @@ getDepthFirstXWaylandSurfaces wlrXWaylandSurface = do
           children <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrXWaylandSurface]
           childrenX <- mapM G.get_x children
           childrenY <- mapM G.get_y children
-          let childrenWithCoords = zip3 children childrenX childrenY
+          childrenGeometryOffsets <-
+            mapM
+              (\child -> do
+                V2 (V2 childGeomX childGeomY) _ <- G.get_geometry child >>= fromLowLevel :: IO (V2 (V2 Float))
+                return (round childGeomX, round childGeomY))
+              children
+          let childrenWithCoords =
+                zipWith4
+                  (\child childX childY (childGeomX, childGeomY) ->
+                    (child, childX - childGeomX, childY - childGeomY))
+                  children
+                  childrenX
+                  childrenY
+                  childrenGeometryOffsets
           Api.godot_array_destroy arrayOfChildren
           mapM_ Api.godot_variant_destroy arrayOfChildrenGV
           return childrenWithCoords
@@ -1533,7 +1546,20 @@ getDepthFirstXdgSurfaces wlrXdgSurface = do
           childrenAsPopups <- mapM G.get_xdg_popup children
           childrenX <- mapM G.get_x childrenAsPopups
           childrenY <- mapM G.get_y childrenAsPopups
-          let childrenWithCoords = zip3 children childrenX childrenY
+          childrenGeometryOffsets <-
+            mapM
+              (\child -> do
+                V2 (V2 childGeomX childGeomY) _ <- G.get_geometry child >>= fromLowLevel :: IO (V2 (V2 Float))
+                return (round childGeomX, round childGeomY))
+              children
+          let childrenWithCoords =
+                zipWith4
+                  (\child childX childY (childGeomX, childGeomY) ->
+                    (child, childX - childGeomX, childY - childGeomY))
+                  children
+                  childrenX
+                  childrenY
+                  childrenGeometryOffsets
           Api.godot_array_destroy arrayOfChildren
           mapM_ Api.godot_variant_destroy arrayOfChildrenGV
           return childrenWithCoords

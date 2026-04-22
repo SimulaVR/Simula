@@ -616,6 +616,7 @@ getXdgSubsurfaceAndCoords :: GodotWlrXdgSurface -> SurfaceLocalCoordinates -> IO
 getXdgSubsurfaceAndCoords wlrXdgSurface cursorCoords@(SurfaceLocalCoordinates (sx, sy)) = do
   debugPutStrLn "Plugin.SimulaViewSprite.getXdgSubsurfaceAndCoords"
   rect2@(V2 (V2 posX posY) (V2 xdgWidth xdgHeight)) <- G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+  -- surface_at expects coordinates relative to the top level wlr_surface, so you don't need to worry about geometry rect offsets or anything
   withGodotRef (G.surface_at wlrXdgSurface sx sy :: IO GodotWlrSurfaceAtResult) $ \wlrSurfaceAtResult -> do
     withGodotRef (G.get_surface wlrSurfaceAtResult :: IO GodotWlrSurface) $ \wlrSurfaceSubSurface -> do
       case validateObject wlrSurfaceSubSurface of
@@ -1198,6 +1199,7 @@ getXWaylandSubsurfaceAndCoords gsvs wlrXWaylandSurface coords@(SurfaceLocalCoord
        return $ Just (wlrSurface, SubSurfaceLocalCoordinates (x, y))
      Nothing -> do
        safeSetActivated gsvs True -- G.set_activated godotWlrXWaylandSurface True
+       -- surface_at expects coordinates relative to the top level wlr_surface, so you don't need to worry about geometry rect offsets or anything
        withGodotRef (G.surface_at wlrXWaylandSurface sx sy :: IO GodotWlrSurfaceAtResult) $ \wlrSurfaceAtResult -> do
          subX <- G.get_sub_x wlrSurfaceAtResult
          subY <- G.get_sub_y wlrSurfaceAtResult
