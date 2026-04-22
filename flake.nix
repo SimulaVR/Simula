@@ -508,6 +508,23 @@
 
               while [ "$#" -gt 0 ]; do
                 case "$1" in
+                  -h|--help)
+                    cat << _EOF_HELP_
+Usage: simula [options] [-- [godot-args]]
+
+Options:
+  --local        Launch Simula using local binaries (useful for developers)
+  --rr           Launch Simula under the rr debugger
+  -h, --help     Show this help message
+
+Debug Environment Variables:
+- SIMULA_DEBUG_MEMORY=1: Shows per-second RSS memory deltas in the HUD so you can get an estimate of how various actions impact top level memory usage.
+- SIMULA_DEBUG_SURFACE_BOUNDARIES=1: Shows wlr_surface (red), geometry boundaries with offset x/y offset (green), and geometry boundaries without x/y offset (blue) on all surfaces. Top-level XDG boundaries are colored in yellow (for wayland surfaces), while XWayland are colored black (though since most xwayland top levels don't have borders to begin with, you often won't see the black border).
+- SIMULA_DEBUG_SURFACE_CREATIONS=1: Prints detailed surface information when they get created/mapped.
+- SIMULA_DEBUG_MOUSE_EVENTS=1 Shows detailed tracing of mouse interaction logic.
+_EOF_HELP_
+                    exit 0
+                    ;;
                   --local)
                     LAUNCH_LOCAL=1
                     ;;
