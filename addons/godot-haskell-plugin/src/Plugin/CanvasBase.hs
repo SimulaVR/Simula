@@ -105,11 +105,21 @@ _draw :: CanvasBase -> [GodotVariant] -> IO ()
 _draw cb gvArgs = do
   debugPutStrLn "Plugin.CanvasBase._draw"
   gsvs <- readTVarIO (cb ^. cbGSVS)
-  gss <- readTVarIO (gsvs ^. gsvsServer)
-  simulaView <- readTVarIO (gsvs ^. gsvsView)
 
-  -- Draw surfaces from CanvasSurface
+  when debugSurfaceBoundariesEnabled $
+    drawDebugBackground cb gsvs
+
   drawCanvasSurface cb gsvs
+
+  when debugSurfaceBoundariesEnabled $ do
+    -- Outline raw wlr_surface buffers as red
+    drawRedWlrSurfaceBoundaries cb gsvs
+
+    -- Show xdg/xwayland geometry rectangles as blue WITHOUT their x/y offsets
+    drawBlueGeometryBordersWithoutOffsets cb gsvs
+
+    -- Show xdg/xwayland geometry rectangles as green WITH their x/y offsets
+    drawGreenGeometryBordersWithOffsets cb gsvs
 
   -- Draw cursor
   drawCursor cb gsvs
@@ -133,10 +143,25 @@ _draw cb gvArgs = do
       withGodotRef (G.get_texture (viewportSurface :: GodotViewport) :: IO GodotViewportTexture) $ \viewportSurfaceTexture ->
         savePng cs viewportSurfaceTexture wlrSurface >> return ()
 
+    drawDebugBackground :: CanvasBase -> GodotSimulaViewSprite -> IO ()
+    drawDebugBackground cb gsvs = do
+      debugPutStrLn "Plugin.CanvasBase.drawDebugBackground"
+      cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
+      viewportSurface <- readTVarIO (cs ^. csViewport)
+      V2 width height <- G.get_size viewportSurface >>= fromLowLevel :: IO (V2 Float)
+      debugRect <- toLowLevel $ V2 (V2 0 0) (V2 width height)
+
+      view <- readTVarIO (gsvs ^. gsvsView)
+      let eitherSurface = view ^. svWlrEitherSurface
+      backgroundColor <- case eitherSurface of
+        Left _  -> (toLowLevel $ (rgb 1.0 (188/255.0) 0.0) `withOpacity` 1.0) :: IO GodotColor -- Orangish yellow for XDG
+        Right _ -> (toLowLevel $ (rgb 0.0 0.0 0.0) `withOpacity` 1.0) :: IO GodotColor         -- Black for XWayland
+
+      G.draw_rect cb debugRect backgroundColor True 1.0 False
+
     drawCanvasSurface :: CanvasBase -> GodotSimulaViewSprite -> IO ()
     drawCanvasSurface cb gsvs = do
       debugPutStrLn "Plugin.CanvasBase.drawCanvasSurface"
-      gss <- readTVarIO (gsvs ^. gsvsServer)
       cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
       viewportSurface <- readTVarIO (cs ^. csViewport)
       renderPosition <- toLowLevel (V2 0 0) :: IO GodotVector2
@@ -145,6 +170,202 @@ _draw cb gvArgs = do
 
       withGodotRef (G.get_texture viewportSurface :: IO GodotViewportTexture) $ \viewportSurfaceTexture ->
         G.draw_texture cb ((safeCast viewportSurfaceTexture) :: GodotTexture) renderPosition modulateColor (coerce nullPtr)
+
+    drawRedWlrSurfaceBoundaries :: CanvasBase -> GodotSimulaViewSprite -> IO ()
+    drawRedWlrSurfaceBoundaries cb gsvs = do
+      debugPutStrLn "Plugin.CanvasBase.drawRedWlrSurfaceBoundaries"
+      redColor <- (toLowLevel $ (rgb 1.0 0.0 0.0) `withOpacity` 1.0) :: IO GodotColor
+      bracket
+        (getDepthFirstSurfaces gsvs)
+        destroyWlrSurfacesWithCoords
+        (\depthFirstSurfaces ->
+          forM_ depthFirstSurfaces $ \(wlrSurface, x, y) -> do
+            (width, height) <- getBufferDimensions wlrSurface
+            debugRect <- toLowLevel $
+              V2
+                (V2 (fromIntegral x) (fromIntegral y))
+                (V2 (fromIntegral width) (fromIntegral height))
+            G.draw_rect cb debugRect redColor False 2.0 False)
+
+    drawBlueGeometryBordersWithoutOffsets :: CanvasBase -> GodotSimulaViewSprite -> IO ()
+    drawBlueGeometryBordersWithoutOffsets cb gsvs = do
+      debugPutStrLn "Plugin.CanvasBase.drawBlueGeometryBordersWithoutOffsets"
+      blueColor <- (toLowLevel $ (rgb 0.0 0.3 1.0) `withOpacity` 1.0) :: IO GodotColor
+      simulaView <- readTVarIO (gsvs ^. gsvsView)
+      geometryRects <- case (simulaView ^. svWlrEitherSurface) of
+        Left wlrXdgSurface ->
+          getXdgGeometryRootRects 0 0 wlrXdgSurface
+        Right wlrXWaylandSurface -> do
+          rootRects <- getXWaylandGeometryRootRects 0 0 wlrXWaylandSurface
+          freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
+          freeChildRects <- fmap Prelude.concat $
+            forM freeChildren $ \freeChild -> do
+              childX <- G.get_x freeChild
+              childY <- G.get_y freeChild
+              getXWaylandGeometryRootRects childX childY freeChild
+          return (rootRects ++ freeChildRects)
+      forM_ geometryRects $ \(x, y, width, height) -> do
+        debugRect <- toLowLevel $
+          V2
+            (V2 (fromIntegral x) (fromIntegral y))
+            (V2 (fromIntegral width) (fromIntegral height))
+        G.draw_rect cb debugRect blueColor False 4.0 False
+
+    drawGreenGeometryBordersWithOffsets :: CanvasBase -> GodotSimulaViewSprite -> IO ()
+    drawGreenGeometryBordersWithOffsets cb gsvs = do
+      debugPutStrLn "Plugin.CanvasBase.drawGreenGeometryBordersWithOffsets"
+      greenColor <- (toLowLevel $ (rgb 0.0 1.0 0.0) `withOpacity` 1.0) :: IO GodotColor
+      simulaView <- readTVarIO (gsvs ^. gsvsView)
+      geometryRects <- case (simulaView ^. svWlrEitherSurface) of
+        Left wlrXdgSurface ->
+          getXdgGeometryRects 0 0 wlrXdgSurface
+        Right wlrXWaylandSurface -> do
+          rootRects <- getXWaylandGeometryRects 0 0 wlrXWaylandSurface
+          freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
+          freeChildRects <- fmap Prelude.concat $
+            forM freeChildren $ \freeChild -> do
+              childX <- G.get_x freeChild
+              childY <- G.get_y freeChild
+              getXWaylandGeometryRects childX childY freeChild
+          return (rootRects ++ freeChildRects)
+      forM_ geometryRects $ \(x, y, width, height) -> do
+        debugRect <- toLowLevel $
+          V2
+            (V2 (fromIntegral x) (fromIntegral y))
+            (V2 (fromIntegral width) (fromIntegral height))
+        G.draw_rect cb debugRect greenColor False 2.0 False
+
+    getXdgGeometryRootRects :: Int -> Int -> GodotWlrXdgSurface -> IO [(Int, Int, Int, Int)]
+    getXdgGeometryRootRects rootX rootY wlrXdgSurface = do
+      debugPutStrLn "Plugin.CanvasBase.getXdgGeometryRootRects"
+      validateSurfaceE wlrXdgSurface
+      rect <- getXdgGeometryRootRect rootX rootY wlrXdgSurface
+      popupChildren <- getMappedXdgPopupChildrenAndRoots wlrXdgSurface
+      childRects <- fmap Prelude.concat $
+        forM popupChildren $ \(popupChild, popupRootX, popupRootY) ->
+          getXdgGeometryRootRects popupRootX popupRootY popupChild
+      return (rect : childRects)
+
+    getXdgGeometryRects :: Int -> Int -> GodotWlrXdgSurface -> IO [(Int, Int, Int, Int)]
+    getXdgGeometryRects rootX rootY wlrXdgSurface = do
+      debugPutStrLn "Plugin.CanvasBase.getXdgGeometryRects"
+      validateSurfaceE wlrXdgSurface
+      rect <- getXdgGeometryRect rootX rootY wlrXdgSurface
+      popupChildren <- getMappedXdgPopupChildrenAndRoots wlrXdgSurface
+      childRects <- fmap Prelude.concat $
+        forM popupChildren $ \(popupChild, popupRootX, popupRootY) ->
+          getXdgGeometryRects popupRootX popupRootY popupChild
+      return (rect : childRects)
+
+    getMappedXdgPopupChildrenAndRoots :: GodotWlrXdgSurface -> IO [(GodotWlrXdgSurface, Int, Int)]
+    getMappedXdgPopupChildrenAndRoots wlrXdgSurface = do
+      debugPutStrLn "Plugin.CanvasBase.getMappedXdgPopupChildrenAndRoots"
+      arrayOfChildren <- G.get_children wlrXdgSurface :: IO GodotArray
+      arrayOfChildrenGV <- fromGodotArray arrayOfChildren
+      children <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrXdgSurface]
+      validatedChildren <- mapM validateSurfaceE children
+      childrenAsPopups <- mapM G.get_xdg_popup validatedChildren
+      childrenX <- mapM G.get_x childrenAsPopups
+      childrenY <- mapM G.get_y childrenAsPopups
+      childrenGeometryOffsets <-
+        mapM
+          (\child -> do
+            V2 (V2 childGeomX childGeomY) _ <- G.get_geometry child >>= fromLowLevel :: IO (V2 (V2 Float))
+            return (round childGeomX, round childGeomY))
+          validatedChildren
+      Api.godot_array_destroy arrayOfChildren
+      mapM_ Api.godot_variant_destroy arrayOfChildrenGV
+      return $
+        Data.List.zipWith4
+          (\child childX childY (childGeomX, childGeomY) ->
+            (child, childX - childGeomX, childY - childGeomY))
+          validatedChildren
+          childrenX
+          childrenY
+          childrenGeometryOffsets
+
+    getXWaylandGeometryRootRects :: Int -> Int -> GodotWlrXWaylandSurface -> IO [(Int, Int, Int, Int)]
+    getXWaylandGeometryRootRects rootX rootY wlrXWaylandSurface = do
+      debugPutStrLn "Plugin.CanvasBase.getXWaylandGeometryRootRects"
+      validateSurfaceE wlrXWaylandSurface
+      rect <- getXWaylandGeometryRootRect rootX rootY wlrXWaylandSurface
+      mappedChildren <- getMappedXWaylandChildrenAndRoots wlrXWaylandSurface
+      childRects <- fmap Prelude.concat $
+        forM mappedChildren $ \(child, childX, childY) ->
+          getXWaylandGeometryRootRects childX childY child
+      return (rect : childRects)
+
+    getXWaylandGeometryRects :: Int -> Int -> GodotWlrXWaylandSurface -> IO [(Int, Int, Int, Int)]
+    getXWaylandGeometryRects rootX rootY wlrXWaylandSurface = do
+      debugPutStrLn "Plugin.CanvasBase.getXWaylandGeometryRects"
+      validateSurfaceE wlrXWaylandSurface
+      rect <- getXWaylandGeometryRect rootX rootY wlrXWaylandSurface
+      mappedChildren <- getMappedXWaylandChildrenAndRoots wlrXWaylandSurface
+      childRects <- fmap Prelude.concat $
+        forM mappedChildren $ \(child, childX, childY) ->
+          getXWaylandGeometryRects childX childY child
+      return (rect : childRects)
+
+    getMappedXWaylandChildrenAndRoots :: GodotWlrXWaylandSurface -> IO [(GodotWlrXWaylandSurface, Int, Int)]
+    getMappedXWaylandChildrenAndRoots wlrXWaylandSurface = do
+      debugPutStrLn "Plugin.CanvasBase.getMappedXWaylandChildrenAndRoots"
+      arrayOfChildren <- G.get_children wlrXWaylandSurface :: IO GodotArray
+      arrayOfChildrenGV <- fromGodotArray arrayOfChildren
+      children <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrXWaylandSurface]
+      validatedChildren <- mapM validateSurfaceE children
+      childrenX <- mapM G.get_x validatedChildren
+      childrenY <- mapM G.get_y validatedChildren
+      Api.godot_array_destroy arrayOfChildren
+      mapM_ Api.godot_variant_destroy arrayOfChildrenGV
+      return $ zip3 validatedChildren childrenX childrenY
+
+    getXdgGeometryRect :: Int -> Int -> GodotWlrXdgSurface -> IO (Int, Int, Int, Int)
+    getXdgGeometryRect rootX rootY wlrXdgSurface = do
+      debugPutStrLn "Plugin.CanvasBase.getXdgGeometryRect"
+      V2 (V2 geometryX geometryY) (V2 geometryWidth geometryHeight) <-
+        G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+      return
+        ( rootX + round geometryX
+        , rootY + round geometryY
+        , round geometryWidth
+        , round geometryHeight
+        )
+
+    getXdgGeometryRootRect :: Int -> Int -> GodotWlrXdgSurface -> IO (Int, Int, Int, Int)
+    getXdgGeometryRootRect rootX rootY wlrXdgSurface = do
+      debugPutStrLn "Plugin.CanvasBase.getXdgGeometryRootRect"
+      V2 _ (V2 geometryWidth geometryHeight) <-
+        G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+      return
+        ( rootX
+        , rootY
+        , round geometryWidth
+        , round geometryHeight
+        )
+
+    getXWaylandGeometryRect :: Int -> Int -> GodotWlrXWaylandSurface -> IO (Int, Int, Int, Int)
+    getXWaylandGeometryRect rootX rootY wlrXWaylandSurface = do
+      debugPutStrLn "Plugin.CanvasBase.getXWaylandGeometryRect"
+      V2 (V2 geometryX geometryY) (V2 geometryWidth geometryHeight) <-
+        G.get_geometry wlrXWaylandSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+      return
+        ( rootX + round geometryX
+        , rootY + round geometryY
+        , round geometryWidth
+        , round geometryHeight
+        )
+
+    getXWaylandGeometryRootRect :: Int -> Int -> GodotWlrXWaylandSurface -> IO (Int, Int, Int, Int)
+    getXWaylandGeometryRootRect rootX rootY wlrXWaylandSurface = do
+      debugPutStrLn "Plugin.CanvasBase.getXWaylandGeometryRootRect"
+      V2 _ (V2 geometryWidth geometryHeight) <-
+        G.get_geometry wlrXWaylandSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+      return
+        ( rootX
+        , rootY
+        , round geometryWidth
+        , round geometryHeight
+        )
 
     drawCursor :: CanvasBase -> GodotSimulaViewSprite -> IO ()
     drawCursor cb gsvs = do

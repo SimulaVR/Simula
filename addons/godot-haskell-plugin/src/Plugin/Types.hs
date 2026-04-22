@@ -117,6 +117,13 @@ debugMouseEventsEnabled = unsafePerformIO $ do
   return $ simulaDebug == Just "1" || simulaDebugSurfaceCreations == Just "1"
 {-# NOINLINE debugMouseEventsEnabled #-}
 
+debugSurfaceBoundariesEnabled :: Bool
+debugSurfaceBoundariesEnabled = unsafePerformIO $ do
+  simulaDebug <- lookupEnv "SIMULA_DEBUG"
+  simulaDebugSurfaceCreations <- lookupEnv "SIMULA_DEBUG_SURFACE_BOUNDARIES"
+  return $ simulaDebug == Just "1" || simulaDebugSurfaceCreations == Just "1"
+{-# NOINLINE debugSurfaceBoundariesEnabled #-}
+
 
 debugPutStrLn :: String -> IO ()
 debugPutStrLn msg =
