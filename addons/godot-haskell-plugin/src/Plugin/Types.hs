@@ -174,6 +174,12 @@ data SpriteDimensions      = SpriteDimensions (Int, Int)
 fullRedrawFramesStartingAmount :: Int
 fullRedrawFramesStartingAmount = 2
 
+markGSVSForFullRedraws :: GodotSimulaViewSprite -> IO ()
+markGSVSForFullRedraws gsvs =
+  atomically $ do
+    writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
+    writeTVar (gsvs ^. gsvsIsDamaged) True
+
 data ResizeMethod = Zoom | Horizontal | Vertical deriving (Eq)
 
 -- This should ideally be `[Variant 'HaskellTy]`, but that would

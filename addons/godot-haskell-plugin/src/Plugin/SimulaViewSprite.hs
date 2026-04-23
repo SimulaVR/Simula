@@ -280,9 +280,7 @@ setTargetDimensions gsvs = do
   G.set_size renderTargetBase spilloverDims'
   G.set_size renderTargetSurface spilloverDims'
   when viewportDimsChanged $
-    atomically $ do
-      writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
-      writeTVar (gsvs ^. gsvsIsDamaged) True
+    markGSVSForFullRedraws gsvs
   -- QuadMesh need to be scaled down by a factor of 0.001 to be reasonably sized in Godot:
   withQuadMesh gsvs $ \quadMesh ->
     G.set_size quadMesh =<< (toLowLevel $ (V2 (0.001 * (fromIntegral spilloverWidth)) (0.001 * (fromIntegral spilloverHeight))))
@@ -306,9 +304,7 @@ setTargetDimensions gsvs = do
         (True, True) -> do atomically $ do writeTVar (gsvs ^. gsvsResizedLastFrame) False
                                            writeTVar (gsvs ^. gsvsSpilloverDims) (Just spilloverDims)
                            when (transOld == 1) $
-                             atomically $ do
-                               writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
-                               writeTVar (gsvs ^. gsvsIsDamaged) True
+                             markGSVSForFullRedraws gsvs
         (True, False) -> do let pushX = spilloverWidth - oldSpilloverWidth
                             let pushY = spilloverHeight - oldSpilloverHeight
                             pushBackVector <- toLowLevel (V3 (-0.5 * 0.001 * (fromIntegral pushX)) (-0.5 * 0.001 * (fromIntegral pushY)) 0) :: IO GodotVector3
@@ -316,9 +312,7 @@ setTargetDimensions gsvs = do
                             atomically $ writeTVar (gsvs ^. gsvsSpilloverDims) (Just spilloverDims)
                             case (transOld == 1, (spilloverWidth > targetWidth || spilloverHeight > targetHeight)) of
                               (True, False) ->  return () -- Avoid changing shader when apps first launch
-                              (True, True) -> atomically $ do
-                                                 writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
-                                                 writeTVar (gsvs ^. gsvsIsDamaged) True
+                              (True, True) -> markGSVSForFullRedraws gsvs
                               (False, _) -> return ()
   updateQuadShader gsvs targetDims spilloverDims
   return ()
@@ -868,9 +862,7 @@ _handle_map gsvs _ = do
   addChild gsvs viewportBase
   addChild viewportBase cb
 
-  atomically $ do
-    writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
-    writeTVar (gsvs ^. gsvsIsDamaged) True
+  markGSVSForFullRedraws gsvs
 
   setInFrontOfUser gsvs (-2)
 
@@ -1083,9 +1075,7 @@ handle_map_free_child_impl gsvsInvisible wlrXWaylandSurface = do
                                            freeChildrenMapOld <- readTVarIO (gss ^. gssFreeChildren) :: IO (M.Map GodotWlrXWaylandSurface GodotSimulaViewSprite)
                                            let freeChildrenMapNew = M.insert wlrXWaylandSurface gsvs freeChildrenMapOld
                                            atomically $ writeTVar (gss ^. gssFreeChildren) freeChildrenMapNew
-                                           atomically $ do
-                                             writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
-                                             writeTVar (gsvs ^. gsvsIsDamaged) True
+                                           markGSVSForFullRedraws gsvs
                                            return True
 
   simulaView <- readTVarIO (gsvsInvisible ^. gsvsView)
@@ -1214,16 +1204,20 @@ getParentGSVS :: GodotSimulaServer -> GodotWlrXWaylandSurface -> IO (Maybe Godot
 getParentGSVS gss wlrXWaylandSurface = do
   debugPutStrLn "Plugin.SimulaViewSprite.getParentGSVS"
   simulaViewMap <- readTVarIO (gss ^. gssViews)
-  parentWlrXWaylandSurface <- (G.get_parent wlrXWaylandSurface) >>= validateSurfaceE
-  let simulaViews = M.keys simulaViewMap
-  let maybeParentSimulaView = Data.List.find (\simulaView -> (simulaView ^. svWlrEitherSurface) == (Right parentWlrXWaylandSurface)) simulaViews
-  maybeGSVSParent <- case maybeParentSimulaView of
-                          Nothing -> do
-                            putStrLn "Couldn't find parent!"
-                            return Nothing
-                          (Just gsvsSimulaView) -> do let gsvsParent = Data.Maybe.fromJust (M.lookup gsvsSimulaView simulaViewMap)
-                                                      return (Just gsvsParent)
-  return maybeGSVSParent
+  parentWlrXWaylandSurface' <- G.get_parent wlrXWaylandSurface :: IO GodotWlrXWaylandSurface
+  case validateObject parentWlrXWaylandSurface' of
+    Nothing -> return Nothing
+    Just validParentWlrXWaylandSurface -> do
+      parentWlrXWaylandSurface <- validateSurfaceE validParentWlrXWaylandSurface
+      let simulaViews = M.keys simulaViewMap
+      let maybeParentSimulaView = Data.List.find (\simulaView -> (simulaView ^. svWlrEitherSurface) == (Right parentWlrXWaylandSurface)) simulaViews
+      maybeGSVSParent <- case maybeParentSimulaView of
+                              Nothing -> do
+                                putStrLn "Couldn't find parent!"
+                                return Nothing
+                              (Just gsvsSimulaView) -> do let gsvsParent = Data.Maybe.fromJust (M.lookup gsvsSimulaView simulaViewMap)
+                                                          return (Just gsvsParent)
+      return maybeGSVSParent
 
 handle_map_child :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_map_child gsvsInvisible gvArgs@[wlrXWaylandSurfaceVariant] = do
@@ -1242,9 +1236,8 @@ handle_map_child gsvsInvisible gvArgs@[wlrXWaylandSurfaceVariant] = do
                             -- G.set_xy wlrXWaylandSurface adjustedXY
                             simulaView <- readTVarIO (gsvsInvisible ^. gsvsView)
                             atomically $ writeTVar (simulaView ^. svMapped) True
-                            atomically $ do
-                              writeTVar (gsvsInvisible ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
-                              writeTVar (gsvsInvisible ^. gsvsIsDamaged) True
+                            markGSVSForFullRedraws parentGSVS
+                            markGSVSForFullRedraws gsvsInvisible
                             return False
   when safeToDestroyArgs $ mapM_ Api.godot_variant_destroy gvArgs
   return ()
@@ -1271,14 +1264,31 @@ handle_map_child gsvsInvisible gvArgs@[wlrXWaylandSurfaceVariant] = do
 handle_set_parent :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_set_parent gsvs gvArgs@[wlrXWaylandSurfaceVariant] = do
   debugPutStrLn "Plugin.SimulaViewSprite.handle_set_parent"
-  -- Intentionally empty for now
+  gss <- readTVarIO (gsvs ^. gsvsServer)
   wlrXWaylandSurface <- (fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface) >>= validateSurfaceE
+  maybeParentGSVS <- getParentGSVS gss wlrXWaylandSurface
+  freeChildrenMap <- readTVarIO (gss ^. gssFreeChildren)
+  let maybeFreeChildOwnerGSVS = M.lookup wlrXWaylandSurface freeChildrenMap
+
+  markGSVSForFullRedraws gsvs
+  forM_ maybeParentGSVS markGSVSForFullRedraws
+  forM_ maybeFreeChildOwnerGSVS $ \freeChildOwnerGSVS ->
+    when (Just freeChildOwnerGSVS /= maybeParentGSVS) $
+      markGSVSForFullRedraws freeChildOwnerGSVS
+
   mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
 handle_unmap_child :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_unmap_child self gvArgs@[wlrXWaylandSurfaceVariant] = do
   debugPutStrLn "Plugin.SimulaViewSprite.handle_unmap_child"
+  gss <- readTVarIO (self ^. gsvsServer)
+  wlrXWaylandSurface <-
+    (fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface) >>= validateSurfaceE
+  maybeParentGSVS <- getParentGSVS gss wlrXWaylandSurface
+  case maybeParentGSVS of
+    Nothing -> putStrLn "handle_unmap_child: no parent GSVS found"
+    Just parentGSVS -> markGSVSForFullRedraws parentGSVS
   atomically $ writeTVar (self ^. gsvsIsDamaged) True
   handle_unmap_base self gvArgs
   mapM_ Api.godot_variant_destroy gvArgs
@@ -1286,6 +1296,13 @@ handle_unmap_child self gvArgs@[wlrXWaylandSurfaceVariant] = do
 handle_unmap_free_child :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_unmap_free_child self gvArgs@[wlrXWaylandSurfaceVariant] = do
   debugPutStrLn "Plugin.SimulaViewSprite.handle_unmap_free_child"
+  gss <- readTVarIO (self ^. gsvsServer)
+  wlrXWaylandSurface <-
+    (fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface) >>= validateSurfaceE
+  maybeParentGSVS <- getParentGSVS gss wlrXWaylandSurface
+  case maybeParentGSVS of
+    Nothing -> putStrLn "handle_unmap_free_child: no parent GSVS found"
+    Just parentGSVS -> markGSVSForFullRedraws parentGSVS
   atomically $ writeTVar (self ^. gsvsIsDamaged) True
   handle_unmap_base self gvArgs
   mapM_ Api.godot_variant_destroy gvArgs
@@ -1413,9 +1430,7 @@ handle_new_popup :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_new_popup gsvs gvArgs@[_wlrXdgSurfaceParentVariant] = do
   debugPutStrLn "Plugin.SimulaViewSprite.handle_new_popup"
   debugPrintCurrentMappedSurface "Plugin.SimulaViewSprite.handle_new_popup" gsvs
-  atomically $ do
-    writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
-    writeTVar (gsvs ^. gsvsIsDamaged) True
+  markGSVSForFullRedraws gsvs
   mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
@@ -1435,9 +1450,7 @@ handle_wlr_surface_new_subsurface gsvs gvArgs@[wlrSubsurfaceVariant] = do
   withGodotRef (G.get_wlr_surface_parent wlrSubsurface :: IO GodotWlrSurface) $ \wlrSurfaceParent ->
     debugPrintWlrSurfaceMapDetails "Plugin.SimulaViewSprite.handle_wlr_surface_new_subsurface.parent" wlrSurfaceParent
   connectGodotSignal wlrSubsurface "destroy" gsvs "handle_wlr_subsurface_destroy" []
-  atomically $ do
-    writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
-    writeTVar (gsvs ^. gsvsIsDamaged) True
+  markGSVSForFullRedraws gsvs
   mapM_ Api.godot_variant_destroy gvArgs
   return ()
 

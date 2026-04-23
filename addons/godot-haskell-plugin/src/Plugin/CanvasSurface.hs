@@ -117,9 +117,7 @@ _draw cs gvArgs = do
                 writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) (fullRedrawFramesRemaining - 1)
             drawResults <- mapM (drawWlrSurface cs) depthFirstSurfaces -- Just draw everything
             when (not (and drawResults)) $ -- when at least one surface didn't have a valid texture this frame
-              atomically $ do
-                writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
-                writeTVar (gsvs ^. gsvsIsDamaged) True
+              markGSVSForFullRedraws gsvs
             return ()
           False -> do
             -- Only draw the damaged regions
@@ -171,9 +169,7 @@ _draw cs gvArgs = do
         -- Don't draw when surfaceTexture is NULL to defend against potential flickering
         case validateObject surfaceTexture of
           Nothing -> do
-            atomically $ do
-              writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
-              writeTVar (gsvs ^. gsvsIsDamaged) True
+            markGSVSForFullRedraws gsvs
             return False
           Just validSurfaceTexture -> do
             G.draw_texture cs validSurfaceTexture renderPosition modulateColor (coerce nullPtr)
@@ -196,9 +192,7 @@ _draw cs gvArgs = do
       validateSurfaceE wlrSurface
       do withGodotRef (G.get_texture wlrSurface :: IO GodotTexture) $ \surfaceTexture ->
            case (validateObject surfaceTexture) of
-             Nothing -> atomically $ do
-               writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
-               writeTVar (gsvs ^. gsvsIsDamaged) True
+             Nothing -> markGSVSForFullRedraws gsvs
              Just surfaceTexture -> do
                  gsvsTransparency <- getTransparency cs
                  modulateColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` gsvsTransparency) :: IO GodotColor
