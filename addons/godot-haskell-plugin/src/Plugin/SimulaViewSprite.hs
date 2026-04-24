@@ -884,17 +884,47 @@ _process self gvArgs = do
   debugPutStrLn "Plugin.SimulaViewSprite._process"
   simulaView <- readTVarIO (self ^. gsvsView)
   mapped <- atomically $ readTVar (simulaView ^. svMapped)
-  isAtTargetDims <- readTVarIO (self ^. gsvsIsAtTargetDims)
-  case (isAtTargetDims, mapped) of
-    (False, True) -> do
-      isAtTargetDimsNow <- isAtTargetDimensions self
-      if isAtTargetDimsNow then (atomically $ writeTVar (self ^. gsvsIsAtTargetDims) True) else (return ())
-    (True, True) -> updateSimulaViewSprite self
-    _ -> return ()
+  when mapped $ do
+    isAtTargetDims <- readTVarIO (self ^. gsvsIsAtTargetDims)
+    isAtTargetDimsNow <-
+      if isAtTargetDims
+        then return True
+        else resizeToTargetDimsIfBigEnough self
+    atomically $ writeTVar (self ^. gsvsIsAtTargetDims) isAtTargetDimsNow
+
+    -- First presentation of gsvs must not depend on configure-size acceptance.
+    -- Some XDG popups commit real buffers while refusing Simula's requested
+    -- target size, so they still need a nonzero QuadMesh/Viewport immediately.
+    hasPresentableSize <- hasPresentableSurfaceSize self
+    when (hasPresentableSize || isAtTargetDimsNow) $
+      updateSimulaViewSprite self
   mapM_ Api.godot_variant_destroy gvArgs
   return ()
-  where isAtTargetDimensions :: GodotSimulaViewSprite -> IO Bool
-        isAtTargetDimensions gsvs = do
+  where hasPresentableSurfaceSize :: GodotSimulaViewSprite -> IO Bool
+        hasPresentableSurfaceSize gsvs = do
+          simulaView <- readTVarIO (gsvs ^. gsvsView)
+          let eitherSurface = (simulaView ^. svWlrEitherSurface)
+          case eitherSurface of
+            Left wlrXdgSurface -> do
+              wlrXdgSurface <- validateSurfaceE wlrXdgSurface
+              V2 _ (V2 xdgWidth xdgHeight) <- G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+              withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
+                (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+                return $
+                  ((round xdgWidth) > 0 && (round xdgHeight) > 0)
+                    || (bufferWidth > 0 && bufferHeight > 0)
+            Right wlrXWaylandSurface -> do
+              wlrXWaylandSurface <- validateSurfaceE wlrXWaylandSurface
+              surfaceWidth <- G.get_width wlrXWaylandSurface
+              surfaceHeight <- G.get_height wlrXWaylandSurface
+              withGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
+                (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+                return $
+                  (surfaceWidth > 0 && surfaceHeight > 0)
+                    || (bufferWidth > 0 && bufferHeight > 0)
+
+        resizeToTargetDimsIfBigEnough :: GodotSimulaViewSprite -> IO Bool
+        resizeToTargetDimsIfBigEnough gsvs = do
           cb <- readTVarIO (gsvs ^. gsvsCanvasBase)
           renderTargetBase <- readTVarIO (cb ^. cbViewport)
           cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
