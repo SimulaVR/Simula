@@ -1494,7 +1494,6 @@ _input gss gvArgs@[eventGV] = do
              unless screenshotMode $ do
                processPointerButtonEvent gsvs (Button True G.BUTTON_WHEEL_DOWN)
          (Just gsvs, _) -> do
-           putStrLn $ "Mouse event button: " ++ show button
            screenshotMode <- readTVarIO (gsvs ^. gsvsScreenshotMode)
            case screenshotMode of
              False -> processPointerButtonEvent gsvs (Button pressed button)
@@ -1679,7 +1678,6 @@ processKeypress gss modifiers keycode isPressed = do
         (Just remappedKeycode) -> remappedKeycode
         Nothing                -> keycode
 
-  putStrLn $ "modifiers: " ++ (show modifiers)
   -- putStrLn $ "keycode': " ++ (show keycode')
 
   wasdMode <- readTVarIO (gss ^. gssWasdMode)

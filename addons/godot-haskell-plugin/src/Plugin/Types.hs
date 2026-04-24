@@ -175,10 +175,9 @@ fullRedrawFramesStartingAmount :: Int
 fullRedrawFramesStartingAmount = 2
 
 markGSVSForFullRedraws :: GodotSimulaViewSprite -> IO ()
-markGSVSForFullRedraws gsvs =
-  atomically $ do
-    writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
-    writeTVar (gsvs ^. gsvsIsDamaged) True
+markGSVSForFullRedraws gsvs = do
+  atomically $ writeTVar (_gsvsFullRedrawFramesRemaining gsvs) fullRedrawFramesStartingAmount
+  atomically $ writeTVar (_gsvsIsDamaged gsvs) True
 
 data ResizeMethod = Zoom | Horizontal | Vertical deriving (Eq)
 
@@ -1665,7 +1664,6 @@ setShader gsvs tres = do
   debugPutStrLn "Plugin.Types.setShader"
   currentShaderPath <- readTVarIO (gsvs ^. gsvsShaderPath)
   unless (currentShaderPath == Just tres) $ do
-    putStrLn $ "setShader: " ++ tres
     shader <- load GodotShader "Shader" (Data.Text.pack tres)
     case shader of
       Just shader ->

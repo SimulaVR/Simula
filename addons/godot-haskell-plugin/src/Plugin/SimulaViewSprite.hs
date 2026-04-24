@@ -62,8 +62,7 @@ instance Eq GodotSimulaViewSprite where
 instance NativeScript GodotSimulaViewSprite where
   className = "SimulaViewSprite"
   classInit obj =
-    do putStrLn "SimulaViewSprite()"
-       GodotSimulaViewSprite (safeCast obj)
+    do GodotSimulaViewSprite (safeCast obj)
                       <$> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar False)
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
@@ -1325,7 +1324,7 @@ handle_unmap_base self [wlrXWaylandSurfaceVariant] = do
 
   case maybeGSVSParent of
     Just parentGSVS -> do -- Delete the free child from the parentGSVS and the gssFreeChildren map
-                  putStrLn "handle_unmap_base: free child path"
+                  -- putStrLn "handle_unmap_base: free child path"
                   freeChildren <- readTVarIO (parentGSVS ^. gsvsFreeChildren)
                   let freeChildrenNew = Data.List.delete wlrXWaylandSurface freeChildren
                   atomically $ writeTVar (parentGSVS ^. gsvsFreeChildren) freeChildrenNew
@@ -1333,7 +1332,8 @@ handle_unmap_base self [wlrXWaylandSurfaceVariant] = do
                   atomically $ writeTVar (gss ^. gssFreeChildren) freeChildrenMapNew
 
 
-    Nothing -> do putStrLn "handle_unmap_base: normal child path"
+    Nothing -> do
+                  -- putStrLn "handle_unmap_base: normal child path"
                   simulaView <- readTVarIO (self ^. gsvsView)
                   atomically $ writeTVar (simulaView ^. svMapped) False
 
