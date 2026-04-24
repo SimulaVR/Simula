@@ -826,19 +826,19 @@ _handle_map gsvs _ = do
   case eitherSurface of
     Left wlrXdgSurface -> do
       validateSurfaceE wlrXdgSurface
-      putStrLn $ "Refraining from setting wlrXdgSurface position"
+      -- putStrLn $ "Refraining from setting wlrXdgSurface position"
+      return ()
     Right wlrXWaylandSurface -> do -- Safeguard to prevent potentially weird behavior
                                    validateSurfaceE wlrXWaylandSurface
                                    zero <- toLowLevel (V2 0 0)
                                    G.set_xy wlrXWaylandSurface zero
+                                   return ()
 
   G.set_process gsvs True
   G.set_process_input gsvs True
   atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
   atomically $ writeTVar (_gsvsShouldMove gsvs) True
 
-  putStr "Mapping surface "
-  print (safeCast @GodotObject gsvs)
   -- Add the gsvs as a child to the current workspace
   (workspace, workspaceStr) <- readTVarIO (gss ^. gssWorkspace)
   G.add_child ((safeCast workspace) :: GodotNode)
