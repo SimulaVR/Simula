@@ -1271,6 +1271,16 @@ getParentGSVS gss wlrXWaylandSurface = do
                                                           return (Just gsvsParent)
       return maybeGSVSParent
 
+markLikelyVisibleGSVSForFullRedraws :: GodotSimulaServer -> IO ()
+markLikelyVisibleGSVSForFullRedraws gss = do
+  debugPutStrLn "Plugin.SimulaViewSprite.markLikelyVisibleGSVSForFullRedraws"
+  maybeKeyboardFocusedGSVS <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
+  maybeActiveCursorGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
+  mapM_ markGSVSForFullRedraws $ nub $ catMaybes -- removes Nothing's and duplicates from the list
+    [ maybeKeyboardFocusedGSVS
+    , maybeActiveCursorGSVS
+    ]
+
 handle_map_child :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_map_child gsvsInvisible gvArgs@[wlrXWaylandSurfaceVariant] = do
   debugPutStrLn "Plugin.SimulaViewSprite.handle_map_child"
@@ -1339,7 +1349,9 @@ handle_unmap_child self gvArgs@[wlrXWaylandSurfaceVariant] = do
     (fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface) >>= validateSurfaceE
   maybeParentGSVS <- getParentGSVS gss wlrXWaylandSurface
   case maybeParentGSVS of
-    Nothing -> putStrLn "handle_unmap_child: no parent GSVS found"
+    Nothing -> do
+      putStrLn "handle_unmap_child: no parent GSVS found"
+      markLikelyVisibleGSVSForFullRedraws gss
     Just parentGSVS -> markGSVSForFullRedraws parentGSVS
   atomically $ writeTVar (self ^. gsvsIsDamaged) True
   handle_unmap_base self gvArgs
@@ -1353,7 +1365,9 @@ handle_unmap_free_child self gvArgs@[wlrXWaylandSurfaceVariant] = do
     (fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface) >>= validateSurfaceE
   maybeParentGSVS <- getParentGSVS gss wlrXWaylandSurface
   case maybeParentGSVS of
-    Nothing -> putStrLn "handle_unmap_free_child: no parent GSVS found"
+    Nothing -> do
+      debugPutStrLn "Plugin.SimulaViewSprite.handle_unmap_free_child: no parent GSVS found"
+      markLikelyVisibleGSVSForFullRedraws gss
     Just parentGSVS -> markGSVSForFullRedraws parentGSVS
   atomically $ writeTVar (self ^. gsvsIsDamaged) True
   handle_unmap_base self gvArgs
