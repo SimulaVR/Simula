@@ -320,11 +320,13 @@ updateQuadShader :: GodotSimulaViewSprite -> SpriteDimensions -> (Int, Int) -> I
 updateQuadShader gsvs (SpriteDimensions (targetWidth, targetHeight)) (spilloverWidth, spilloverHeight) = do
   gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
   fullRedrawFramesRemaining <- readTVarIO (gsvs ^. gsvsFullRedrawFramesRemaining)
+  surfaceNeedsAlphaBlend <- surfaceHasInsetGeometry gsvs
   let shouldUseTransparentShader =
         (gsvsTransparency < 1)
         || (fullRedrawFramesRemaining > 0)
         || (spilloverWidth > targetWidth)
         || (spilloverHeight > targetHeight)
+        || surfaceNeedsAlphaBlend
   setShader gsvs $
     if shouldUseTransparentShader
       then "res://addons/godot-haskell-plugin/TextShader.tres"
@@ -861,7 +863,15 @@ _handle_map gsvs _ = do
   addChild gsvs viewportBase
   addChild viewportBase cb
 
-  markGSVSForFullRedraws gsvs
+  surfaceIsParented <- surfaceHasParent eitherSurface
+  if surfaceIsParented
+    -- This hack is to accomodate parented XDG popups which spawn as toplevels and
+    -- which for some reason generate weird artifacts unless we redraw 23 frames deep
+    -- (according to one test). I'm setting to 30 in case other scenarios need more
+    -- redraws. These popups seem to be rare (basically help menus), so in practice
+    -- this path won't be used that often.
+    then markGSVSForFullRedrawFrames gsvs 30
+    else markGSVSForFullRedraws gsvs
 
   setInFrontOfUser gsvs (-2)
 
@@ -872,6 +882,19 @@ _handle_map gsvs _ = do
   atomically $ writeTVar (simulaView ^. svMapped) True
 
   return ()
+
+surfaceHasParent :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO Bool
+surfaceHasParent eitherSurface =
+  case eitherSurface of
+    Left wlrXdgSurface -> do
+      wlrXdgSurface <- validateSurfaceE wlrXdgSurface
+      toplevel <- G.get_xdg_toplevel wlrXdgSurface >>= validateSurfaceE
+      parent <- G.get_parent toplevel :: IO GodotWlrXdgToplevel
+      return $ isJust (validateObject parent)
+    Right wlrXWaylandSurface -> do
+      wlrXWaylandSurface <- validateSurfaceE wlrXWaylandSurface
+      parent <- G.get_parent wlrXWaylandSurface :: IO GodotWlrXWaylandSurface
+      return $ isJust (validateObject parent)
 
 handle_unmap :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_unmap self args@[wlrXWaylandSurfaceVariant] = do

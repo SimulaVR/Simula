@@ -175,8 +175,12 @@ fullRedrawFramesStartingAmount :: Int
 fullRedrawFramesStartingAmount = 2
 
 markGSVSForFullRedraws :: GodotSimulaViewSprite -> IO ()
-markGSVSForFullRedraws gsvs = do
-  atomically $ writeTVar (_gsvsFullRedrawFramesRemaining gsvs) fullRedrawFramesStartingAmount
+markGSVSForFullRedraws gsvs =
+  markGSVSForFullRedrawFrames gsvs fullRedrawFramesStartingAmount
+
+markGSVSForFullRedrawFrames :: GodotSimulaViewSprite -> Int -> IO ()
+markGSVSForFullRedrawFrames gsvs frameCount = do
+  atomically $ writeTVar (_gsvsFullRedrawFramesRemaining gsvs) frameCount
   atomically $ writeTVar (_gsvsIsDamaged gsvs) True
 
 data ResizeMethod = Zoom | Horizontal | Vertical deriving (Eq)
@@ -958,7 +962,7 @@ initializeRenderTarget gsvs viewportType = do
   G.set_size renderTarget pixelDimensionsOfWlrSurface
 
   case viewportType of
-    ViewportSurface -> G.set_clear_mode renderTarget G.CLEAR_MODE_NEVER
+    ViewportSurface -> G.set_clear_mode renderTarget G.CLEAR_MODE_ONLY_NEXT_FRAME
     ViewportBase -> G.set_clear_mode renderTarget G.CLEAR_MODE_ALWAYS
   G.set_transparent_background renderTarget True
 
@@ -984,6 +988,33 @@ getBufferDimensions wlrSurface = do
           width <- G.get_width wlrSurfaceState
           height <-G.get_height wlrSurfaceState
           return (width, height)
+
+surfaceHasInsetGeometry :: GodotSimulaViewSprite -> IO Bool
+surfaceHasInsetGeometry gsvs = do
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  case simulaView ^. svWlrEitherSurface of
+    Left wlrXdgSurface -> do
+      wlrXdgSurface <- validateSurfaceE wlrXdgSurface
+      V2 (V2 geomX geomY) (V2 geomWidth geomHeight) <-
+        G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+      withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
+        (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+        return $
+          (round geomX /= 0)
+            || (round geomY /= 0)
+            || (round geomWidth /= bufferWidth)
+            || (round geomHeight /= bufferHeight)
+    Right wlrXWaylandSurface -> do
+      wlrXWaylandSurface <- validateSurfaceE wlrXWaylandSurface
+      V2 (V2 geomX geomY) (V2 geomWidth geomHeight) <-
+        G.get_geometry wlrXWaylandSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+      withGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
+        (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+        return $
+          (round geomX /= 0)
+            || (round geomY /= 0)
+            || (round geomWidth /= bufferWidth)
+            || (round geomHeight /= bufferHeight)
 
 newCanvasSurface :: GodotSimulaViewSprite -> IO CanvasSurface
 newCanvasSurface gsvs = do

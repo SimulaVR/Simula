@@ -12,7 +12,6 @@ module Plugin.CanvasSurface where
 
 import Control.Monad
 
-import Data.List
 import Data.Maybe
 import Control.Exception
 
@@ -92,9 +91,41 @@ _process self gvArgs = do
   gsvs <- readTVarIO (self ^. csGSVS)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   mapped <- readTVarIO (simulaView ^. svMapped)
-  when mapped $ G.update self
+  when mapped $ do
+    prepareViewportForDraw self gsvs
+    G.update self
   mapM_ Api.godot_variant_destroy gvArgs
   return ()
+
+prepareViewportForDraw :: CanvasSurface -> GodotSimulaViewSprite -> IO ()
+prepareViewportForDraw cs gsvs = do
+  fullRedrawFramesRemaining <- readTVarIO (gsvs ^. gsvsFullRedrawFramesRemaining)
+  when (fullRedrawFramesRemaining > 0) $
+    whenM (surfaceHasInsetGeometry gsvs) $ do
+      viewport <- readTVarIO (cs ^. csViewport)
+      G.set_clear_mode viewport G.CLEAR_MODE_ONLY_NEXT_FRAME
+      return ()
+
+getAccumulatedDamageRegions :: GodotSimulaViewSprite -> [(GodotWlrSurface, Int, Int)] -> IO [GodotRect2]
+getAccumulatedDamageRegions gsvs depthFirstSurfaces = do
+  let surfaces = fmap (\(wlrSurface, _, _) -> wlrSurface) depthFirstSurfaces
+  let xs = fmap (\(_, x, _) -> x) depthFirstSurfaces
+  let ys = fmap (\(_, _, y) -> y) depthFirstSurfaces
+  surfacesVariants <- mapM (\surf -> toLowLevel $ toVariant surf) surfaces
+  let xsV = fmap toVariant xs
+  let ysV = fmap toVariant ys
+  xsVariant <- mapM toLowLevel xsV :: IO [GodotVariant]
+  ysVariant <- mapM toLowLevel ysV :: IO [GodotVariant]
+  surfacesVariantsArray <- toLowLevel surfacesVariants
+  xsVariantArray <- toLowLevel xsVariant
+  ysVariantArray <- toLowLevel ysVariant
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  let eitherSurface = simulaView ^. svWlrEitherSurface
+  regionsArray <- withWlrSurface eitherSurface $ \wlrSurfaceParent ->
+    G.accumulate_damage_regions wlrSurfaceParent surfacesVariantsArray xsVariantArray ysVariantArray
+  regions <- fromLowLevel regionsArray >>= mapM fromGodotVariant
+  mapM Api.godot_array_destroy [surfacesVariantsArray, xsVariantArray, ysVariantArray, regionsArray]
+  return regions
 
 _draw :: CanvasSurface -> [GodotVariant] -> IO ()
 _draw cs gvArgs = do
@@ -117,37 +148,18 @@ _draw cs gvArgs = do
                 writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) (fullRedrawFramesRemaining - 1)
             drawResults <- mapM (drawWlrSurface cs) depthFirstSurfaces -- Just draw everything
             when (not (and drawResults)) $ -- when at least one surface didn't have a valid texture this frame
-              markGSVSForFullRedraws gsvs
+              markGSVSForFullRedrawFrames gsvs fullRedrawFramesRemaining -- bump to the next frame while retaining our fullRedrawFramesRemaining amount
             return ()
           False -> do
             -- Only draw the damaged regions
-            let surfaces = fmap (tuple1) depthFirstSurfaces
-            let xs = fmap (tuple2) depthFirstSurfaces
-            let ys = fmap (tuple3) depthFirstSurfaces
-            surfacesVariants <- mapM (\surf -> toLowLevel $ toVariant $ surf) surfaces
-            let xsV = fmap toVariant xs
-            let ysV = fmap toVariant ys
-            xsVariant <- mapM toLowLevel xsV :: IO [GodotVariant]
-            ysVariant <- mapM toLowLevel ysV :: IO [GodotVariant]
-            surfacesVariantsArray <- toLowLevel surfacesVariants
-            xsVariantArray <- toLowLevel xsVariant
-            ysVariantArray <- toLowLevel ysVariant
-            let eitherSurface = (simulaView ^. svWlrEitherSurface)
-            regionsArray <- withWlrSurface eitherSurface $ \wlrSurfaceParent ->
-              G.accumulate_damage_regions wlrSurfaceParent surfacesVariantsArray xsVariantArray ysVariantArray
-            regions <- fromLowLevel regionsArray >>= mapM fromGodotVariant
+            regions <- getAccumulatedDamageRegions gsvs depthFirstSurfaces
             atomically $ writeTVar (gsvs ^. gsvsDamagedRegions) regions
 
             -- Draw surfaces
             mapM (drawWlrSurfaceRegions cs regions) depthFirstSurfaces
-            mapM Api.godot_array_destroy [surfacesVariantsArray, xsVariantArray, ysVariantArray, regionsArray]
             return ())
   mapM_ Api.godot_variant_destroy gvArgs
   where
-    tuple1 (a1, b2, c3) = a1
-    tuple2 (a1, b2, c3) = b2
-    tuple3 (a1, b2, c3) = c3
-
     savePngCS :: (GodotWlrSurface, CanvasSurface) -> IO ()
     savePngCS arg@((wlrSurface, cs)) = do
       debugPutStrLn "Plugin.CanvasSurface.savePngCS"
