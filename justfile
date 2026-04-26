@@ -51,6 +51,11 @@ build-godot-watch:
 build-godot-openxr:
   nix develop ./submodules/godot-openxr# --command bash -c "cd ./submodules/godot-openxr && just build && just install"
 
+build-godot-haskell-api:
+  cd ./submodules/godot && ./bin/godot.x11.tools.64 --gdnative-generate-json-api ./api.json && cd -
+  cd ./submodules/godot-haskell-cabal/classgen && cabal run exe:godot-haskell-classgen -- ../../godot/api.json && cd -
+  cd ./submodules/godot-haskell-cabal && cp -r src src.bak && rsync -a classgen/src/ src/ && cd -
+
 build-godot-haskell-plugin:
   cd ./addons/godot-haskell-plugin && just build && cd -
 
