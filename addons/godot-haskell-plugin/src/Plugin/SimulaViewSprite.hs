@@ -73,6 +73,7 @@ instance NativeScript GodotSimulaViewSprite where
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar Nothing)
                       <*> atomically (newTVar [])
+                      <*> atomically (newTVar [])
                       <*> atomically (newTVar 1.0)
                       <*> atomically (newTVar False)
                       <*> atomically (newTVar (Nothing, Nothing))
@@ -99,6 +100,7 @@ instance NativeScript GodotSimulaViewSprite where
     , func NoRPC "handle_map_free_child" (catchGodot handle_map_free_child)
     , func NoRPC "handle_map_child" (catchGodot handle_map_child)
     , func NoRPC "handle_set_parent" (catchGodot handle_set_parent)
+    , func NoRPC "handle_xdg_set_parent" (catchGodot handle_xdg_set_parent)
     , func NoRPC "handle_new_popup" (catchGodot handle_new_popup)
     , func NoRPC "handle_window_menu" (catchGodot handle_window_menu)
     , func NoRPC "handle_wlr_surface_new_subsurface" (catchGodot handle_wlr_surface_new_subsurface)
@@ -296,7 +298,7 @@ setTargetDimensions gsvs = do
   transOld <- readTVarIO (gsvs ^. gsvsTransparency)
   case maybeSpilloverDimsOld of
     Nothing -> do
-      if (spilloverWidth > 0) then atomically $ writeTVar (gsvs ^. gsvsSpilloverDims) (Just settledDimensions) else return ()
+      if (spilloverWidth > 0) then atomically $ writeTVar (gsvs ^. gsvsSpilloverDims) (Just spilloverDims) else return ()
     Just spilloverDimsOld@(oldSpilloverWidth, oldSpilloverHeight) -> do
       case ((oldSpilloverWidth /= spilloverWidth) || (oldSpilloverHeight /= spilloverHeight), resizedLastFrame) of
         (False, _) -> return ()
@@ -320,7 +322,7 @@ updateQuadShader :: GodotSimulaViewSprite -> SpriteDimensions -> (Int, Int) -> I
 updateQuadShader gsvs (SpriteDimensions (targetWidth, targetHeight)) (spilloverWidth, spilloverHeight) = do
   gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
   fullRedrawFramesRemaining <- readTVarIO (gsvs ^. gsvsFullRedrawFramesRemaining)
-  surfaceNeedsAlphaBlend <- surfaceHasInsetGeometry gsvs
+  surfaceNeedsAlphaBlend <- gsvsViewOrChildrenHaveInsetGeometry gsvs
   let shouldUseTransparentShader =
         (gsvsTransparency < 1)
         || (fullRedrawFramesRemaining > 0)
@@ -527,9 +529,11 @@ processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)
                maybeSurfaceAndCoords <-
                  case wlrEitherSurface of
                    Right godotWlrXWaylandSurface -> do
-                     getXWaylandSubsurfaceAndCoords gsvs godotWlrXWaylandSurface surfaceLocalCoords
+                     fmap (\(wlrSurface, coords) -> (wlrSurface, coords, Nothing)) <$>
+                       getXWaylandSubsurfaceAndCoords gsvs godotWlrXWaylandSurface surfaceLocalCoords
                    Left godotWlrXdgSurface ->
-                     getXdgSubsurfaceAndCoords godotWlrXdgSurface surfaceLocalCoords
+                     fmap (\(wlrSurface, coords, focusedXdgSurface) -> (wlrSurface, coords, Just focusedXdgSurface)) <$>
+                       getXdgSubsurfaceAndCoordsAttachedAware gsvs godotWlrXdgSurface surfaceLocalCoords
                case maybeSurfaceAndCoords of
                  Nothing -> do
                    wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
@@ -539,7 +543,7 @@ processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)
                      Motion -> return ()
                      Button _ _ -> pointerNotifyButton wlrSeat evt
                    pointerNotifyFrame wlrSeat
-                 Just (godotWlrSurface, subSurfaceLocalCoords@(SubSurfaceLocalCoordinates (ssx, ssy))) ->
+                 Just (godotWlrSurface, subSurfaceLocalCoords@(SubSurfaceLocalCoordinates (ssx, ssy)), maybeFocusedXdgSurface) ->
                    (do
                      wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
 
@@ -548,6 +552,10 @@ processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)
                          pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
                          pointerNotifyMotion wlrSeat subSurfaceLocalCoords
                        Button _ _ -> do
+                         -- Keyboard focus/activation goes to the XDG toplevel root for this hit.
+                         -- Pointer events go to the concrete wlr_surface returned by surface_at,
+                         -- which may be a subsurface/leaf rather than the XDG root itself.
+                         mapM_ (keyboardFocusAnXdgRootSurfaceFromGSVS gsvs) maybeFocusedXdgSurface
                          pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
                          pointerNotifyMotion wlrSeat subSurfaceLocalCoords
                          debugPrintMouseButtonIntercept evt godotWlrSurface surfaceLocalCoords subSurfaceLocalCoords
@@ -645,8 +653,9 @@ debugPrintPointerSeatState gsvs inputEventType surfaceLocalCoords@(SurfaceLocalC
         case wlrEitherSurface of
           Right godotWlrXWaylandSurface ->
             getXWaylandSubsurfaceAndCoords gsvs' godotWlrXWaylandSurface coords
-          Left godotWlrXdgSurface ->
-            getXdgSubsurfaceAndCoords godotWlrXdgSurface coords
+          Left godotWlrXdgSurface -> do
+            maybeHit <- getXdgSubsurfaceAndCoordsAttachedAware gsvs' godotWlrXdgSurface coords
+            return $ fmap (\(wlrSurface, subCoords, _) -> (wlrSurface, subCoords)) maybeHit
       case maybeSurfaceAndCoords of
         Nothing -> return "nothing"
         Just (godotWlrSurface, SubSurfaceLocalCoordinates (ssx, ssy)) ->
@@ -767,6 +776,42 @@ getXdgSubsurfaceAndCoords wlrXdgSurface cursorCoords@(SurfaceLocalCoordinates (s
           let ssCoordinates = SubSurfaceLocalCoordinates (ssx, ssy)
           return $ Just (validWlrSurfaceSubSurface, ssCoordinates)
 
+getXdgSubsurfaceAndCoordsAttachedAware :: GodotSimulaViewSprite -> GodotWlrXdgSurface -> SurfaceLocalCoordinates -> IO (Maybe (GodotWlrSurface, SubSurfaceLocalCoordinates, GodotWlrXdgSurface))
+getXdgSubsurfaceAndCoordsAttachedAware gsvs rootWlrXdgSurface compositionCoords@(SurfaceLocalCoordinates (sx, sy)) = do
+  debugPutStrLn "Plugin.SimulaViewSprite.getXdgSubsurfaceAndCoordsAttachedAware"
+  (offsetX, offsetY) <- getGSVSSurfacesCoordinateOffsetFromOrigin gsvs
+  let rootLocalCoords =
+        SurfaceLocalCoordinates
+          ( sx - fromIntegral offsetX
+          , sy - fromIntegral offsetY
+          )
+  maybeAttachedHit <- getAttachedXdgSubsurfaceAndCoords gsvs rootLocalCoords
+  case maybeAttachedHit of
+    Just hit -> return $ Just hit
+    Nothing -> do
+      maybeRootHit <- getXdgSubsurfaceAndCoords rootWlrXdgSurface rootLocalCoords
+      return $ fmap (\(wlrSurface, coords) -> (wlrSurface, coords, rootWlrXdgSurface)) maybeRootHit
+
+getAttachedXdgSubsurfaceAndCoords :: GodotSimulaViewSprite -> SurfaceLocalCoordinates -> IO (Maybe (GodotWlrSurface, SubSurfaceLocalCoordinates, GodotWlrXdgSurface))
+getAttachedXdgSubsurfaceAndCoords gsvs surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)) = do
+  debugPutStrLn "Plugin.SimulaViewSprite.getAttachedXdgSubsurfaceAndCoords"
+  attachedChildren <- readTVarIO (gsvs ^. gsvsAttachedXdgChildren)
+  findAttachedHit (Data.List.reverse attachedChildren)
+  where
+    findAttachedHit [] = return Nothing
+    findAttachedHit (childWlrXdgSurface:remainingChildren) = do
+      (childRootX, childRootY) <- getAttachedXdgChildRootOffset gsvs childWlrXdgSurface
+      let childLocalCoords =
+            SurfaceLocalCoordinates
+              ( sx - fromIntegral childRootX
+              , sy - fromIntegral childRootY
+              )
+      maybeChildHit <- getXdgSubsurfaceAndCoords childWlrXdgSurface childLocalCoords
+      case maybeChildHit of
+        Nothing -> findAttachedHit remainingChildren
+        Just (wlrSurface, subSurfaceLocalCoords) ->
+          return $ Just (wlrSurface, subSurfaceLocalCoords, childWlrXdgSurface)
+
 keyboardNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> IO ()
 keyboardNotifyEnter wlrSeat wlrSurface = do
   debugPutStrLn "Plugin.SimulaViewSprite.keyboardNotifyEnter"
@@ -827,15 +872,29 @@ _handle_map gsvs _ = do
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
   case eitherSurface of
     Left wlrXdgSurface -> do
+      wlrXdgSurface <- validateSurfaceE wlrXdgSurface
+      maybeParentGSVS <- getXdgParentGSVS gss wlrXdgSurface
+      case maybeParentGSVS of
+        Just parentGSVS -> mapAsAttachedXdgToplevel gsvs simulaView wlrXdgSurface parentGSVS
+        Nothing -> mapAsStandaloneSurface gsvs simulaView eitherSurface
+    Right _ ->
+      mapAsStandaloneSurface gsvs simulaView eitherSurface
+
+  return ()
+
+mapAsStandaloneSurface :: GodotSimulaViewSprite -> SimulaView -> Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO ()
+mapAsStandaloneSurface gsvs simulaView eitherSurface = do
+  debugPutStrLn "Plugin.SimulaViewSprite.mapAsStandaloneSurface"
+  gss <- readTVarIO (gsvs ^. gsvsServer)
+  case eitherSurface of
+    Left wlrXdgSurface -> do
       validateSurfaceE wlrXdgSurface
-      -- putStrLn $ "Refraining from setting wlrXdgSurface position"
       return ()
     Right wlrXWaylandSurface -> do -- Safeguard to prevent potentially weird behavior
-                                   validateSurfaceE wlrXWaylandSurface
-                                   zero <- toLowLevel (V2 0 0)
-                                   G.set_xy wlrXWaylandSurface zero
-                                   return ()
-
+      validateSurfaceE wlrXWaylandSurface
+      zero <- toLowLevel (V2 0 0)
+      G.set_xy wlrXWaylandSurface zero
+      return ()
   G.set_process gsvs True
   G.set_process_input gsvs True
   atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
@@ -883,23 +942,108 @@ _handle_map gsvs _ = do
 
   return ()
 
+mapAsAttachedXdgToplevel :: GodotSimulaViewSprite -> SimulaView -> GodotWlrXdgSurface -> GodotSimulaViewSprite -> IO ()
+mapAsAttachedXdgToplevel childGSVS simulaView childWlrXdgSurface parentGSVS = do
+  debugPutStrLn "Plugin.SimulaViewSprite.mapAsAttachedXdgToplevel"
+  gss <- readTVarIO (childGSVS ^. gsvsServer)
+  G.set_process childGSVS False
+  G.set_process_input childGSVS False
+  atomically $ do
+    modifyTVar' (gss ^. gssViews) (M.insert simulaView childGSVS)
+    writeTVar (simulaView ^. svMapped) True
+    writeTVar (childGSVS ^. gsvsShouldMove) False
+    writeTVar (childGSVS ^. gsvsIsAtTargetDims) True
+  attachXdgChildToParent gss parentGSVS childWlrXdgSurface
+  markGSVSForFullRedrawFrames parentGSVS 30
+  keyboardFocusAnXdgRootSurfaceFromGSVS parentGSVS childWlrXdgSurface
+
+attachXdgChildToParent :: GodotSimulaServer -> GodotSimulaViewSprite -> GodotWlrXdgSurface -> IO ()
+attachXdgChildToParent gss parentGSVS childWlrXdgSurface = do
+  debugPutStrLn "Plugin.SimulaViewSprite.attachXdgChildToParent"
+  attachedMap <- readTVarIO (gss ^. gssAttachedXdgChildren)
+  case M.lookup childWlrXdgSurface attachedMap of
+    Just oldParentGSVS | oldParentGSVS /= parentGSVS -> do
+      detachXdgChildFromParent gss childWlrXdgSurface
+      return ()
+    _ -> return ()
+  attachedChildren <- readTVarIO (parentGSVS ^. gsvsAttachedXdgChildren)
+  let attachedChildrenNew = Data.List.delete childWlrXdgSurface attachedChildren ++ [childWlrXdgSurface]
+  atomically $ do
+    writeTVar (parentGSVS ^. gsvsAttachedXdgChildren) attachedChildrenNew
+    modifyTVar' (gss ^. gssAttachedXdgChildren) (M.insert childWlrXdgSurface parentGSVS)
+
+detachXdgChildFromParent :: GodotSimulaServer -> GodotWlrXdgSurface -> IO (Maybe GodotSimulaViewSprite)
+detachXdgChildFromParent gss childWlrXdgSurface = do
+  debugPutStrLn "Plugin.SimulaViewSprite.detachXdgChildFromParent"
+  attachedMap <- readTVarIO (gss ^. gssAttachedXdgChildren)
+  case M.lookup childWlrXdgSurface attachedMap of
+    Nothing -> return Nothing
+    Just parentGSVS -> do
+      attachedChildren <- readTVarIO (parentGSVS ^. gsvsAttachedXdgChildren)
+      let attachedChildrenNew = Data.List.delete childWlrXdgSurface attachedChildren
+      atomically $ do
+        writeTVar (parentGSVS ^. gsvsAttachedXdgChildren) attachedChildrenNew
+        modifyTVar' (gss ^. gssAttachedXdgChildren) (M.delete childWlrXdgSurface)
+      markGSVSForFullRedrawFrames parentGSVS 30
+      return $ Just parentGSVS
+
+detachXWaylandFreeChildFromParent :: GodotSimulaServer -> GodotWlrXWaylandSurface -> IO (Maybe GodotSimulaViewSprite)
+detachXWaylandFreeChildFromParent gss childWlrXWaylandSurface = do
+  debugPutStrLn "Plugin.SimulaViewSprite.detachXWaylandFreeChildFromParent"
+  freeChildrenMap <- readTVarIO (gss ^. gssFreeChildren)
+  case M.lookup childWlrXWaylandSurface freeChildrenMap of
+    Nothing -> return Nothing
+    Just parentGSVS -> do
+      freeChildren <- readTVarIO (parentGSVS ^. gsvsFreeChildren)
+      let freeChildrenNew = Data.List.delete childWlrXWaylandSurface freeChildren
+      atomically $ do
+        writeTVar (parentGSVS ^. gsvsFreeChildren) freeChildrenNew
+        modifyTVar' (gss ^. gssFreeChildren) (M.delete childWlrXWaylandSurface)
+      markGSVSForFullRedrawFrames parentGSVS 30
+      return $ Just parentGSVS
+
+-- The second argument is the XDG root surface that should receive keyboard
+-- focus/activation. It is either the XDG surface wrapped by the SimulaView, or
+-- the root XDG surface of an attached parented XDG toplevel. We need this
+-- because the GSVS being clicked and the XDG toplevel that should receive focus
+-- are no longer always the same thing: clicking an attached child should focus
+-- that child, while clicking the parent/root area should focus the SimulaView's
+-- own XDG surface.
+keyboardFocusAnXdgRootSurfaceFromGSVS :: GodotSimulaViewSprite -> GodotWlrXdgSurface -> IO ()
+keyboardFocusAnXdgRootSurfaceFromGSVS spatialGSVS wlrXdgSurface = do
+  debugPutStrLn "Plugin.SimulaViewSprite.keyboardFocusAnXdgRootSurfaceFromGSVS"
+  gss <- readTVarIO (spatialGSVS ^. gsvsServer)
+  wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+  previousActiveCursorGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
+  when (previousActiveCursorGSVS /= Just spatialGSVS) $
+    mapM_ clearActiveSurface previousActiveCursorGSVS
+  atomically $ do
+    writeTVar (gss ^. gssKeyboardFocusedSprite) (Just spatialGSVS)
+    writeTVar (gss ^. gssActiveCursorGSVS) (Just spatialGSVS)
+  withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) $ \rootWlrSurface -> do
+    rootWlrSurface <- validateSurfaceE rootWlrSurface
+    G.reference rootWlrSurface
+    replaceActiveSurface spatialGSVS (Just rootWlrSurface)
+    toplevel <- G.get_xdg_toplevel wlrXdgSurface >>= validateSurfaceE
+    G.set_activated toplevel True
+    G.keyboard_notify_enter wlrSeat rootWlrSurface
+
 surfaceHasParent :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO Bool
 surfaceHasParent eitherSurface =
   case eitherSurface of
     Left wlrXdgSurface -> do
       wlrXdgSurface <- validateSurfaceE wlrXdgSurface
-      toplevel <- G.get_xdg_toplevel wlrXdgSurface >>= validateSurfaceE
-      parent <- G.get_parent toplevel :: IO GodotWlrXdgToplevel
-      return $ isJust (validateObject parent)
+      isJust <$> getXdgParentSurface wlrXdgSurface
     Right wlrXWaylandSurface -> do
       wlrXWaylandSurface <- validateSurfaceE wlrXWaylandSurface
       parent <- G.get_parent wlrXWaylandSurface :: IO GodotWlrXWaylandSurface
       return $ isJust (validateObject parent)
 
 handle_unmap :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
-handle_unmap self args@[wlrXWaylandSurfaceVariant] = do
+handle_unmap self args@[_xdgOrXwaylandSurfaceVariant] = do
   debugPutStrLn "Plugin.SimulaViewSprite.handle_unmap"
   handle_unmap_base self args
+  mapM_ Api.godot_variant_destroy args
 
 -- Passes control entirely to updateSimulaViewSprite.
 _process :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
@@ -1012,6 +1156,17 @@ _handle_destroy gsvs gvArgs@[_gsvsGV] = do
 
   clearActiveSurface gsvs
   clearCursorSurface gsvs
+  case eitherSurface of
+    Left wlrXdgSurface -> do
+      detachXdgChildFromParent gss wlrXdgSurface
+      attachedChildren <- readTVarIO (gsvs ^. gsvsAttachedXdgChildren)
+      forM_ attachedChildren $ \childWlrXdgSurface ->
+        detachXdgChildFromParent gss childWlrXdgSurface
+    Right wlrXWaylandSurface -> do
+      detachXWaylandFreeChildFromParent gss wlrXWaylandSurface
+      freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
+      forM_ freeChildren $ \childWlrXWaylandSurface ->
+        detachXWaylandFreeChildFromParent gss childWlrXWaylandSurface
   G.queue_free gsvs -- Queue the `gsvs` for destruction
   G.set_process gsvs False -- Remove the `simulaView ↦ gsvs` mapping from the gss
   atomically $ modifyTVar' (gss ^. gssViews) (M.delete simulaView)
@@ -1341,6 +1496,75 @@ handle_set_parent gsvs gvArgs@[wlrXWaylandSurfaceVariant] = do
   mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
+handle_xdg_set_parent :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
+handle_xdg_set_parent gsvs gvArgs@[_wlrXdgToplevelVariant] = do
+  debugPutStrLn "Plugin.SimulaViewSprite.handle_xdg_set_parent"
+  gss <- readTVarIO (gsvs ^. gsvsServer)
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  case simulaView ^. svWlrEitherSurface of
+    Right _ -> return ()
+    Left childWlrXdgSurface -> do
+      childWlrXdgSurface <- validateSurfaceE childWlrXdgSurface
+      maybeXdgDeclaredParentGSVS <- getXdgParentGSVS gss childWlrXdgSurface
+      attachedMap <- readTVarIO (gss ^. gssAttachedXdgChildren)
+      let maybeSimulaTrackedParentGSVS = M.lookup childWlrXdgSurface attachedMap
+      case (maybeSimulaTrackedParentGSVS, maybeXdgDeclaredParentGSVS) of
+        -- If state didn't change, then at least redraw the parent gsvs
+        (Just simulaTrackedParentGSVS, Just xdgDeclaredParentGSVS)
+          | simulaTrackedParentGSVS == xdgDeclaredParentGSVS ->
+              markGSVSForFullRedraws simulaTrackedParentGSVS
+        -- If we're switching from an old to a new parent, then change state and trigger a hard redraw on the new parent
+        (Just _, Just xdgDeclaredParentGSVS) -> do
+          detachXdgChildFromParent gss childWlrXdgSurface
+          attachXdgChildToParent gss xdgDeclaredParentGSVS childWlrXdgSurface
+          markGSVSForFullRedrawFrames xdgDeclaredParentGSVS 30
+        -- If we used to be attached to a gsvs but now we're parentless:
+        (Just _, Nothing) -> do
+          detachXdgChildFromParent gss childWlrXdgSurface
+          markGSVSForFullRedraws gsvs
+        -- If we weren't attached to any gsvs before (meaning the gsvs is a
+        -- standalone node in the scene graph) but now want to attach to a new
+        -- one, we have to remove ourselves from the scene graph.
+        (Nothing, Just xdgDeclaredParentGSVS) -> do
+          removeStandaloneGSVSFromSceneGraph gsvs
+          attachXdgChildToParent gss xdgDeclaredParentGSVS childWlrXdgSurface
+          markGSVSForFullRedrawFrames xdgDeclaredParentGSVS 30
+        -- If we're not attached to any gsvs (so we're a standalone gsvs in the scene graph),
+        -- and still have no parent, then just mark the gsvs for redraws.
+        (Nothing, Nothing) ->
+          markGSVSForFullRedraws gsvs
+  mapM_ Api.godot_variant_destroy gvArgs
+  return ()
+
+-- Used for gsvs which are actually standalone gsvs rendered in the scene graph
+-- (as opposed to attached to another gsvs as a child)
+removeStandaloneGSVSFromSceneGraph :: GodotSimulaViewSprite -> IO ()
+removeStandaloneGSVSFromSceneGraph gsvs = do
+  debugPutStrLn "Plugin.SimulaViewSprite.removeStandaloneGSVSFromSceneGraph"
+  G.set_process gsvs False
+  G.set_process_input gsvs False
+  isInSceneGraph <- G.is_inside_tree ((safeCast gsvs) :: GodotNode)
+  when isInSceneGraph $ do
+    parentNode <- G.get_parent ((safeCast gsvs) :: GodotNode) :: IO GodotNode
+    case validateObject parentNode of
+      Just validParentNode -> removeChild validParentNode gsvs
+      Nothing -> return ()
+
+-- If the gsvs is standalone, mark it for redraws. Otherwise, find its parent
+-- gsvs and mark it for redraws.
+markRootGSVSForFullRedraws :: GodotSimulaViewSprite -> IO ()
+markRootGSVSForFullRedraws gsvs = do
+  debugPutStrLn "Plugin.SimulaViewSprite.markRootGSVSForFullRedraws"
+  gss <- readTVarIO (gsvs ^. gsvsServer)
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  case simulaView ^. svWlrEitherSurface of
+    Left wlrXdgSurface -> do
+      attachedMap <- readTVarIO (gss ^. gssAttachedXdgChildren)
+      case M.lookup wlrXdgSurface attachedMap of
+        Just parentGSVS -> markGSVSForFullRedraws parentGSVS
+        Nothing -> markGSVSForFullRedraws gsvs
+    Right _ -> markGSVSForFullRedraws gsvs
+
 handle_unmap_child :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_unmap_child self gvArgs@[wlrXWaylandSurfaceVariant] = do
   debugPutStrLn "Plugin.SimulaViewSprite.handle_unmap_child"
@@ -1375,43 +1599,33 @@ handle_unmap_free_child self gvArgs@[wlrXWaylandSurfaceVariant] = do
 
 
 handle_unmap_base :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
-handle_unmap_base self [wlrXWaylandSurfaceVariant] = do
+handle_unmap_base self _ = do
+  -- Since this shared helper doesn't own the [GodotVariant] args, we don't clean them up here
   debugPutStrLn "Plugin.SimulaViewSprite.handle_unmap_base"
   gss <- readTVarIO (self ^. gsvsServer)
   simulaView <- atomically $ readTVar (self ^. gsvsView)
-  freeChildrenMap <- readTVarIO (gss ^. gssFreeChildren)
-  wlrXWaylandSurface <- (fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface) >>= validateSurfaceE
 
   keyboardGrabLetGo gss (GrabWindow self undefined)
   keyboardGrabLetGo gss (GrabWindows undefined)
   keyboardGrabLetGo gss (GrabWorkspaces undefined)
 
-  G.reference wlrXWaylandSurface
-  let maybeGSVSParent = M.lookup wlrXWaylandSurface freeChildrenMap
-
-  case maybeGSVSParent of
-    Just parentGSVS -> do -- Delete the free child from the parentGSVS and the gssFreeChildren map
-                  -- putStrLn "handle_unmap_base: free child path"
-                  freeChildren <- readTVarIO (parentGSVS ^. gsvsFreeChildren)
-                  let freeChildrenNew = Data.List.delete wlrXWaylandSurface freeChildren
-                  atomically $ writeTVar (parentGSVS ^. gsvsFreeChildren) freeChildrenNew
-                  let freeChildrenMapNew = M.delete wlrXWaylandSurface freeChildrenMap
-                  atomically $ writeTVar (gss ^. gssFreeChildren) freeChildrenMapNew
-
-
-    Nothing -> do
-                  -- putStrLn "handle_unmap_base: normal child path"
-                  simulaView <- readTVarIO (self ^. gsvsView)
-                  atomically $ writeTVar (simulaView ^. svMapped) False
-
-                  -- Ensure that we de-focus the gsvs if it is active
-                  maybeGSVSFocused <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
-                  case maybeGSVSFocused of
-                    Nothing -> return ()
-                    (Just gsvsFocused) -> do
-                      simulaViewFocused <- readTVarIO (gsvsFocused ^. gsvsView)
-                      if (simulaViewFocused == simulaView) then (atomically $ writeTVar (gss ^. gssKeyboardFocusedSprite) Nothing)
-                                                          else (return ())
+  -- We don't dispatch on the [GodotVariant] argument since we don't know if it's xwayland or xdg.
+  -- Instead, we go through `simulaView ^. svWlrEitherSurface`
+  case simulaView ^. svWlrEitherSurface of
+    Left wlrXdgSurface -> do
+      detachedParent <- detachXdgChildFromParent gss wlrXdgSurface
+      case detachedParent of
+        Just parentGSVS -> do
+          markGSVSForFullRedrawFrames parentGSVS 30
+          clearKeyboardFocusIfThisView gss simulaView
+        Nothing -> clearKeyboardFocusIfThisView gss simulaView
+    Right wlrXWaylandSurface -> do
+      wlrXWaylandSurface <- validateSurfaceE wlrXWaylandSurface
+      G.reference wlrXWaylandSurface
+      detachedParent <- detachXWaylandFreeChildFromParent gss wlrXWaylandSurface
+      case detachedParent of
+        Just _ -> return ()
+        Nothing -> clearKeyboardFocusIfThisView gss simulaView
 
   G.set_process self False
   G.set_process_input self False
@@ -1423,11 +1637,24 @@ handle_unmap_base self [wlrXWaylandSurfaceVariant] = do
     case validateObject parentNode of
       Just validParentNode -> removeChild validParentNode self
       Nothing -> return ()
+  where
+    clearKeyboardFocusIfThisView :: GodotSimulaServer -> SimulaView -> IO ()
+    clearKeyboardFocusIfThisView gss simulaView = do
+      maybeGSVSFocused <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
+      case maybeGSVSFocused of
+        Nothing -> return ()
+        Just gsvsFocused -> do
+          simulaViewFocused <- readTVarIO (gsvsFocused ^. gsvsView)
+          when (simulaViewFocused == simulaView) $
+            atomically $ writeTVar (gss ^. gssKeyboardFocusedSprite) Nothing
 
 -- The returned GodotWlrSurface will have a +1'ed reference count by the time this function returns it; caller is responsible for unreferencing it
 getXWaylandSubsurfaceAndCoords :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> SurfaceLocalCoordinates -> IO (Maybe (GodotWlrSurface, SubSurfaceLocalCoordinates))
-getXWaylandSubsurfaceAndCoords gsvs wlrXWaylandSurface coords@(SurfaceLocalCoordinates (sx, sy)) = do
+getXWaylandSubsurfaceAndCoords gsvs wlrXWaylandSurface compositionCoords@(SurfaceLocalCoordinates (sx, sy)) = do
   debugPutStrLn "Plugin.SimulaViewSprite.getXWaylandSubsurfaceAndCoords"
+  (offsetX, offsetY) <- getGSVSSurfacesCoordinateOffsetFromOrigin gsvs
+  let coords = SurfaceLocalCoordinates (sx - fromIntegral offsetX, sy - fromIntegral offsetY)
+      SurfaceLocalCoordinates (rootSurfaceX, rootSurfaceY) = coords -- rootSurfaceX/rootSurfaceY are relative to the wlrXWaylandSurface
   freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
   maybeFreeRet <- getFreeChildrenCoords wlrXWaylandSurface coords freeChildren -- Returns referenced surface if it succeeds
   case maybeFreeRet of
@@ -1438,7 +1665,7 @@ getXWaylandSubsurfaceAndCoords gsvs wlrXWaylandSurface coords@(SurfaceLocalCoord
      Nothing -> do
        safeSetActivated gsvs True -- G.set_activated godotWlrXWaylandSurface True
        -- surface_at expects coordinates relative to the top level wlr_surface, so you don't need to worry about geometry rect offsets or anything
-       withGodotRef (G.surface_at wlrXWaylandSurface sx sy :: IO GodotWlrSurfaceAtResult) $ \wlrSurfaceAtResult -> do
+       withGodotRef (G.surface_at wlrXWaylandSurface rootSurfaceX rootSurfaceY :: IO GodotWlrSurfaceAtResult) $ \wlrSurfaceAtResult -> do
          subX <- G.get_sub_x wlrSurfaceAtResult
          subY <- G.get_sub_y wlrSurfaceAtResult
          withGodotRef (G.get_surface wlrSurfaceAtResult :: IO GodotWlrSurface) $ \wlrSurface' ->
@@ -1497,7 +1724,7 @@ handle_new_popup :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_new_popup gsvs gvArgs@[_wlrXdgSurfaceParentVariant] = do
   debugPutStrLn "Plugin.SimulaViewSprite.handle_new_popup"
   debugPrintCurrentMappedSurface "Plugin.SimulaViewSprite.handle_new_popup" gsvs
-  markGSVSForFullRedraws gsvs
+  markRootGSVSForFullRedraws gsvs
   mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
@@ -1505,6 +1732,7 @@ handle_window_menu :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_window_menu gsvsInvisible gvArgs@[wlrXdgToplevel, serial, x, y] = do
   debugPutStrLn "Plugin.SimulaViewSprite.handle_window_menu"
   atomically $ writeTVar (gsvsInvisible ^. gsvsIsDamaged) True
+  markRootGSVSForFullRedraws gsvsInvisible
   mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
@@ -1517,7 +1745,7 @@ handle_wlr_surface_new_subsurface gsvs gvArgs@[wlrSubsurfaceVariant] = do
   withGodotRef (G.get_wlr_surface_parent wlrSubsurface :: IO GodotWlrSurface) $ \wlrSurfaceParent ->
     debugPrintWlrSurfaceMapDetails "Plugin.SimulaViewSprite.handle_wlr_surface_new_subsurface.parent" wlrSurfaceParent
   connectGodotSignal wlrSubsurface "destroy" gsvs "handle_wlr_subsurface_destroy" []
-  markGSVSForFullRedraws gsvs
+  markRootGSVSForFullRedraws gsvs
   mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
@@ -1534,6 +1762,7 @@ handle_wlr_subsurface_destroy :: GodotSimulaViewSprite -> [GodotVariant] -> IO (
 handle_wlr_subsurface_destroy gsvs gvArgs@[_wlrSubsurfaceVariant] = do
   debugPutStrLn "Plugin.SimulaViewSprite.handle_wlr_subsurface_destroy"
   atomically $ writeTVar (gsvs ^. gsvsIsDamaged) True
+  markRootGSVSForFullRedraws gsvs
   mapM_ Api.godot_variant_destroy gvArgs
   return ()
 

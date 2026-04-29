@@ -101,7 +101,7 @@ prepareViewportForDraw :: CanvasSurface -> GodotSimulaViewSprite -> IO ()
 prepareViewportForDraw cs gsvs = do
   fullRedrawFramesRemaining <- readTVarIO (gsvs ^. gsvsFullRedrawFramesRemaining)
   when (fullRedrawFramesRemaining > 0) $
-    whenM (surfaceHasInsetGeometry gsvs) $ do
+    whenM (gsvsViewOrChildrenHaveInsetGeometry gsvs) $ do
       viewport <- readTVarIO (cs ^. csViewport)
       G.set_clear_mode viewport G.CLEAR_MODE_ONLY_NEXT_FRAME
       return ()

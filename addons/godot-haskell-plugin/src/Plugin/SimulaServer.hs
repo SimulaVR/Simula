@@ -1082,6 +1082,7 @@ initGodotSimulaServer obj = do
   gssOriginalEnv' <- getEnvironment
 
   gssFreeChildren' <- newTVarIO M.empty :: IO (TVar (M.Map GodotWlrXWaylandSurface GodotSimulaViewSprite))
+  gssAttachedXdgChildren' <- newTVarIO M.empty :: IO (TVar (M.Map GodotWlrXdgSurface GodotSimulaViewSprite))
 
   rec
       configuration <- parseConfiguration
@@ -1226,6 +1227,7 @@ initGodotSimulaServer obj = do
       , _gssXWaylandDisplay       = gssXWaylandDisplay'       :: TVar (Maybe String)
       , _gssOriginalEnv           = gssOriginalEnv'           :: [(String, String)]
       , _gssFreeChildren          = gssFreeChildren'          :: TVar (M.Map GodotWlrXWaylandSurface GodotSimulaViewSprite)
+      , _gssAttachedXdgChildren   = gssAttachedXdgChildren'   :: TVar (M.Map GodotWlrXdgSurface GodotSimulaViewSprite)
       , _gssConfiguration         = gssConfiguration'         :: TVar Configuration
       , _gssKeyboardShortcuts     = gssKeyboardShortcuts'     :: TVar KeyboardShortcuts
       , _gssKeyboardRemappings    = gssKeyboardRemappings'    :: TVar KeyboardRemappings
@@ -1375,6 +1377,7 @@ _on_WlrXdgShell_new_surface gss gvArgs@[wlrXdgSurfaceVariant] = do
                 connectGodotSignal wlrXdgSurface "unmap" gsvs "handle_unmap" []
                 connectGodotSignal wlrXdgSurface "new_popup" gsvs "handle_new_popup" []
                 connectGodotSignal wlrXdgToplevel "request_show_window_menu" gsvs "handle_window_menu" []
+                connectGodotSignal wlrXdgToplevel "set_parent" gsvs "handle_xdg_set_parent" []
                 connectGodotSignal wlrSurface "new_subsurface" gsvs "handle_wlr_surface_new_subsurface" []
                 connectGodotSignal wlrSurface "commit" gsvs "handle_wlr_surface_commit" []
                 connectGodotSignal wlrSurface "destroy" gsvs "handle_wlr_surface_destroy" []

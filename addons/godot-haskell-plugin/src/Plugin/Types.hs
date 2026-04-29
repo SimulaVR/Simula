@@ -160,6 +160,9 @@ instance Show GodotWlrSurface where
 instance Ord GodotWlrXWaylandSurface where
   wlrXWaylandSurface1 `compare` wlrXWaylandSurface2 = ((coerce wlrXWaylandSurface1) :: Ptr ()) `compare` ((coerce wlrXWaylandSurface2) :: Ptr ())
 
+instance Ord GodotWlrXdgSurface where
+  wlrXdgSurface1 `compare` wlrXdgSurface2 = ((coerce wlrXdgSurface1) :: Ptr ()) `compare` ((coerce wlrXdgSurface2) :: Ptr ())
+
 instance Ord GodotSpatial where
   sp1 `compare` sp2 = ((coerce sp1) :: Ptr ()) `compare` ((coerce sp2) :: Ptr ())
 
@@ -309,6 +312,7 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssXWaylandDisplay         :: TVar (Maybe String) -- For appLaunch
   , _gssOriginalEnv             :: [(String, String)]
   , _gssFreeChildren            :: TVar (M.Map GodotWlrXWaylandSurface GodotSimulaViewSprite)
+  , _gssAttachedXdgChildren     :: TVar (M.Map GodotWlrXdgSurface GodotSimulaViewSprite)
   , _gssConfiguration           :: TVar Configuration
   , _gssKeyboardShortcuts       :: TVar KeyboardShortcuts
   , _gssKeyboardRemappings      :: TVar KeyboardRemappings
@@ -359,6 +363,7 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsCursorCoordinates :: TVar SurfaceLocalCoordinates
   , _gsvsTargetSize        :: TVar (Maybe SpriteDimensions)
   , _gsvsFreeChildren      :: TVar [GodotWlrXWaylandSurface]
+  , _gsvsAttachedXdgChildren :: TVar [GodotWlrXdgSurface]
   , _gsvsTransparency      :: TVar Float
   , _gsvsScreenshotMode    :: TVar Bool
   , _gsvsScreenshotCoords  :: TVar (Maybe SurfaceLocalCoordinates, Maybe SurfaceLocalCoordinates)
@@ -610,6 +615,78 @@ getGSVSFromEitherSurface gss eitherSurface = do
     containsGodotWlrXWaylandSurface :: GodotWlrXWaylandSurface -> SimulaView -> GodotSimulaViewSprite -> Bool
     containsGodotWlrXWaylandSurface wlrXWaylandSurface simulaView _ = 
       ((simulaView ^. svWlrEitherSurface) == Right wlrXWaylandSurface)
+
+-- Needed since we have to go through `wlr_xdg_toplevel`'s' to get to the parent `wlr_xdg_surface`
+getXdgParentSurface :: GodotWlrXdgSurface -> IO (Maybe GodotWlrXdgSurface)
+getXdgParentSurface wlrXdgSurface = do
+  debugPutStrLn "Plugin.Types.getXdgParentSurface"
+  wlrXdgSurface <- validateSurfaceE wlrXdgSurface
+  wlrXdgToplevel <- G.get_xdg_toplevel wlrXdgSurface >>= validateSurfaceE
+  parentToplevel <- G.get_parent wlrXdgToplevel :: IO GodotWlrXdgToplevel
+  case validateObject parentToplevel of
+    Nothing -> return Nothing
+    Just validParentToplevel -> do
+      validParentToplevel <- validateSurfaceE validParentToplevel
+      parentSurface <- G.get_xdg_surface validParentToplevel :: IO GodotWlrXdgSurface
+      case validateObject parentSurface of
+        Nothing -> return Nothing
+        Just validParentSurface -> Just <$> validateSurfaceE validParentSurface
+
+getXdgParentGSVS :: GodotSimulaServer -> GodotWlrXdgSurface -> IO (Maybe GodotSimulaViewSprite)
+getXdgParentGSVS gss wlrXdgSurface = do
+  debugPutStrLn "Plugin.Types.getXdgParentGSVS"
+  maybeParentSurface <- getXdgParentSurface wlrXdgSurface
+  case maybeParentSurface of
+    Nothing -> return Nothing
+    Just parentSurface -> getGSVSFromEitherSurface gss (Left parentSurface)
+
+-- Try to get width/height of a surface which factors out its x/y geometry offset
+-- (to take into account that some surfaces have invisible borders or
+-- decorations). If that fails though, revert to just getting the raw wlr_surface
+-- buffer dimensions.
+getGeometryAwareSurfaceDimensions :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO (Int, Int)
+getGeometryAwareSurfaceDimensions eitherSurface = do
+  debugPutStrLn "Plugin.Types.getGeometryAwareSurfaceDimensions"
+  case eitherSurface of
+    Left wlrXdgSurface -> do
+      wlrXdgSurface <- validateSurfaceE wlrXdgSurface
+      V2 _ (V2 xdgWidth xdgHeight) <- G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+      withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
+        (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+        let width = if round xdgWidth > 0 then round xdgWidth else bufferWidth
+        let height = if round xdgHeight > 0 then round xdgHeight else bufferHeight
+        return (width, height)
+    Right wlrXWaylandSurface -> do
+      wlrXWaylandSurface <- validateSurfaceE wlrXWaylandSurface
+      width <- G.get_width wlrXWaylandSurface
+      height <- G.get_height wlrXWaylandSurface
+      withGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
+        (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+        return (if width > 0 then width else bufferWidth, if height > 0 then height else bufferHeight)
+
+getGSVSTargetDimsOrFallbackToItsCurrentEffectiveSize :: GodotSimulaViewSprite -> IO (Int, Int)
+getGSVSTargetDimsOrFallbackToItsCurrentEffectiveSize gsvs = do
+  debugPutStrLn "Plugin.Types.getGSVSTargetDimsOrFallbackToItsCurrentEffectiveSize"
+  maybeTargetDims <- readTVarIO (gsvs ^. gsvsTargetSize)
+  case maybeTargetDims of
+    Just (SpriteDimensions dims@(width, height)) | width > 0 && height > 0 -> return dims
+    _ -> do
+      simulaView <- readTVarIO (gsvs ^. gsvsView)
+      getGeometryAwareSurfaceDimensions (simulaView ^. svWlrEitherSurface)
+
+getAttachedXdgChildRootOffset :: GodotSimulaViewSprite -> GodotWlrXdgSurface -> IO (Int, Int)
+getAttachedXdgChildRootOffset parentGSVS childWlrXdgSurface = do
+  debugPutStrLn "Plugin.Types.getAttachedXdgChildRootOffset"
+  (parentWidth, parentHeight) <- getGSVSTargetDimsOrFallbackToItsCurrentEffectiveSize parentGSVS
+  childWlrXdgSurface <- validateSurfaceE childWlrXdgSurface
+  V2 (V2 childGeomX childGeomY) (V2 childGeomWidth childGeomHeight) <- G.get_geometry childWlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+  withGodotRef (G.get_wlr_surface childWlrXdgSurface :: IO GodotWlrSurface) $ \childWlrSurface -> do
+    (childBufferWidth, childBufferHeight) <- getBufferDimensions childWlrSurface
+    let childVisibleWidth = if round childGeomWidth > 0 then round childGeomWidth else childBufferWidth
+    let childVisibleHeight = if round childGeomHeight > 0 then round childGeomHeight else childBufferHeight
+    let childRootX = ((parentWidth - childVisibleWidth) `div` 2) - round childGeomX
+    let childRootY = ((parentHeight - childVisibleHeight) `div` 2) - round childGeomY
+    return (childRootX, childRootY)
 
 {- Import godot-extra functions that godot-haskell still lacks. -}
 newNS :: [Variant 'GodotTy] -> Text -> IO (Maybe GodotObject)
@@ -989,32 +1066,45 @@ getBufferDimensions wlrSurface = do
           height <-G.get_height wlrSurfaceState
           return (width, height)
 
-surfaceHasInsetGeometry :: GodotSimulaViewSprite -> IO Bool
-surfaceHasInsetGeometry gsvs = do
+gsvsViewOrChildrenHaveInsetGeometry :: GodotSimulaViewSprite -> IO Bool
+gsvsViewOrChildrenHaveInsetGeometry gsvs = do
   simulaView <- readTVarIO (gsvs ^. gsvsView)
-  case simulaView ^. svWlrEitherSurface of
-    Left wlrXdgSurface -> do
-      wlrXdgSurface <- validateSurfaceE wlrXdgSurface
-      V2 (V2 geomX geomY) (V2 geomWidth geomHeight) <-
-        G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
-      withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
-        (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
-        return $
-          (round geomX /= 0)
-            || (round geomY /= 0)
-            || (round geomWidth /= bufferWidth)
-            || (round geomHeight /= bufferHeight)
-    Right wlrXWaylandSurface -> do
-      wlrXWaylandSurface <- validateSurfaceE wlrXWaylandSurface
-      V2 (V2 geomX geomY) (V2 geomWidth geomHeight) <-
-        G.get_geometry wlrXWaylandSurface >>= fromLowLevel :: IO (V2 (V2 Float))
-      withGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
-        (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
-        return $
-          (round geomX /= 0)
-            || (round geomY /= 0)
-            || (round geomWidth /= bufferWidth)
-            || (round geomHeight /= bufferHeight)
+  rootHasInset <- case simulaView ^. svWlrEitherSurface of
+    Left wlrXdgSurface ->
+      xdgSurfaceHasInsetGeometry wlrXdgSurface
+    Right wlrXWaylandSurface ->
+      xWaylandSurfaceHasInsetGeometry wlrXWaylandSurface
+  attachedChildren <- readTVarIO (gsvs ^. gsvsAttachedXdgChildren)
+  attachedChildrenHaveInset <- or <$> mapM xdgSurfaceHasInsetGeometry attachedChildren
+  freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
+  freeChildrenHaveInset <- or <$> mapM xWaylandSurfaceHasInsetGeometry freeChildren
+  return (rootHasInset || attachedChildrenHaveInset || freeChildrenHaveInset)
+
+xdgSurfaceHasInsetGeometry :: GodotWlrXdgSurface -> IO Bool
+xdgSurfaceHasInsetGeometry wlrXdgSurface = do
+  wlrXdgSurface <- validateSurfaceE wlrXdgSurface
+  V2 (V2 geomX geomY) (V2 geomWidth geomHeight) <-
+    G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+  withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
+    (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+    return $
+      (round geomX /= 0)
+        || (round geomY /= 0)
+        || (round geomWidth /= bufferWidth)
+        || (round geomHeight /= bufferHeight)
+
+xWaylandSurfaceHasInsetGeometry :: GodotWlrXWaylandSurface -> IO Bool
+xWaylandSurfaceHasInsetGeometry wlrXWaylandSurface = do
+  wlrXWaylandSurface <- validateSurfaceE wlrXWaylandSurface
+  V2 (V2 geomX geomY) (V2 geomWidth geomHeight) <-
+    G.get_geometry wlrXWaylandSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+  withGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
+    (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+    return $
+      (round geomX /= 0)
+        || (round geomY /= 0)
+        || (round geomWidth /= bufferWidth)
+        || (round geomHeight /= bufferHeight)
 
 newCanvasSurface :: GodotSimulaViewSprite -> IO CanvasSurface
 newCanvasSurface gsvs = do
@@ -1464,9 +1554,9 @@ fromGodotArray vs = do
   size <- fromIntegral <$> Api.godot_array_size vs
   forM [0..size-1] $ Api.godot_array_get vs
 
-getDepthFirstSurfaces :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
-getDepthFirstSurfaces gsvs = do
-  debugPutStrLn "Plugin.Types.getDepthFirstSurfaces"
+getDepthFirstSurfacesRaw :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstSurfacesRaw gsvs = do
+  debugPutStrLn "Plugin.Types.getDepthFirstSurfacesRaw"
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
   depthFirstBaseSurfaces <- getDepthFirstBaseSurfaces gsvs
@@ -1493,6 +1583,39 @@ getDepthFirstSurfaces gsvs = do
               return acc
           | otherwise = return (acc ++ [surfaceWithCoords])
 
+getDepthFirstSurfaces :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstSurfaces gsvs = do
+  debugPutStrLn "Plugin.Types.getDepthFirstSurfaces"
+  rawSurfaces <- getDepthFirstSurfacesRaw gsvs
+  (offsetX, offsetY) <- getSurfacesCoordinateOffsetFromOrigin rawSurfaces
+  return $ fmap (\(wlrSurface, x, y) -> (wlrSurface, x + offsetX, y + offsetY)) rawSurfaces
+
+getSurfacesCoordinateOffsetFromOrigin :: [(GodotWlrSurface, Int, Int)] -> IO (Int, Int)
+getSurfacesCoordinateOffsetFromOrigin surfaces = do
+  debugPutStrLn "Plugin.Types.getSurfacesCoordinateOffsetFromOrigin"
+  (minX, minY, _, _) <- getSurfacesCoordinateBounds surfaces
+  return (max 0 (-minX), max 0 (-minY))
+
+getGSVSSurfacesCoordinateOffsetFromOrigin :: GodotSimulaViewSprite -> IO (Int, Int)
+getGSVSSurfacesCoordinateOffsetFromOrigin gsvs = do
+  debugPutStrLn "Plugin.Types.getGSVSSurfacesCoordinateOffsetFromOrigin"
+  bracket
+    (getDepthFirstSurfacesRaw gsvs)
+    destroyWlrSurfacesWithCoords
+    getSurfacesCoordinateOffsetFromOrigin
+
+getSurfacesCoordinateBounds :: [(GodotWlrSurface, Int, Int)] -> IO (Int, Int, Int, Int)
+getSurfacesCoordinateBounds surfaces = do
+  debugPutStrLn "Plugin.Types.getSurfacesCoordinateBounds"
+  boxes <- forM surfaces $ \(wlrSurface, x, y) -> do
+    (width, height) <- getBufferDimensions wlrSurface
+    return (x, y, x + width, y + height)
+  let xs1 = 0 : fmap (\(x1, _, _, _) -> x1) boxes
+  let ys1 = 0 : fmap (\(_, y1, _, _) -> y1) boxes
+  let xs2 = 0 : fmap (\(_, _, x2, _) -> x2) boxes
+  let ys2 = 0 : fmap (\(_, _, _, y2) -> y2) boxes
+  return (Data.List.minimum xs1, Data.List.minimum ys1, Data.List.maximum xs2, Data.List.maximum ys2)
+
 getDepthFirstBaseSurfaces :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
 getDepthFirstBaseSurfaces gsvs = do
   debugPutStrLn "Plugin.Types.getDepthFirstBaseSurfaces"
@@ -1501,7 +1624,12 @@ getDepthFirstBaseSurfaces gsvs = do
   depthFirstBaseSurfaces <- case eitherSurface of
     Left wlrXdgSurface -> do
       ret <- getDepthFirstXdgSurfaces wlrXdgSurface :: IO [(GodotWlrSurface, Int, Int)]
-      return ret
+      attachedChildren <- readTVarIO (gsvs ^. gsvsAttachedXdgChildren)
+      attachedSurfaces <- fmap List.concat $ forM attachedChildren $ \childWlrXdgSurface -> do
+        (childRootX, childRootY) <- getAttachedXdgChildRootOffset gsvs childWlrXdgSurface
+        childSurfaces <- getDepthFirstXdgSurfaces childWlrXdgSurface
+        return $ fmap (\(wlrSurface, x, y) -> (wlrSurface, childRootX + x, childRootY + y)) childSurfaces
+      return (ret ++ attachedSurfaces)
     Right wlrXWaylandSurface -> do
       freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
       freeChildren' <- mapM (\wlrXWaylandSurfaceFC -> do x <- G.get_x wlrXWaylandSurfaceFC
@@ -1675,20 +1803,11 @@ getSpilloverDims :: GodotSimulaViewSprite -> IO (Int, Int)
 getSpilloverDims gsvs = do
   debugPutStrLn "Plugin.Types.getSpilloverDims"
   bracket
-    (getDepthFirstSurfaces gsvs :: IO [(GodotWlrSurface, Int, Int)])
+    (getDepthFirstSurfacesRaw gsvs :: IO [(GodotWlrSurface, Int, Int)])
     destroyWlrSurfacesWithCoords
     (\depthFirstSurfaces -> do
-      spilloverDims <- mapM (getSpilloverDims gsvs) depthFirstSurfaces
-      let spilloverWidth = Data.List.maximum $ fmap fst spilloverDims
-      let spilloverHeight = Data.List.maximum $ fmap snd spilloverDims
-      return (spilloverWidth, spilloverHeight))
-  where getSpilloverDims :: GodotSimulaViewSprite -> (GodotWlrSurface, Int, Int) -> IO (Int, Int)
-        getSpilloverDims gsvs (wlrSurface, sx, sy) = do
-          (baseWidth, baseHeight) <- getBaseDimensions gsvs
-          (childWidth, childHeight) <- getBufferDimensions wlrSurface
-          let widthSpill = max 0 ((sx + childWidth) - baseWidth)
-          let heightSpill = max 0 ((sy + childHeight) - baseHeight)
-          return $ (baseWidth + widthSpill, baseHeight + heightSpill)
+      (minX, minY, maxX, maxY) <- getSurfacesCoordinateBounds depthFirstSurfaces
+      return (maxX - minX, maxY - minY))
 
 setShader :: GodotSimulaViewSprite -> String -> IO ()
 setShader gsvs tres = do
