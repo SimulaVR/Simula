@@ -10,7 +10,6 @@
 module Plugin.CanvasBase where
 
 import Control.Exception
-
 import Data.Colour
 import Data.Colour.SRGB.Linear
 
@@ -66,6 +65,7 @@ instance NativeScript CanvasBase where
     CanvasBase (safeCast obj)
                   <$> atomically (newTVar (error "Failed to initialize CanvasBase."))
                   <*> atomically (newTVar (error "Failed to initialize CanvasBase."))
+                  <*> atomically (newTVar (error "Failed to initialize CanvasBase."))
   classMethods =
     [
       func NoRPC "_process" (catchGodot Plugin.CanvasBase._process)
@@ -82,9 +82,15 @@ newCanvasBase gsvs = do
     >>= deRefStablePtr . castPtrToStablePtr :: IO CanvasBase
 
   viewport <- initializeRenderTarget gsvs ViewportBase
+  debugFont <- unsafeInstance GodotDynamicFont "DynamicFont"
+  dynamicFontData' <- load GodotDynamicFontData "DynamicFontData" "res://OpenSansEmoji.ttf"
+  let dynamicFontData = Data.Maybe.fromJust dynamicFontData'
+  G.set_font_data debugFont dynamicFontData
+  G.set_size debugFont 24
 
   atomically $ writeTVar (_cbGSVS cb) gsvs
   atomically $ writeTVar (_cbViewport cb) viewport
+  atomically $ writeTVar (_cbDebugFont cb) debugFont
 
   return cb
 
@@ -114,6 +120,10 @@ _draw cb gvArgs = do
   when debugSurfaceBoundariesEnabled $ do
     -- Outline raw wlr_surface buffers as red
     drawRedWlrSurfaceBoundaries cb gsvs
+
+    when (debugMouseEventsEnabled || debugKeyboardEventsEnabled) $
+      -- Show pointer IDs inside surfaces when debugging mouse/keyboard events (where it's likely useful)
+      drawRedWlrSurfacePointerIds cb gsvs
 
     -- Show xdg/xwayland geometry rectangles as blue WITHOUT their x/y offsets
     drawBlueGeometryBordersWithoutOffsets cb gsvs
@@ -186,6 +196,135 @@ _draw cb gvArgs = do
                 (V2 (fromIntegral x) (fromIntegral y))
                 (V2 (fromIntegral width) (fromIntegral height))
             G.draw_rect cb debugRect redColor False 2.0 False)
+
+    drawRedWlrSurfacePointerIds :: CanvasBase -> GodotSimulaViewSprite -> IO ()
+    drawRedWlrSurfacePointerIds cb gsvs = do
+      debugPutStrLn "Plugin.CanvasBase.drawRedWlrSurfacePointerIds"
+      redColor <- (toLowLevel $ (rgb 1.0 0.0 0.0) `withOpacity` 1.0) :: IO GodotColor
+      debugFont <- readTVarIO (cb ^. cbDebugFont)
+      bracket
+        (getDepthFirstSurfaces gsvs)
+        destroyWlrSurfacesWithCoords
+        (\depthFirstSurfaces -> do
+          labelGroups <- foldM addSurfaceLabel M.empty depthFirstSurfaces
+          forM_ (M.elems labelGroups) $
+            drawSurfaceLabelGroup cb debugFont redColor)
+      where
+        addSurfaceLabel :: M.Map (Int, Int) ((Int, Int, Int, Int), [String]) -> (GodotWlrSurface, Int, Int) -> IO (M.Map (Int, Int) ((Int, Int, Int, Int), [String]))
+        addSurfaceLabel labelsByCenter (wlrSurface, x, y) = do
+          (width, height) <- getBufferDimensions wlrSurface
+          if width > 0 && height > 0
+            then do
+              label <- getSurfaceLabel wlrSurface width height
+              let labelGroup = ((x, y, width, height), [label])
+              return $ M.insertWith appendLabelGroup (surfaceCenterKey x y width height) labelGroup labelsByCenter
+            else return labelsByCenter
+
+        appendLabelGroup :: ((Int, Int, Int, Int), [String]) -> ((Int, Int, Int, Int), [String]) -> ((Int, Int, Int, Int), [String])
+        appendLabelGroup (_, newLabels) (oldRect, oldLabels) =
+          (oldRect, oldLabels ++ newLabels)
+
+        surfaceCenterKey :: Int -> Int -> Int -> Int -> (Int, Int)
+        surfaceCenterKey x y width height =
+          (2 * x + width, 2 * y + height)
+
+        getSurfaceLabel :: GodotWlrSurface -> Int -> Int -> IO String
+        getSurfaceLabel wlrSurface width height = do
+          surfaceRole <- getWlrSurfaceRoleName wlrSurface
+          return $ surfaceRole ++ ":" ++ pointerIdSuffix width height (show wlrSurface)
+
+        getWlrSurfaceRoleName :: GodotWlrSurface -> IO String
+        getWlrSurfaceRoleName wlrSurface = do
+          isSubsurface <- G.is_wlr_subsurface wlrSurface
+          isXdgSurface <- G.is_wlr_xdg_surface wlrSurface
+          isXWaylandSurface <- G.is_wlr_xwayland_surface wlrSurface
+          return $
+            case (isSubsurface, isXdgSurface, isXWaylandSurface) of
+              (True, _, _) -> "sub"
+              (_, True, _) -> "xdg"
+              (_, _, True) -> "xway"
+              _ -> "wlr"
+
+        pointerIdSuffix :: Int -> Int -> String -> String
+        pointerIdSuffix width height pointerId =
+          let suffixLength = pointerIdSuffixLength width height
+          in case splitAt (length pointerId - suffixLength) pointerId of
+            (_, suffix) | length pointerId > 10 -> suffix
+            _ -> pointerId
+
+        pointerIdSuffixLength :: Int -> Int -> Int
+        pointerIdSuffixLength width height =
+          if width >= 140 && height >= 24 then 7 else 4
+
+    drawSurfaceLabelGroup :: CanvasBase -> GodotDynamicFont -> GodotColor -> ((Int, Int, Int, Int), [String]) -> IO ()
+    drawSurfaceLabelGroup cb font color ((x, y, width, height), labels) = do
+      debugPutStrLn "Plugin.CanvasBase.drawSurfaceLabelGroup"
+      maybeFitted <- fitSurfaceLabels font labels width height
+      case maybeFitted of
+        Nothing -> return ()
+        Just (fontSize, visibleLabels) ->
+          drawCenteredLabelLines cb font color fontSize visibleLabels x y width height
+
+    drawCenteredLabelLines :: CanvasBase -> GodotDynamicFont -> GodotColor -> Int -> [String] -> Int -> Int -> Int -> Int -> IO ()
+    drawCenteredLabelLines cb font color fontSize labels x y width height = do
+      debugPutStrLn "Plugin.CanvasBase.drawCenteredLabelLines"
+      G.set_size font fontSize
+      fontHeight <- G.get_height (safeCast font :: GodotFont)
+      bracket
+        (mapM (toLowLevel . pack) labels :: IO [GodotString])
+        (mapM_ Api.godot_string_destroy)
+        (\labelStrs -> do
+          fontAscent <- G.get_ascent (safeCast font :: GodotFont)
+          let surfaceWidth = fromIntegral width
+          let surfaceHeight = fromIntegral height
+          let labelCount = length labelStrs
+          let blockHeight = fontHeight * fromIntegral labelCount
+          let firstBaselineY = fromIntegral y + max fontAscent ((surfaceHeight - blockHeight) / 2 + fontAscent)
+          forM_ (zip [0..] labelStrs) $ \(lineIndex :: Int, labelStr) -> do
+            V2 textWidth _ <- G.get_string_size (safeCast font :: GodotFont) labelStr >>= fromLowLevel :: IO (V2 Float)
+            let textX = fromIntegral x + max 0 ((surfaceWidth - textWidth) / 2)
+            let baselineY = firstBaselineY + fontHeight * fromIntegral lineIndex
+            renderPosition <- toLowLevel (V2 textX baselineY) :: IO GodotVector2
+            G.draw_string cb (safeCast font :: GodotFont) renderPosition labelStr color width)
+
+    fitSurfaceLabels :: GodotDynamicFont -> [String] -> Int -> Int -> IO (Maybe (Int, [String]))
+    fitSurfaceLabels font labels width height =
+      findFittingFontSize candidateSizes
+      where
+        minReadableFontSize = 14
+        maxFontSize = max minReadableFontSize (min 24 (height - 4))
+        candidateSizes = [maxFontSize, maxFontSize - 1 .. minReadableFontSize]
+
+        fitLabelCount :: Int -> [String] -> [String]
+        fitLabelCount maxLines labels
+          | maxLines <= 0 = []
+          | length labels <= maxLines = labels
+          | maxLines <= 1 = take 1 labels
+          | otherwise = take (maxLines - 1) labels ++ ["+" ++ show (length labels - maxLines + 1)]
+
+        findFittingFontSize :: [Int] -> IO (Maybe (Int, [String]))
+        findFittingFontSize [] = return Nothing
+        findFittingFontSize (fontSize:rest) = do
+          G.set_size font fontSize
+          fontHeight <- G.get_height (safeCast font :: GodotFont)
+          let maxLines = floor ((fromIntegral (max 1 height) - 4) / max 1 fontHeight)
+          let visibleLabels = fitLabelCount maxLines labels
+          if Prelude.null visibleLabels
+            then return Nothing
+            else do
+              textWidths <- forM visibleLabels $ \label ->
+                bracket
+                  (toLowLevel (pack label) :: IO GodotString)
+                  Api.godot_string_destroy
+                  (\labelStr -> do
+                    V2 textWidth _ <- G.get_string_size (safeCast font :: GodotFont) labelStr >>= fromLowLevel :: IO (V2 Float)
+                    return textWidth)
+              let maxWidth = max 1 (fromIntegral width - 4)
+              let maxHeight = max 1 (fromIntegral height - 4)
+              let totalHeight = fontHeight * fromIntegral (length visibleLabels)
+              if maximum textWidths <= maxWidth && totalHeight <= maxHeight
+                then return (Just (fontSize, visibleLabels))
+                else findFittingFontSize rest
 
     drawBlueGeometryBordersWithoutOffsets :: CanvasBase -> GodotSimulaViewSprite -> IO ()
     drawBlueGeometryBordersWithoutOffsets cb gsvs = do

@@ -394,11 +394,12 @@ data CanvasBase = CanvasBase {
     _cbObject       :: GodotObject
   , _cbGSVS         :: TVar GodotSimulaViewSprite
   , _cbViewport     :: TVar GodotViewport
+  , _cbDebugFont    :: TVar GodotDynamicFont
 }
 
 instance HasBaseClass CanvasBase where
   type BaseClass CanvasBase = GodotNode2D
-  super (CanvasBase obj _ _ ) = GodotNode2D obj
+  super (CanvasBase obj _ _ _ ) = GodotNode2D obj
 
 data CanvasSurface = CanvasSurface {
     _csObject       :: GodotObject
