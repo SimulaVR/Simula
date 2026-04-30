@@ -490,6 +490,7 @@ focus gsvs = do
         replaceActiveSurface gsvs (Just wlrSurface)
         toplevel <- G.get_xdg_toplevel wlrXdgSurface :: IO GodotWlrXdgToplevel
         G.set_activated toplevel True
+        debugPrintKeyboardFocusChange gsvs "focus xdg root keyboard_notify_enter" (Just wlrSurface)
         G.keyboard_notify_enter wlrSeat wlrSurface
         pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
         pointerNotifyFrame wlrSeat
@@ -500,6 +501,7 @@ focus gsvs = do
         G.reference wlrSurface
         replaceActiveSurface gsvs (Just wlrSurface)
         safeSetActivated gsvs True -- G.set_activated wlrXWaylandSurface True
+        debugPrintKeyboardFocusChange gsvs "focus xwayland root keyboard_notify_enter" (Just wlrSurface)
         G.keyboard_notify_enter wlrSeat wlrSurface
         pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
         pointerNotifyFrame wlrSeat
@@ -673,6 +675,139 @@ debugPrintPointerSeatState gsvs inputEventType surfaceLocalCoords@(SurfaceLocalC
                 ++ "x"
                 ++ show bufferHeight
 
+debugPrintKeyboardFocusChange :: GodotSimulaViewSprite -> String -> Maybe GodotWlrSurface -> IO ()
+debugPrintKeyboardFocusChange gsvs context maybeTargetSurface =
+  when debugKeyboardEventsEnabled $ do
+    focusSummary <- debugDescribeKeyboardFocus gsvs
+    targetSurfaceSummary <- describeMaybeWlrSurface maybeTargetSurface
+    putStrLn $
+      "Keyboard focus change context="
+        ++ context
+        ++ " targetSurface="
+        ++ targetSurfaceSummary
+        ++ " "
+        ++ focusSummary
+
+debugDescribeKeyboardFocus :: GodotSimulaViewSprite -> IO String
+debugDescribeKeyboardFocus gsvs = do
+  gss <- readTVarIO (gsvs ^. gsvsServer)
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  maybeKeyboardFocusedGSVS <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
+  maybeActiveSurface <- readTVarIO (gsvs ^. gsvsActiveSurface)
+  wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+  pointerFocusedSurfaceSummary <- getPointerFocusedSurfaceSummary wlrSeat
+  activeSurfaceSummary <- describeMaybeWlrSurface maybeActiveSurface
+  viewSummary <- describeViewSurface simulaView
+  return $
+    "focus="
+      ++ describeMaybeGSVS maybeKeyboardFocusedGSVS
+      ++ " focusMatches="
+      ++ show (maybeKeyboardFocusedGSVS == Just gsvs)
+      ++ " activeSurface="
+      ++ activeSurfaceSummary
+      ++ " pointerFocus="
+      ++ pointerFocusedSurfaceSummary
+      ++ " view="
+      ++ viewSummary
+
+describeGSVS :: GodotSimulaViewSprite -> String
+describeGSVS gsvs = "gsvsObj=" ++ show (_gsvsObj gsvs)
+
+describeMaybeGSVS :: Maybe GodotSimulaViewSprite -> String
+describeMaybeGSVS Nothing = "nothing"
+describeMaybeGSVS (Just gsvs) = describeGSVS gsvs
+
+debugPrintXWaylandFreeChildKeyboardFocus :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> GodotWlrSurface -> SubSurfaceLocalCoordinates -> IO ()
+debugPrintXWaylandFreeChildKeyboardFocus gsvs freeChildSurface wlrSurface (SubSurfaceLocalCoordinates (x, y)) =
+  when debugKeyboardEventsEnabled $ do
+    pid <- G.get_pid freeChildSurface
+    surfaceX <- G.get_x freeChildSurface
+    surfaceY <- G.get_y freeChildSurface
+    width <- G.get_width freeChildSurface
+    height <- G.get_height freeChildSurface
+    focusSummary <- debugDescribeKeyboardFocus gsvs
+    putStrLn $
+      "Keyboard focus xwayland free child activated child="
+        ++ show freeChildSurface
+        ++ " pid="
+        ++ show pid
+        ++ " geometry=("
+        ++ show surfaceX
+        ++ ","
+        ++ show surfaceY
+        ++ " "
+        ++ show width
+        ++ "x"
+        ++ show height
+        ++ ") childLocal=("
+        ++ show x
+        ++ ","
+        ++ show y
+        ++ ") wlrSurface="
+        ++ show wlrSurface
+        ++ " "
+        ++ focusSummary
+
+describeMaybeWlrSurface :: Maybe GodotWlrSurface -> IO String
+describeMaybeWlrSurface Nothing = return "nothing"
+describeMaybeWlrSurface (Just wlrSurface) = do
+  validWlrSurface <- validateSurfaceE wlrSurface
+  (bufferWidth, bufferHeight) <- getBufferDimensions validWlrSurface
+  return $
+    "surface="
+      ++ show validWlrSurface
+      ++ " buffer="
+      ++ show bufferWidth
+      ++ "x"
+      ++ show bufferHeight
+
+getPointerFocusedSurfaceSummary :: GodotWlrSeat -> IO String
+getPointerFocusedSurfaceSummary wlrSeat =
+  withGodotRef (G.get_pointer_focused_surface wlrSeat :: IO GodotWlrSurface) $ \focusedSurface ->
+    case validateObject focusedSurface of
+      Nothing -> return "nothing"
+      Just validFocusedSurface -> describeMaybeWlrSurface (Just validFocusedSurface)
+
+describeViewSurface :: SimulaView -> IO String
+describeViewSurface simulaView =
+  case simulaView ^. svWlrEitherSurface of
+    Left wlrXdgSurface -> do
+      pid <- G.get_pid wlrXdgSurface
+      roleInt <- G.get_role wlrXdgSurface
+      return $
+        "protocol=xdg surface="
+          ++ show wlrXdgSurface
+          ++ " pid="
+          ++ show pid
+          ++ " role="
+          ++ xdgRoleName roleInt
+    Right wlrXWaylandSurface -> do
+      pid <- G.get_pid wlrXWaylandSurface
+      x <- G.get_x wlrXWaylandSurface
+      y <- G.get_y wlrXWaylandSurface
+      width <- G.get_width wlrXWaylandSurface
+      height <- G.get_height wlrXWaylandSurface
+      return $
+        "protocol=xwayland surface="
+          ++ show wlrXWaylandSurface
+          ++ " pid="
+          ++ show pid
+          ++ " geometry=("
+          ++ show x
+          ++ ","
+          ++ show y
+          ++ " "
+          ++ show width
+          ++ "x"
+          ++ show height
+          ++ ")"
+
+xdgRoleName :: Int -> String
+xdgRoleName 0 = "none"
+xdgRoleName 1 = "toplevel"
+xdgRoleName 2 = "popup"
+xdgRoleName role = "unknown(" ++ show role ++ ")"
+
 debugPrintWlrSurfaceMapDetails :: String -> GodotWlrSurface -> IO ()
 debugPrintWlrSurfaceMapDetails prefix wlrSurface =
   when debugSurfaceCreationsEnabled $ do
@@ -738,11 +873,6 @@ debugPrintXdgMapDetails prefix wlrXdgSurface =
           ++ show bufferWidth
           ++ "x"
           ++ show bufferHeight
- where
-  xdgRoleName 0 = "none"
-  xdgRoleName 1 = "toplevel"
-  xdgRoleName 2 = "popup"
-  xdgRoleName role = "unknown(" ++ show role ++ ")"
 
 debugPrintCurrentMappedSurface :: String -> GodotSimulaViewSprite -> IO ()
 debugPrintCurrentMappedSurface prefix gsvs =
@@ -1026,6 +1156,7 @@ keyboardFocusAnXdgRootSurfaceFromGSVS spatialGSVS wlrXdgSurface = do
     replaceActiveSurface spatialGSVS (Just rootWlrSurface)
     toplevel <- G.get_xdg_toplevel wlrXdgSurface >>= validateSurfaceE
     G.set_activated toplevel True
+    debugPrintKeyboardFocusChange spatialGSVS "focus attached xdg root keyboard_notify_enter" (Just rootWlrSurface)
     G.keyboard_notify_enter wlrSeat rootWlrSurface
 
 surfaceHasParent :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO Bool
@@ -1661,6 +1792,7 @@ getXWaylandSubsurfaceAndCoords gsvs wlrXWaylandSurface compositionCoords@(Surfac
      Just freeSurfaceAndCoords@(wlrSurface, SubSurfaceLocalCoordinates (x, y), maybeWlrXWaylandSurface) -> do
        let wlrXWaylandSurface = Data.Maybe.fromJust maybeWlrXWaylandSurface
        G.set_activated wlrXWaylandSurface True
+       debugPrintXWaylandFreeChildKeyboardFocus gsvs wlrXWaylandSurface wlrSurface (SubSurfaceLocalCoordinates (x, y))
        return $ Just (wlrSurface, SubSurfaceLocalCoordinates (x, y))
      Nothing -> do
        safeSetActivated gsvs True -- G.set_activated godotWlrXWaylandSurface True

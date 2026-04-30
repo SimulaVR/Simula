@@ -117,6 +117,13 @@ debugMouseEventsEnabled = unsafePerformIO $ do
   return $ simulaDebug == Just "1" || simulaDebugSurfaceCreations == Just "1"
 {-# NOINLINE debugMouseEventsEnabled #-}
 
+debugKeyboardEventsEnabled :: Bool
+debugKeyboardEventsEnabled = unsafePerformIO $ do
+  simulaDebug <- lookupEnv "SIMULA_DEBUG"
+  simulaDebugKeyboardEvents <- lookupEnv "SIMULA_DEBUG_KEYBOARD_EVENTS"
+  return $ simulaDebug == Just "1" || simulaDebugKeyboardEvents == Just "1"
+{-# NOINLINE debugKeyboardEventsEnabled #-}
+
 debugSurfaceBoundariesEnabled :: Bool
 debugSurfaceBoundariesEnabled = unsafePerformIO $ do
   simulaDebug <- lookupEnv "SIMULA_DEBUG"

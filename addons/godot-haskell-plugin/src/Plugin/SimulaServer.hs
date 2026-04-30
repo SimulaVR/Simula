@@ -1666,6 +1666,41 @@ _on_simula_shortcut gss gvArgs@[scancodeWithModifiers', isPressed'] = do
         extractTestKeys :: Int -> [Int]
         extractTestKeys sc = concatMap (extractIf sc) [G.KEY_A, G.KEY_B, G.KEY_MASK_ALT] 
 
+debugPrintProcessKeypress :: GodotSimulaServer
+                          -> Modifiers
+                          -> Keycode
+                          -> Keycode
+                          -> Bool
+                          -> Bool
+                          -> Maybe KeyboardAction
+                          -> Bool
+                          -> IO ()
+debugPrintProcessKeypress gss modifiers keycode keycode' isPressed wasdMode maybeKeyboardAction isMouseCode =
+  when debugKeyboardEventsEnabled $ do
+    maybeKeyboardFocusedGSVS <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
+    focusSummary <- case maybeKeyboardFocusedGSVS of
+      Nothing -> return "focus=nothing"
+      Just gsvs -> debugDescribeKeyboardFocus gsvs
+    putStrLn $
+      "Keyboard dispatch modifiers="
+        ++ show modifiers
+        ++ " keycode="
+        ++ show keycode
+        ++ " remappedKeycode="
+        ++ show keycode'
+        ++ " isPressed="
+        ++ show isPressed
+        ++ " wasdMode="
+        ++ show wasdMode
+        ++ " shortcutAction="
+        ++ show (isJust maybeKeyboardAction)
+        ++ " isMouseCode="
+        ++ show isMouseCode
+        ++ " sendsWlrKey="
+        ++ show (isNothing maybeKeyboardAction && not isMouseCode && keycode' /= 0)
+        ++ " "
+        ++ focusSummary
+
 processKeypress :: GodotSimulaServer -> Modifiers -> Keycode -> Bool -> IO ()
 processKeypress gss modifiers keycode isPressed = do
   debugPutStrLn "Plugin.SimulaServer.processKeypress"
@@ -1685,6 +1720,8 @@ processKeypress gss modifiers keycode isPressed = do
 
   wasdMode <- readTVarIO (gss ^. gssWasdMode)
   let isMouseCode = isMouseButton keycode'
+
+  debugPrintProcessKeypress gss modifiers keycode keycode' isPressed wasdMode maybeKeyboardAction isMouseCode
 
   case (maybeKeyboardAction, isMouseCode) of
     (Just action, _) -> do putStrLn $ "action detected"

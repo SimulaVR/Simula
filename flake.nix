@@ -521,7 +521,8 @@ Debug Environment Variables:
 - SIMULA_DEBUG_MEMORY=1: Shows per-second RSS memory deltas in the HUD so you can get an estimate of how various actions impact top level memory usage.
 - SIMULA_DEBUG_SURFACE_BOUNDARIES=1: Shows wlr_surface (red), geometry boundaries with offset x/y offset (green), and geometry boundaries without x/y offset (blue) on all surfaces. Top-level XDG boundaries are colored in yellow (for wayland surfaces), while XWayland are colored black (though since most xwayland top levels don't have borders to begin with, you often won't see the black border).
 - SIMULA_DEBUG_SURFACE_CREATIONS=1: Prints detailed surface information when they get created/mapped.
-- SIMULA_DEBUG_MOUSE_EVENTS=1 Shows detailed tracing of mouse interaction logic.
+- SIMULA_DEBUG_MOUSE_EVENTS=1: Shows detailed tracing of mouse interaction logic.
+- SIMULA_DEBUG_KEYBOARD_EVENTS=1: Shows detailed tracing of keyboard focus and key dispatch logic.
 _EOF_HELP_
                     exit 0
                     ;;
