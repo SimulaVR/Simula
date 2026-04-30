@@ -87,6 +87,8 @@ instance NativeScript GodotSimulaViewSprite where
                       <*> atomically (newTVar Nothing)
                       <*> atomically (newTVar [])
                       <*> atomically (newTVar False)
+                      <*> atomically (newTVar [])
+                      <*> atomically (newTVar Nothing)
   -- classExtends = "RigidBody"
   classMethods =
     [ func NoRPC "_input_event" (catchGodot inputEvent)
@@ -492,7 +494,7 @@ focus gsvs = do
         G.set_activated toplevel True
         debugPrintKeyboardFocusChange gsvs "focus xdg root keyboard_notify_enter" (Just wlrSurface)
         G.keyboard_notify_enter wlrSeat wlrSurface
-        pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
+        pointerNotifyEnter gsvs wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
         pointerNotifyFrame wlrSeat
     Right wlrXWaylandSurface -> do
       wlrXWaylandSurface <- validateSurfaceE wlrXWaylandSurface
@@ -503,7 +505,7 @@ focus gsvs = do
         safeSetActivated gsvs True -- G.set_activated wlrXWaylandSurface True
         debugPrintKeyboardFocusChange gsvs "focus xwayland root keyboard_notify_enter" (Just wlrSurface)
         G.keyboard_notify_enter wlrSeat wlrSurface
-        pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
+        pointerNotifyEnter gsvs wlrSeat wlrSurface (SubSurfaceLocalCoordinates (0,0))
         pointerNotifyFrame wlrSeat
 
 -- | This function isn't called unless a surface is being pointed at (by VR
@@ -540,6 +542,7 @@ processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)
                  Nothing -> do
                    wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
                    clearActiveSurface gsvs
+                   debugHudClearPointerFocus gsvs
                    G.pointer_clear_focus wlrSeat
                    case evt of
                      Motion -> return ()
@@ -551,41 +554,57 @@ processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)
 
                      case evt of
                        Motion -> do
-                         pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
+                         pointerNotifyEnter gsvs wlrSeat godotWlrSurface subSurfaceLocalCoords
                          pointerNotifyMotion wlrSeat subSurfaceLocalCoords
                        Button _ _ -> do
                          -- Keyboard focus/activation goes to the XDG toplevel root for this hit.
                          -- Pointer events go to the concrete wlr_surface returned by surface_at,
                          -- which may be a subsurface/leaf rather than the XDG root itself.
                          mapM_ (keyboardFocusAnXdgRootSurfaceFromGSVS gsvs) maybeFocusedXdgSurface
-                         pointerNotifyEnter wlrSeat godotWlrSurface subSurfaceLocalCoords
+                         pointerNotifyEnter gsvs wlrSeat godotWlrSurface subSurfaceLocalCoords
                          pointerNotifyMotion wlrSeat subSurfaceLocalCoords
-                         debugPrintMouseButtonIntercept evt godotWlrSurface surfaceLocalCoords subSurfaceLocalCoords
+                         debugPrintMouseButtonIntercept gsvs evt godotWlrSurface surfaceLocalCoords subSurfaceLocalCoords
                          pointerNotifyButton wlrSeat evt
 
                      pointerNotifyFrame wlrSeat)
                      `finally` destroyMaybe (safeCast godotWlrSurface)
 
 
-debugPrintMouseButtonIntercept :: InputEventType -> GodotWlrSurface -> SurfaceLocalCoordinates -> SubSurfaceLocalCoordinates -> IO ()
-debugPrintMouseButtonIntercept inputEventType wlrSurface (SurfaceLocalCoordinates (sx, sy)) (SubSurfaceLocalCoordinates (ssx, ssy)) =
+debugPrintMouseButtonIntercept :: GodotSimulaViewSprite -> InputEventType -> GodotWlrSurface -> SurfaceLocalCoordinates -> SubSurfaceLocalCoordinates -> IO ()
+debugPrintMouseButtonIntercept gsvs inputEventType wlrSurface (SurfaceLocalCoordinates (sx, sy)) (SubSurfaceLocalCoordinates (ssx, ssy)) =
   when debugMouseEventsEnabled $ do
     case inputEventType of
       Motion -> return ()
       Button pressed buttonIndex -> do
         (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
-        putStrLn $
-          "Mouse button intercepted by surface="
+        let msg =
+              "Mouse button intercepted by surface="
+                ++ show wlrSurface
+                ++ " button="
+                ++ show buttonIndex
+                ++ " pressed="
+                ++ show pressed
+                ++ " surfaceLocal=("
+                ++ show sx
+                ++ ","
+                ++ show sy
+                ++ ") subSurfaceLocal=("
+                ++ show ssx
+                ++ ","
+                ++ show ssy
+                ++ ") buffer="
+                ++ show bufferWidth
+                ++ "x"
+                ++ show bufferHeight
+        putStrLn msg
+        debugHudPush gsvs $
+          "MOUSE button surface="
             ++ show wlrSurface
             ++ " button="
             ++ show buttonIndex
             ++ " pressed="
             ++ show pressed
-            ++ " surfaceLocal=("
-            ++ show sx
-            ++ ","
-            ++ show sy
-            ++ ") subSurfaceLocal=("
+            ++ " local=("
             ++ show ssx
             ++ ","
             ++ show ssy
@@ -617,18 +636,28 @@ debugPrintPointerSeatState gsvs inputEventType surfaceLocalCoords@(SurfaceLocalC
         wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
         focusedSurfaceSummary <- getFocusedSurfaceSummary wlrSeat
         hitSurfaceSummary <- getHitSurfaceSummary gsvs surfaceLocalCoords
-        putStrLn $
-          "Mouse button seat state button="
+        let msg =
+              "Mouse button seat state button="
+                ++ show buttonIndex
+                ++ " pressed="
+                ++ show pressed
+                ++ " surfaceLocal=("
+                ++ show sx
+                ++ ","
+                ++ show sy
+                ++ ") focused="
+                ++ focusedSurfaceSummary
+                ++ " freshHit="
+                ++ hitSurfaceSummary
+        putStrLn msg
+        debugHudPush gsvs $
+          "MOUSE seat button="
             ++ show buttonIndex
             ++ " pressed="
             ++ show pressed
-            ++ " surfaceLocal=("
-            ++ show sx
-            ++ ","
-            ++ show sy
-            ++ ") focused="
+            ++ " focused="
             ++ focusedSurfaceSummary
-            ++ " freshHit="
+            ++ " hit="
             ++ hitSurfaceSummary
   where
     getFocusedSurfaceSummary :: GodotWlrSeat -> IO String
@@ -680,10 +709,18 @@ debugPrintKeyboardFocusChange gsvs context maybeTargetSurface =
   when debugKeyboardEventsEnabled $ do
     focusSummary <- debugDescribeKeyboardFocus gsvs
     targetSurfaceSummary <- describeMaybeWlrSurface maybeTargetSurface
-    putStrLn $
-      "Keyboard focus change context="
+    let msg =
+          "Keyboard focus change context="
+            ++ context
+            ++ " targetSurface="
+            ++ targetSurfaceSummary
+            ++ " "
+            ++ focusSummary
+    putStrLn msg
+    debugHudPush gsvs $
+      "KEY focus context="
         ++ context
-        ++ " targetSurface="
+        ++ " target="
         ++ targetSurfaceSummary
         ++ " "
         ++ focusSummary
@@ -726,12 +763,34 @@ debugPrintXWaylandFreeChildKeyboardFocus gsvs freeChildSurface wlrSurface (SubSu
     width <- G.get_width freeChildSurface
     height <- G.get_height freeChildSurface
     focusSummary <- debugDescribeKeyboardFocus gsvs
-    putStrLn $
-      "Keyboard focus xwayland free child activated child="
+    let msg =
+          "Keyboard focus xwayland free child activated child="
+            ++ show freeChildSurface
+            ++ " pid="
+            ++ show pid
+            ++ " geometry=("
+            ++ show surfaceX
+            ++ ","
+            ++ show surfaceY
+            ++ " "
+            ++ show width
+            ++ "x"
+            ++ show height
+            ++ ") childLocal=("
+            ++ show x
+            ++ ","
+            ++ show y
+            ++ ") wlrSurface="
+            ++ show wlrSurface
+            ++ " "
+            ++ focusSummary
+    putStrLn msg
+    debugHudPush gsvs $
+      "KEY free-child focus child="
         ++ show freeChildSurface
         ++ " pid="
         ++ show pid
-        ++ " geometry=("
+        ++ " geom=("
         ++ show surfaceX
         ++ ","
         ++ show surfaceY
@@ -739,14 +798,8 @@ debugPrintXWaylandFreeChildKeyboardFocus gsvs freeChildSurface wlrSurface (SubSu
         ++ show width
         ++ "x"
         ++ show height
-        ++ ") childLocal=("
-        ++ show x
-        ++ ","
-        ++ show y
         ++ ") wlrSurface="
         ++ show wlrSurface
-        ++ " "
-        ++ focusSummary
 
 describeMaybeWlrSurface :: Maybe GodotWlrSurface -> IO String
 describeMaybeWlrSurface Nothing = return "nothing"
@@ -988,9 +1041,11 @@ pointerNotifyFrame wlrSeat = do
 -- | Let wlroots know we have entered a new surface. We can safely call this
 -- | over and over (wlroots checks if we've called it already for this surface
 -- | and, if so, returns early.
-pointerNotifyEnter :: GodotWlrSeat -> GodotWlrSurface -> SubSurfaceLocalCoordinates -> IO ()
-pointerNotifyEnter wlrSeat wlrSurface (SubSurfaceLocalCoordinates (ssx, ssy)) = do
+pointerNotifyEnter :: GodotSimulaViewSprite -> GodotWlrSeat -> GodotWlrSurface -> SubSurfaceLocalCoordinates -> IO ()
+pointerNotifyEnter gsvs wlrSeat wlrSurface (SubSurfaceLocalCoordinates (ssx, ssy)) = do
   debugPutStrLn "Plugin.SimulaViewSprite.pointerNotifyEnter"
+  when debugMouseEventsEnabled $
+    debugHudPushPointerFocus gsvs ("surface=" ++ show wlrSurface)
   G.pointer_notify_enter wlrSeat wlrSurface ssx ssy -- Causing a crash
 
 _handle_map :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
@@ -1776,7 +1831,8 @@ handle_unmap_base self _ = do
         Nothing -> return ()
         Just gsvsFocused -> do
           simulaViewFocused <- readTVarIO (gsvsFocused ^. gsvsView)
-          when (simulaViewFocused == simulaView) $
+          when (simulaViewFocused == simulaView) $ do
+            debugHudPush gsvsFocused "KEY clear focus for unmapped/destroyed view"
             atomically $ writeTVar (gss ^. gssKeyboardFocusedSprite) Nothing
 
 -- The returned GodotWlrSurface will have a +1'ed reference count by the time this function returns it; caller is responsible for unreferencing it

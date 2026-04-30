@@ -131,6 +131,10 @@ _draw cb gvArgs = do
     -- Show xdg/xwayland geometry rectangles as green WITH their x/y offsets
     drawGreenGeometryBordersWithOffsets cb gsvs
 
+  -- Debug HUD can show targetted, uncluttered messages on gsvs
+  when debugHudEnabled $
+    drawDebugHud cb gsvs
+
   -- Draw cursor
   drawCursor cb gsvs
 
@@ -168,6 +172,40 @@ _draw cb gvArgs = do
         Right _ -> (toLowLevel $ (rgb 0.0 0.0 0.0) `withOpacity` 1.0) :: IO GodotColor         -- Black for XWayland
 
       G.draw_rect cb debugRect backgroundColor True 1.0 False
+
+    drawDebugHud :: CanvasBase -> GodotSimulaViewSprite -> IO ()
+    drawDebugHud cb gsvs = do
+      debugPutStrLn "Plugin.CanvasBase.drawDebugHud"
+      messages <- getDebugHudVisibleMessages gsvs
+      unless (Data.List.null messages) $ do
+        cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
+        viewportSurface <- readTVarIO (cs ^. csViewport)
+        V2 width height <- G.get_size viewportSurface >>= fromLowLevel :: IO (V2 Float)
+        debugFont <- readTVarIO (cb ^. cbDebugFont)
+        G.set_size debugFont 16
+        fontHeight <- G.get_height (safeCast debugFont :: GodotFont)
+        fontAscent <- G.get_ascent (safeCast debugFont :: GodotFont)
+        let padding = 8
+        let lineGap = 2
+        let lineStep = fontHeight + lineGap
+        let hudHeight = min height (fromIntegral padding * 2 + lineStep * fromIntegral (Data.List.length messages))
+        let hudTop = max 0 (height - hudHeight)
+        hudRect <- toLowLevel $
+          V2
+            (V2 0 hudTop)
+            (V2 width hudHeight)
+        backgroundColor <- (toLowLevel $ (rgb 0.0 0.0 0.0) `withOpacity` 0.82) :: IO GodotColor
+        textColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1.0) :: IO GodotColor
+        G.draw_rect cb hudRect backgroundColor True 1.0 False
+        bracket
+          (mapM (toLowLevel . pack) messages :: IO [GodotString])
+          (mapM_ Api.godot_string_destroy)
+          (\messageStrs -> do
+            let firstBaselineY = hudTop + fromIntegral padding + fontAscent
+            let maxTextWidth = max 1 (round width - padding * 2)
+            forM_ (zip [0..] messageStrs) $ \(lineIndex :: Int, messageStr) -> do
+              renderPosition <- toLowLevel (V2 (fromIntegral padding) (firstBaselineY + lineStep * fromIntegral lineIndex)) :: IO GodotVector2
+              G.draw_string cb (safeCast debugFont :: GodotFont) renderPosition messageStr textColor maxTextWidth)
 
     drawCanvasSurface :: CanvasBase -> GodotSimulaViewSprite -> IO ()
     drawCanvasSurface cb gsvs = do

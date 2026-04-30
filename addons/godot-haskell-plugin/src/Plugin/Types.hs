@@ -67,8 +67,6 @@ import           Data.Text hiding (show)
 import qualified System.Process.ByteString as B
 import qualified Data.ByteString.Char8 as B
 
-import Data.IORef
-
 import qualified Data.Map.Strict as M
 
 import Data.UUID
@@ -131,6 +129,76 @@ debugSurfaceBoundariesEnabled = unsafePerformIO $ do
   return $ simulaDebug == Just "1" || simulaDebugSurfaceCreations == Just "1"
 {-# NOINLINE debugSurfaceBoundariesEnabled #-}
 
+debugHudEnabled :: Bool
+debugHudEnabled =
+  debugSurfaceBoundariesEnabled && (debugMouseEventsEnabled || debugKeyboardEventsEnabled)
+
+debugHudMaxLines :: Int
+debugHudMaxLines = 8
+
+debugHudLineMaxChars :: Int
+debugHudLineMaxChars = 170
+
+debugHudGlobalMessages :: TVar [String]
+debugHudGlobalMessages = unsafePerformIO $ newTVarIO []
+{-# NOINLINE debugHudGlobalMessages #-}
+
+debugHudPushTo :: TVar [String] -> String -> IO ()
+debugHudPushTo messagesVar msg =
+  when debugHudEnabled $
+    atomically $ modifyTVar' messagesVar $ \messages ->
+      let messages' = List.take debugHudMaxLines $ List.drop (List.length messages + 1 - debugHudMaxLines) (messages ++ [debugHudTrimLine msg])
+      in messages'
+
+debugHudPushGlobal :: String -> IO ()
+debugHudPushGlobal =
+  debugHudPushTo debugHudGlobalMessages
+
+debugHudPush :: GodotSimulaViewSprite -> String -> IO ()
+debugHudPush gsvs msg =
+  debugHudPushTo (_gsvsDebugHudMessages gsvs) msg
+
+debugHudPushPointerFocus :: GodotSimulaViewSprite -> String -> IO ()
+debugHudPushPointerFocus gsvs surfaceSummary =
+  when debugHudEnabled $ do
+    shouldPush <- atomically $ do
+      lastFocus <- readTVar (_gsvsDebugHudLastPointerFocusSummary gsvs)
+      if lastFocus == Just surfaceSummary
+        then return False
+        else do
+          writeTVar (_gsvsDebugHudLastPointerFocusSummary gsvs) (Just surfaceSummary)
+          return True
+    when shouldPush $
+      debugHudPush gsvs ("MOUSE focus " ++ surfaceSummary)
+
+debugHudClearPointerFocus :: GodotSimulaViewSprite -> IO ()
+debugHudClearPointerFocus gsvs =
+  when debugHudEnabled $ do
+    shouldPush <- atomically $ do
+      lastFocus <- readTVar (_gsvsDebugHudLastPointerFocusSummary gsvs)
+      case lastFocus of
+        Nothing -> return False
+        Just _ -> do
+          writeTVar (_gsvsDebugHudLastPointerFocusSummary gsvs) Nothing
+          return True
+    when shouldPush $
+      debugHudPush gsvs "MOUSE clear pointer focus"
+
+getDebugHudVisibleMessages :: GodotSimulaViewSprite -> IO [String]
+getDebugHudVisibleMessages gsvs =
+  if debugHudEnabled
+    then do
+      globalMessages <- readTVarIO debugHudGlobalMessages
+      localMessages <- readTVarIO (_gsvsDebugHudMessages gsvs)
+      -- Return only the most recent messages w/in our debugHudMaxLines constraint
+      return $ List.take debugHudMaxLines $ List.drop (List.length globalMessages + List.length localMessages - debugHudMaxLines) (globalMessages ++ localMessages)
+    else return []
+
+debugHudTrimLine :: String -> String
+debugHudTrimLine msg
+  | List.length msg <= debugHudLineMaxChars = msg
+  | debugHudLineMaxChars <= 3 = List.take debugHudLineMaxChars msg
+  | otherwise = List.take (debugHudLineMaxChars - 3) msg ++ "..."
 
 debugPutStrLn :: String -> IO ()
 debugPutStrLn msg =
@@ -384,6 +452,8 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsShaderPath        :: TVar (Maybe String)
   , _gsvsDamagedRegions    :: TVar [GodotRect2]
   , _gsvsIsDamaged         :: TVar Bool
+  , _gsvsDebugHudMessages  :: TVar [String]
+  , _gsvsDebugHudLastPointerFocusSummary :: TVar (Maybe String)
   }
 
 instance HasBaseClass GodotSimulaViewSprite where

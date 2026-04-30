@@ -1413,6 +1413,8 @@ _on_wlr_key gss gvArgs@[keyboardGVar, eventGVar] = do
   debugPutStrLn "Plugin.SimulaServer._on_wlr_key"
   wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
   event <- fromGodotVariant eventGVar
+  when debugKeyboardEventsEnabled $
+    debugHudPushKeyboardFocusedOrGlobal gss "KEY wlroots notify key"
   G.keyboard_notify_key wlrSeat event
   mapM_ Api.godot_variant_destroy gvArgs
   return ()
@@ -1421,6 +1423,8 @@ _on_wlr_modifiers :: GodotSimulaServer -> [GodotVariant] -> IO ()
 _on_wlr_modifiers gss gvArgs@[keyboardGVar] = do
   debugPutStrLn "Plugin.SimulaServer._on_wlr_modifiers"
   wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+  when debugKeyboardEventsEnabled $
+    debugHudPushKeyboardFocusedOrGlobal gss "KEY wlroots notify modifiers"
   G.keyboard_notify_modifiers wlrSeat
   mapM_ Api.godot_variant_destroy gvArgs
   return ()
@@ -1681,25 +1685,48 @@ debugPrintProcessKeypress gss modifiers keycode keycode' isPressed wasdMode mayb
     focusSummary <- case maybeKeyboardFocusedGSVS of
       Nothing -> return "focus=nothing"
       Just gsvs -> debugDescribeKeyboardFocus gsvs
-    putStrLn $
-      "Keyboard dispatch modifiers="
-        ++ show modifiers
-        ++ " keycode="
-        ++ show keycode
-        ++ " remappedKeycode="
-        ++ show keycode'
-        ++ " isPressed="
-        ++ show isPressed
-        ++ " wasdMode="
-        ++ show wasdMode
-        ++ " shortcutAction="
-        ++ show (isJust maybeKeyboardAction)
-        ++ " isMouseCode="
-        ++ show isMouseCode
-        ++ " sendsWlrKey="
-        ++ show (isNothing maybeKeyboardAction && not isMouseCode && keycode' /= 0)
-        ++ " "
-        ++ focusSummary
+    let sendsWlrKey = isNothing maybeKeyboardAction && not isMouseCode && keycode' /= 0
+    let msg =
+          "Keyboard dispatch modifiers="
+            ++ show modifiers
+            ++ " keycode="
+            ++ show keycode
+            ++ " remappedKeycode="
+            ++ show keycode'
+            ++ " isPressed="
+            ++ show isPressed
+            ++ " wasdMode="
+            ++ show wasdMode
+            ++ " shortcutAction="
+            ++ show (isJust maybeKeyboardAction)
+            ++ " isMouseCode="
+            ++ show isMouseCode
+            ++ " sendsWlrKey="
+            ++ show sendsWlrKey
+            ++ " "
+            ++ focusSummary
+    putStrLn msg
+    let hudMsg =
+          "KEY dispatch key="
+            ++ show keycode
+            ++ " remap="
+            ++ show keycode'
+            ++ " pressed="
+            ++ show isPressed
+            ++ " sendsWlrKey="
+            ++ show sendsWlrKey
+            ++ " "
+            ++ focusSummary
+    case maybeKeyboardFocusedGSVS of
+      Just gsvs -> debugHudPush gsvs hudMsg
+      Nothing -> debugHudPushGlobal hudMsg
+
+debugHudPushKeyboardFocusedOrGlobal :: GodotSimulaServer -> String -> IO ()
+debugHudPushKeyboardFocusedOrGlobal gss msg = do
+  maybeKeyboardFocusedGSVS <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
+  case maybeKeyboardFocusedGSVS of
+    Just gsvs -> debugHudPush gsvs msg
+    Nothing -> debugHudPushGlobal msg
 
 processKeypress :: GodotSimulaServer -> Modifiers -> Keycode -> Bool -> IO ()
 processKeypress gss modifiers keycode isPressed = do
