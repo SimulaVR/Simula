@@ -533,10 +533,10 @@ processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)
                maybeSurfaceAndCoords <-
                  case wlrEitherSurface of
                    Right godotWlrXWaylandSurface -> do
-                     fmap (\(wlrSurface, coords) -> (wlrSurface, coords, Nothing)) <$>
-                       getXWaylandSubsurfaceAndCoords gsvs godotWlrXWaylandSurface surfaceLocalCoords
+                     fmap (\(wlrSurface, coords, focusOwnerXWaylandSurface) -> (wlrSurface, coords, Nothing, Just focusOwnerXWaylandSurface)) <$>
+                       getXWaylandSubsurfaceAndCoordsWithKeyboardFocus gsvs godotWlrXWaylandSurface surfaceLocalCoords
                    Left godotWlrXdgSurface ->
-                     fmap (\(wlrSurface, coords, focusedXdgSurface) -> (wlrSurface, coords, Just focusedXdgSurface)) <$>
+                     fmap (\(wlrSurface, coords, focusedXdgSurface) -> (wlrSurface, coords, Just focusedXdgSurface, Nothing)) <$>
                        getXdgSubsurfaceAndCoordsAttachedAware gsvs godotWlrXdgSurface surfaceLocalCoords
                case maybeSurfaceAndCoords of
                  Nothing -> do
@@ -548,7 +548,7 @@ processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)
                      Motion -> return ()
                      Button _ _ -> pointerNotifyButton wlrSeat evt
                    pointerNotifyFrame wlrSeat
-                 Just (godotWlrSurface, subSurfaceLocalCoords@(SubSurfaceLocalCoordinates (ssx, ssy)), maybeFocusedXdgSurface) ->
+                 Just (godotWlrSurface, subSurfaceLocalCoords@(SubSurfaceLocalCoordinates (ssx, ssy)), maybeFocusedXdgSurface, maybeFocusOwnerXWaylandSurface) ->
                    (do
                      wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
 
@@ -557,10 +557,12 @@ processClickEvent' gsvs evt surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)
                          pointerNotifyEnter gsvs wlrSeat godotWlrSurface subSurfaceLocalCoords
                          pointerNotifyMotion wlrSeat subSurfaceLocalCoords
                        Button _ _ -> do
-                         -- Keyboard focus/activation goes to the XDG toplevel root for this hit.
+                         -- Keyboard focus/activation goes to the owning surface for this hit.
                          -- Pointer events go to the concrete wlr_surface returned by surface_at,
-                         -- which may be a subsurface/leaf rather than the XDG root itself.
+                         -- which may be a subsurface/leaf (i.e. parented xdg toplevel or xwayland
+                         -- free child) rather than the owning surface itself.
                          mapM_ (keyboardFocusAnXdgRootSurfaceFromGSVS gsvs) maybeFocusedXdgSurface
+                         mapM_ (keyboardFocusXWaylandRootWlrSurfaceFromGSVS gsvs) maybeFocusOwnerXWaylandSurface
                          pointerNotifyEnter gsvs wlrSeat godotWlrSurface subSurfaceLocalCoords
                          pointerNotifyMotion wlrSeat subSurfaceLocalCoords
                          debugPrintMouseButtonIntercept gsvs evt godotWlrSurface surfaceLocalCoords subSurfaceLocalCoords
@@ -1214,6 +1216,25 @@ keyboardFocusAnXdgRootSurfaceFromGSVS spatialGSVS wlrXdgSurface = do
     debugPrintKeyboardFocusChange spatialGSVS "focus attached xdg root keyboard_notify_enter" (Just rootWlrSurface)
     G.keyboard_notify_enter wlrSeat rootWlrSurface
 
+keyboardFocusXWaylandRootWlrSurfaceFromGSVS :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> IO ()
+keyboardFocusXWaylandRootWlrSurfaceFromGSVS spatialGSVS wlrXWaylandSurface = do
+  debugPutStrLn "Plugin.SimulaViewSprite.keyboardFocusXWaylandRootWlrSurfaceFromGSVS"
+  gss <- readTVarIO (spatialGSVS ^. gsvsServer)
+  wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+  previousActiveCursorGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
+  when (previousActiveCursorGSVS /= Just spatialGSVS) $
+    mapM_ clearActiveSurface previousActiveCursorGSVS
+  atomically $ do
+    writeTVar (gss ^. gssKeyboardFocusedSprite) (Just spatialGSVS)
+    writeTVar (gss ^. gssActiveCursorGSVS) (Just spatialGSVS)
+  withGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface) $ \rootWlrSurface -> do
+    rootWlrSurface <- validateSurfaceE rootWlrSurface
+    G.reference rootWlrSurface -- +1 the refe count since
+    replaceActiveSurface spatialGSVS (Just rootWlrSurface) -- ...we store reference to it here
+    G.set_activated wlrXWaylandSurface True
+    debugPrintKeyboardFocusChange spatialGSVS "focus xwayland root keyboard_notify_enter" (Just rootWlrSurface)
+    G.keyboard_notify_enter wlrSeat rootWlrSurface
+
 surfaceHasParent :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO Bool
 surfaceHasParent eitherSurface =
   case eitherSurface of
@@ -1837,35 +1858,99 @@ handle_unmap_base self _ = do
 
 -- The returned GodotWlrSurface will have a +1'ed reference count by the time this function returns it; caller is responsible for unreferencing it
 getXWaylandSubsurfaceAndCoords :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> SurfaceLocalCoordinates -> IO (Maybe (GodotWlrSurface, SubSurfaceLocalCoordinates))
-getXWaylandSubsurfaceAndCoords gsvs wlrXWaylandSurface compositionCoords@(SurfaceLocalCoordinates (sx, sy)) = do
+getXWaylandSubsurfaceAndCoords gsvs wlrXWaylandSurface compositionCoords = do
   debugPutStrLn "Plugin.SimulaViewSprite.getXWaylandSubsurfaceAndCoords"
+  fmap (\(wlrSurface, coords, _) -> (wlrSurface, coords)) <$>
+    getXWaylandSubsurfaceAndCoordsWithKeyboardFocus gsvs wlrXWaylandSurface compositionCoords
+
+-- The returned GodotWlrSurface will have a +1'ed reference count by the time this function returns it; caller is responsible for unreferencing it
+getXWaylandSubsurfaceAndCoordsWithKeyboardFocus :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> SurfaceLocalCoordinates -> IO (Maybe (GodotWlrSurface, SubSurfaceLocalCoordinates, GodotWlrXWaylandSurface))
+getXWaylandSubsurfaceAndCoordsWithKeyboardFocus gsvs wlrXWaylandSurface compositionCoords@(SurfaceLocalCoordinates (sx, sy)) = do
+  debugPutStrLn "Plugin.SimulaViewSprite.getXWaylandSubsurfaceAndCoordsWithKeyboardFocus"
   (offsetX, offsetY) <- getGSVSSurfacesCoordinateOffsetFromOrigin gsvs
   let coords = SurfaceLocalCoordinates (sx - fromIntegral offsetX, sy - fromIntegral offsetY)
       SurfaceLocalCoordinates (rootSurfaceX, rootSurfaceY) = coords -- rootSurfaceX/rootSurfaceY are relative to the wlrXWaylandSurface
   freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
   maybeFreeRet <- getFreeChildrenCoords wlrXWaylandSurface coords freeChildren -- Returns referenced surface if it succeeds
   case maybeFreeRet of
-     Just freeSurfaceAndCoords@(wlrSurface, SubSurfaceLocalCoordinates (x, y), maybeWlrXWaylandSurface) -> do
-       let wlrXWaylandSurface = Data.Maybe.fromJust maybeWlrXWaylandSurface
-       G.set_activated wlrXWaylandSurface True
-       debugPrintXWaylandFreeChildKeyboardFocus gsvs wlrXWaylandSurface wlrSurface (SubSurfaceLocalCoordinates (x, y))
-       return $ Just (wlrSurface, SubSurfaceLocalCoordinates (x, y))
+     Just (wlrSurface, SubSurfaceLocalCoordinates (x, y), focusOwnerXWaylandSurface) -> do
+       G.set_activated focusOwnerXWaylandSurface True
+       debugPrintXWaylandFreeChildKeyboardFocus gsvs focusOwnerXWaylandSurface wlrSurface (SubSurfaceLocalCoordinates (x, y))
+       return $ Just (wlrSurface, SubSurfaceLocalCoordinates (x, y), focusOwnerXWaylandSurface)
      Nothing -> do
-       safeSetActivated gsvs True -- G.set_activated godotWlrXWaylandSurface True
-       -- surface_at expects coordinates relative to the top level wlr_surface, so you don't need to worry about geometry rect offsets or anything
-       withGodotRef (G.surface_at wlrXWaylandSurface rootSurfaceX rootSurfaceY :: IO GodotWlrSurfaceAtResult) $ \wlrSurfaceAtResult -> do
-         subX <- G.get_sub_x wlrSurfaceAtResult
-         subY <- G.get_sub_y wlrSurfaceAtResult
-         withGodotRef (G.get_surface wlrSurfaceAtResult :: IO GodotWlrSurface) $ \wlrSurface' ->
-           case validateObject wlrSurface' of
-             Nothing -> return Nothing
-             Just validWlrSurface -> do
-               validWlrSurface <- validateSurfaceE validWlrSurface
-               G.reference validWlrSurface -- Ensures the wlrSurface' is live when we return it from this function; caller is responsible for unreferencing it
-               return $ Just (validWlrSurface, SubSurfaceLocalCoordinates (subX, subY))
+       maybeMappedChildRet <- getMappedXWaylandChildrenCoords coords wlrXWaylandSurface
+       case maybeMappedChildRet of
+         Just (wlrSurface, SubSurfaceLocalCoordinates (x, y), focusOwnerXWaylandSurface) -> do
+           G.set_activated focusOwnerXWaylandSurface True
+           debugPrintXWaylandFreeChildKeyboardFocus gsvs focusOwnerXWaylandSurface wlrSurface (SubSurfaceLocalCoordinates (x, y))
+           return $ Just (wlrSurface, SubSurfaceLocalCoordinates (x, y), focusOwnerXWaylandSurface)
+         Nothing -> do
+           safeSetActivated gsvs True -- G.set_activated godotWlrXWaylandSurface True
+           -- surface_at expects coordinates relative to the top level wlr_surface, so you don't need to worry about geometry rect offsets or anything
+           withGodotRef (G.surface_at wlrXWaylandSurface rootSurfaceX rootSurfaceY :: IO GodotWlrSurfaceAtResult) $ \wlrSurfaceAtResult -> do
+             subX <- G.get_sub_x wlrSurfaceAtResult
+             subY <- G.get_sub_y wlrSurfaceAtResult
+             withGodotRef (G.get_surface wlrSurfaceAtResult :: IO GodotWlrSurface) $ \wlrSurface' ->
+               case validateObject wlrSurface' of
+                 Nothing -> return Nothing
+                 Just validWlrSurface -> do
+                   validWlrSurface <- validateSurfaceE validWlrSurface
+                   G.reference validWlrSurface -- Ensures the wlrSurface' is live when we return it from this function; caller is responsible for unreferencing it
+                   return $ Just (validWlrSurface, SubSurfaceLocalCoordinates (subX, subY), wlrXWaylandSurface)
+
+-- Take gsvs coords and a mapped child and check whether or not the mapped child is hit or not. If so, return the hit in subsurface local coords.
+-- Returns referenced surface if it succeeds; caller is responsible for unreferencing it
+getMappedXWaylandChildCoords :: SurfaceLocalCoordinates -> GodotWlrXWaylandSurface -> IO (Maybe (GodotWlrSurface, SubSurfaceLocalCoordinates, GodotWlrXWaylandSurface))
+getMappedXWaylandChildCoords (SurfaceLocalCoordinates (cx, cy)) mappedChildXWaylandSurface = do
+  debugPutStrLn "Plugin.SimulaViewSprite.getMappedXWaylandChildCoords"
+  childX <- G.get_x mappedChildXWaylandSurface
+  childY <- G.get_y mappedChildXWaylandSurface
+  V2 (V2 childGeomX childGeomY) _ <- G.get_geometry mappedChildXWaylandSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+  let rootX = fromIntegral childX - childGeomX
+      rootY = fromIntegral childY - childGeomY
+      childLocalX = cx - rootX
+      childLocalY = cy - rootY
+  withGodotRef (G.surface_at mappedChildXWaylandSurface childLocalX childLocalY :: IO GodotWlrSurfaceAtResult) $ \wlrSurfaceAtResult -> do
+    withGodotRef (G.get_surface wlrSurfaceAtResult :: IO GodotWlrSurface) $ \wlrSurface ->
+      case validateObject wlrSurface of
+        Nothing -> return Nothing
+        Just validWlrSurface -> do
+          validWlrSurface <- validateSurfaceE validWlrSurface
+          (bufferWidth, bufferHeight) <- getBufferDimensions validWlrSurface
+          subX <- G.get_sub_x wlrSurfaceAtResult
+          subY <- G.get_sub_y wlrSurfaceAtResult
+          case (0 <= subX, subX < fromIntegral bufferWidth, 0 <= subY, subY < fromIntegral bufferHeight) of
+            (True, True, True, True) -> do
+              G.reference validWlrSurface
+              return $ Just (validWlrSurface, SubSurfaceLocalCoordinates (subX, subY), mappedChildXWaylandSurface)
+            _ -> return Nothing
+
+-- Takes gsvs coords and checks whether each mapped child surface is hit or not (in reverse order). Does NOT check whether the root wlrXWaylandSurface is hit.
+-- Returns referenced surface if it succeeds; caller is responsible for unreferencing it
+getMappedXWaylandChildrenCoords :: SurfaceLocalCoordinates -> GodotWlrXWaylandSurface -> IO (Maybe (GodotWlrSurface, SubSurfaceLocalCoordinates, GodotWlrXWaylandSurface))
+getMappedXWaylandChildrenCoords coords wlrXWaylandSurface = do
+  debugPutStrLn "Plugin.SimulaViewSprite.getMappedXWaylandChildrenCoords"
+  arrayOfChildren <- G.get_children wlrXWaylandSurface :: IO GodotArray
+  arrayOfChildrenGV <- fromGodotArray arrayOfChildren
+  children <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrXWaylandSurface]
+  ret <- findMappedChildHit (Data.List.reverse children)
+  Api.godot_array_destroy arrayOfChildren
+  mapM_ Api.godot_variant_destroy arrayOfChildrenGV
+  return ret
+  where
+    findMappedChildHit [] = return Nothing
+    findMappedChildHit (child:remainingChildren) = do
+      maybeNestedHit <- getMappedXWaylandChildrenCoords coords child
+      case maybeNestedHit of
+        Just hit -> return $ Just hit
+        Nothing -> do
+          maybeChildHit <- getMappedXWaylandChildCoords coords child
+          case maybeChildHit of
+            Just hit -> return $ Just hit
+            Nothing -> findMappedChildHit remainingChildren
 
 -- Returns referenced surface if it succeeds; caller is responsible for unreferencing it
-getFreeChildCoords :: GodotWlrXWaylandSurface -> SurfaceLocalCoordinates -> GodotWlrXWaylandSurface -> IO (Maybe (GodotWlrSurface, SubSurfaceLocalCoordinates, Maybe GodotWlrXWaylandSurface))
+getFreeChildCoords :: GodotWlrXWaylandSurface -> SurfaceLocalCoordinates -> GodotWlrXWaylandSurface -> IO (Maybe (GodotWlrSurface, SubSurfaceLocalCoordinates, GodotWlrXWaylandSurface))
 getFreeChildCoords parentWlrXWaylandSurface (SurfaceLocalCoordinates (cx, cy)) wlrXWaylandSurface = do
   debugPutStrLn "Plugin.SimulaViewSprite.getFreeChildCoords"
   withGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface) $ \freeChildSurface -> do
@@ -1880,10 +1965,10 @@ getFreeChildCoords parentWlrXWaylandSurface (SurfaceLocalCoordinates (cx, cy)) w
         G.reference freeChildSurface
         let x = cx - fsx
         let y = cy - fsy
-        return $ Just (freeChildSurface, SubSurfaceLocalCoordinates (x, y), Just wlrXWaylandSurface)
+        return $ Just (freeChildSurface, SubSurfaceLocalCoordinates (x, y), wlrXWaylandSurface)
       _ -> return Nothing
 
-getFreeChildrenCoords :: GodotWlrXWaylandSurface -> SurfaceLocalCoordinates -> [GodotWlrXWaylandSurface] -> IO (Maybe (GodotWlrSurface, SubSurfaceLocalCoordinates, Maybe GodotWlrXWaylandSurface))
+getFreeChildrenCoords :: GodotWlrXWaylandSurface -> SurfaceLocalCoordinates -> [GodotWlrXWaylandSurface] -> IO (Maybe (GodotWlrSurface, SubSurfaceLocalCoordinates, GodotWlrXWaylandSurface))
 getFreeChildrenCoords parentWlrXWaylandSurface coords@(SurfaceLocalCoordinates (cx, cy)) freeChildren = do
   debugPutStrLn "Plugin.SimulaViewSprite.getFreeChildrenCoords"
   let freeChildren' = Data.List.reverse freeChildren
