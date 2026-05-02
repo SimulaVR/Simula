@@ -760,8 +760,8 @@ debugPrintXWaylandFreeChildKeyboardFocus :: GodotSimulaViewSprite -> GodotWlrXWa
 debugPrintXWaylandFreeChildKeyboardFocus gsvs freeChildSurface wlrSurface (SubSurfaceLocalCoordinates (x, y)) =
   when debugKeyboardEventsEnabled $ do
     pid <- G.get_pid freeChildSurface
-    surfaceX <- G.get_x freeChildSurface
-    surfaceY <- G.get_y freeChildSurface
+    surfaceX <- G.get_surface_origin_x freeChildSurface
+    surfaceY <- G.get_surface_origin_y freeChildSurface
     width <- G.get_width freeChildSurface
     height <- G.get_height freeChildSurface
     focusSummary <- debugDescribeKeyboardFocus gsvs
@@ -838,8 +838,8 @@ describeViewSurface simulaView =
           ++ xdgRoleName roleInt
     Right wlrXWaylandSurface -> do
       pid <- G.get_pid wlrXWaylandSurface
-      x <- G.get_x wlrXWaylandSurface
-      y <- G.get_y wlrXWaylandSurface
+      x <- G.get_surface_origin_x wlrXWaylandSurface
+      y <- G.get_surface_origin_y wlrXWaylandSurface
       width <- G.get_width wlrXWaylandSurface
       height <- G.get_height wlrXWaylandSurface
       return $
@@ -879,8 +879,8 @@ debugPrintWlrSurfaceMapDetails prefix wlrSurface =
 debugPrintXWaylandMapDetails :: String -> GodotWlrXWaylandSurface -> IO ()
 debugPrintXWaylandMapDetails prefix wlrXWaylandSurface =
   when debugSurfaceCreationsEnabled $ do
-    x <- G.get_x wlrXWaylandSurface
-    y <- G.get_y wlrXWaylandSurface
+    x <- G.get_surface_origin_x wlrXWaylandSurface
+    y <- G.get_surface_origin_y wlrXWaylandSurface
     width <- G.get_width wlrXWaylandSurface
     height <- G.get_height wlrXWaylandSurface
     pid <- G.get_pid wlrXWaylandSurface
@@ -1469,8 +1469,8 @@ handle_map_free_child_impl gsvsInvisible wlrXWaylandSurface = do
                      case maybeSurfaceLocalCoords of
                        Nothing -> return False
                        Just (sx, sy) -> do -- Push surface onto end of gsvsFreeChildren stack
-                                           x <- G.get_x wlrXWaylandSurface
-                                           y <- G.get_y wlrXWaylandSurface
+                                           x <- G.get_surface_origin_x wlrXWaylandSurface
+                                           y <- G.get_surface_origin_y wlrXWaylandSurface
                                            let xOffset = (sx - x)
                                            let yOffset = (sy - y)
 
@@ -1499,8 +1499,8 @@ handle_map_free_child_impl gsvsInvisible wlrXWaylandSurface = do
         computeSurfaceLocalCoordinates :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> IO (Maybe (Int, Int))
         computeSurfaceLocalCoordinates gsvs child = do
           debugPutStrLn "Plugin.SimulaViewSprite.computeSurfaceLocalCoordinates"
-          localX <- G.get_x child
-          localY <- G.get_y child
+          localX <- G.get_surface_origin_x child
+          localY <- G.get_surface_origin_y child
 
           simulaView <- readTVarIO (gsvs ^. gsvsView)
           let eitherSurface = (simulaView ^. svWlrEitherSurface)
@@ -1510,16 +1510,16 @@ handle_map_free_child_impl gsvsInvisible wlrXWaylandSurface = do
                             return Nothing
                           Right parent -> do
                             validateSurfaceE parent
-                            globalX <- G.get_x parent
-                            globalY <- G.get_y parent
+                            globalX <- G.get_surface_origin_x parent
+                            globalY <- G.get_surface_origin_y parent
                             return $ Just (localX - globalX, localY - globalY)
           return maybeCoords
 
 getAdjustedXY :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> IO GodotVector2
 getAdjustedXY gsvs wlrXWaylandSurface = do
   debugPutStrLn "Plugin.SimulaViewSprite.getAdjustedXY"
-  childSX <- G.get_x wlrXWaylandSurface
-  childSY <- G.get_y wlrXWaylandSurface
+  childSX <- G.get_surface_origin_x wlrXWaylandSurface
+  childSY <- G.get_surface_origin_y wlrXWaylandSurface
   childWidth <- G.get_width wlrXWaylandSurface
   childHeight <- G.get_height wlrXWaylandSurface
   maybeSpriteDims <- readTVarIO (gsvs ^. gsvsTargetSize)
@@ -1568,11 +1568,11 @@ getAdjustedXYFreeChild gsvs wlrXWaylandSurface = do
                                  return (V2 0 0)
                                (Right wlrXWaylandSurfaceParent) -> do
                                  wlrXWaylandSurface <- validateSurfaceE wlrXWaylandSurfaceParent
-                                 x <- G.get_x wlrXWaylandSurfaceParent
-                                 y <- G.get_y wlrXWaylandSurfaceParent
+                                 x <- G.get_surface_origin_x wlrXWaylandSurfaceParent
+                                 y <- G.get_surface_origin_y wlrXWaylandSurfaceParent
                                  return $ V2 x y
-  childX <- G.get_x wlrXWaylandSurface
-  childY <- G.get_y wlrXWaylandSurface
+  childX <- G.get_surface_origin_x wlrXWaylandSurface
+  childY <- G.get_surface_origin_y wlrXWaylandSurface
 
   let childSX = childX - parentX
   let childSY = childY - parentY
@@ -1646,7 +1646,6 @@ markLikelyVisibleGSVSForFullRedraws gss = do
 handle_map_child :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_map_child gsvsInvisible gvArgs@[wlrXWaylandSurfaceVariant] = do
   debugPutStrLn "Plugin.SimulaViewSprite.handle_map_child"
-  gss <- readTVarIO $ (gsvsInvisible ^. gsvsServer)
   wlrXWaylandSurface <- (fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface) >>= validateSurfaceE
   debugPrintXWaylandMapDetails "Plugin.SimulaViewSprite.handle_map_child" wlrXWaylandSurface
   gss <- readTVarIO (gsvsInvisible ^. gsvsServer)
@@ -1658,9 +1657,12 @@ handle_map_child gsvsInvisible gvArgs@[wlrXWaylandSurfaceVariant] = do
       handle_map_free_child_impl gsvsInvisible wlrXWaylandSurface
     Just (parentGSVS) -> do -- adjustedXY <- getAdjustedXY parentGSVS wlrXWaylandSurface
                             -- G.set_xy wlrXWaylandSurface adjustedXY
+                            shouldCenter <- xWaylandSurfaceShouldCenterOverParent wlrXWaylandSurface
                             simulaView <- readTVarIO (gsvsInvisible ^. gsvsView)
                             atomically $ writeTVar (simulaView ^. svMapped) True
-                            markGSVSForFullRedraws parentGSVS
+                            if shouldCenter
+                              then markGSVSForFullRedrawFrames parentGSVS 30
+                              else markGSVSForFullRedraws parentGSVS
                             markGSVSForFullRedraws gsvsInvisible
                             return False
   when safeToDestroyArgs $ mapM_ Api.godot_variant_destroy gvArgs
@@ -1669,8 +1671,8 @@ handle_map_child gsvsInvisible gvArgs@[wlrXWaylandSurfaceVariant] = do
         computeSurfaceLocalCoordinates :: GodotSimulaViewSprite -> GodotWlrXWaylandSurface -> IO (Maybe (Int, Int))
         computeSurfaceLocalCoordinates gsvs child = do
           debugPutStrLn "Plugin.SimulaViewSprite.computeSurfaceLocalCoordinates"
-          localX <- G.get_x child
-          localY <- G.get_y child
+          localX <- G.get_surface_origin_x child
+          localY <- G.get_surface_origin_y child
 
           simulaView <- readTVarIO (gsvs ^. gsvsView)
           let eitherSurface = (simulaView ^. svWlrEitherSurface)
@@ -1680,8 +1682,8 @@ handle_map_child gsvsInvisible gvArgs@[wlrXWaylandSurfaceVariant] = do
                             return Nothing
                           Right parent -> do
                             parent <- validateSurfaceE parent
-                            globalX <- G.get_x parent
-                            globalY <- G.get_y parent
+                            globalX <- G.get_surface_origin_x parent
+                            globalY <- G.get_surface_origin_y parent
                             return $ Just (localX - globalX, localY - globalY)
           return maybeCoords
 
@@ -1693,9 +1695,13 @@ handle_set_parent gsvs gvArgs@[wlrXWaylandSurfaceVariant] = do
   maybeParentGSVS <- getParentGSVS gss wlrXWaylandSurface
   freeChildrenMap <- readTVarIO (gss ^. gssFreeChildren)
   let maybeFreeChildOwnerGSVS = M.lookup wlrXWaylandSurface freeChildrenMap
+  shouldCenter <- xWaylandSurfaceShouldCenterOverParent wlrXWaylandSurface
 
   markGSVSForFullRedraws gsvs
-  forM_ maybeParentGSVS markGSVSForFullRedraws
+  forM_ maybeParentGSVS $ \parentGSVS ->
+    if shouldCenter
+      then markGSVSForFullRedrawFrames parentGSVS 30
+      else markGSVSForFullRedraws parentGSVS
   forM_ maybeFreeChildOwnerGSVS $ \freeChildOwnerGSVS ->
     when (Just freeChildOwnerGSVS /= maybeParentGSVS) $
       markGSVSForFullRedraws freeChildOwnerGSVS
@@ -1900,14 +1906,12 @@ getXWaylandSubsurfaceAndCoordsWithKeyboardFocus gsvs wlrXWaylandSurface composit
 
 -- Take gsvs coords and a mapped child and check whether or not the mapped child is hit or not. If so, return the hit in subsurface local coords.
 -- Returns referenced surface if it succeeds; caller is responsible for unreferencing it
-getMappedXWaylandChildCoords :: SurfaceLocalCoordinates -> GodotWlrXWaylandSurface -> IO (Maybe (GodotWlrSurface, SubSurfaceLocalCoordinates, GodotWlrXWaylandSurface))
-getMappedXWaylandChildCoords (SurfaceLocalCoordinates (cx, cy)) mappedChildXWaylandSurface = do
-  debugPutStrLn "Plugin.SimulaViewSprite.getMappedXWaylandChildCoords"
-  childX <- G.get_x mappedChildXWaylandSurface
-  childY <- G.get_y mappedChildXWaylandSurface
-  V2 (V2 childGeomX childGeomY) _ <- G.get_geometry mappedChildXWaylandSurface >>= fromLowLevel :: IO (V2 (V2 Float))
-  let rootX = fromIntegral childX - childGeomX
-      rootY = fromIntegral childY - childGeomY
+getHitMappedXWaylandChildWithCoords :: SurfaceLocalCoordinates -> GodotWlrXWaylandSurface -> GodotWlrXWaylandSurface -> IO (Maybe (GodotWlrSurface, SubSurfaceLocalCoordinates, GodotWlrXWaylandSurface))
+getHitMappedXWaylandChildWithCoords (SurfaceLocalCoordinates (cx, cy)) parentWlrXWaylandSurface mappedChildXWaylandSurface = do
+  debugPutStrLn "Plugin.SimulaViewSprite.getHitMappedXWaylandChildWithCoords"
+  (childRootX, childRootY) <- getEffectiveXWaylandChildSurfaceCoordsRelativeToParent parentWlrXWaylandSurface mappedChildXWaylandSurface
+  let rootX = fromIntegral childRootX
+      rootY = fromIntegral childRootY
       childLocalX = cx - rootX
       childLocalY = cy - rootY
   withGodotRef (G.surface_at mappedChildXWaylandSurface childLocalX childLocalY :: IO GodotWlrSurfaceAtResult) $ \wlrSurfaceAtResult -> do
@@ -1944,7 +1948,7 @@ getMappedXWaylandChildrenCoords coords wlrXWaylandSurface = do
       case maybeNestedHit of
         Just hit -> return $ Just hit
         Nothing -> do
-          maybeChildHit <- getMappedXWaylandChildCoords coords child
+          maybeChildHit <- getHitMappedXWaylandChildWithCoords coords wlrXWaylandSurface child
           case maybeChildHit of
             Just hit -> return $ Just hit
             Nothing -> findMappedChildHit remainingChildren
@@ -1954,8 +1958,8 @@ getFreeChildCoords :: GodotWlrXWaylandSurface -> SurfaceLocalCoordinates -> Godo
 getFreeChildCoords parentWlrXWaylandSurface (SurfaceLocalCoordinates (cx, cy)) wlrXWaylandSurface = do
   debugPutStrLn "Plugin.SimulaViewSprite.getFreeChildCoords"
   withGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface) $ \freeChildSurface -> do
-    fsx' <- G.get_x wlrXWaylandSurface
-    fsy' <- G.get_y wlrXWaylandSurface
+    fsx' <- G.get_surface_origin_x wlrXWaylandSurface
+    fsy' <- G.get_surface_origin_y wlrXWaylandSurface
 
     let (fsx, fsy) = (fromIntegral fsx', fromIntegral fsy')
     (fLengthX', fLengthY') <- getBufferDimensions freeChildSurface

@@ -718,13 +718,9 @@ getXdgParentGSVS gss wlrXdgSurface = do
     Nothing -> return Nothing
     Just parentSurface -> getGSVSFromEitherSurface gss (Left parentSurface)
 
--- Try to get width/height of a surface which factors out its x/y geometry offset
--- (to take into account that some surfaces have invisible borders or
--- decorations). If that fails though, revert to just getting the raw wlr_surface
--- buffer dimensions.
-getGeometryAwareSurfaceDimensions :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO (Int, Int)
-getGeometryAwareSurfaceDimensions eitherSurface = do
-  debugPutStrLn "Plugin.Types.getGeometryAwareSurfaceDimensions"
+getVisibleSurfaceDimensions :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO (Int, Int)
+getVisibleSurfaceDimensions eitherSurface = do
+  debugPutStrLn "Plugin.Types.getVisibleSurfaceDimensions"
   case eitherSurface of
     Left wlrXdgSurface -> do
       wlrXdgSurface <- validateSurfaceE wlrXdgSurface
@@ -750,7 +746,7 @@ getGSVSTargetDimsOrFallbackToItsCurrentEffectiveSize gsvs = do
     Just (SpriteDimensions dims@(width, height)) | width > 0 && height > 0 -> return dims
     _ -> do
       simulaView <- readTVarIO (gsvs ^. gsvsView)
-      getGeometryAwareSurfaceDimensions (simulaView ^. svWlrEitherSurface)
+      getVisibleSurfaceDimensions (simulaView ^. svWlrEitherSurface)
 
 getAttachedXdgChildRootOffset :: GodotSimulaViewSprite -> GodotWlrXdgSurface -> IO (Int, Int)
 getAttachedXdgChildRootOffset parentGSVS childWlrXdgSurface = do
@@ -760,6 +756,51 @@ getAttachedXdgChildRootOffset parentGSVS childWlrXdgSurface = do
   V2 (V2 childGeomX childGeomY) (V2 childGeomWidth childGeomHeight) <- G.get_geometry childWlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
   withGodotRef (G.get_wlr_surface childWlrXdgSurface :: IO GodotWlrSurface) $ \childWlrSurface -> do
     (childBufferWidth, childBufferHeight) <- getBufferDimensions childWlrSurface
+    let childVisibleWidth = if round childGeomWidth > 0 then round childGeomWidth else childBufferWidth
+    let childVisibleHeight = if round childGeomHeight > 0 then round childGeomHeight else childBufferHeight
+    let childRootX = ((parentWidth - childVisibleWidth) `div` 2) - round childGeomX
+    let childRootY = ((parentHeight - childVisibleHeight) `div` 2) - round childGeomY
+    return (childRootX, childRootY)
+
+-- Check for both override_redirect=0 (the client is not asking to bypass normal
+-- window-manager/compositor management) and "_NET_WM_WINDOW_TYPE_DIALOG".
+-- This may be too restrictive, but we'll see if it's sufficient in practice.
+xWaylandSurfaceShouldCenterOverParent :: GodotWlrXWaylandSurface -> IO Bool
+xWaylandSurfaceShouldCenterOverParent wlrXWaylandSurface = do
+  debugPutStrLn "Plugin.Types.xWaylandSurfaceShouldCenterOverParent"
+  hasParent <- G.has_parent wlrXWaylandSurface
+  overrideRedirect <- G.get_override_redirect wlrXWaylandSurface
+  isDialog <- xWaylandSurfaceHasWindowTypeName wlrXWaylandSurface "_NET_WM_WINDOW_TYPE_DIALOG"
+  return (hasParent && not overrideRedirect && isDialog)
+
+xWaylandSurfaceHasWindowTypeName :: GodotWlrXWaylandSurface -> String -> IO Bool
+xWaylandSurfaceHasWindowTypeName wlrXWaylandSurface typeName = do
+  debugPutStrLn "Plugin.Types.xWaylandSurfaceHasWindowTypeName"
+  typeNameGodotString <- toLowLevel (pack typeName) :: IO GodotString
+  G.has_window_type_name wlrXWaylandSurface typeNameGodotString
+    `finally` Api.godot_string_destroy typeNameGodotString
+
+getEffectiveXWaylandChildSurfaceCoordsRelativeToParent :: GodotWlrXWaylandSurface -> GodotWlrXWaylandSurface -> IO (Int, Int)
+getEffectiveXWaylandChildSurfaceCoordsRelativeToParent parentWlrXWaylandSurface childWlrXWaylandSurface = do
+  debugPutStrLn "Plugin.Types.getEffectiveXWaylandChildSurfaceCoordsRelativeToParent"
+  shouldCenter <- xWaylandSurfaceShouldCenterOverParent childWlrXWaylandSurface
+  if shouldCenter
+    then getCoordsToCenterXWaylandChildRelativeToParent parentWlrXWaylandSurface childWlrXWaylandSurface
+    else do
+      surfaceX <- G.get_surface_origin_x childWlrXWaylandSurface
+      surfaceY <- G.get_surface_origin_y childWlrXWaylandSurface
+      return (surfaceX, surfaceY)
+
+getCoordsToCenterXWaylandChildRelativeToParent :: GodotWlrXWaylandSurface -> GodotWlrXWaylandSurface -> IO (Int, Int)
+getCoordsToCenterXWaylandChildRelativeToParent parentWlrXWaylandSurface childWlrXWaylandSurface = do
+  debugPutStrLn "Plugin.Types.getCoordsToCenterXWaylandChildRelativeToParent"
+  (parentWidth, parentHeight) <- getVisibleSurfaceDimensions (Right parentWlrXWaylandSurface)
+  childWlrXWaylandSurface <- validateSurfaceE childWlrXWaylandSurface
+  V2 (V2 childGeomX childGeomY) (V2 childGeomWidth childGeomHeight) <- G.get_geometry childWlrXWaylandSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+  withGodotRef (G.get_wlr_surface childWlrXWaylandSurface :: IO GodotWlrSurface) $ \childWlrSurface -> do
+    (childBufferWidth, childBufferHeight) <- getBufferDimensions childWlrSurface
+    -- XWayland geometry is currently always rooted at (0,0), but using the
+    -- same geometry-aware formula as xdg keeps the two paths symmetric.
     let childVisibleWidth = if round childGeomWidth > 0 then round childGeomWidth else childBufferWidth
     let childVisibleHeight = if round childGeomHeight > 0 then round childGeomHeight else childBufferHeight
     let childRootX = ((parentWidth - childVisibleWidth) `div` 2) - round childGeomX
@@ -1710,8 +1751,8 @@ getDepthFirstBaseSurfaces gsvs = do
       return (ret ++ attachedSurfaces)
     Right wlrXWaylandSurface -> do
       freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
-      freeChildren' <- mapM (\wlrXWaylandSurfaceFC -> do x <- G.get_x wlrXWaylandSurfaceFC
-                                                         y <- G.get_y wlrXWaylandSurfaceFC
+      freeChildren' <- mapM (\wlrXWaylandSurfaceFC -> do x <- G.get_surface_origin_x wlrXWaylandSurfaceFC
+                                                         y <- G.get_surface_origin_y wlrXWaylandSurfaceFC
                                                          wlrSurface <- retainGodotRef (G.get_wlr_surface wlrXWaylandSurfaceFC :: IO GodotWlrSurface)
                                                          return (wlrSurface, x, y))
                             freeChildren
@@ -1719,8 +1760,6 @@ getDepthFirstBaseSurfaces gsvs = do
       return (depthFirstXWaylandSurfaces ++ freeChildren')
   return depthFirstBaseSurfaces
 
--- TODO: All (Int, Int) should be relative to root surface; right now,
--- subsurface coordinates are possibly relative to their immediate parent.
 getDepthFirstXWaylandSurfaces :: GodotWlrXWaylandSurface -> IO [(GodotWlrSurface, Int, Int)]
 getDepthFirstXWaylandSurfaces wlrXWaylandSurface = do
   debugPutStrLn "Plugin.Types.getDepthFirstXWaylandSurfaces"
@@ -1738,7 +1777,12 @@ getDepthFirstXWaylandSurfaces wlrXWaylandSurface = do
         appendSurfaceAndChildren oldList arg@(wlrSurface, x, y) = do
           debugPutStrLn "Plugin.Types.appendSurfaceAndChildren"
           subsurfacesAndCoords <- getSurfaceChildren wlrSurface :: IO [(GodotWlrSurface, Int, Int)]
-          foldM appendSurfaceAndChildren (oldList ++ [(wlrSurface, x, y)]) subsurfacesAndCoords
+          let rootRelativeSubsurfacesAndCoords =
+                fmap
+                  (\(subsurface, subsurfaceX, subsurfaceY) ->
+                    (subsurface, x + subsurfaceX, y + subsurfaceY))
+                  subsurfacesAndCoords
+          foldM appendSurfaceAndChildren (oldList ++ [(wlrSurface, x, y)]) rootRelativeSubsurfacesAndCoords
 
         getSurfaceChildren :: GodotWlrSurface -> IO [(GodotWlrSurface, Int, Int)]
         getSurfaceChildren wlrSurface = do
@@ -1762,22 +1806,13 @@ getDepthFirstXWaylandSurfaces wlrXWaylandSurface = do
           numChildren <- Api.godot_array_size arrayOfChildren
           arrayOfChildrenGV <- fromGodotArray arrayOfChildren
           children <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrXWaylandSurface]
-          childrenX <- mapM G.get_x children
-          childrenY <- mapM G.get_y children
-          childrenGeometryOffsets <-
-            mapM
-              (\child -> do
-                V2 (V2 childGeomX childGeomY) _ <- G.get_geometry child >>= fromLowLevel :: IO (V2 (V2 Float))
-                return (round childGeomX, round childGeomY))
-              children
+          effectiveChildCoords <- mapM (getEffectiveXWaylandChildSurfaceCoordsRelativeToParent wlrXWaylandSurface) children
           let childrenWithCoords =
-                zipWith4
-                  (\child childX childY (childGeomX, childGeomY) ->
-                    (child, childX - childGeomX, childY - childGeomY))
+                List.zipWith
+                  (\child (childRootX, childRootY) ->
+                    (child, childRootX, childRootY))
                   children
-                  childrenX
-                  childrenY
-                  childrenGeometryOffsets
+                  effectiveChildCoords
           Api.godot_array_destroy arrayOfChildren
           mapM_ Api.godot_variant_destroy arrayOfChildrenGV
           return childrenWithCoords
@@ -1801,22 +1836,15 @@ getDepthFirstXdgSurfaces wlrXdgSurface = do
           arrayOfChildrenGV <- fromGodotArray arrayOfChildren
           children <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrXdgSurface]
           childrenAsPopups <- mapM G.get_xdg_popup children
-          childrenX <- mapM G.get_x childrenAsPopups
-          childrenY <- mapM G.get_y childrenAsPopups
-          childrenGeometryOffsets <-
-            mapM
-              (\child -> do
-                V2 (V2 childGeomX childGeomY) _ <- G.get_geometry child >>= fromLowLevel :: IO (V2 (V2 Float))
-                return (round childGeomX, round childGeomY))
-              children
+          childrenX <- mapM G.get_surface_origin_x childrenAsPopups
+          childrenY <- mapM G.get_surface_origin_y childrenAsPopups
           let childrenWithCoords =
-                zipWith4
-                  (\child childX childY (childGeomX, childGeomY) ->
-                    (child, childX - childGeomX, childY - childGeomY))
+                zipWith3
+                  (\child childX childY ->
+                    (child, childX, childY))
                   children
                   childrenX
                   childrenY
-                  childrenGeometryOffsets
           Api.godot_array_destroy arrayOfChildren
           mapM_ Api.godot_variant_destroy arrayOfChildrenGV
           return childrenWithCoords

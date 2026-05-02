@@ -196,8 +196,8 @@ testRightclickPopup gss app screenshotBase = do
           (px, py) <- case (Data.List.length freeChildren > 0, len >= 2) of
             (True, _) -> do
               let freeChild = Data.List.head freeChildren
-              x <- G.get_x freeChild
-              y <- G.get_y freeChild
+              x <- G.get_surface_origin_x freeChild
+              y <- G.get_surface_origin_y freeChild
               return (x, y)
             (_, True) -> do
               let (_, x, y) = depthFirstSurfaces !! 1

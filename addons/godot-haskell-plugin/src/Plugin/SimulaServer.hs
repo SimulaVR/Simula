@@ -1323,8 +1323,8 @@ debugPrintXdgSurfaceDetails prefix wlrXdgSurface =
 debugPrintXWaylandSurfaceDetails :: String -> GodotWlrXWaylandSurface -> IO ()
 debugPrintXWaylandSurfaceDetails prefix wlrXWaylandSurface =
   when debugSurfaceCreationsEnabled $ do
-    x <- G.get_x wlrXWaylandSurface
-    y <- G.get_y wlrXWaylandSurface
+    x <- G.get_surface_origin_x wlrXWaylandSurface
+    y <- G.get_surface_origin_y wlrXWaylandSurface
     width <- G.get_width wlrXWaylandSurface
     height <- G.get_height wlrXWaylandSurface
     pid <- G.get_pid wlrXWaylandSurface

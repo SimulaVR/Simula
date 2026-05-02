@@ -377,8 +377,8 @@ _draw cb gvArgs = do
           freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
           freeChildRects <- fmap Prelude.concat $
             forM freeChildren $ \freeChild -> do
-              childX <- G.get_x freeChild
-              childY <- G.get_y freeChild
+              childX <- G.get_surface_origin_x freeChild
+              childY <- G.get_surface_origin_y freeChild
               getXWaylandGeometryRootRects childX childY freeChild
           return (rootRects ++ freeChildRects)
       forM_ geometryRects $ \(x, y, width, height) -> do
@@ -401,8 +401,8 @@ _draw cb gvArgs = do
           freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
           freeChildRects <- fmap Prelude.concat $
             forM freeChildren $ \freeChild -> do
-              childX <- G.get_x freeChild
-              childY <- G.get_y freeChild
+              childX <- G.get_surface_origin_x freeChild
+              childY <- G.get_surface_origin_y freeChild
               getXWaylandGeometryRects childX childY freeChild
           return (rootRects ++ freeChildRects)
       forM_ geometryRects $ \(x, y, width, height) -> do
@@ -442,24 +442,17 @@ _draw cb gvArgs = do
       children <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrXdgSurface]
       validatedChildren <- mapM validateSurfaceE children
       childrenAsPopups <- mapM G.get_xdg_popup validatedChildren
-      childrenX <- mapM G.get_x childrenAsPopups
-      childrenY <- mapM G.get_y childrenAsPopups
-      childrenGeometryOffsets <-
-        mapM
-          (\child -> do
-            V2 (V2 childGeomX childGeomY) _ <- G.get_geometry child >>= fromLowLevel :: IO (V2 (V2 Float))
-            return (round childGeomX, round childGeomY))
-          validatedChildren
+      childrenX <- mapM G.get_surface_origin_x childrenAsPopups
+      childrenY <- mapM G.get_surface_origin_y childrenAsPopups
       Api.godot_array_destroy arrayOfChildren
       mapM_ Api.godot_variant_destroy arrayOfChildrenGV
       return $
-        Data.List.zipWith4
-          (\child childX childY (childGeomX, childGeomY) ->
-            (child, childX - childGeomX, childY - childGeomY))
+        Data.List.zipWith3
+          (\child childX childY ->
+            (child, childX, childY))
           validatedChildren
           childrenX
           childrenY
-          childrenGeometryOffsets
 
     getXWaylandGeometryRootRects :: Int -> Int -> GodotWlrXWaylandSurface -> IO [(Int, Int, Int, Int)]
     getXWaylandGeometryRootRects rootX rootY wlrXWaylandSurface = do
@@ -490,11 +483,12 @@ _draw cb gvArgs = do
       arrayOfChildrenGV <- fromGodotArray arrayOfChildren
       children <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrXWaylandSurface]
       validatedChildren <- mapM validateSurfaceE children
-      childrenX <- mapM G.get_x validatedChildren
-      childrenY <- mapM G.get_y validatedChildren
+      -- Will either be the existing child coords, or the coords after we
+      -- center the child if it should be centered relative to the parent.
+      effectiveChildCoords <- mapM (getEffectiveXWaylandChildSurfaceCoordsRelativeToParent wlrXWaylandSurface) validatedChildren
       Api.godot_array_destroy arrayOfChildren
       mapM_ Api.godot_variant_destroy arrayOfChildrenGV
-      return $ zip3 validatedChildren childrenX childrenY
+      return $ Data.List.zipWith (\child (childX, childY) -> (child, childX, childY)) validatedChildren effectiveChildCoords
 
     getXdgGeometryRect :: Int -> Int -> GodotWlrXdgSurface -> IO (Int, Int, Int, Int)
     getXdgGeometryRect rootX rootY wlrXdgSurface = do
