@@ -9,9 +9,9 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
     systems.url = "github:nix-systems/x86_64-linux";
-    godot.url = "git+https://github.com/SimulaVR/godot?rev=1172b6b60efb77c58aa69d10dfad8b9a9565dc40&submodules=1";
+    godot.url = "git+https://github.com/SimulaVR/godot?rev=57c7b4effdf146f579c9345289cfc3b98fbc55e8&submodules=1";
     godot-haskell = {
-      url = "git+https://github.com/SimulaVR/godot-haskell?rev=ae307f7de0c10f4e91930a156ee37bee8c79be5f&submodules=1";
+      url = "git+https://github.com/SimulaVR/godot-haskell?rev=f5d7f0a48ec17815b1290a183583a43fed2c097e&submodules=1";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     monado.url = "git+https://github.com/SimulaVR/monado-xv?rev=47b52aa79efa6f39fc99502442223207ae067e6b&submodules=1";
@@ -21,7 +21,7 @@
     };
     i3status-fork.url = "git+https://github.com/SimulaVR/i3status?rev=f734c9fe2580b6a23bcb1d1081376ae7897bdbf2";
     godot-openxr = {
-      url = "git+https://github.com/SimulaVR/godot-openxr?submodules=1";
+      url = "git+https://github.com/SimulaVR/godot-openxr?rev=a6f66d7883c63f9a13d8fcc0647816f8a104c3bd&submodules=1";
       flake = false;
     };
     flake-parts = {

@@ -152,17 +152,17 @@
         "wlroots-flake": "wlroots-flake"
       },
       "locked": {
-        "lastModified": 1770583884,
-        "narHash": "sha256-78k7hM4ZF8/UcaiU35t8vAUzY8M+f5OERk6zYdg4Zl8=",
+        "lastModified": 1777852808,
+        "narHash": "sha256-uX0BH+DknbQAhvPBaLCMdVZBk7aPwQmJa8S2nyzHuoc=",
         "ref": "refs/heads/3.x-simula",
-        "rev": "1172b6b60efb77c58aa69d10dfad8b9a9565dc40",
-        "revCount": 29805,
+        "rev": "57c7b4effdf146f579c9345289cfc3b98fbc55e8",
+        "revCount": 29824,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/SimulaVR/godot"
       },
       "original": {
-        "rev": "1172b6b60efb77c58aa69d10dfad8b9a9565dc40",
+        "rev": "57c7b4effdf146f579c9345289cfc3b98fbc55e8",
         "submodules": true,
         "type": "git",
         "url": "https://github.com/SimulaVR/godot"
@@ -178,17 +178,17 @@
         "treefmt-nix": "treefmt-nix_2"
       },
       "locked": {
-        "lastModified": 1770321723,
-        "narHash": "sha256-m3xpLUd2Ba0i31htpWX0VAv9X+9E/+L+sNV2AkXKUp8=",
+        "lastModified": 1777855543,
+        "narHash": "sha256-qZ4xNx+acdQMCJ8VZ27Sk9/5MNXRCjY7wS6uPqe/zcQ=",
         "ref": "refs/heads/master",
-        "rev": "ae307f7de0c10f4e91930a156ee37bee8c79be5f",
-        "revCount": 135,
+        "rev": "f5d7f0a48ec17815b1290a183583a43fed2c097e",
+        "revCount": 142,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/SimulaVR/godot-haskell"
       },
       "original": {
-        "rev": "ae307f7de0c10f4e91930a156ee37bee8c79be5f",
+        "rev": "f5d7f0a48ec17815b1290a183583a43fed2c097e",
         "submodules": true,
         "type": "git",
         "url": "https://github.com/SimulaVR/godot-haskell"
@@ -207,6 +207,7 @@
         "url": "https://github.com/SimulaVR/godot-openxr"
       },
       "original": {
+        "rev": "a6f66d7883c63f9a13d8fcc0647816f8a104c3bd",
         "submodules": true,
         "type": "git",
         "url": "https://github.com/SimulaVR/godot-openxr"
