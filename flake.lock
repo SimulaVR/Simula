@@ -178,17 +178,17 @@
         "treefmt-nix": "treefmt-nix_2"
       },
       "locked": {
-        "lastModified": 1777855543,
-        "narHash": "sha256-qZ4xNx+acdQMCJ8VZ27Sk9/5MNXRCjY7wS6uPqe/zcQ=",
+        "lastModified": 1777904875,
+        "narHash": "sha256-c4ESQ24qJMVDCQ24+GPhxnIkgADj/wtxUIC/OSN1Uio=",
         "ref": "refs/heads/master",
-        "rev": "f5d7f0a48ec17815b1290a183583a43fed2c097e",
-        "revCount": 142,
+        "rev": "831fad813dcac3129f1b27a9137f781ced1207b8",
+        "revCount": 144,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/SimulaVR/godot-haskell"
       },
       "original": {
-        "rev": "f5d7f0a48ec17815b1290a183583a43fed2c097e",
+        "rev": "831fad813dcac3129f1b27a9137f781ced1207b8",
         "submodules": true,
         "type": "git",
         "url": "https://github.com/SimulaVR/godot-haskell"
