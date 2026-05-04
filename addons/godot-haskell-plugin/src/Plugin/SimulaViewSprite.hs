@@ -264,10 +264,21 @@ setTargetDimensions gsvs = do
   settledDimensions' <- toLowLevel $ (V2 (fromIntegral settledWidth) (fromIntegral settledHeight))
 
   spilloverDims@(spilloverWidth, spilloverHeight) <- getSpilloverDims gsvs
+  let baseViewportHeight =
+        spilloverHeight
+          + debugHudReservedHeight
+          + if debugDepthFirstThumbnailsEnabled
+              then debugDepthFirstThumbnailHeight
+              else 0
   spilloverDims' <- toLowLevel $ (V2 (fromIntegral spilloverWidth) (fromIntegral spilloverHeight))
+  baseViewportDims' <- toLowLevel $ (V2 (fromIntegral spilloverWidth) (fromIntegral baseViewportHeight))
   V2 currentViewportWidth currentViewportHeight <- G.get_size renderTargetSurface >>= fromLowLevel :: IO (V2 Float)
+  V2 currentBaseViewportWidth currentBaseViewportHeight <- G.get_size renderTargetBase >>= fromLowLevel :: IO (V2 Float)
   let viewportDimsChanged =
-        ((round currentViewportWidth) /= spilloverWidth) || ((round currentViewportHeight) /= spilloverHeight)
+        ((round currentViewportWidth) /= spilloverWidth)
+          || ((round currentViewportHeight) /= spilloverHeight)
+          || ((round currentBaseViewportWidth) /= spilloverWidth)
+          || ((round currentBaseViewportHeight) /= baseViewportHeight)
 
   -- Set buffer dimensions to new target size
   case eitherSurface of
@@ -280,13 +291,13 @@ setTargetDimensions gsvs = do
       G.set_size wlrXWaylandSurface settledDimensions'
 
   -- Set the corresponding Viewports to match our new target size
-  G.set_size renderTargetBase spilloverDims'
+  G.set_size renderTargetBase baseViewportDims'
   G.set_size renderTargetSurface spilloverDims'
   when viewportDimsChanged $
     markGSVSForFullRedraws gsvs
   -- QuadMesh need to be scaled down by a factor of 0.001 to be reasonably sized in Godot:
   withQuadMesh gsvs $ \quadMesh ->
-    G.set_size quadMesh =<< (toLowLevel $ (V2 (0.001 * (fromIntegral spilloverWidth)) (0.001 * (fromIntegral spilloverHeight))))
+    G.set_size quadMesh =<< (toLowLevel $ (V2 (0.001 * (fromIntegral spilloverWidth)) (0.001 * (fromIntegral baseViewportHeight))))
 
   -- Problem: Calls to `G.set_size quadMesh` cause gsvs to "jitter" (since
   -- they're resized from the center). We thus have to translate them to create
@@ -331,6 +342,7 @@ updateQuadShader gsvs (SpriteDimensions (targetWidth, targetHeight)) (spilloverW
         || (spilloverWidth > targetWidth)
         || (spilloverHeight > targetHeight)
         || surfaceNeedsAlphaBlend
+        || debugDepthFirstThumbnailsEnabled
   setShader gsvs $
     if shouldUseTransparentShader
       then "res://addons/godot-haskell-plugin/TextShader.tres"

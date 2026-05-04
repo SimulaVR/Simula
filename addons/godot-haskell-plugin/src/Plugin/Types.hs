@@ -129,9 +129,23 @@ debugSurfaceBoundariesEnabled = unsafePerformIO $ do
   return $ simulaDebug == Just "1" || simulaDebugSurfaceCreations == Just "1"
 {-# NOINLINE debugSurfaceBoundariesEnabled #-}
 
+debugDepthFirstThumbnailsEnabled :: Bool
+debugDepthFirstThumbnailsEnabled = unsafePerformIO $ do
+  simulaDebugDepthFirstThumbnails <- lookupEnv "SIMULA_DEBUG_DEPTH_FIRST_THUMBNAILS"
+  return $ simulaDebugDepthFirstThumbnails == Just "1"
+{-# NOINLINE debugDepthFirstThumbnailsEnabled #-}
+
+-- Extra vertical space reserved below the viewportSurface for normal GSVS HUD text.
+debugHudReservedHeight :: Int
+debugHudReservedHeight = 56
+
+-- Height of the part of the GSVS HUD that shows the depth-first surface thumbnails.
+debugDepthFirstThumbnailHeight :: Int
+debugDepthFirstThumbnailHeight = 220
+
 debugHudEnabled :: Bool
 debugHudEnabled =
-  debugSurfaceBoundariesEnabled && (debugMouseEventsEnabled || debugKeyboardEventsEnabled)
+  debugDepthFirstThumbnailsEnabled || (debugSurfaceBoundariesEnabled && (debugMouseEventsEnabled || debugKeyboardEventsEnabled))
 
 debugHudMaxLines :: Int
 debugHudMaxLines = 8

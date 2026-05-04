@@ -140,7 +140,7 @@ _draw cs gvArgs = do
       (\depthFirstSurfaces -> do
         isEntirelyDamaged <- readTVarIO (gsvs ^. gsvsIsDamaged)
         fullRedrawFramesRemaining <- readTVarIO (gsvs ^. gsvsFullRedrawFramesRemaining)
-        case (isEntirelyDamaged || fullRedrawFramesRemaining > 0) of
+        case (debugDepthFirstThumbnailsEnabled || isEntirelyDamaged || fullRedrawFramesRemaining > 0) of
           True -> do
             atomically $ do
               writeTVar (gsvs ^. gsvsIsDamaged) False
@@ -173,7 +173,6 @@ _draw cs gvArgs = do
       debugPutStrLn "Plugin.CanvasSurface.drawWlrSurface"
       validateSurfaceE wlrSurface
       gsvs <- readTVarIO (cs ^. csGSVS)
-      gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
       gsvsTransparency <- getTransparency cs
       modulateColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` gsvsTransparency) :: IO GodotColor
       renderPosition <- toLowLevel (V2 (fromIntegral x) (fromIntegral y))
@@ -200,7 +199,6 @@ _draw cs gvArgs = do
     drawWlrSurfaceRegions cs regions (wlrSurface, x, y) = do
       debugPutStrLn "Plugin.CanvasSurface.drawWlrSurfaceRegions"
       gsvs <- readTVarIO (cs ^. csGSVS)
-      gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
       validateSurfaceE wlrSurface
       do withGodotRef (G.get_texture wlrSurface :: IO GodotTexture) $ \surfaceTexture ->
            case (validateObject surfaceTexture) of

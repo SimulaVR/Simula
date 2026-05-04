@@ -111,20 +111,23 @@ _draw :: CanvasBase -> [GodotVariant] -> IO ()
 _draw cb gvArgs = do
   debugPutStrLn "Plugin.CanvasBase._draw"
   gsvs <- readTVarIO (cb ^. cbGSVS)
+  let showSurfaceDebugOverlays =
+        debugSurfaceBoundariesEnabled || debugDepthFirstThumbnailsEnabled
 
-  when debugSurfaceBoundariesEnabled $
+  when showSurfaceDebugOverlays $
     drawDebugBackground cb gsvs
 
   drawCanvasSurface cb gsvs
 
-  when debugSurfaceBoundariesEnabled $ do
+  when showSurfaceDebugOverlays $ do
     -- Outline raw wlr_surface buffers as red
     drawRedWlrSurfaceBoundaries cb gsvs
 
-    when (debugMouseEventsEnabled || debugKeyboardEventsEnabled) $
+    when (debugDepthFirstThumbnailsEnabled || debugMouseEventsEnabled || debugKeyboardEventsEnabled) $
       -- Show pointer IDs inside surfaces when debugging mouse/keyboard events (where it's likely useful)
       drawRedWlrSurfacePointerIds cb gsvs
 
+  when (debugSurfaceBoundariesEnabled && not debugDepthFirstThumbnailsEnabled) $ do
     -- Show xdg/xwayland geometry rectangles as blue WITHOUT their x/y offsets
     drawBlueGeometryBordersWithoutOffsets cb gsvs
 
@@ -177,10 +180,12 @@ _draw cb gvArgs = do
     drawDebugHud cb gsvs = do
       debugPutStrLn "Plugin.CanvasBase.drawDebugHud"
       messages <- getDebugHudVisibleMessages gsvs
-      unless (Data.List.null messages) $ do
+      unless (Data.List.null messages && not debugDepthFirstThumbnailsEnabled) $ do
         cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
         viewportSurface <- readTVarIO (cs ^. csViewport)
-        V2 width height <- G.get_size viewportSurface >>= fromLowLevel :: IO (V2 Float)
+        viewportBase <- readTVarIO (cb ^. cbViewport)
+        V2 _viewportSurfaceWidth viewportSurfaceHeight <- G.get_size viewportSurface >>= fromLowLevel :: IO (V2 Float)
+        V2 viewportBaseWidth viewportBaseHeight <- G.get_size viewportBase >>= fromLowLevel :: IO (V2 Float)
         debugFont <- readTVarIO (cb ^. cbDebugFont)
         G.set_size debugFont 16
         fontHeight <- G.get_height (safeCast debugFont :: GodotFont)
@@ -188,24 +193,124 @@ _draw cb gvArgs = do
         let padding = 8
         let lineGap = 2
         let lineStep = fontHeight + lineGap
-        let hudHeight = min height (fromIntegral padding * 2 + lineStep * fromIntegral (Data.List.length messages))
-        let hudTop = max 0 (height - hudHeight)
+        let depthFirstThumbnailsHeight = if debugDepthFirstThumbnailsEnabled then debugDepthFirstThumbnailHeight else 0
+        let requestedHudHeight = fromIntegral padding * 2 + fromIntegral depthFirstThumbnailsHeight + lineStep * fromIntegral (Data.List.length messages)
+        let availableHudHeight = max 0 (viewportBaseHeight - viewportSurfaceHeight)
+        let hudHeight = min availableHudHeight requestedHudHeight
+        let hudTop = viewportSurfaceHeight
         hudRect <- toLowLevel $
           V2
             (V2 0 hudTop)
-            (V2 width hudHeight)
+            (V2 viewportBaseWidth hudHeight)
         backgroundColor <- (toLowLevel $ (rgb 0.0 0.0 0.0) `withOpacity` 0.82) :: IO GodotColor
         textColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1.0) :: IO GodotColor
         G.draw_rect cb hudRect backgroundColor True 1.0 False
+        when debugDepthFirstThumbnailsEnabled $
+          drawDebugHudDepthFirstThumbnails cb gsvs debugFont (fromIntegral padding) (hudTop + fromIntegral padding) (viewportBaseWidth - fromIntegral padding * 2) (fromIntegral depthFirstThumbnailsHeight)
         bracket
           (mapM (toLowLevel . pack) messages :: IO [GodotString])
           (mapM_ Api.godot_string_destroy)
           (\messageStrs -> do
-            let firstBaselineY = hudTop + fromIntegral padding + fontAscent
-            let maxTextWidth = max 1 (round width - padding * 2)
+            let firstBaselineY = hudTop + fromIntegral padding + fromIntegral depthFirstThumbnailsHeight + fontAscent
+            let maxTextWidth = max 1 (round viewportBaseWidth - padding * 2)
             forM_ (zip [0..] messageStrs) $ \(lineIndex :: Int, messageStr) -> do
               renderPosition <- toLowLevel (V2 (fromIntegral padding) (firstBaselineY + lineStep * fromIntegral lineIndex)) :: IO GodotVector2
               G.draw_string cb (safeCast debugFont :: GodotFont) renderPosition messageStr textColor maxTextWidth)
+
+    drawDebugHudDepthFirstThumbnails :: CanvasBase -> GodotSimulaViewSprite -> GodotDynamicFont -> Float -> Float -> Float -> Float -> IO ()
+    drawDebugHudDepthFirstThumbnails cb gsvs debugFont left top availableWidth availableHeight = do
+      debugPutStrLn "Plugin.CanvasBase.drawDebugHudDepthFirstThumbnails"
+      bracket
+        (getDepthFirstSurfaces gsvs)
+        destroyWlrSurfacesWithCoords
+        (\depthFirstSurfaces -> do
+          let layerCount = Data.List.length depthFirstSurfaces
+          when (layerCount > 0) $ do
+            G.set_size debugFont 16
+            fontHeight <- G.get_height (safeCast debugFont :: GodotFont)
+            fontAscent <- G.get_ascent (safeCast debugFont :: GodotFont)
+            let gap = 4
+            let labelHeight = fontHeight + 6
+            let thumbnailAreaHeight = max 4 (availableHeight - labelHeight)
+            let cellWidth = max 4 ((availableWidth - gap * fromIntegral (layerCount - 1)) / fromIntegral layerCount)
+            let maxBoxWidth = min cellWidth 240
+            let maxBoxHeight = max 4 (thumbnailAreaHeight - 6)
+            forM_ (zip [0 :: Int ..] depthFirstSurfaces) $ \(layerIndex, (wlrSurface, _, _)) -> do
+              (surfaceWidth, surfaceHeight) <- getBufferDimensions wlrSurface
+              label <- getSurfaceLabel layerIndex wlrSurface surfaceWidth surfaceHeight
+              let aspect = if surfaceHeight <= 0 then 1 else fromIntegral surfaceWidth / fromIntegral surfaceHeight
+              let boxWidth = max 3 (min maxBoxWidth (maxBoxHeight * aspect))
+              let boxHeight = max 3 (min maxBoxHeight (boxWidth / max 0.1 aspect))
+              let x = left + fromIntegral layerIndex * (cellWidth + gap) + max 0 ((cellWidth - boxWidth) / 2)
+              let y = top + max 0 ((thumbnailAreaHeight - boxHeight) / 2)
+              let labelTop = top + thumbnailAreaHeight
+              fillColor <- depthLayerFillColor layerIndex
+              borderColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 0.85) :: IO GodotColor
+              labelColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1.0) :: IO GodotColor
+              textureColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1.0) :: IO GodotColor
+              layerRect <- toLowLevel $ V2 (V2 x y) (V2 boxWidth boxHeight)
+              G.draw_rect cb layerRect fillColor True 1.0 False
+              withGodotRef (G.get_texture wlrSurface :: IO GodotTexture) $ \surfaceTexture ->
+                case validateObject surfaceTexture of
+                  Nothing -> return ()
+                  Just validSurfaceTexture ->
+                    G.draw_texture_rect cb validSurfaceTexture layerRect False textureColor False (coerce nullPtr)
+              G.draw_rect cb layerRect borderColor False 1.0 False
+              bracket
+                (toLowLevel (pack label) :: IO GodotString)
+                Api.godot_string_destroy
+                (\labelStr -> do
+                  V2 textWidth _ <- G.get_string_size (safeCast debugFont :: GodotFont) labelStr >>= fromLowLevel :: IO (V2 Float)
+                  labelPos <- toLowLevel (V2 (left + fromIntegral layerIndex * (cellWidth + gap) + max 0 ((cellWidth - textWidth) / 2)) (labelTop + fontAscent)) :: IO GodotVector2
+                  G.draw_string cb (safeCast debugFont :: GodotFont) labelPos labelStr labelColor (round cellWidth)))
+
+    depthLayerFillColor :: Int -> IO GodotColor
+    depthLayerFillColor layerIndex =
+      (toLowLevel $ paletteColor `withOpacity` 0.92) :: IO GodotColor
+      where
+        -- These are just some random colors that we use to help us visualize surfaces in the HUD when they are transparent/NULL
+        palette =
+          [ rgb 1.0 0.28 0.22
+          , rgb 0.10 0.68 1.0
+          , rgb 0.33 0.95 0.42
+          , rgb 1.0 0.82 0.16
+          , rgb 1.0 0.35 0.78
+          , rgb 0.30 1.0 0.86
+          ] :: [Colour Double]
+        paletteColor = palette !! (layerIndex `mod` Data.List.length palette)
+
+    getSurfaceLabel :: Int -> GodotWlrSurface -> Int -> Int -> IO String
+    getSurfaceLabel layerIndex wlrSurface width height = do
+      surfaceRole <- getWlrSurfaceRoleName wlrSurface
+      let baseLabel = surfaceRole ++ ":" ++ pointerIdSuffix width height (show wlrSurface)
+      return $
+        if debugDepthFirstThumbnailsEnabled
+          then "L" ++ show layerIndex ++ ":" ++ baseLabel
+          else baseLabel
+
+    getWlrSurfaceRoleName :: GodotWlrSurface -> IO String
+    getWlrSurfaceRoleName wlrSurface = do
+      isSubsurface <- G.is_wlr_subsurface wlrSurface
+      isXdgSurface <- G.is_wlr_xdg_surface wlrSurface
+      isXWaylandSurface <- G.is_wlr_xwayland_surface wlrSurface
+      return $
+        case (isSubsurface, isXdgSurface, isXWaylandSurface) of
+          (True, _, _) -> "sub"
+          (_, True, _) -> "xdg"
+          (_, _, True) -> "xway"
+          _ -> "wlr"
+
+    pointerIdSuffix :: Int -> Int -> String -> String
+    pointerIdSuffix width height pointerId =
+      let suffixLength = pointerIdSuffixLength width height
+      in case splitAt (length pointerId - suffixLength) pointerId of
+        (_, suffix) | length pointerId > 10 -> suffix
+        _ -> pointerId
+
+    -- Battle tested numbers that seem to work pretty well
+    pointerIdSuffixLength :: Int -> Int -> Int
+    pointerIdSuffixLength width height =
+      if width >= 140 && height >= 24 then 7 else 4
 
     drawCanvasSurface :: CanvasBase -> GodotSimulaViewSprite -> IO ()
     drawCanvasSurface cb gsvs = do
@@ -244,16 +349,16 @@ _draw cb gvArgs = do
         (getDepthFirstSurfaces gsvs)
         destroyWlrSurfacesWithCoords
         (\depthFirstSurfaces -> do
-          labelGroups <- foldM addSurfaceLabel M.empty depthFirstSurfaces
+          labelGroups <- foldM addSurfaceLabel M.empty (zip [0 :: Int ..] depthFirstSurfaces)
           forM_ (M.elems labelGroups) $
             drawSurfaceLabelGroup cb debugFont redColor)
       where
-        addSurfaceLabel :: M.Map (Int, Int) ((Int, Int, Int, Int), [String]) -> (GodotWlrSurface, Int, Int) -> IO (M.Map (Int, Int) ((Int, Int, Int, Int), [String]))
-        addSurfaceLabel labelsByCenter (wlrSurface, x, y) = do
+        addSurfaceLabel :: M.Map (Int, Int) ((Int, Int, Int, Int), [String]) -> (Int, (GodotWlrSurface, Int, Int)) -> IO (M.Map (Int, Int) ((Int, Int, Int, Int), [String]))
+        addSurfaceLabel labelsByCenter (layerIndex, (wlrSurface, x, y)) = do
           (width, height) <- getBufferDimensions wlrSurface
           if width > 0 && height > 0
             then do
-              label <- getSurfaceLabel wlrSurface width height
+              label <- getSurfaceLabel layerIndex wlrSurface width height
               let labelGroup = ((x, y, width, height), [label])
               return $ M.insertWith appendLabelGroup (surfaceCenterKey x y width height) labelGroup labelsByCenter
             else return labelsByCenter
@@ -266,10 +371,14 @@ _draw cb gvArgs = do
         surfaceCenterKey x y width height =
           (2 * x + width, 2 * y + height)
 
-        getSurfaceLabel :: GodotWlrSurface -> Int -> Int -> IO String
-        getSurfaceLabel wlrSurface width height = do
+        getSurfaceLabel :: Int -> GodotWlrSurface -> Int -> Int -> IO String
+        getSurfaceLabel layerIndex wlrSurface width height = do
           surfaceRole <- getWlrSurfaceRoleName wlrSurface
-          return $ surfaceRole ++ ":" ++ pointerIdSuffix width height (show wlrSurface)
+          let baseLabel = surfaceRole ++ ":" ++ pointerIdSuffix width height (show wlrSurface)
+          return $
+            if debugDepthFirstThumbnailsEnabled
+              then "L" ++ show layerIndex ++ ":" ++ baseLabel
+              else baseLabel
 
         getWlrSurfaceRoleName :: GodotWlrSurface -> IO String
         getWlrSurfaceRoleName wlrSurface = do

@@ -523,6 +523,7 @@ Debug Environment Variables:
 - SIMULA_DEBUG_SURFACE_CREATIONS=1: Prints detailed surface information when they get created/mapped.
 - SIMULA_DEBUG_MOUSE_EVENTS=1: Shows detailed tracing of mouse interaction logic.
 - SIMULA_DEBUG_KEYBOARD_EVENTS=1: Shows detailed tracing of keyboard focus and key dispatch logic.
+- SIMULA_DEBUG_DEPTH_FIRST_THUMBNAILS=1: Shows a live HUD underneath each app with individual thumbnails of each of its subsurfaces (in the depth-first order in which they are being rendered).
 _EOF_HELP_
                     exit 0
                     ;;
