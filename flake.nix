@@ -524,6 +524,7 @@ Debug Environment Variables:
 - SIMULA_DEBUG_MOUSE_EVENTS=1: Shows detailed tracing of mouse interaction logic.
 - SIMULA_DEBUG_KEYBOARD_EVENTS=1: Shows detailed tracing of keyboard focus and key dispatch logic.
 - SIMULA_DEBUG_DEPTH_FIRST_THUMBNAILS=1: Shows a live HUD underneath each app with individual thumbnails of each of its subsurfaces (in the depth-first order in which they are being rendered).
+- SIMULA_DEBUG_DAMAGED_REGIONS=1: Shows transient purple overlays over damaged surface regions and persistent damaged-region thumbnail previews in GSVS HUDs. If you additionally set this to an existing directory path instead of 1, it will also save each damaged-region event as <your-supplied-path>/<event-number>.png.
 _EOF_HELP_
                     exit 0
                     ;;
