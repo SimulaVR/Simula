@@ -27,6 +27,7 @@ import Godot.Gdnative.Types
 import qualified Godot.Methods as G
 import Godot.Nativescript
 import Linear
+import System.FilePath ((</>))
 
 import Plugin.Debug.DamagedRegionTypes
 import Plugin.Imports
@@ -153,7 +154,15 @@ flushDebugDamagedRegionPendingSnapshot gsvs viewportTexture =
         else do
           -- 6. On a later frame, it calls snapshotViewportTextureForDamageHud
           -- viewportTexture.
-          maybeSnapshotTexture <- snapshotViewportTextureForDamageHud viewportTexture
+          currentPendingEventIndex <- atomically $
+            fmap ddrsEventIndex <$> readTVar (_gsvsDebugDamagedRegionPendingSnapshot gsvs)
+          maybeSnapshotTexture <-
+            if currentPendingEventIndex == Just (ddrsEventIndex snapshot)
+              then snapshotViewportTextureForDamageHud viewportTexture
+              else return Nothing
+          when (currentPendingEventIndex == Just (ddrsEventIndex snapshot)) $
+            forM_ debugDamagedRegionsExportDirectory $ \exportDirectory ->
+              exportDebugDamagedRegionSnapshotPng exportDirectory snapshot viewportTexture
           atomically $ do
             currentPendingSnapshot <- readTVar (_gsvsDebugDamagedRegionPendingSnapshot gsvs)
             when (fmap ddrsEventIndex currentPendingSnapshot == Just (ddrsEventIndex snapshot)) $
@@ -193,12 +202,11 @@ snapshotViewportTextureForDamageHud viewportTexture = do
         then return Nothing
         else do
           -- 3. If that image is non-empty, allocate a fresh Godot Image and ImageTexture.
+          maybeSnapshotImage <- newGodotImage
           classDB <- Godot_ClassDB <$> withCString "ClassDB" Api.godot_global_get_singleton
-          imageVariant <- (G.instance' classDB =<< toLowLevel "Image") >>= fromLowLevel
           imageTextureVariant <- (G.instance' classDB =<< toLowLevel "ImageTexture") >>= fromLowLevel
-          case (fromVariant imageVariant :: Maybe GodotObject, fromVariant imageTextureVariant :: Maybe GodotObject) of
-            (Just imageObject, Just imageTextureObject) -> do
-              let snapshotImage = GodotImage imageObject
+          case (maybeSnapshotImage, fromVariant imageTextureVariant :: Maybe GodotObject) of
+            (Just snapshotImage, Just imageTextureObject) -> do
               -- 4. Copy the viewport image into the fresh image.
               G.copy_from snapshotImage viewportImage
               snapshotImageIsEmpty <- G.is_empty snapshotImage
@@ -217,6 +225,49 @@ snapshotViewportTextureForDamageHud viewportTexture = do
                       then Just snapshotTexture
                       else Nothing
             _ -> return Nothing
+
+newGodotImage :: IO (Maybe GodotImage)
+newGodotImage = do
+  classDB <- Godot_ClassDB <$> withCString "ClassDB" Api.godot_global_get_singleton
+  imageVariant <- (G.instance' classDB =<< toLowLevel "Image") >>= fromLowLevel
+  return $ GodotImage <$> (fromVariant imageVariant :: Maybe GodotObject)
+
+exportDebugDamagedRegionSnapshotPng :: FilePath -> DebugDamagedRegionSnapshot -> GodotTexture -> IO ()
+exportDebugDamagedRegionSnapshotPng exportDirectory snapshot viewportTexture =
+  case validateObject viewportTexture of
+    Nothing -> return ()
+    Just validViewportTexture -> do
+      viewportImage <- G.get_data validViewportTexture
+      imageIsEmpty <- G.is_empty viewportImage
+      unless imageIsEmpty $ do
+        surfaceWidth <- fromIntegral <$> G.get_width viewportImage
+        surfaceHeight <- fromIntegral <$> G.get_height viewportImage
+        forM_ (debugDamagedRegionUnionRectClampedToGSVSBounds surfaceWidth surfaceHeight (ddrsRects snapshot)) $ \unionRect ->
+          saveDebugDamagedRegionUnionImage exportDirectory snapshot viewportImage unionRect
+
+saveDebugDamagedRegionUnionImage :: FilePath -> DebugDamagedRegionSnapshot -> GodotImage -> DebugDamagedRegionRect -> IO ()
+saveDebugDamagedRegionUnionImage exportDirectory snapshot viewportImage (unionX, unionY, unionWidth, unionHeight) = do
+  let outputWidth = max 1 (ceiling unionWidth)
+  let outputHeight = max 1 (ceiling unionHeight)
+  maybeOutputImage <- newGodotImage
+  forM_ maybeOutputImage $ \outputImage -> do
+    G.create outputImage outputWidth outputHeight False G.FORMAT_RGBA8
+    transparent <- (toLowLevel $ (rgb 0.0 0.0 0.0) `withOpacity` 0.0) :: IO GodotColor
+    G.fill outputImage transparent
+    forM_ (ddrsRects snapshot) $ \(rectX, rectY, rectWidth, rectHeight) -> do
+      let sourceX = max unionX rectX
+      let sourceY = max unionY rectY
+      let sourceRight = min (unionX + unionWidth) (rectX + rectWidth)
+      let sourceBottom = min (unionY + unionHeight) (rectY + rectHeight)
+      when (sourceRight > sourceX && sourceBottom > sourceY) $ do
+        sourceRect <- toLowLevel $
+          V2
+            (V2 sourceX sourceY)
+            (V2 (sourceRight - sourceX) (sourceBottom - sourceY))
+        destination <- toLowLevel $ V2 (sourceX - unionX) (sourceY - unionY)
+        G.blit_rect outputImage viewportImage sourceRect destination
+    pathStr <- toLowLevel (pack (exportDirectory </> (show (ddrsEventIndex snapshot) ++ ".png"))) :: IO GodotString
+    void $ G.save_png outputImage pathStr
 
 -- Returns the currently visible damaged-region overlays for a GSVS, pruning
 -- expired overlays from GSVS state before handing them to the drawing code.

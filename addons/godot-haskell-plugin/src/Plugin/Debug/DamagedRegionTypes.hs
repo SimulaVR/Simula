@@ -1,16 +1,46 @@
 module Plugin.Debug.DamagedRegionTypes where
 
+import Control.Exception (SomeException, try)
 import Godot.Api.Auto (GodotTexture)
 import Godot.Gdnative.Types
+import System.Directory (Permissions, doesDirectoryExist, getPermissions, writable)
 import System.Environment (lookupEnv)
 import System.IO.Unsafe
 
+debugDamagedRegionsEnvValue :: Maybe String
+debugDamagedRegionsEnvValue = unsafePerformIO $
+  lookupEnv "SIMULA_DEBUG_DAMAGED_REGIONS"
+{-# NOINLINE debugDamagedRegionsEnvValue #-}
+
 -- Use `unsafePerformIO` to read the env once and cache the result as a Bool.
 debugDamagedRegionsEnabled :: Bool
-debugDamagedRegionsEnabled = unsafePerformIO $ do
-  simulaDebugDamagedRegions <- lookupEnv "SIMULA_DEBUG_DAMAGED_REGIONS"
-  return $ simulaDebugDamagedRegions == Just "1"
+debugDamagedRegionsEnabled =
+  case debugDamagedRegionsEnvValue of
+    Just "" -> False
+    Just "0" -> False
+    Just _ -> True
+    Nothing -> False
 {-# NOINLINE debugDamagedRegionsEnabled #-}
+
+debugDamagedRegionsExportDirectory :: Maybe FilePath
+debugDamagedRegionsExportDirectory = unsafePerformIO $ do
+  simulaDebugDamagedRegions <- lookupEnv "SIMULA_DEBUG_DAMAGED_REGIONS"
+  case simulaDebugDamagedRegions of
+    Just path | path /= "1" && path /= "0" && path /= "" -> do
+      directoryExists <- doesDirectoryExist path
+      if directoryExists
+        then do
+          permissionsResult <- try (getPermissions path) :: IO (Either SomeException Permissions)
+          if either (const False) writable permissionsResult
+            then return (Just path)
+            else do
+              putStrLn $ "SIMULA_DEBUG_DAMAGED_REGIONS export path is not writable, skipping PNG exports: " ++ path
+              return Nothing
+        else do
+          putStrLn $ "SIMULA_DEBUG_DAMAGED_REGIONS export path is not an existing directory, skipping PNG exports: " ++ path
+          return Nothing
+    _ -> return Nothing
+{-# NOINLINE debugDamagedRegionsExportDirectory #-}
 
 -- Pixel height allocated to one row of damaged region HUD thumbnails
 debugDamagedRegionThumbnailRowHeight :: Int
