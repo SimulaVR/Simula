@@ -787,7 +787,7 @@ getAttachedXdgChildRootOffset parentGSVS childWlrXdgSurface = do
     return (childRootX, childRootY)
 
 -- Check for both override_redirect=0 (the client is not asking to bypass normal
--- window-manager/compositor management) and "_NET_WM_WINDOW_TYPE_DIALOG".
+-- window-manager/compositor management) and "_NET_WM_WINDOW_TYPE_DIALOG"/"_NET_WM_WINDOW_TYPE_POPUP_MENU".
 -- This may be too restrictive, but we'll see if it's sufficient in practice.
 xWaylandSurfaceShouldCenterOverParent :: GodotWlrXWaylandSurface -> IO Bool
 xWaylandSurfaceShouldCenterOverParent wlrXWaylandSurface = do
@@ -795,7 +795,8 @@ xWaylandSurfaceShouldCenterOverParent wlrXWaylandSurface = do
   hasParent <- G.has_parent wlrXWaylandSurface
   overrideRedirect <- G.get_override_redirect wlrXWaylandSurface
   isDialog <- xWaylandSurfaceHasWindowTypeName wlrXWaylandSurface "_NET_WM_WINDOW_TYPE_DIALOG"
-  return (hasParent && not overrideRedirect && isDialog)
+  isPopup <- xWaylandSurfaceHasWindowTypeName wlrXWaylandSurface "_NET_WM_WINDOW_TYPE_POPUP_MENU"
+  return (hasParent && not overrideRedirect && (isDialog || isPopup))
 
 xWaylandSurfaceHasWindowTypeName :: GodotWlrXWaylandSurface -> String -> IO Bool
 xWaylandSurfaceHasWindowTypeName wlrXWaylandSurface typeName = do
