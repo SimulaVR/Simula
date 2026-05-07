@@ -36,6 +36,7 @@ import           Data.Colour
 import           Data.Colour.SRGB.Linear
 
 import           Plugin.Imports
+import           Plugin.Debug.DamagedRegionTypes
 
 import           Godot.Core.GodotVisualServer          as G
 import qualified Godot.Methods               as G
@@ -145,7 +146,9 @@ debugDepthFirstThumbnailHeight = 220
 
 debugHudEnabled :: Bool
 debugHudEnabled =
-  debugDepthFirstThumbnailsEnabled || (debugSurfaceBoundariesEnabled && (debugMouseEventsEnabled || debugKeyboardEventsEnabled))
+  debugDepthFirstThumbnailsEnabled
+    || debugDamagedRegionsEnabled
+    || (debugSurfaceBoundariesEnabled && (debugMouseEventsEnabled || debugKeyboardEventsEnabled))
 
 debugHudMaxLines :: Int
 debugHudMaxLines = 8
@@ -263,6 +266,7 @@ unfoldrM f b = f b >>= \case
 data SurfaceLocalCoordinates    = SurfaceLocalCoordinates (Float, Float)
 data SubSurfaceLocalCoordinates = SubSurfaceLocalCoordinates (Float, Float)
 data SpriteDimensions      = SpriteDimensions (Int, Int)
+
 fullRedrawFramesStartingAmount :: Int
 fullRedrawFramesStartingAmount = 2
 
@@ -274,6 +278,9 @@ markGSVSForFullRedrawFrames :: GodotSimulaViewSprite -> Int -> IO ()
 markGSVSForFullRedrawFrames gsvs frameCount = do
   atomically $ writeTVar (_gsvsFullRedrawFramesRemaining gsvs) frameCount
   atomically $ writeTVar (_gsvsIsDamaged gsvs) True
+
+validateObject :: GodotObject :< a => a -> Maybe a
+validateObject obj = guard (unsafeCoerce ((safeCast obj) :: GodotObject) /= nullPtr) >> return obj
 
 data ResizeMethod = Zoom | Horizontal | Vertical deriving (Eq)
 
@@ -465,6 +472,9 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsFullRedrawFramesRemaining :: TVar Int
   , _gsvsShaderPath        :: TVar (Maybe String)
   , _gsvsDamagedRegions    :: TVar [GodotRect2]
+  , _gsvsDebugDamagedRegionOverlays :: TVar [DebugDamagedRegionOverlay] -- A recent history of damage events, the union of which will be displayed as purple rectangles over the gsvs itself (with varying opacity depending upon how old the damaged region is)
+  , _gsvsDebugDamagedRegionHistory :: TVar [DebugDamagedRegionSnapshot] -- History of snapshots; each snapshot encodes an individual damaged region event displayed as a thumbnail in the GSVS HUD
+  , _gsvsDebugDamagedRegionPendingSnapshot :: TVar (Maybe DebugDamagedRegionSnapshot) -- Storage for fresh damage event metadata before we have a GSVS texture, so it can be finalized into _gsvsDebugDamagedRegionHistory for HUD display
   , _gsvsIsDamaged         :: TVar Bool
   , _gsvsDebugHudMessages  :: TVar [String]
   , _gsvsDebugHudLastPointerFocusSummary :: TVar (Maybe String)
@@ -2197,9 +2207,6 @@ getGrabDiff gss = do
                                                                      diffTransform <- Api.godot_transform_operator_multiply povTransform prevTransformInverse
                                                                      return diffTransform
   return diffTransform
-
-validateObject :: GodotObject :< a => a -> Maybe a
-validateObject obj = guard (unsafeCoerce ((safeCast obj) :: GodotObject) /= nullPtr) >> return obj
 
 class (GodotObject :< surface) => Validatable surface where
   isValid :: surface -> IO Bool

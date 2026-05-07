@@ -31,6 +31,8 @@ import Godot.Core.GodotViewport as G
 
 import Godot.Core.GodotVisualServer as G
 
+import Plugin.Debug.DamagedRegions
+import Plugin.Debug.DamagedRegionTypes
 import Plugin.Types
 import Data.Maybe
 import Data.Either
@@ -119,6 +121,9 @@ _draw cb gvArgs = do
 
   drawCanvasSurface cb gsvs
 
+  when debugDamagedRegionsEnabled $
+    drawDebugDamagedRegionOverlays cb gsvs
+
   when showSurfaceDebugOverlays $ do
     -- Outline raw wlr_surface buffers as red
     drawRedWlrSurfaceBoundaries cb gsvs
@@ -180,9 +185,14 @@ _draw cb gvArgs = do
     drawDebugHud cb gsvs = do
       debugPutStrLn "Plugin.CanvasBase.drawDebugHud"
       messages <- getDebugHudVisibleMessages gsvs
-      unless (Data.List.null messages && not debugDepthFirstThumbnailsEnabled) $ do
+      unless (Data.List.null messages && not debugDepthFirstThumbnailsEnabled && not debugDamagedRegionsEnabled) $ do
         cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
         viewportSurface <- readTVarIO (cs ^. csViewport)
+        when debugDamagedRegionsEnabled $
+          withGodotRef (G.get_texture viewportSurface :: IO GodotViewportTexture) $ \viewportSurfaceTexture ->
+            flushDebugDamagedRegionPendingSnapshot gsvs (safeCast viewportSurfaceTexture)
+        damagedRegionHistory <- getDebugDamagedRegionHistory gsvs
+        let visibleDamagedRegionHistory = keepLast debugDamagedRegionHistoryMax damagedRegionHistory
         viewportBase <- readTVarIO (cb ^. cbViewport)
         V2 _viewportSurfaceWidth viewportSurfaceHeight <- G.get_size viewportSurface >>= fromLowLevel :: IO (V2 Float)
         V2 viewportBaseWidth viewportBaseHeight <- G.get_size viewportBase >>= fromLowLevel :: IO (V2 Float)
@@ -194,7 +204,8 @@ _draw cb gvArgs = do
         let lineGap = 2
         let lineStep = fontHeight + lineGap
         let depthFirstThumbnailsHeight = if debugDepthFirstThumbnailsEnabled then debugDepthFirstThumbnailHeight else 0
-        let requestedHudHeight = fromIntegral padding * 2 + fromIntegral depthFirstThumbnailsHeight + lineStep * fromIntegral (Data.List.length messages)
+        let damagedRegionThumbnailsHeight = if debugDamagedRegionsEnabled && not (Data.List.null visibleDamagedRegionHistory) then debugDamagedRegionHudHeightForCount (Data.List.length visibleDamagedRegionHistory) else 0
+        let requestedHudHeight = fromIntegral padding * 2 + fromIntegral depthFirstThumbnailsHeight + fromIntegral damagedRegionThumbnailsHeight + lineStep * fromIntegral (Data.List.length messages)
         let availableHudHeight = max 0 (viewportBaseHeight - viewportSurfaceHeight)
         let hudHeight = min availableHudHeight requestedHudHeight
         let hudTop = viewportSurfaceHeight
@@ -207,11 +218,20 @@ _draw cb gvArgs = do
         G.draw_rect cb hudRect backgroundColor True 1.0 False
         when debugDepthFirstThumbnailsEnabled $
           drawDebugHudDepthFirstThumbnails cb gsvs debugFont (fromIntegral padding) (hudTop + fromIntegral padding) (viewportBaseWidth - fromIntegral padding * 2) (fromIntegral depthFirstThumbnailsHeight)
+        when debugDamagedRegionsEnabled $
+          drawDebugHudDamagedRegionThumbnails cb visibleDamagedRegionHistory debugFont $
+            DebugHudDamagedRegionThumbnailsArea
+              { debugHudDamagedRegionThumbnailsAreaLeft = fromIntegral padding
+              , debugHudDamagedRegionThumbnailsAreaTop = hudTop + fromIntegral padding + fromIntegral depthFirstThumbnailsHeight
+              , debugHudDamagedRegionThumbnailsAreaWidth = viewportBaseWidth - fromIntegral padding * 2
+              , debugHudDamagedRegionThumbnailsAreaHeight = fromIntegral damagedRegionThumbnailsHeight
+              }
+        G.set_size debugFont 16
         bracket
           (mapM (toLowLevel . pack) messages :: IO [GodotString])
           (mapM_ Api.godot_string_destroy)
           (\messageStrs -> do
-            let firstBaselineY = hudTop + fromIntegral padding + fromIntegral depthFirstThumbnailsHeight + fontAscent
+            let firstBaselineY = hudTop + fromIntegral padding + fromIntegral depthFirstThumbnailsHeight + fromIntegral damagedRegionThumbnailsHeight + fontAscent
             let maxTextWidth = max 1 (round viewportBaseWidth - padding * 2)
             forM_ (zip [0..] messageStrs) $ \(lineIndex :: Int, messageStr) -> do
               renderPosition <- toLowLevel (V2 (fromIntegral padding) (firstBaselineY + lineStep * fromIntegral lineIndex)) :: IO GodotVector2

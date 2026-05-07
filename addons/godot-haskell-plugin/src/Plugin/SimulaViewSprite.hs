@@ -33,6 +33,8 @@ import           Godot.Nativescript
 
 import Plugin.CanvasBase
 import Plugin.CanvasSurface
+import Plugin.Debug.DamagedRegions
+import Plugin.Debug.DamagedRegionTypes
 import Plugin.Types
 import Data.Maybe
 import Data.Either
@@ -86,6 +88,9 @@ instance NativeScript GodotSimulaViewSprite where
                       <*> atomically (newTVar 0)
                       <*> atomically (newTVar Nothing)
                       <*> atomically (newTVar [])
+                      <*> atomically (newTVar [])
+                      <*> atomically (newTVar [])
+                      <*> atomically (newTVar Nothing)
                       <*> atomically (newTVar False)
                       <*> atomically (newTVar [])
                       <*> atomically (newTVar Nothing)
@@ -270,6 +275,9 @@ setTargetDimensions gsvs = do
           + if debugDepthFirstThumbnailsEnabled
               then debugDepthFirstThumbnailHeight
               else 0
+          + if debugDamagedRegionsEnabled
+              then debugDamagedRegionThumbnailHeight
+              else 0
   spilloverDims' <- toLowLevel $ (V2 (fromIntegral spilloverWidth) (fromIntegral spilloverHeight))
   baseViewportDims' <- toLowLevel $ (V2 (fromIntegral spilloverWidth) (fromIntegral baseViewportHeight))
   V2 currentViewportWidth currentViewportHeight <- G.get_size renderTargetSurface >>= fromLowLevel :: IO (V2 Float)
@@ -342,7 +350,7 @@ updateQuadShader gsvs (SpriteDimensions (targetWidth, targetHeight)) (spilloverW
         || (spilloverWidth > targetWidth)
         || (spilloverHeight > targetHeight)
         || surfaceNeedsAlphaBlend
-        || debugDepthFirstThumbnailsEnabled
+        || debugHudEnabled
   setShader gsvs $
     if shouldUseTransparentShader
       then "res://addons/godot-haskell-plugin/TextShader.tres"

@@ -36,6 +36,8 @@ import Godot.Core.GodotViewport as G
 
 import Godot.Core.GodotVisualServer as G
 
+import Plugin.Debug.DamagedRegions
+import Plugin.Debug.DamagedRegionTypes
 import Plugin.Types
 import Data.Maybe
 import Data.Either
@@ -140,7 +142,14 @@ _draw cs gvArgs = do
       (\depthFirstSurfaces -> do
         isEntirelyDamaged <- readTVarIO (gsvs ^. gsvsIsDamaged)
         fullRedrawFramesRemaining <- readTVarIO (gsvs ^. gsvsFullRedrawFramesRemaining)
-        case (debugDepthFirstThumbnailsEnabled || isEntirelyDamaged || fullRedrawFramesRemaining > 0) of
+        let shouldFullRedraw = debugDepthFirstThumbnailsEnabled || isEntirelyDamaged || fullRedrawFramesRemaining > 0
+        debugDamageRegions <- if debugDamagedRegionsEnabled
+          then do
+            regions <- getAccumulatedDamageRegions gsvs depthFirstSurfaces
+            atomically $ writeTVar (gsvs ^. gsvsDamagedRegions) regions
+            return (Just regions)
+          else return Nothing
+        case shouldFullRedraw of
           True -> do
             atomically $ do
               writeTVar (gsvs ^. gsvsIsDamaged) False
@@ -149,14 +158,20 @@ _draw cs gvArgs = do
             drawResults <- mapM (drawWlrSurface cs) depthFirstSurfaces -- Just draw everything
             when (not (and drawResults)) $ -- when at least one surface didn't have a valid texture this frame
               markGSVSForFullRedrawFrames gsvs fullRedrawFramesRemaining -- bump to the next frame while retaining our fullRedrawFramesRemaining amount
+            rememberDebugDamageRegionsFromCanvas cs gsvs debugDamageRegions
             return ()
           False -> do
             -- Only draw the damaged regions
-            regions <- getAccumulatedDamageRegions gsvs depthFirstSurfaces
-            atomically $ writeTVar (gsvs ^. gsvsDamagedRegions) regions
+            regions <- case debugDamageRegions of
+              Just regions -> return regions
+              Nothing -> do
+                regions <- getAccumulatedDamageRegions gsvs depthFirstSurfaces
+                atomically $ writeTVar (gsvs ^. gsvsDamagedRegions) regions
+                return regions
 
             -- Draw surfaces
             mapM (drawWlrSurfaceRegions cs regions) depthFirstSurfaces
+            rememberDebugDamageRegionsFromCanvas cs gsvs (Just regions)
             return ())
   mapM_ Api.godot_variant_destroy gvArgs
   where
