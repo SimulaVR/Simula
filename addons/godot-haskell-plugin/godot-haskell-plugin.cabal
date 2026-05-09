@@ -94,6 +94,8 @@ library
       Plugin.Simula
       Plugin.VR
       Plugin.Debug
+      Plugin.Debug.DamagedRegions
+      Plugin.Debug.DamagedRegionTypes
       Plugin.CanvasAR
       Plugin.Input.HandTelekinesis
       -- Debug.C
@@ -141,6 +143,8 @@ foreign-library godot-haskell-plugin
     Plugin.Simula
     Plugin.VR
     Plugin.Debug
+    Plugin.Debug.DamagedRegions
+    Plugin.Debug.DamagedRegionTypes
     Plugin.CanvasAR
     Plugin.Input.HandTelekinesis
     -- Debug.C
