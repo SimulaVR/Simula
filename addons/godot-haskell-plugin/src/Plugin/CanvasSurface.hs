@@ -102,11 +102,9 @@ _process self gvArgs = do
 prepareViewportForDraw :: CanvasSurface -> GodotSimulaViewSprite -> IO ()
 prepareViewportForDraw cs gsvs = do
   fullRedrawFramesRemaining <- readTVarIO (gsvs ^. gsvsFullRedrawFramesRemaining)
-  when (fullRedrawFramesRemaining > 0) $
-    whenM (gsvsViewOrChildrenHaveInsetGeometry gsvs) $ do
-      viewport <- readTVarIO (cs ^. csViewport)
-      G.set_clear_mode viewport G.CLEAR_MODE_ONLY_NEXT_FRAME
-      return ()
+  when (fullRedrawFramesRemaining > 0) $ do
+   viewport <- readTVarIO (cs ^. csViewport)
+   G.set_clear_mode viewport G.CLEAR_MODE_ONLY_NEXT_FRAME
 
 getAccumulatedDamageRegions :: GodotSimulaViewSprite -> [(GodotWlrSurface, Int, Int)] -> IO [GodotRect2]
 getAccumulatedDamageRegions gsvs depthFirstSurfaces = do
