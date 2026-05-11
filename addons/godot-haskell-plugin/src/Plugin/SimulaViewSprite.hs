@@ -87,6 +87,7 @@ instance NativeScript GodotSimulaViewSprite where
                       <*> atomically (newTVar False)
                       <*> atomically (newTVar 0)
                       <*> atomically (newTVar Nothing)
+                      <*> atomically (newTVar Nothing)
                       <*> atomically (newTVar [])
                       <*> atomically (newTVar [])
                       <*> atomically (newTVar [])
@@ -302,7 +303,7 @@ setTargetDimensions gsvs = do
   G.set_size renderTargetBase baseViewportDims'
   G.set_size renderTargetSurface spilloverDims'
   when viewportDimsChanged $
-    markGSVSForFullRedraws gsvs
+    markGSVSForFullRedrawsByDefaultFrameAmount gsvs
   -- QuadMesh need to be scaled down by a factor of 0.001 to be reasonably sized in Godot:
   withQuadMesh gsvs $ \quadMesh ->
     G.set_size quadMesh =<< (toLowLevel $ (V2 (0.001 * (fromIntegral spilloverWidth)) (0.001 * (fromIntegral baseViewportHeight))))
@@ -326,7 +327,7 @@ setTargetDimensions gsvs = do
         (True, True) -> do atomically $ do writeTVar (gsvs ^. gsvsResizedLastFrame) False
                                            writeTVar (gsvs ^. gsvsSpilloverDims) (Just spilloverDims)
                            when (transOld == 1) $
-                             markGSVSForFullRedraws gsvs
+                             markGSVSForFullRedrawsByDefaultFrameAmount gsvs
         (True, False) -> do let pushX = spilloverWidth - oldSpilloverWidth
                             let pushY = spilloverHeight - oldSpilloverHeight
                             pushBackVector <- toLowLevel (V3 (-0.5 * 0.001 * (fromIntegral pushX)) (-0.5 * 0.001 * (fromIntegral pushY)) 0) :: IO GodotVector3
@@ -334,7 +335,7 @@ setTargetDimensions gsvs = do
                             atomically $ writeTVar (gsvs ^. gsvsSpilloverDims) (Just spilloverDims)
                             case (transOld == 1, (spilloverWidth > targetWidth || spilloverHeight > targetHeight)) of
                               (True, False) ->  return () -- Avoid changing shader when apps first launch
-                              (True, True) -> markGSVSForFullRedraws gsvs
+                              (True, True) -> markGSVSForFullRedrawsByDefaultFrameAmount gsvs
                               (False, _) -> return ()
   updateQuadShader gsvs targetDims spilloverDims
   return ()
@@ -347,8 +348,8 @@ updateQuadShader gsvs (SpriteDimensions (targetWidth, targetHeight)) (spilloverW
   let shouldUseTransparentShader =
         (gsvsTransparency < 1)
         || (fullRedrawFramesRemaining > 0)
-        || (spilloverWidth > targetWidth)
-        || (spilloverHeight > targetHeight)
+        || (spilloverWidth /= targetWidth) -- Use the transparent shader whenever the rendered
+        || (spilloverHeight /= targetHeight) -- surface does not fill the target quad.
         || surfaceNeedsAlphaBlend
         || debugHudEnabled
   setShader gsvs $
@@ -1137,7 +1138,7 @@ mapAsStandaloneSurface gsvs simulaView eitherSurface = do
     -- redraws. These popups seem to be rare (basically help menus), so in practice
     -- this path won't be used that often.
     then markGSVSForFullRedrawFrames gsvs 30
-    else markGSVSForFullRedraws gsvs
+    else markGSVSForFullRedrawMilliseconds gsvs
 
   setInFrontOfUser gsvs (-2)
 
@@ -1509,7 +1510,7 @@ handle_map_free_child_impl gsvsInvisible wlrXWaylandSurface = do
                                            freeChildrenMapOld <- readTVarIO (gss ^. gssFreeChildren) :: IO (M.Map GodotWlrXWaylandSurface GodotSimulaViewSprite)
                                            let freeChildrenMapNew = M.insert wlrXWaylandSurface gsvs freeChildrenMapOld
                                            atomically $ writeTVar (gss ^. gssFreeChildren) freeChildrenMapNew
-                                           markGSVSForFullRedraws gsvs
+                                           markGSVSForFullRedrawsByDefaultFrameAmount gsvs
                                            return True
 
   simulaView <- readTVarIO (gsvsInvisible ^. gsvsView)
@@ -1658,7 +1659,7 @@ markLikelyVisibleGSVSForFullRedraws gss = do
   debugPutStrLn "Plugin.SimulaViewSprite.markLikelyVisibleGSVSForFullRedraws"
   maybeKeyboardFocusedGSVS <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
   maybeActiveCursorGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
-  mapM_ markGSVSForFullRedraws $ nub $ catMaybes -- removes Nothing's and duplicates from the list
+  mapM_ markGSVSForFullRedrawsByDefaultFrameAmount $ nub $ catMaybes -- removes Nothing's and duplicates from the list
     [ maybeKeyboardFocusedGSVS
     , maybeActiveCursorGSVS
     ]
@@ -1682,8 +1683,8 @@ handle_map_child gsvsInvisible gvArgs@[wlrXWaylandSurfaceVariant] = do
                             atomically $ writeTVar (simulaView ^. svMapped) True
                             if shouldCenter
                               then markGSVSForFullRedrawFrames parentGSVS 30
-                              else markGSVSForFullRedraws parentGSVS
-                            markGSVSForFullRedraws gsvsInvisible
+                              else markGSVSForFullRedrawsByDefaultFrameAmount parentGSVS
+                            markGSVSForFullRedrawsByDefaultFrameAmount gsvsInvisible
                             return False
   when safeToDestroyArgs $ mapM_ Api.godot_variant_destroy gvArgs
   return ()
@@ -1717,14 +1718,14 @@ handle_set_parent gsvs gvArgs@[wlrXWaylandSurfaceVariant] = do
   let maybeFreeChildOwnerGSVS = M.lookup wlrXWaylandSurface freeChildrenMap
   shouldCenter <- xWaylandSurfaceShouldCenterOverParent wlrXWaylandSurface
 
-  markGSVSForFullRedraws gsvs
+  markGSVSForFullRedrawsByDefaultFrameAmount gsvs
   forM_ maybeParentGSVS $ \parentGSVS ->
     if shouldCenter
       then markGSVSForFullRedrawFrames parentGSVS 30
-      else markGSVSForFullRedraws parentGSVS
+      else markGSVSForFullRedrawsByDefaultFrameAmount parentGSVS
   forM_ maybeFreeChildOwnerGSVS $ \freeChildOwnerGSVS ->
     when (Just freeChildOwnerGSVS /= maybeParentGSVS) $
-      markGSVSForFullRedraws freeChildOwnerGSVS
+      markGSVSForFullRedrawsByDefaultFrameAmount freeChildOwnerGSVS
 
   mapM_ Api.godot_variant_destroy gvArgs
   return ()
@@ -1745,7 +1746,7 @@ handle_xdg_set_parent gsvs gvArgs@[_wlrXdgToplevelVariant] = do
         -- If state didn't change, then at least redraw the parent gsvs
         (Just simulaTrackedParentGSVS, Just xdgDeclaredParentGSVS)
           | simulaTrackedParentGSVS == xdgDeclaredParentGSVS ->
-              markGSVSForFullRedraws simulaTrackedParentGSVS
+              markGSVSForFullRedrawsByDefaultFrameAmount simulaTrackedParentGSVS
         -- If we're switching from an old to a new parent, then change state and trigger a hard redraw on the new parent
         (Just _, Just xdgDeclaredParentGSVS) -> do
           detachXdgChildFromParent gss childWlrXdgSurface
@@ -1754,7 +1755,7 @@ handle_xdg_set_parent gsvs gvArgs@[_wlrXdgToplevelVariant] = do
         -- If we used to be attached to a gsvs but now we're parentless:
         (Just _, Nothing) -> do
           detachXdgChildFromParent gss childWlrXdgSurface
-          markGSVSForFullRedraws gsvs
+          markGSVSForFullRedrawsByDefaultFrameAmount gsvs
         -- If we weren't attached to any gsvs before (meaning the gsvs is a
         -- standalone node in the scene graph) but now want to attach to a new
         -- one, we have to remove ourselves from the scene graph.
@@ -1765,7 +1766,7 @@ handle_xdg_set_parent gsvs gvArgs@[_wlrXdgToplevelVariant] = do
         -- If we're not attached to any gsvs (so we're a standalone gsvs in the scene graph),
         -- and still have no parent, then just mark the gsvs for redraws.
         (Nothing, Nothing) ->
-          markGSVSForFullRedraws gsvs
+          markGSVSForFullRedrawsByDefaultFrameAmount gsvs
   mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
@@ -1794,9 +1795,9 @@ markRootGSVSForFullRedraws gsvs = do
     Left wlrXdgSurface -> do
       attachedMap <- readTVarIO (gss ^. gssAttachedXdgChildren)
       case M.lookup wlrXdgSurface attachedMap of
-        Just parentGSVS -> markGSVSForFullRedraws parentGSVS
-        Nothing -> markGSVSForFullRedraws gsvs
-    Right _ -> markGSVSForFullRedraws gsvs
+        Just parentGSVS -> markGSVSForFullRedrawsByDefaultFrameAmount parentGSVS
+        Nothing -> markGSVSForFullRedrawsByDefaultFrameAmount gsvs
+    Right _ -> markGSVSForFullRedrawsByDefaultFrameAmount gsvs
 
 handle_unmap_child :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
 handle_unmap_child self gvArgs@[wlrXWaylandSurfaceVariant] = do
@@ -1809,7 +1810,7 @@ handle_unmap_child self gvArgs@[wlrXWaylandSurfaceVariant] = do
     Nothing -> do
       putStrLn "handle_unmap_child: no parent GSVS found"
       markLikelyVisibleGSVSForFullRedraws gss
-    Just parentGSVS -> markGSVSForFullRedraws parentGSVS
+    Just parentGSVS -> markGSVSForFullRedrawsByDefaultFrameAmount parentGSVS
   atomically $ writeTVar (self ^. gsvsIsDamaged) True
   handle_unmap_base self gvArgs
   mapM_ Api.godot_variant_destroy gvArgs
@@ -1825,7 +1826,7 @@ handle_unmap_free_child self gvArgs@[wlrXWaylandSurfaceVariant] = do
     Nothing -> do
       debugPutStrLn "Plugin.SimulaViewSprite.handle_unmap_free_child: no parent GSVS found"
       markLikelyVisibleGSVSForFullRedraws gss
-    Just parentGSVS -> markGSVSForFullRedraws parentGSVS
+    Just parentGSVS -> markGSVSForFullRedrawsByDefaultFrameAmount parentGSVS
   atomically $ writeTVar (self ^. gsvsIsDamaged) True
   handle_unmap_base self gvArgs
   mapM_ Api.godot_variant_destroy gvArgs

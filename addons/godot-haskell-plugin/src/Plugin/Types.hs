@@ -10,6 +10,7 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Plugin.Types where
 
@@ -270,8 +271,15 @@ data SpriteDimensions      = SpriteDimensions (Int, Int)
 fullRedrawFramesStartingAmount :: Int
 fullRedrawFramesStartingAmount = 2
 
-markGSVSForFullRedraws :: GodotSimulaViewSprite -> IO ()
-markGSVSForFullRedraws gsvs =
+appLaunchFullRedrawMilliseconds :: Integer
+appLaunchFullRedrawMilliseconds = 250
+
+monotonicTimeInMilliseconds :: IO Integer
+monotonicTimeInMilliseconds =
+  (`div` 1000000) . toNanoSecs <$> getTime Monotonic
+
+markGSVSForFullRedrawsByDefaultFrameAmount :: GodotSimulaViewSprite -> IO ()
+markGSVSForFullRedrawsByDefaultFrameAmount gsvs =
   markGSVSForFullRedrawFrames gsvs fullRedrawFramesStartingAmount
 
 markGSVSForFullRedrawFrames :: GodotSimulaViewSprite -> Int -> IO ()
@@ -279,8 +287,38 @@ markGSVSForFullRedrawFrames gsvs frameCount = do
   atomically $ writeTVar (_gsvsFullRedrawFramesRemaining gsvs) frameCount
   atomically $ writeTVar (_gsvsIsDamaged gsvs) True
 
+markGSVSForFullRedrawMilliseconds :: GodotSimulaViewSprite -> IO ()
+markGSVSForFullRedrawMilliseconds gsvs = do
+  markGSVSForFullRedrawsByDefaultFrameAmount gsvs
+  now <- monotonicTimeInMilliseconds
+  atomically $ writeTVar (_gsvsFullRedrawMillisecondsDeadline gsvs) (Just (now + appLaunchFullRedrawMilliseconds))
+
+getGSVSFullRedrawMillisecondsRemaining :: GodotSimulaViewSprite -> IO Integer
+getGSVSFullRedrawMillisecondsRemaining gsvs = do
+  maybeDeadlineMs <- readTVarIO (_gsvsFullRedrawMillisecondsDeadline gsvs)
+  case maybeDeadlineMs of
+    Nothing -> return 0
+    Just deadlineMs -> do
+      now <- monotonicTimeInMilliseconds
+      let millisecondsRemaining = max 0 (deadlineMs - now)
+      when (millisecondsRemaining == 0) $
+        atomically $ writeTVar (_gsvsFullRedrawMillisecondsDeadline gsvs) Nothing
+      return millisecondsRemaining
+
 validateObject :: GodotObject :< a => a -> Maybe a
 validateObject obj = guard (unsafeCoerce ((safeCast obj) :: GodotObject) /= nullPtr) >> return obj
+
+newEmptyRid :: IO GodotRid
+newEmptyRid = do
+  let ridSize = opaqueSizeOf @GodotRid
+  ridPtr <- mallocForeignPtrBytes ridSize
+  withForeignPtr ridPtr $ \ptr -> fillBytes ptr 0 ridSize
+  return (coerce ridPtr)
+
+-- Global empty RID to share across low-level CanvasSurface draws, which require an optional RID argument
+globalEmptyRid :: GodotRid
+globalEmptyRid = unsafePerformIO newEmptyRid
+{-# NOINLINE globalEmptyRid #-}
 
 data ResizeMethod = Zoom | Horizontal | Vertical deriving (Eq)
 
@@ -470,6 +508,7 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsCursor            :: TVar ((Maybe GodotWlrSurface), (Maybe GodotTexture))
   , _gsvsIsAtTargetDims    :: TVar Bool
   , _gsvsFullRedrawFramesRemaining :: TVar Int
+  , _gsvsFullRedrawMillisecondsDeadline :: TVar (Maybe Integer) -- Sometimes useful to mark a gsvs for redraw in terms of time instead of frames
   , _gsvsShaderPath        :: TVar (Maybe String)
   , _gsvsDamagedRegions    :: TVar [GodotRect2]
   , _gsvsDebugDamagedRegionOverlays :: TVar [DebugDamagedRegionOverlay] -- A recent history of damage events, the union of which will be displayed as purple rectangles over the gsvs itself (with varying opacity depending upon how old the damaged region is)
@@ -500,13 +539,15 @@ data CanvasSurface = CanvasSurface {
   , _csGSVS         :: TVar GodotSimulaViewSprite
   , _csViewport     :: TVar GodotViewport
   , _csClearShader  :: TVar GodotShaderMaterial
-  , _csPremulShader :: TVar GodotShaderMaterial
+  , _csPassthroughShader :: TVar GodotShaderMaterial
+  , _csClearCanvasItem :: TVar GodotRid
+  , _csPassthroughCanvasItem :: TVar GodotRid
   , _csFrameCounter :: TVar Integer
 }
 
 instance HasBaseClass CanvasSurface where
   type BaseClass CanvasSurface = GodotNode2D
-  super (CanvasSurface obj _ _ _ _ _) = GodotNode2D obj
+  super (CanvasSurface obj _ _ _ _ _ _ _) = GodotNode2D obj
 
 instance Eq CanvasSurface where
   (==) = (==) `on` _csObject
