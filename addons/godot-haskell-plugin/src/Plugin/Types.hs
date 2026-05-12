@@ -38,6 +38,7 @@ import           Data.Colour.SRGB.Linear
 
 import           Plugin.Imports
 import           Plugin.Debug.DamagedRegionTypes
+import           Plugin.Debug.MemoryHudTypes
 
 import           Godot.Core.GodotVisualServer          as G
 import qualified Godot.Methods               as G
@@ -139,7 +140,8 @@ debugDepthFirstThumbnailsEnabled = unsafePerformIO $ do
 
 -- Extra vertical space reserved below the viewportSurface for normal GSVS HUD text.
 debugHudReservedHeight :: Int
-debugHudReservedHeight = 56
+debugHudReservedHeight =
+  56 + if debugMemoryHudEnabled then debugMemoryHudHeight else 0
 
 -- Height of the part of the GSVS HUD that shows the depth-first surface thumbnails.
 debugDepthFirstThumbnailHeight :: Int
@@ -149,6 +151,7 @@ debugHudEnabled :: Bool
 debugHudEnabled =
   debugDepthFirstThumbnailsEnabled
     || debugDamagedRegionsEnabled
+    || debugMemoryHudEnabled
     || (debugSurfaceBoundariesEnabled && (debugMouseEventsEnabled || debugKeyboardEventsEnabled))
 
 debugHudMaxLines :: Int

@@ -96,6 +96,8 @@ library
       Plugin.Debug
       Plugin.Debug.DamagedRegions
       Plugin.Debug.DamagedRegionTypes
+      Plugin.Debug.MemoryHud
+      Plugin.Debug.MemoryHudTypes
       Plugin.CanvasAR
       Plugin.Input.HandTelekinesis
       -- Debug.C
@@ -145,6 +147,8 @@ foreign-library godot-haskell-plugin
     Plugin.Debug
     Plugin.Debug.DamagedRegions
     Plugin.Debug.DamagedRegionTypes
+    Plugin.Debug.MemoryHud
+    Plugin.Debug.MemoryHudTypes
     Plugin.CanvasAR
     Plugin.Input.HandTelekinesis
     -- Debug.C
