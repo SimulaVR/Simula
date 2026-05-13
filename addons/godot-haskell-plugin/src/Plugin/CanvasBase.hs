@@ -35,6 +35,8 @@ import Plugin.Debug.DamagedRegions
 import Plugin.Debug.DamagedRegionTypes
 import Plugin.Debug.MemoryHud
 import Plugin.Debug.MemoryHudTypes
+import Plugin.Debug.ProfileHud
+import Plugin.Debug.ProfileHudTypes
 import Plugin.Types
 import Data.Maybe
 import Data.Either
@@ -105,53 +107,55 @@ _ready cb gvArgs = do
   mapM_ Api.godot_variant_destroy gvArgs
 
 _process :: CanvasBase -> [GodotVariant] -> IO ()
-_process self gvArgs = do
-  debugPutStrLn "Plugin.CanvasBase._process"
-  G.update self
-  mapM_ Api.godot_variant_destroy gvArgs
-  return ()
+_process self gvArgs =
+  profileScope "Plugin.CanvasBase._process" $ do
+    debugPutStrLn "Plugin.CanvasBase._process"
+    G.update self
+    mapM_ Api.godot_variant_destroy gvArgs
+    return ()
 
 _draw :: CanvasBase -> [GodotVariant] -> IO ()
 _draw cb gvArgs = do
-  debugPutStrLn "Plugin.CanvasBase._draw"
-  gsvs <- readTVarIO (cb ^. cbGSVS)
-  let showSurfaceDebugOverlays =
-        debugSurfaceBoundariesEnabled || debugDepthFirstThumbnailsEnabled
+  profileScope "Plugin.CanvasBase._draw" $ do
+    debugPutStrLn "Plugin.CanvasBase._draw"
+    gsvs <- readTVarIO (cb ^. cbGSVS)
+    let showSurfaceDebugOverlays =
+          debugSurfaceBoundariesEnabled || debugDepthFirstThumbnailsEnabled
 
-  when showSurfaceDebugOverlays $
-    drawDebugBackground cb gsvs
+    when showSurfaceDebugOverlays $
+      drawDebugBackground cb gsvs
 
-  drawCanvasSurface cb gsvs
+    drawCanvasSurface cb gsvs
 
-  when debugDamagedRegionsEnabled $
-    drawDebugDamagedRegionOverlays cb gsvs
+    when debugDamagedRegionsEnabled $
+      drawDebugDamagedRegionOverlays cb gsvs
 
-  when showSurfaceDebugOverlays $ do
-    -- Outline raw wlr_surface buffers as red
-    drawRedWlrSurfaceBoundaries cb gsvs
+    when showSurfaceDebugOverlays $ do
+      -- Outline raw wlr_surface buffers as red
+      drawRedWlrSurfaceBoundaries cb gsvs
 
-    when (debugDepthFirstThumbnailsEnabled || debugMouseEventsEnabled || debugKeyboardEventsEnabled) $
-      -- Show pointer IDs inside surfaces when debugging mouse/keyboard events (where it's likely useful)
-      drawRedWlrSurfacePointerIds cb gsvs
+      when (debugDepthFirstThumbnailsEnabled || debugMouseEventsEnabled || debugKeyboardEventsEnabled) $
+        -- Show pointer IDs inside surfaces when debugging mouse/keyboard events (where it's likely useful)
+        drawRedWlrSurfacePointerIds cb gsvs
 
-  when (debugSurfaceBoundariesEnabled && not debugDepthFirstThumbnailsEnabled) $ do
-    -- Show xdg/xwayland geometry rectangles as blue WITHOUT their x/y offsets
-    drawBlueGeometryBordersWithoutOffsets cb gsvs
+    when (debugSurfaceBoundariesEnabled && not debugDepthFirstThumbnailsEnabled) $ do
+      -- Show xdg/xwayland geometry rectangles as blue WITHOUT their x/y offsets
+      drawBlueGeometryBordersWithoutOffsets cb gsvs
 
-    -- Show xdg/xwayland geometry rectangles as green WITH their x/y offsets
-    drawGreenGeometryBordersWithOffsets cb gsvs
+      -- Show xdg/xwayland geometry rectangles as green WITH their x/y offsets
+      drawGreenGeometryBordersWithOffsets cb gsvs
 
-  -- Debug HUD can show targetted, uncluttered messages on gsvs
-  when debugHudEnabled $
-    drawDebugHud cb gsvs
+    -- Debug HUD can show targetted, uncluttered messages on gsvs
+    when debugHudEnabled $
+      drawDebugHud cb gsvs
 
-  -- Draw cursor
-  drawCursor cb gsvs
+    -- Draw cursor
+    drawCursor cb gsvs
 
-  -- Increment global framecount
-  atomically $ modifyTVar' (gsvs ^. gsvsFrameCount) (+1)
+    -- Increment global framecount
+    atomically $ modifyTVar' (gsvs ^. gsvsFrameCount) (+1)
 
-  mapM_ Api.godot_variant_destroy gvArgs
+    mapM_ Api.godot_variant_destroy gvArgs
 
   where
     getTransparency :: CanvasBase -> IO Double
@@ -168,26 +172,27 @@ _draw cb gvArgs = do
         savePng cs viewportSurfaceTexture wlrSurface >> return ()
 
     drawDebugBackground :: CanvasBase -> GodotSimulaViewSprite -> IO ()
-    drawDebugBackground cb gsvs = do
-      debugPutStrLn "Plugin.CanvasBase.drawDebugBackground"
-      cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
-      viewportSurface <- readTVarIO (cs ^. csViewport)
-      V2 width height <- G.get_size viewportSurface >>= fromLowLevel :: IO (V2 Float)
-      debugRect <- toLowLevel $ V2 (V2 0 0) (V2 width height)
+    drawDebugBackground cb gsvs =
+      profileScope "Plugin.CanvasBase.drawDebugBackground" $ do
+        debugPutStrLn "Plugin.CanvasBase.drawDebugBackground"
+        cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
+        viewportSurface <- readTVarIO (cs ^. csViewport)
+        V2 width height <- G.get_size viewportSurface >>= fromLowLevel :: IO (V2 Float)
+        debugRect <- toLowLevel $ V2 (V2 0 0) (V2 width height)
 
-      view <- readTVarIO (gsvs ^. gsvsView)
-      let eitherSurface = view ^. svWlrEitherSurface
-      backgroundColor <- case eitherSurface of
-        Left _  -> (toLowLevel $ (rgb 1.0 (188/255.0) 0.0) `withOpacity` 1.0) :: IO GodotColor -- Orangish yellow for XDG
-        Right _ -> (toLowLevel $ (rgb 0.0 0.0 0.0) `withOpacity` 1.0) :: IO GodotColor         -- Black for XWayland
+        view <- readTVarIO (gsvs ^. gsvsView)
+        let eitherSurface = view ^. svWlrEitherSurface
+        backgroundColor <- case eitherSurface of
+          Left _  -> (toLowLevel $ (rgb 1.0 (188/255.0) 0.0) `withOpacity` 1.0) :: IO GodotColor -- Orangish yellow for XDG
+          Right _ -> (toLowLevel $ (rgb 0.0 0.0 0.0) `withOpacity` 1.0) :: IO GodotColor         -- Black for XWayland
 
-      G.draw_rect cb debugRect backgroundColor True 1.0 False
+        G.draw_rect cb debugRect backgroundColor True 1.0 False
 
     drawDebugHud :: CanvasBase -> GodotSimulaViewSprite -> IO ()
     drawDebugHud cb gsvs = do
       debugPutStrLn "Plugin.CanvasBase.drawDebugHud"
       messages <- getDebugHudVisibleMessages gsvs
-      unless (Data.List.null messages && not debugDepthFirstThumbnailsEnabled && not debugDamagedRegionsEnabled && not debugMemoryHudEnabled) $ do
+      unless (Data.List.null messages && not debugDepthFirstThumbnailsEnabled && not debugDamagedRegionsEnabled && not debugMemoryHudEnabled && not debugProfileHudEnabled) $ do
         cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
         viewportSurface <- readTVarIO (cs ^. csViewport)
         when debugDamagedRegionsEnabled $
@@ -198,6 +203,9 @@ _draw cb gvArgs = do
           then do
             gss <- readTVarIO (gsvs ^. gsvsServer)
             Just <$> getDebugMemoryHudSnapshot gss
+          else return Nothing
+        maybeDebugProfileSnapshot <- if debugProfileHudEnabled
+          then Just <$> getDebugProfileHudSnapshot
           else return Nothing
         let visibleDamagedRegionHistory = keepLast debugDamagedRegionHistoryMax damagedRegionHistory
         viewportBase <- readTVarIO (cb ^. cbViewport)
@@ -216,7 +224,11 @@ _draw cb gvArgs = do
               case maybeDebugMemorySnapshot of
                 Just debugMemorySnapshot -> debugMemoryHudHeightForRows (max 1 $ Data.List.length $ debugMemoryHudVisibleRows debugMemorySnapshot)
                 Nothing -> if debugMemoryHudEnabled then debugMemoryHudHeight else 0
-        let requestedHudHeight = fromIntegral padding * 2 + fromIntegral depthFirstThumbnailsHeight + fromIntegral damagedRegionThumbnailsHeight + fromIntegral memoryHudReservedHeight + lineStep * fromIntegral (Data.List.length messages)
+        let profileHudReservedHeight =
+              case maybeDebugProfileSnapshot of
+                Just debugProfileSnapshot -> debugProfileHudHeightForRows (max 1 $ Data.List.length $ debugProfileHudVisibleRows debugProfileSnapshot)
+                Nothing -> if debugProfileHudEnabled then debugProfileHudHeight else 0
+        let requestedHudHeight = fromIntegral padding * 2 + fromIntegral depthFirstThumbnailsHeight + fromIntegral damagedRegionThumbnailsHeight + fromIntegral memoryHudReservedHeight + fromIntegral profileHudReservedHeight + lineStep * fromIntegral (Data.List.length messages)
         let availableHudHeight = max 0 (viewportBaseHeight - viewportSurfaceHeight)
         let hudHeight = min availableHudHeight requestedHudHeight
         let hudTop = viewportSurfaceHeight
@@ -243,12 +255,18 @@ _draw cb gvArgs = do
             (hudTop + fromIntegral padding + fromIntegral depthFirstThumbnailsHeight + fromIntegral damagedRegionThumbnailsHeight)
             (viewportBaseWidth - fromIntegral padding * 2)
             (fromIntegral memoryHudReservedHeight)
+        forM_ maybeDebugProfileSnapshot $ \debugProfileSnapshot ->
+          drawDebugHudProfileUsage cb debugProfileSnapshot debugFont
+            (fromIntegral padding)
+            (hudTop + fromIntegral padding + fromIntegral depthFirstThumbnailsHeight + fromIntegral damagedRegionThumbnailsHeight + fromIntegral memoryHudReservedHeight)
+            (viewportBaseWidth - fromIntegral padding * 2)
+            (fromIntegral profileHudReservedHeight)
         G.set_size debugFont 16
         bracket
           (mapM (toLowLevel . pack) messages :: IO [GodotString])
           (mapM_ Api.godot_string_destroy)
           (\messageStrs -> do
-            let firstBaselineY = hudTop + fromIntegral padding + fromIntegral depthFirstThumbnailsHeight + fromIntegral damagedRegionThumbnailsHeight + fromIntegral memoryHudReservedHeight + fontAscent
+            let firstBaselineY = hudTop + fromIntegral padding + fromIntegral depthFirstThumbnailsHeight + fromIntegral damagedRegionThumbnailsHeight + fromIntegral memoryHudReservedHeight + fromIntegral profileHudReservedHeight + fontAscent
             let maxTextWidth = max 1 (round viewportBaseWidth - padding * 2)
             forM_ (zip [0..] messageStrs) $ \(lineIndex :: Int, messageStr) -> do
               renderPosition <- toLowLevel (V2 (fromIntegral padding) (firstBaselineY + lineStep * fromIntegral lineIndex)) :: IO GodotVector2
@@ -350,16 +368,17 @@ _draw cb gvArgs = do
       if width >= 140 && height >= 24 then 7 else 4
 
     drawCanvasSurface :: CanvasBase -> GodotSimulaViewSprite -> IO ()
-    drawCanvasSurface cb gsvs = do
-      debugPutStrLn "Plugin.CanvasBase.drawCanvasSurface"
-      cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
-      viewportSurface <- readTVarIO (cs ^. csViewport)
-      renderPosition <- toLowLevel (V2 0 0) :: IO GodotVector2
-      gsvsTransparency <- getTransparency cb
-      modulateColor <- (toLowLevel $ (rgb 1.0 1.0 (1.0 :: Double)) `withOpacity` gsvsTransparency) :: IO GodotColor
+    drawCanvasSurface cb gsvs =
+      profileScope "Plugin.CanvasBase.drawCanvasSurface" $ do
+        debugPutStrLn "Plugin.CanvasBase.drawCanvasSurface"
+        cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
+        viewportSurface <- readTVarIO (cs ^. csViewport)
+        renderPosition <- toLowLevel (V2 0 0) :: IO GodotVector2
+        gsvsTransparency <- getTransparency cb
+        modulateColor <- (toLowLevel $ (rgb 1.0 1.0 (1.0 :: Double)) `withOpacity` gsvsTransparency) :: IO GodotColor
 
-      withGodotRef (G.get_texture viewportSurface :: IO GodotViewportTexture) $ \viewportSurfaceTexture ->
-        G.draw_texture cb ((safeCast viewportSurfaceTexture) :: GodotTexture) renderPosition modulateColor (coerce nullPtr)
+        withGodotRef (G.get_texture viewportSurface :: IO GodotViewportTexture) $ \viewportSurfaceTexture ->
+          G.draw_texture cb ((safeCast viewportSurfaceTexture) :: GodotTexture) renderPosition modulateColor (coerce nullPtr)
 
     drawRedWlrSurfaceBoundaries :: CanvasBase -> GodotSimulaViewSprite -> IO ()
     drawRedWlrSurfaceBoundaries cb gsvs = do
@@ -441,13 +460,14 @@ _draw cb gvArgs = do
           if width >= 140 && height >= 24 then 7 else 4
 
     drawSurfaceLabelGroup :: CanvasBase -> GodotDynamicFont -> GodotColor -> ((Int, Int, Int, Int), [String]) -> IO ()
-    drawSurfaceLabelGroup cb font color ((x, y, width, height), labels) = do
-      debugPutStrLn "Plugin.CanvasBase.drawSurfaceLabelGroup"
-      maybeFitted <- fitSurfaceLabels font labels width height
-      case maybeFitted of
-        Nothing -> return ()
-        Just (fontSize, visibleLabels) ->
-          drawCenteredLabelLines cb font color fontSize visibleLabels x y width height
+    drawSurfaceLabelGroup cb font color ((x, y, width, height), labels) =
+      profileScope "Plugin.CanvasBase.drawSurfaceLabelGroup" $ do
+        debugPutStrLn "Plugin.CanvasBase.drawSurfaceLabelGroup"
+        maybeFitted <- fitSurfaceLabels font labels width height
+        case maybeFitted of
+          Nothing -> return ()
+          Just (fontSize, visibleLabels) ->
+            drawCenteredLabelLines cb font color fontSize visibleLabels x y width height
 
     drawCenteredLabelLines :: CanvasBase -> GodotDynamicFont -> GodotColor -> Int -> [String] -> Int -> Int -> Int -> Int -> IO ()
     drawCenteredLabelLines cb font color fontSize labels x y width height = do

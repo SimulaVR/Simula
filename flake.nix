@@ -9,9 +9,9 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
     systems.url = "github:nix-systems/x86_64-linux";
-    godot.url = "git+https://github.com/SimulaVR/godot?rev=57c7b4effdf146f579c9345289cfc3b98fbc55e8&submodules=1";
+    godot.url = "git+https://github.com/SimulaVR/godot?rev=ce3269acfcd125a734678f0fd8e5047463902f46&submodules=1";
     godot-haskell = {
-      url = "git+https://github.com/SimulaVR/godot-haskell?rev=831fad813dcac3129f1b27a9137f781ced1207b8&submodules=1";
+      url = "git+https://github.com/SimulaVR/godot-haskell?rev=2ca4d94b819cce18f68f7013cac482b3f083fbe8&submodules=1";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     monado.url = "git+https://github.com/SimulaVR/monado-xv?rev=47b52aa79efa6f39fc99502442223207ae067e6b&submodules=1";
@@ -520,6 +520,9 @@ Options:
 Debug Environment Variables:
 - SIMULA_DEBUG_MEMORY=1: Shows per-second RSS memory deltas in the HUD so you can get an estimate of how various actions impact top level memory usage.
 - SIMULA_DEBUG_MEMORY_HUD=1: Shows a live object count memory HUD underneath each app.
+- SIMULA_DEBUG_PROFILE_HUD=1: Shows a live profiling HUD with the most expensive Haskell function calls from the past 10-second window. Writes more detailed output to ./HUD_profile_live.txt and ./HUD_profile_recent_missed_frames.txt.
+  - SIMULA_DEBUG_PROFILE_HUD_BUDGET_MS=<milliseconds>: Sets the missed-frame threshold in milliseconds for SIMULA_DEBUG_PROFILE_HUD. Default: 16.67.
+  - SIMULA_DEBUG_PROFILE_HUD_WINDOW_S=<seconds>: Sets the recent frame/sample retention window in seconds for SIMULA_DEBUG_PROFILE_HUD. Default: 10.0.
 - SIMULA_DEBUG_SURFACE_BOUNDARIES=1: Shows wlr_surface (red), geometry boundaries with offset x/y offset (green), and geometry boundaries without x/y offset (blue) on all surfaces. Top-level XDG boundaries are colored in yellow (for wayland surfaces), while XWayland are colored black (though since most xwayland top levels don't have borders to begin with, you often won't see the black border).
 - SIMULA_DEBUG_SURFACE_CREATIONS=1: Prints detailed surface information when they get created/mapped.
 - SIMULA_DEBUG_MOUSE_EVENTS=1: Shows detailed tracing of mouse interaction logic.

@@ -47,6 +47,7 @@ import Plugin.Input
 import Plugin.SimulaViewSprite
 import Plugin.Types
 import Plugin.Debug
+import Plugin.Debug.ProfileHudTypes
 
 import Control.Monad
 import Control.Concurrent
@@ -710,6 +711,13 @@ instance NativeScript GodotSimulaServer where
 
 process :: GodotSimulaServer -> [GodotVariant] -> IO ()
 process gss gvArgs@[deltaGV] = do
+  -- We choose this as the "frame boundary" point for our whole profiling system.
+  -- It rolls up the previous open frame and starts tracking the new frame.
+  profileFrameBoundary
+  profileScope "Plugin.SimulaServer.process" $ processSimulaServer gss gvArgs
+
+processSimulaServer :: GodotSimulaServer -> [GodotVariant] -> IO ()
+processSimulaServer gss gvArgs@[deltaGV] = do
   debugPutStrLn "Plugin.SimulaServer.process"
 
   wasdMode <- readTVarIO (gss ^. gssWasdMode)
@@ -1566,7 +1574,11 @@ updateCursorStateAbsolute gsvs sx sy = do
   atomically $ writeTVar (gsvs ^. gsvsCursorCoordinates) (SurfaceLocalCoordinates (sx'', sy''))
 
 sendWlrootsMotion :: GodotSimulaViewSprite -> IO ()
-sendWlrootsMotion gsvs = do
+sendWlrootsMotion gsvs =
+  profileScope "Plugin.SimulaServer.sendWlrootsMotion" $ sendWlrootsMotionImpl gsvs
+
+sendWlrootsMotionImpl :: GodotSimulaViewSprite -> IO ()
+sendWlrootsMotionImpl gsvs = do
   debugPutStrLn "Plugin.SimulaServer.sendWlrootsMotion"
   screenshotModeEnabled <- readTVarIO (gsvs ^. gsvsScreenshotMode)
   activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
@@ -1593,7 +1605,11 @@ getHMDLookAtSprite gss = do
 
 
 physicsProcess :: GodotSimulaServer -> [GodotVariant] -> IO ()
-physicsProcess gss gvArgs = do
+physicsProcess gss gvArgs =
+  profileScope "Plugin.SimulaServer.physicsProcess" $ physicsProcessImpl gss gvArgs
+
+physicsProcessImpl :: GodotSimulaServer -> [GodotVariant] -> IO ()
+physicsProcessImpl gss gvArgs = do
   debugPutStrLn "Plugin.SimulaServer.physicsProcess"
   maybeLookAtGSVS <- getHMDLookAtSprite gss
   gsvsActiveCursor <- readTVarIO (gss ^. gssActiveCursorGSVS)

@@ -35,6 +35,7 @@ import Plugin.CanvasBase
 import Plugin.CanvasSurface
 import Plugin.Debug.DamagedRegions
 import Plugin.Debug.DamagedRegionTypes
+import Plugin.Debug.ProfileHudTypes
 import Plugin.Types
 import Data.Maybe
 import Data.Either
@@ -1275,7 +1276,11 @@ handle_unmap self args@[_xdgOrXwaylandSurfaceVariant] = do
 
 -- Passes control entirely to updateSimulaViewSprite.
 _process :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
-_process self gvArgs = do
+_process self gvArgs =
+  profileScope "Plugin.SimulaViewSprite._process" $ processSimulaViewSprite self gvArgs
+
+processSimulaViewSprite :: GodotSimulaViewSprite -> [GodotVariant] -> IO ()
+processSimulaViewSprite self gvArgs = do
   debugPutStrLn "Plugin.SimulaViewSprite._process"
   simulaView <- readTVarIO (self ^. gsvsView)
   mapped <- atomically $ readTVar (simulaView ^. svMapped)
@@ -1449,7 +1454,11 @@ safeSetActivated gsvs active = do
       -- G.set_activated toplevel True
 
 applyViewportBaseTexture :: GodotSimulaViewSprite -> IO ()
-applyViewportBaseTexture gsvs = do
+applyViewportBaseTexture gsvs =
+  profileScope "Plugin.SimulaViewSprite.applyViewportBaseTexture" $ applyViewportBaseTextureImpl gsvs
+
+applyViewportBaseTextureImpl :: GodotSimulaViewSprite -> IO ()
+applyViewportBaseTextureImpl gsvs = do
   debugPutStrLn "Plugin.SimulaViewSprite.applyViewportBaseTexture"
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)

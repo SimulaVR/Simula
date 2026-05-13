@@ -38,6 +38,7 @@ import Godot.Core.GodotVisualServer as G
 
 import Plugin.Debug.DamagedRegions
 import Plugin.Debug.DamagedRegionTypes
+import Plugin.Debug.ProfileHudTypes
 import Plugin.Types
 import Data.Maybe
 import Data.Either
@@ -127,7 +128,11 @@ getVisualServer cs = do
   readTVarIO (gss ^. gssVisualServer)
 
 _process :: CanvasSurface -> [GodotVariant] -> IO ()
-_process self gvArgs = do
+_process self gvArgs =
+  profileScope "Plugin.CanvasSurface._process" $ processCanvasSurface self gvArgs
+
+processCanvasSurface :: CanvasSurface -> [GodotVariant] -> IO ()
+processCanvasSurface self gvArgs = do
   debugPutStrLn "Plugin.CanvasSurface._process"
   gsvs <- readTVarIO (self ^. csGSVS)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
@@ -171,7 +176,11 @@ getAccumulatedDamageRegions gsvs depthFirstSurfaces = do
   return regions
 
 _draw :: CanvasSurface -> [GodotVariant] -> IO ()
-_draw cs gvArgs = do
+_draw cs gvArgs =
+  profileScope "Plugin.CanvasSurface._draw" $ drawCanvasSurfaceFrame cs gvArgs
+
+drawCanvasSurfaceFrame :: CanvasSurface -> [GodotVariant] -> IO ()
+drawCanvasSurfaceFrame cs gvArgs = do
   debugPutStrLn "Plugin.CanvasSurface._draw"
   gsvs <- readTVarIO (cs ^. csGSVS)
   simulaView <- readTVarIO (gsvs ^. gsvsView)

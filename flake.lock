@@ -152,17 +152,17 @@
         "wlroots-flake": "wlroots-flake"
       },
       "locked": {
-        "lastModified": 1777852808,
-        "narHash": "sha256-uX0BH+DknbQAhvPBaLCMdVZBk7aPwQmJa8S2nyzHuoc=",
+        "lastModified": 1778554245,
+        "narHash": "sha256-XvjDM7FS7sEZoKEhWI2eAq1H6fM+RzjXA6GfpzXkZog=",
         "ref": "refs/heads/3.x-simula",
-        "rev": "57c7b4effdf146f579c9345289cfc3b98fbc55e8",
-        "revCount": 29824,
+        "rev": "ce3269acfcd125a734678f0fd8e5047463902f46",
+        "revCount": 2,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/SimulaVR/godot"
       },
       "original": {
-        "rev": "57c7b4effdf146f579c9345289cfc3b98fbc55e8",
+        "rev": "ce3269acfcd125a734678f0fd8e5047463902f46",
         "submodules": true,
         "type": "git",
         "url": "https://github.com/SimulaVR/godot"
@@ -178,17 +178,17 @@
         "treefmt-nix": "treefmt-nix_2"
       },
       "locked": {
-        "lastModified": 1777904875,
-        "narHash": "sha256-c4ESQ24qJMVDCQ24+GPhxnIkgADj/wtxUIC/OSN1Uio=",
+        "lastModified": 1778554341,
+        "narHash": "sha256-tcGUpp/zcAiPRuda91WLS8k28+TS1F49EPBN8gT/FMw=",
         "ref": "refs/heads/master",
-        "rev": "831fad813dcac3129f1b27a9137f781ced1207b8",
-        "revCount": 144,
+        "rev": "2ca4d94b819cce18f68f7013cac482b3f083fbe8",
+        "revCount": 145,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/SimulaVR/godot-haskell"
       },
       "original": {
-        "rev": "831fad813dcac3129f1b27a9137f781ced1207b8",
+        "rev": "2ca4d94b819cce18f68f7013cac482b3f083fbe8",
         "submodules": true,
         "type": "git",
         "url": "https://github.com/SimulaVR/godot-haskell"

@@ -39,6 +39,7 @@ import           Data.Colour.SRGB.Linear
 import           Plugin.Imports
 import           Plugin.Debug.DamagedRegionTypes
 import           Plugin.Debug.MemoryHudTypes
+import           Plugin.Debug.ProfileHudTypes
 
 import           Godot.Core.GodotVisualServer          as G
 import qualified Godot.Methods               as G
@@ -141,7 +142,9 @@ debugDepthFirstThumbnailsEnabled = unsafePerformIO $ do
 -- Extra vertical space reserved below the viewportSurface for normal GSVS HUD text.
 debugHudReservedHeight :: Int
 debugHudReservedHeight =
-  56 + if debugMemoryHudEnabled then debugMemoryHudHeight else 0
+  56
+    + if debugMemoryHudEnabled then debugMemoryHudHeight else 0
+    + if debugProfileHudEnabled then debugProfileHudHeight else 0
 
 -- Height of the part of the GSVS HUD that shows the depth-first surface thumbnails.
 debugDepthFirstThumbnailHeight :: Int
@@ -152,6 +155,7 @@ debugHudEnabled =
   debugDepthFirstThumbnailsEnabled
     || debugDamagedRegionsEnabled
     || debugMemoryHudEnabled
+    || debugProfileHudEnabled
     || (debugSurfaceBoundariesEnabled && (debugMouseEventsEnabled || debugKeyboardEventsEnabled))
 
 debugHudMaxLines :: Int
@@ -222,7 +226,7 @@ debugHudTrimLine msg
   | otherwise = List.take (debugHudLineMaxChars - 3) msg ++ "..."
 
 debugPutStrLn :: String -> IO ()
-debugPutStrLn msg =
+debugPutStrLn msg = do
   when debugOutputEnabled $
     putStrLn msg
 
@@ -1234,7 +1238,11 @@ initializeRenderTarget gsvs viewportType = do
   return renderTarget
 
 getBufferDimensions :: GodotWlrSurface -> IO (Int, Int)
-getBufferDimensions wlrSurface = do
+getBufferDimensions wlrSurface =
+  profileScope "Plugin.Types.getBufferDimensions" $ getBufferDimensionsImpl wlrSurface
+
+getBufferDimensionsImpl :: GodotWlrSurface -> IO (Int, Int)
+getBufferDimensionsImpl wlrSurface = do
   debugPutStrLn "Plugin.Types.getBufferDimensions"
   dims@(bufferWidth, bufferHeight) <- withCurrentState $ getBufferDimensions'
   return dims
@@ -1743,7 +1751,11 @@ fromGodotArray vs = do
   forM [0..size-1] $ Api.godot_array_get vs
 
 getDepthFirstSurfacesRaw :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
-getDepthFirstSurfacesRaw gsvs = do
+getDepthFirstSurfacesRaw gsvs =
+  profileScope "Plugin.Types.getDepthFirstSurfacesRaw" $ getDepthFirstSurfacesRawImpl gsvs
+
+getDepthFirstSurfacesRawImpl :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstSurfacesRawImpl gsvs = do
   debugPutStrLn "Plugin.Types.getDepthFirstSurfacesRaw"
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
@@ -1772,7 +1784,11 @@ getDepthFirstSurfacesRaw gsvs = do
           | otherwise = return (acc ++ [surfaceWithCoords])
 
 getDepthFirstSurfaces :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
-getDepthFirstSurfaces gsvs = do
+getDepthFirstSurfaces gsvs =
+  profileScope "Plugin.Types.getDepthFirstSurfaces" $ getDepthFirstSurfacesImpl gsvs
+
+getDepthFirstSurfacesImpl :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstSurfacesImpl gsvs = do
   debugPutStrLn "Plugin.Types.getDepthFirstSurfaces"
   rawSurfaces <- getDepthFirstSurfacesRaw gsvs
   (offsetX, offsetY) <- getSurfacesCoordinateOffsetFromOrigin rawSurfaces
@@ -1805,7 +1821,11 @@ getSurfacesCoordinateBounds surfaces = do
   return (Data.List.minimum xs1, Data.List.minimum ys1, Data.List.maximum xs2, Data.List.maximum ys2)
 
 getDepthFirstBaseSurfaces :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
-getDepthFirstBaseSurfaces gsvs = do
+getDepthFirstBaseSurfaces gsvs =
+  profileScope "Plugin.Types.getDepthFirstBaseSurfaces" $ getDepthFirstBaseSurfacesImpl gsvs
+
+getDepthFirstBaseSurfacesImpl :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstBaseSurfacesImpl gsvs = do
   debugPutStrLn "Plugin.Types.getDepthFirstBaseSurfaces"
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
@@ -1830,7 +1850,11 @@ getDepthFirstBaseSurfaces gsvs = do
   return depthFirstBaseSurfaces
 
 getDepthFirstXWaylandSurfaces :: GodotWlrXWaylandSurface -> IO [(GodotWlrSurface, Int, Int)]
-getDepthFirstXWaylandSurfaces wlrXWaylandSurface = do
+getDepthFirstXWaylandSurfaces wlrXWaylandSurface =
+  profileScope "Plugin.Types.getDepthFirstXWaylandSurfaces" $ getDepthFirstXWaylandSurfacesImpl wlrXWaylandSurface
+
+getDepthFirstXWaylandSurfacesImpl :: GodotWlrXWaylandSurface -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstXWaylandSurfacesImpl wlrXWaylandSurface = do
   debugPutStrLn "Plugin.Types.getDepthFirstXWaylandSurfaces"
   xwaylandMappedChildrenAndCoords <- getXWaylandMappedChildren wlrXWaylandSurface :: IO [(GodotWlrXWaylandSurface, Int, Int)]
   wlrSurface <- retainGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface)
@@ -1887,7 +1911,11 @@ getDepthFirstXWaylandSurfaces wlrXWaylandSurface = do
           return childrenWithCoords
 
 getDepthFirstXdgSurfaces :: GodotWlrXdgSurface -> IO [(GodotWlrSurface, Int, Int)]
-getDepthFirstXdgSurfaces wlrXdgSurface = do
+getDepthFirstXdgSurfaces wlrXdgSurface =
+  profileScope "Plugin.Types.getDepthFirstXdgSurfaces" $ getDepthFirstXdgSurfacesImpl wlrXdgSurface
+
+getDepthFirstXdgSurfacesImpl :: GodotWlrXdgSurface -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstXdgSurfacesImpl wlrXdgSurface = do
   debugPutStrLn "Plugin.Types.getDepthFirstXdgSurfaces"
   xdgPopups <- getXdgPopups wlrXdgSurface :: IO [(GodotWlrXdgSurface, Int, Int)]
   depthFirstXdgSurfaces  <- foldM appendXdgSurfaceAndChildren [(wlrXdgSurface, 0, 0)] xdgPopups
@@ -1925,12 +1953,20 @@ getDepthFirstXdgSurfaces wlrXdgSurface = do
           foldM appendXdgSurfaceAndChildren (oldList ++ [(wlrXdgSurface, x, y)]) subsurfacesAndCoords
 
 getDepthFirstWlrSurfaces :: GodotWlrSurface -> IO [(GodotWlrSurface, Int, Int)]
-getDepthFirstWlrSurfaces wlrSurface = do
+getDepthFirstWlrSurfaces wlrSurface =
+  profileScope "Plugin.Types.getDepthFirstWlrSurfaces" $ getDepthFirstWlrSurfacesImpl wlrSurface
+
+getDepthFirstWlrSurfacesImpl :: GodotWlrSurface -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstWlrSurfacesImpl wlrSurface = do
   debugPutStrLn "Plugin.Types.getDepthFirstWlrSurfaces"
   getDepthFirstWlrSurfacesFrom 0 0 wlrSurface
 
 getDepthFirstWlrSurfacesFrom :: Int -> Int -> GodotWlrSurface -> IO [(GodotWlrSurface, Int, Int)]
-getDepthFirstWlrSurfacesFrom rootX rootY wlrSurface = do
+getDepthFirstWlrSurfacesFrom rootX rootY wlrSurface =
+  profileScope "Plugin.Types.getDepthFirstWlrSurfacesFrom" $ getDepthFirstWlrSurfacesFromImpl rootX rootY wlrSurface
+
+getDepthFirstWlrSurfacesFromImpl :: Int -> Int -> GodotWlrSurface -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstWlrSurfacesFromImpl rootX rootY wlrSurface = do
   debugPutStrLn "Plugin.Types.getDepthFirstWlrSurfacesFrom"
   surfaceChildrenAndCoords <- getSurfaceChildren wlrSurface
   let rootRelativeSurfaceChildrenAndCoords = fmap (\(childSurface, childX, childY) -> (childSurface, rootX + childX, rootY + childY)) surfaceChildrenAndCoords
