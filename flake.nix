@@ -654,7 +654,7 @@ _EOF_HELP_
                 xpra
                 xorg.xrdb
                 wmctrl
-                ffmpeg
+                ffmpeg-full
                 synapse
                 xsel
                 mimic

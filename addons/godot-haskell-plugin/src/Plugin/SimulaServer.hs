@@ -274,10 +274,13 @@ getKeyboardAction gss keyboardShortcut =
                 let videoBaseName' = "simula_screen_recording_" <> timeStampStr
                 let videoBaseName = filter (\x -> x /= ' ') videoBaseName'
                 maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
-                let dataDir = fromMaybe "./media" maybeDataDir
+                let dataDir = fromMaybe "." maybeDataDir
                 createDirectoryIfMissing False dataDir
-                let relativePath = (dataDir ++ "/" ++ videoBaseName ++ ".mkv")
-                (_,_,_, ph) <- createProcess (proc ("ffmpeg") ["-nostdin", "-f", "x11grab", "-framerate", "90", "-i", ":0.0", "-c:v", "libx264", "-y", "-loglevel", "quiet", relativePath])
+                let mediaDir = dataDir </> "media"
+                createDirectoryIfMissing False mediaDir
+                let relativePath = mediaDir </> videoBaseName <> ".mkv"
+                putStrLn $ "Recording screen to " <> relativePath
+                (_,_,_, ph) <- createProcess (proc ("ffmpeg") ["-nostdin", "-f", "x11grab", "-framerate", "90", "-i", ":0.0", "-c:v", "libx264", "-y", relativePath])
                 atomically $ writeTVar (gss ^. gssScreenRecorder) (Just ph)
               return ()
             Just ph -> do
