@@ -4,14 +4,13 @@ import Control.Concurrent.STM.TVar
 import qualified Data.List as List
 import qualified Data.Map.Strict as M
 import Data.Time.Clock
-import System.Environment (lookupEnv)
 import System.IO.Unsafe
 
-debugMemoryHudEnabled :: Bool
-debugMemoryHudEnabled = unsafePerformIO $ do
-  simulaDebugMemoryHud <- lookupEnv "SIMULA_DEBUG_MEMORY_HUD"
-  return $ simulaDebugMemoryHud == Just "1"
-{-# NOINLINE debugMemoryHudEnabled #-}
+import Plugin.Debug.HudTypes
+
+debugMemoryHudEnabled :: IO Bool
+debugMemoryHudEnabled =
+  debugHudModeActive DebugHudMemory
 
 debugMemoryHudOutputPath :: FilePath
 debugMemoryHudOutputPath = "./HUD_output.txt"

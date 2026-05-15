@@ -7,20 +7,16 @@ import System.Directory (Permissions, doesDirectoryExist, getPermissions, writab
 import System.Environment (lookupEnv)
 import System.IO.Unsafe
 
+import Plugin.Debug.HudTypes
+
 debugDamagedRegionsEnvValue :: Maybe String
 debugDamagedRegionsEnvValue = unsafePerformIO $
   lookupEnv "SIMULA_DEBUG_DAMAGED_REGIONS"
 {-# NOINLINE debugDamagedRegionsEnvValue #-}
 
--- Use `unsafePerformIO` to read the env once and cache the result as a Bool.
-debugDamagedRegionsEnabled :: Bool
+debugDamagedRegionsEnabled :: IO Bool
 debugDamagedRegionsEnabled =
-  case debugDamagedRegionsEnvValue of
-    Just "" -> False
-    Just "0" -> False
-    Just _ -> True
-    Nothing -> False
-{-# NOINLINE debugDamagedRegionsEnabled #-}
+  debugHudModeActive DebugHudDamagedRegions
 
 debugDamagedRegionsExportDirectory :: Maybe FilePath
 debugDamagedRegionsExportDirectory = unsafePerformIO $ do
@@ -52,6 +48,19 @@ debugDamagedRegionThumbnailGridGap = 12
 
 -- In GSVS-relative coordinates.
 type DebugDamagedRegionRect = (Float, Float, Float, Float)
+
+data SnapshotTextureSourceGeometry =
+  SnapshotTextureSourceGeometry
+    { snapshotTextureSourceOffsetRight :: Float
+    , snapshotTextureSourceOffsetDown  :: Float
+    , snapshotTextureSourceWidth       :: Float
+    , snapshotTextureSourceHeight      :: Float
+    }
+
+snapshotTextureSourceGeometryTuple :: SnapshotTextureSourceGeometry -> (Float, Float, Float, Float)
+snapshotTextureSourceGeometryTuple
+  (SnapshotTextureSourceGeometry right down width height) =
+    (right, down, width, height)
 
 -- Damaged region locations meant to be displayed directly over a gsvs
 data DebugDamagedRegionOverlay = DebugDamagedRegionOverlay

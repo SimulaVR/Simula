@@ -55,10 +55,12 @@ appendDebugMemoryHudOutput msg = do
   return ()
 
 getDebugMemoryHudSnapshot :: GodotSimulaServer -> IO DebugMemoryHudSnapshot
-getDebugMemoryHudSnapshot gss
-  | not debugMemoryHudEnabled =
+getDebugMemoryHudSnapshot gss = do
+  enabled <- debugMemoryHudEnabled
+  if not enabled
+    then
       return $ DebugMemoryHudSnapshot 0 0 [] Nothing
-  | otherwise = do
+    else do
       now <- getCurrentTime
       cached <- readTVarIO debugMemoryHudGlobalSampleCacheForDeltaComputation
       case cached of

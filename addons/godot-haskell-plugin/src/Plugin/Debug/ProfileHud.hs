@@ -25,11 +25,13 @@ import Plugin.Imports
 import Plugin.Types
 
 getDebugProfileHudSnapshot :: IO DebugProfileHudSnapshot
-getDebugProfileHudSnapshot
-  | not debugProfileHudEnabled = do
+getDebugProfileHudSnapshot = do
+  enabled <- debugProfileHudEnabled
+  if not enabled
+    then do
       now <- getCurrentTime
       return $ emptyDebugProfileHudSnapshot now
-  | otherwise = do
+    else do
       now <- getCurrentTime
       cached <- readTVarIO debugProfileHudSnapshotCacheVar
       case cached of

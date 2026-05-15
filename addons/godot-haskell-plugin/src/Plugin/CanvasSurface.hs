@@ -193,8 +193,10 @@ drawCanvasSurfaceFrame cs gvArgs = do
         isEntirelyDamaged <- readTVarIO (gsvs ^. gsvsIsDamaged)
         fullRedrawFramesRemaining <- readTVarIO (gsvs ^. gsvsFullRedrawFramesRemaining)
         fullRedrawMillisecondsRemaining <- getGSVSFullRedrawMillisecondsRemaining gsvs
-        let shouldFullRedraw = debugDepthFirstThumbnailsEnabled || isEntirelyDamaged || fullRedrawFramesRemaining > 0 || fullRedrawMillisecondsRemaining > 0
-        debugDamageRegions <- if debugDamagedRegionsEnabled
+        debugDepthFirstThumbnailsActive <- debugDepthFirstThumbnailsEnabled
+        debugDamagedRegionsActive <- debugDamagedRegionsEnabled
+        let shouldFullRedraw = debugDepthFirstThumbnailsActive || isEntirelyDamaged || fullRedrawFramesRemaining > 0 || fullRedrawMillisecondsRemaining > 0
+        debugDamageRegions <- if debugDamagedRegionsActive
           then do
             regions <- getAccumulatedDamageRegions gsvs depthFirstSurfaces
             atomically $ writeTVar (gsvs ^. gsvsDamagedRegions) regions

@@ -94,6 +94,8 @@ library
       Plugin.Simula
       Plugin.VR
       Plugin.Debug
+      Plugin.Debug.HUD
+      Plugin.Debug.HudTypes
       Plugin.Debug.DamagedRegions
       Plugin.Debug.DamagedRegionTypes
       Plugin.Debug.MemoryHud
@@ -147,6 +149,8 @@ foreign-library godot-haskell-plugin
     Plugin.Simula
     Plugin.VR
     Plugin.Debug
+    Plugin.Debug.HUD
+    Plugin.Debug.HudTypes
     Plugin.Debug.DamagedRegions
     Plugin.Debug.DamagedRegionTypes
     Plugin.Debug.MemoryHud

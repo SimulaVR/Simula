@@ -35,6 +35,7 @@ let Configuration =
                               , { _keyCombination = ["KEY_MASK_META", "KEY_M"]                         , _keyAction = "grabWindows"                }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_M"]       , _keyAction = "grabWorkspaces"             }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_A"]                         , _keyAction = "launchAppLauncher"          }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_D"]                         , _keyAction = "toggleDebugHud"             }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_E"]                         , _keyAction = "cycleEnvironment"           }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_F"]                         , _keyAction = "orientWindowTowardsGaze"    }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_9"]                         , _keyAction = "scaleWindowDown"            }

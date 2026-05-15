@@ -38,7 +38,7 @@ import           Data.Colour.SRGB.Linear
 
 import           Plugin.Imports
 import           Plugin.Debug.DamagedRegionTypes
-import           Plugin.Debug.MemoryHudTypes
+import           Plugin.Debug.HudTypes
 import           Plugin.Debug.ProfileHudTypes
 
 import           Godot.Core.GodotVisualServer          as G
@@ -105,61 +105,36 @@ debugOutputEnabled = unsafePerformIO $ do
   return $ simulaDebug == Just "1" || runningUnderRr == Just "1"
 {-# NOINLINE debugOutputEnabled #-}
 
-debugSurfaceCreationsEnabled :: Bool
-debugSurfaceCreationsEnabled = unsafePerformIO $ do
-  simulaDebug <- lookupEnv "SIMULA_DEBUG"
-  simulaDebugSurfaceCreations <- lookupEnv "SIMULA_DEBUG_SURFACE_CREATIONS"
-  return $ simulaDebug == Just "1" || simulaDebugSurfaceCreations == Just "1"
-{-# NOINLINE debugSurfaceCreationsEnabled #-}
+debugSurfaceCreationsEnabled :: IO Bool
+debugSurfaceCreationsEnabled =
+  debugHudModeActive DebugHudSurfaceCreations
 
-debugMouseEventsEnabled :: Bool
-debugMouseEventsEnabled = unsafePerformIO $ do
-  simulaDebug <- lookupEnv "SIMULA_DEBUG"
-  simulaDebugSurfaceCreations <- lookupEnv "SIMULA_DEBUG_MOUSE_EVENTS"
-  return $ simulaDebug == Just "1" || simulaDebugSurfaceCreations == Just "1"
-{-# NOINLINE debugMouseEventsEnabled #-}
+debugMouseEventsEnabled :: IO Bool
+debugMouseEventsEnabled =
+  debugHudModeActive DebugHudMouseEvents
 
-debugKeyboardEventsEnabled :: Bool
-debugKeyboardEventsEnabled = unsafePerformIO $ do
-  simulaDebug <- lookupEnv "SIMULA_DEBUG"
-  simulaDebugKeyboardEvents <- lookupEnv "SIMULA_DEBUG_KEYBOARD_EVENTS"
-  return $ simulaDebug == Just "1" || simulaDebugKeyboardEvents == Just "1"
-{-# NOINLINE debugKeyboardEventsEnabled #-}
+debugKeyboardEventsEnabled :: IO Bool
+debugKeyboardEventsEnabled =
+  debugHudModeActive DebugHudKeyboardEvents
 
-debugSurfaceBoundariesEnabled :: Bool
-debugSurfaceBoundariesEnabled = unsafePerformIO $ do
-  simulaDebug <- lookupEnv "SIMULA_DEBUG"
-  simulaDebugSurfaceCreations <- lookupEnv "SIMULA_DEBUG_SURFACE_BOUNDARIES"
-  return $ simulaDebug == Just "1" || simulaDebugSurfaceCreations == Just "1"
-{-# NOINLINE debugSurfaceBoundariesEnabled #-}
+debugSurfaceBoundariesEnabled :: IO Bool
+debugSurfaceBoundariesEnabled =
+  debugHudModeActive DebugHudSurfaceBoundaries
 
-debugDepthFirstThumbnailsEnabled :: Bool
-debugDepthFirstThumbnailsEnabled = unsafePerformIO $ do
-  simulaDebugDepthFirstThumbnails <- lookupEnv "SIMULA_DEBUG_DEPTH_FIRST_THUMBNAILS"
-  return $ simulaDebugDepthFirstThumbnails == Just "1"
-{-# NOINLINE debugDepthFirstThumbnailsEnabled #-}
-
--- Extra vertical space reserved below the viewportSurface for normal GSVS HUD text.
-debugHudReservedHeight :: Int
-debugHudReservedHeight =
-  56
-    + if debugMemoryHudEnabled then debugMemoryHudHeight else 0
-    + if debugProfileHudEnabled then debugProfileHudHeight else 0
+debugDepthFirstThumbnailsEnabled :: IO Bool
+debugDepthFirstThumbnailsEnabled =
+  debugHudModeActive DebugHudDepthFirstSurfaces
 
 -- Height of the part of the GSVS HUD that shows the depth-first surface thumbnails.
 debugDepthFirstThumbnailHeight :: Int
 debugDepthFirstThumbnailHeight = 220
 
-debugHudEnabled :: Bool
+debugHudEnabled :: IO Bool
 debugHudEnabled =
-  debugDepthFirstThumbnailsEnabled
-    || debugDamagedRegionsEnabled
-    || debugMemoryHudEnabled
-    || debugProfileHudEnabled
-    || (debugSurfaceBoundariesEnabled && (debugMouseEventsEnabled || debugKeyboardEventsEnabled))
+  debugHudVisible
 
 debugHudMaxLines :: Int
-debugHudMaxLines = 8
+debugHudMaxLines = 10
 
 debugHudLineMaxChars :: Int
 debugHudLineMaxChars = 170
@@ -169,8 +144,9 @@ debugHudGlobalMessages = unsafePerformIO $ newTVarIO []
 {-# NOINLINE debugHudGlobalMessages #-}
 
 debugHudPushTo :: TVar [String] -> String -> IO ()
-debugHudPushTo messagesVar msg =
-  when debugHudEnabled $
+debugHudPushTo messagesVar msg = do
+  enabled <- debugHudEnabled
+  when enabled $
     atomically $ modifyTVar' messagesVar $ \messages ->
       let messages' = List.take debugHudMaxLines $ List.drop (List.length messages + 1 - debugHudMaxLines) (messages ++ [debugHudTrimLine msg])
       in messages'
@@ -184,8 +160,9 @@ debugHudPush gsvs msg =
   debugHudPushTo (_gsvsDebugHudMessages gsvs) msg
 
 debugHudPushPointerFocus :: GodotSimulaViewSprite -> String -> IO ()
-debugHudPushPointerFocus gsvs surfaceSummary =
-  when debugHudEnabled $ do
+debugHudPushPointerFocus gsvs surfaceSummary = do
+  enabled <- debugHudEnabled
+  when enabled $ do
     shouldPush <- atomically $ do
       lastFocus <- readTVar (_gsvsDebugHudLastPointerFocusSummary gsvs)
       if lastFocus == Just surfaceSummary
@@ -197,8 +174,9 @@ debugHudPushPointerFocus gsvs surfaceSummary =
       debugHudPush gsvs ("MOUSE focus " ++ surfaceSummary)
 
 debugHudClearPointerFocus :: GodotSimulaViewSprite -> IO ()
-debugHudClearPointerFocus gsvs =
-  when debugHudEnabled $ do
+debugHudClearPointerFocus gsvs = do
+  enabled <- debugHudEnabled
+  when enabled $ do
     shouldPush <- atomically $ do
       lastFocus <- readTVar (_gsvsDebugHudLastPointerFocusSummary gsvs)
       case lastFocus of
@@ -210,8 +188,9 @@ debugHudClearPointerFocus gsvs =
       debugHudPush gsvs "MOUSE clear pointer focus"
 
 getDebugHudVisibleMessages :: GodotSimulaViewSprite -> IO [String]
-getDebugHudVisibleMessages gsvs =
-  if debugHudEnabled
+getDebugHudVisibleMessages gsvs = do
+  enabled <- debugHudEnabled
+  if enabled
     then do
       globalMessages <- readTVarIO debugHudGlobalMessages
       localMessages <- readTVarIO (_gsvsDebugHudMessages gsvs)
@@ -271,8 +250,66 @@ unfoldrM f b = f b >>= \case
   Just (a, b') -> return . (a :) =<< unfoldrM f b'
   _            -> return []
 
-data SurfaceLocalCoordinates    = SurfaceLocalCoordinates (Float, Float)
-data SubSurfaceLocalCoordinates = SubSurfaceLocalCoordinates (Float, Float)
+newtype RightCoordinate = RightCoordinate Float
+newtype DownCoordinate = DownCoordinate Float
+newtype OffsetRight = OffsetRight Float
+newtype OffsetDown = OffsetDown Float
+newtype Width = Width Float
+newtype Height = Height Float
+newtype WorldPositionX = WorldPositionX Float
+newtype WorldPositionY = WorldPositionY Float
+newtype WorldPositionZ = WorldPositionZ Float
+
+data CanvasBaseCoordinates =
+  CanvasBaseCoordinates RightCoordinate DownCoordinate
+
+data WorldCoordinates3D =
+  WorldCoordinates3D
+    { worldCoordinates3DPositionX :: WorldPositionX
+    , worldCoordinates3DPositionY :: WorldPositionY
+    , worldCoordinates3DPositionZ :: WorldPositionZ
+    , worldCoordinates3DGodotVector :: GodotVector3
+    }
+
+data CanvasBaseGeometry =
+  CanvasBaseGeometry
+    { canvasBaseGeometryOffsetRight :: OffsetRight
+    , canvasBaseGeometryOffsetDown  :: OffsetDown
+    , canvasBaseGeometryWidth       :: Width
+    , canvasBaseGeometryHeight      :: Height
+    }
+
+canvasBaseCoordinatesTuple :: CanvasBaseCoordinates -> (Float, Float)
+canvasBaseCoordinatesTuple (CanvasBaseCoordinates (RightCoordinate right) (DownCoordinate down)) =
+  (right, down)
+
+canvasBaseGeometryTuple :: CanvasBaseGeometry -> (Float, Float, Float, Float)
+canvasBaseGeometryTuple
+  (CanvasBaseGeometry (OffsetRight right) (OffsetDown down) (Width width) (Height height)) =
+    (right, down, width, height)
+
+canvasBaseGeometryToGodotRect2 :: CanvasBaseGeometry -> IO GodotRect2
+canvasBaseGeometryToGodotRect2 geometry =
+  let (right, down, width, height) = canvasBaseGeometryTuple geometry
+  in toLowLevel $ V2 (V2 right down) (V2 width height)
+
+worldCoordinates3DVector :: WorldCoordinates3D -> GodotVector3
+worldCoordinates3DVector =
+  worldCoordinates3DGodotVector
+
+worldCoordinates3DFromGodotVector :: GodotVector3 -> IO WorldCoordinates3D
+worldCoordinates3DFromGodotVector vector = do
+  V3 x y z <- fromLowLevel vector
+  return $
+    WorldCoordinates3D
+      { worldCoordinates3DPositionX = WorldPositionX x
+      , worldCoordinates3DPositionY = WorldPositionY y
+      , worldCoordinates3DPositionZ = WorldPositionZ z
+      , worldCoordinates3DGodotVector = vector
+      }
+
+data SubSurfaceLocalCoordinates =
+  SubSurfaceLocalCoordinates RightCoordinate DownCoordinate
 data SpriteDimensions      = SpriteDimensions (Int, Int)
 
 fullRedrawFramesStartingAmount :: Int
@@ -381,7 +418,7 @@ instance FromDhall StartingApps
 type Scancode          = Int
 type Modifiers         = Int
 type Keycode           = Int
-type SpriteLocation    = Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates)
+type SpriteLocation    = Maybe (GodotSimulaViewSprite, CanvasBaseCoordinates)
 type KeyboardAction    = SpriteLocation -> Bool -> IO () -- `Bool` signifies whether the key is pressed down
 type KeyboardShortcuts = M.Map (Modifiers, Keycode) KeyboardAction
 type KeyboardRemappings = M.Map Scancode Scancode
@@ -501,13 +538,13 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsView              :: TVar SimulaView
   , _gsvsCanvasBase        :: TVar CanvasBase
   , _gsvsCanvasSurface     :: TVar CanvasSurface
-  , _gsvsCursorCoordinates :: TVar SurfaceLocalCoordinates
+  , _gsvsCursorCoordinates :: TVar CanvasBaseCoordinates
   , _gsvsTargetSize        :: TVar (Maybe SpriteDimensions)
   , _gsvsFreeChildren      :: TVar [GodotWlrXWaylandSurface]
   , _gsvsAttachedXdgChildren :: TVar [GodotWlrXdgSurface]
   , _gsvsTransparency      :: TVar Float
   , _gsvsScreenshotMode    :: TVar Bool
-  , _gsvsScreenshotCoords  :: TVar (Maybe SurfaceLocalCoordinates, Maybe SurfaceLocalCoordinates)
+  , _gsvsScreenshotCoords  :: TVar (Maybe CanvasBaseCoordinates, Maybe CanvasBaseCoordinates)
   , _gsvsActiveSurface     :: TVar (Maybe GodotWlrSurface)
   , _gsvsFrameCount        :: TVar Integer
   , _gsvsSpilloverDims     :: TVar (Maybe (Int, Int))
@@ -531,15 +568,16 @@ instance HasBaseClass GodotSimulaViewSprite where
   super gsvs = GodotRigidBody (_gsvsObj gsvs)
 
 data CanvasBase = CanvasBase {
-    _cbObject       :: GodotObject
-  , _cbGSVS         :: TVar GodotSimulaViewSprite
-  , _cbViewport     :: TVar GodotViewport
-  , _cbDebugFont    :: TVar GodotDynamicFont
+    _cbObject           :: GodotObject
+  , _cbGSVS             :: TVar GodotSimulaViewSprite
+  , _cbViewport         :: TVar GodotViewport
+  , _cbDebugContentFont :: TVar GodotDynamicFont -- If we try to use the same font for different parts of the HUD (with different font sizes)
+  , _cbDebugHudTabFont  :: TVar GodotDynamicFont -- ...weird things occur, so we store them as two separate entries.
 }
 
 instance HasBaseClass CanvasBase where
   type BaseClass CanvasBase = GodotNode2D
-  super (CanvasBase obj _ _ _ ) = GodotNode2D obj
+  super (CanvasBase obj _ _ _ _ ) = GodotNode2D obj
 
 data CanvasSurface = CanvasSurface {
     _csObject       :: GodotObject
@@ -1079,25 +1117,27 @@ withGodotRef3 allocA allocB allocC action =
       withGodotRef allocC $ \c ->
         action a b c
 
-getSurfaceLocalCoordinates :: GodotSimulaViewSprite -> GodotVector3 -> IO (SurfaceLocalCoordinates)
-getSurfaceLocalCoordinates gsvs clickPos = do
-  debugPutStrLn "Plugin.Types.getSurfaceLocalCoordinates"
+getCanvasBaseCoordinatesFromWorldHit :: GodotSimulaViewSprite -> WorldCoordinates3D -> IO CanvasBaseCoordinates
+getCanvasBaseCoordinatesFromWorldHit gsvs worldCoordinates = do
+  debugPutStrLn "Plugin.Types.getCanvasBaseCoordinatesFromWorldHit"
+  let clickPos = worldCoordinates3DVector worldCoordinates
   lpos <- G.to_local gsvs clickPos >>= fromLowLevel
   meshInstance <- atomically $ readTVar (_gsvsMeshInstance gsvs)
   aabb <- G.get_aabb meshInstance
+  aabbPosition <- godot_aabb_get_position aabb >>= fromLowLevel
   aabbSize <- godot_aabb_get_size aabb >>= fromLowLevel
   withQuadMesh gsvs $ \quadMesh -> do
     quadMeshSize <- G.get_size quadMesh >>= fromLowLevel
 
+    let aabbTopLeft = V2 (aabbPosition ^. _x + aabbSize ^. _x) (aabbPosition ^. _y + aabbSize ^. _y)
     let topLeftPos =
-          V2 (aabbSize ^. _x / 2 - lpos ^. _x) (aabbSize ^. _y / 2 - lpos ^. _y)
+          V2 (aabbTopLeft ^. _x - lpos ^. _x) (aabbTopLeft ^. _y - lpos ^. _y)
     let scaledPos = liftI2 (/) topLeftPos (aabbSize ^. _xy)
     let coords = liftI2 (*) quadMeshSize scaledPos
     -- coords = surface coordinates in pixel with (0,0) at top left
     let sx = fromIntegral $ truncate (1000 * coords ^. _x) -- Adjust by a factor of 1000 since we are dealing with Quad Mesh
         sy = fromIntegral $ truncate (1000 * coords ^. _y) -- "
-    clickPos' <- fromLowLevel clickPos
-    return (SurfaceLocalCoordinates (sx, sy))
+    return (CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy))
 
 getARVRCameraOrPancakeCameraTransform :: GodotSimulaServer -> IO GodotTransform
 getARVRCameraOrPancakeCameraTransform gss = do

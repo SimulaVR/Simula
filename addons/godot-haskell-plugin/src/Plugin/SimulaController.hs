@@ -262,7 +262,7 @@ process self gvArgs@[deltaGV] = do
       pointerWindow self >>= \case
         Just window -> do
           G.set_visible (_gscLaser self) True
-          pos <- G.get_collision_point $ _gscRayCast self
+          pos <- G.get_collision_point (_gscRayCast self) >>= worldCoordinates3DFromGodotVector
           processClickEvent window Motion pos
           --processTouchpadScroll self window pos
         Nothing -> do

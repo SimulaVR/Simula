@@ -16,11 +16,11 @@ import System.Environment (lookupEnv)
 import System.IO.Unsafe
 import Text.Read (readMaybe)
 
-debugProfileHudEnabled :: Bool
-debugProfileHudEnabled = unsafePerformIO $ do
-  simulaDebugProfileHud <- lookupEnv "SIMULA_DEBUG_PROFILE_HUD"
-  return $ simulaDebugProfileHud == Just "1"
-{-# NOINLINE debugProfileHudEnabled #-}
+import Plugin.Debug.HudTypes
+
+debugProfileHudEnabled :: IO Bool
+debugProfileHudEnabled =
+  debugHudModeActive DebugHudProfile
 
 debugProfileHudLivePath :: FilePath
 debugProfileHudLivePath = "./HUD_profile_live.txt"
@@ -246,31 +246,42 @@ debugProfileHudStateVar = unsafePerformIO $ newTVarIO debugProfileHudInitialStat
 {-# NOINLINE debugProfileHudStateVar #-}
 
 profileScope :: String -> IO a -> IO a
-profileScope label action
-  | not debugProfileHudEnabled = action
-  | otherwise = bracket_ (profileEnter label) profileExit action
+profileScope label action = do
+  enabled <- debugProfileHudEnabled
+  if not enabled
+    then action
+    else bracket_ (profileEnterNow label) profileExitNow action
 
 profileEnter :: String -> IO ()
-profileEnter label =
-  when debugProfileHudEnabled $ do
-    now <- getCurrentTime
-    threadId <- myThreadId
-    atomically $
-      modifyTVar' debugProfileHudStateVar $
-        pushOpenScope threadId (OpenScope label now 0 [])
+profileEnter label = do
+  enabled <- debugProfileHudEnabled
+  when enabled $
+    profileEnterNow label
 
 profileExit :: IO ()
 profileExit =
-  when debugProfileHudEnabled $ do
-    now <- getCurrentTime
-    threadId <- myThreadId
-    atomically $
-      modifyTVar' debugProfileHudStateVar $
-        popOpenScope now threadId
+  profileExitNow
+
+profileEnterNow :: String -> IO ()
+profileEnterNow label = do
+  now <- getCurrentTime
+  threadId <- myThreadId
+  atomically $
+    modifyTVar' debugProfileHudStateVar $
+      pushOpenScope threadId (OpenScope label now 0 [])
+
+profileExitNow :: IO ()
+profileExitNow = do
+  now <- getCurrentTime
+  threadId <- myThreadId
+  atomically $
+    modifyTVar' debugProfileHudStateVar $
+      popOpenScope now threadId
 
 profileFrameBoundary :: IO ()
-profileFrameBoundary =
-  when debugProfileHudEnabled $ do
+profileFrameBoundary = do
+  enabled <- debugProfileHudEnabled
+  when enabled $ do
     now <- getCurrentTime
     atomically $
       modifyTVar' debugProfileHudStateVar $

@@ -35,8 +35,9 @@ import Plugin.Types
 
 -- Records a new damage event by (i) refreshing on-GSVS overlays and (ii) storing a HUD snapshot metadata (without the texture, since it doesn't exist yet)
 recordDebugDamagedRegionEventForOverlayAndPendingHudSnapshot :: GodotSimulaViewSprite -> [GodotRect2] -> Maybe GodotTexture -> IO ()
-recordDebugDamagedRegionEventForOverlayAndPendingHudSnapshot gsvs regions _maybeViewportTexture =
-  when debugDamagedRegionsEnabled $ do
+recordDebugDamagedRegionEventForOverlayAndPendingHudSnapshot gsvs regions _maybeViewportTexture = do
+  enabled <- debugDamagedRegionsEnabled
+  when enabled $ do
     -- Convert Godot Rect2s into simple (x, y, width, height) tuples
     rects <- fmap catMaybes $
       forM regions $ \region -> do
@@ -136,9 +137,10 @@ storeDebugDamagedRegionPendingSnapshotMetadata gsvs frame uniqueRects = do
 -- Finalizes a pending damaged-region HUD event by capturing the current viewport
 -- texture and moving the event from pending metadata into persistent HUD history.
 flushDebugDamagedRegionPendingSnapshot :: GodotSimulaViewSprite -> GodotTexture -> IO ()
-flushDebugDamagedRegionPendingSnapshot gsvs viewportTexture =
+flushDebugDamagedRegionPendingSnapshot gsvs viewportTexture = do
   -- 1. Runs only when debugDamagedRegionsEnabled is true.
-  when debugDamagedRegionsEnabled $ do
+  enabled <- debugDamagedRegionsEnabled
+  when enabled $ do
     -- 2. Reads the current GSVS frame.
     frame <- readTVarIO (_gsvsFrameCount gsvs)
     -- 3. Reads _gsvsDebugDamagedRegionPendingSnapshot, which may contain
@@ -272,9 +274,10 @@ saveDebugDamagedRegionUnionImage exportDirectory snapshot viewportImage (unionX,
 -- Returns the currently visible damaged-region overlays for a GSVS, pruning
 -- expired overlays from GSVS state before handing them to the drawing code.
 getAndPruneDebugDamagedRegionOverlays :: GodotSimulaViewSprite -> IO [DebugDamagedRegionOverlay]
-getAndPruneDebugDamagedRegionOverlays gsvs =
+getAndPruneDebugDamagedRegionOverlays gsvs = do
   -- 1. If debug damaged regions are disabled, return no overlays.
-  if debugDamagedRegionsEnabled
+  enabled <- debugDamagedRegionsEnabled
+  if enabled
     then do
       -- 2. Read the current GSVS frame.
       frame <- readTVarIO (_gsvsFrameCount gsvs)
@@ -290,16 +293,18 @@ getAndPruneDebugDamagedRegionOverlays gsvs =
     else return []
 
 getDebugDamagedRegionHistory :: GodotSimulaViewSprite -> IO [DebugDamagedRegionSnapshot]
-getDebugDamagedRegionHistory gsvs =
-  if debugDamagedRegionsEnabled
+getDebugDamagedRegionHistory gsvs = do
+  enabled <- debugDamagedRegionsEnabled
+  if enabled
     then readTVarIO (_gsvsDebugDamagedRegionHistory gsvs)
     else return []
 
 rememberDebugDamageRegionsFromCanvas :: CanvasSurface -> GodotSimulaViewSprite -> Maybe [GodotRect2] -> IO ()
 rememberDebugDamageRegionsFromCanvas _ _ Nothing =
   return ()
-rememberDebugDamageRegionsFromCanvas cs gsvs (Just regions) =
-  when debugDamagedRegionsEnabled $ do
+rememberDebugDamageRegionsFromCanvas cs gsvs (Just regions) = do
+  enabled <- debugDamagedRegionsEnabled
+  when enabled $ do
     viewportSurface <- readTVarIO (cs ^. csViewport) :: IO GodotViewport
     withGodotRef (G.get_texture viewportSurface :: IO GodotViewportTexture) $ \viewportSurfaceTexture ->
       recordDebugDamagedRegionEventForOverlayAndPendingHudSnapshot gsvs regions (Just (safeCast viewportSurfaceTexture))
@@ -372,8 +377,15 @@ drawDebugHudDamagedRegionThumbnails cb visibleHistory debugFont debugHudDamagedR
         -- rect is scaled/clipped into the abstract mini-surface, then
         -- drawDebugDamagedRegionThumbnailRect copies that region from the
         -- saved snapshot texture and draws its per-rect border.
+        let thumbnailGeometry =
+              CanvasBaseGeometry
+                { canvasBaseGeometryOffsetRight = OffsetRight x
+                , canvasBaseGeometryOffsetDown = OffsetDown y
+                , canvasBaseGeometryWidth = Width boxWidth
+                , canvasBaseGeometryHeight = Height boxHeight
+                }
         forM_ rects $
-          drawDebugDamagedRegionThumbnailRect cb snapshotTexture snapshotTextureModulateColor x y boxWidth boxHeight surfaceWidth surfaceHeight
+          drawDebugDamagedRegionThumbnailRect cb snapshotTexture snapshotTextureModulateColor thumbnailGeometry surfaceWidth surfaceHeight
 
         -- Draw the border around the whole abstract mini-surface.
         G.draw_rect cb thumbnailRect borderColor False 1.0 False
@@ -381,7 +393,20 @@ drawDebugHudDamagedRegionThumbnails cb visibleHistory debugFont debugHudDamagedR
         -- Draw the cropped literal preview underneath. This computes the
         -- union/bounding box of all damaged rects and draws that source
         -- region from the snapshot texture into the lower preview area.
-        drawDebugDamagedRegionPreview cb snapshotTexture snapshotTextureModulateColor borderColor (cellLeft + 4) (cellTop + abstractAreaHeight + previewGap) (cellWidth - 8) previewAreaHeight surfaceWidth surfaceHeight rects
+        drawDebugDamagedRegionPreview
+          cb
+          snapshotTexture
+          snapshotTextureModulateColor
+          borderColor
+          (CanvasBaseGeometry
+            { canvasBaseGeometryOffsetRight = OffsetRight (cellLeft + 4)
+            , canvasBaseGeometryOffsetDown = OffsetDown (cellTop + abstractAreaHeight + previewGap)
+            , canvasBaseGeometryWidth = Width (cellWidth - 8)
+            , canvasBaseGeometryHeight = Height previewAreaHeight
+            })
+          surfaceWidth
+          surfaceHeight
+          rects
 
         -- Draw the event-number label centered below this HUD cell.
         let label = show (ddrsEventIndex snapshot)
@@ -404,11 +429,11 @@ drawDebugDamagedRegionOverlays cb gsvs = do
     let progress = min 1.0 (fromIntegral age / fromIntegral debugDamagedRegionOverlayFrames :: Double)
     let alpha = max 0.10 (0.40 * (1.0 - progress))
     forM_ (ddroRects overlay) $
-      drawDebugDamagedRegionRect cb alpha
+      drawDebugDamagedRegionRect cb alpha . debugDamagedRegionRectToCanvasBaseGeometry
 
 -- Draws a purple damaged-region rect overlay in CanvasBase coordinates
-drawDebugDamagedRegionRect :: CanvasBase -> Double -> DebugDamagedRegionRect -> IO ()
-drawDebugDamagedRegionRect cb alpha (x, y, width, height) =
+drawDebugDamagedRegionRect :: CanvasBase -> Double -> CanvasBaseGeometry -> IO ()
+drawDebugDamagedRegionRect cb alpha geometry =
   when (width > 0 && height > 0) $ do
     -- Use purple fill with the caller-supplied opacity, so the
     -- damaged pixels are visible without completely hiding the surface.
@@ -417,20 +442,21 @@ drawDebugDamagedRegionRect cb alpha (x, y, width, height) =
     -- the fill, making the exact damaged-region edge easy to see.
     let borderAlpha = min 0.80 (alpha + 0.25)
     borderColor <- (toLowLevel $ (rgb 0.95 0.62 1.0) `withOpacity` borderAlpha) :: IO GodotColor
-    debugRect <- toLowLevel $
-      V2
-        (V2 x y)
-        (V2 width height)
+    debugRect <- canvasBaseGeometryToGodotRect2 geometry
     G.draw_rect cb debugRect fillColor True 1.0 False
     G.draw_rect cb debugRect borderColor False 2.0 False
+  where
+    (_, _, width, height) = canvasBaseGeometryTuple geometry
 
 -- Draws one damaged source rect inside the abstract HUD mini-surface by
 -- scaling from full GSVS texture coordinates into thumbnail coordinates,
 -- copying the matching snapshot pixels, and outlining the copied region.
-drawDebugDamagedRegionThumbnailRect :: CanvasBase -> GodotTexture -> GodotColor -> Float -> Float -> Float -> Float -> Float -> Float -> DebugDamagedRegionRect -> IO ()
-drawDebugDamagedRegionThumbnailRect cb snapshotTexture snapshotTextureModulateColor thumbnailX thumbnailY thumbnailWidth thumbnailHeight surfaceWidth surfaceHeight (x, y, width, height) = do
+drawDebugDamagedRegionThumbnailRect :: CanvasBase -> GodotTexture -> GodotColor -> CanvasBaseGeometry -> Float -> Float -> DebugDamagedRegionRect -> IO ()
+drawDebugDamagedRegionThumbnailRect cb snapshotTexture snapshotTextureModulateColor thumbnailGeometry surfaceWidth surfaceHeight damagedRegionRect = do
   -- Convert from full-size surface coordinates to the scaled-down HUD
   -- mini-surface coordinates.
+  let (thumbnailX, thumbnailY, thumbnailWidth, thumbnailHeight) = canvasBaseGeometryTuple thumbnailGeometry
+  let (x, y, width, height) = damagedRegionRect
   let scaleX = thumbnailWidth / max 1 surfaceWidth
   let scaleY = thumbnailHeight / max 1 surfaceHeight
   let scaledX = thumbnailX + x * scaleX
@@ -456,35 +482,53 @@ drawDebugDamagedRegionThumbnailRect cb snapshotTexture snapshotTextureModulateCo
   -- texture region.
   when (clippedRight > clippedX && clippedBottom > clippedY && sourceRight > sourceX && sourceBottom > sourceY) $ do
     borderColor <- (toLowLevel $ (rgb 1.0 0.66 1.0) `withOpacity` 0.92) :: IO GodotColor
-    debugRect <- toLowLevel $
-      V2
-        (V2 clippedX clippedY)
-        (V2 (clippedRight - clippedX) (clippedBottom - clippedY))
+    let destinationGeometry =
+          CanvasBaseGeometry
+            { canvasBaseGeometryOffsetRight = OffsetRight clippedX
+            , canvasBaseGeometryOffsetDown = OffsetDown clippedY
+            , canvasBaseGeometryWidth = Width (clippedRight - clippedX)
+            , canvasBaseGeometryHeight = Height (clippedBottom - clippedY)
+            }
+    debugRect <- canvasBaseGeometryToGodotRect2 destinationGeometry
 
     -- Copy the actual damaged pixels into the mini-surface, then draw a
     -- thin pink-purple border around that copied piece.
-    drawSnapshotTextureRegionIntoCanvasBaseRect cb snapshotTexture snapshotTextureModulateColor debugRect (sourceX, sourceY, sourceRight - sourceX, sourceBottom - sourceY)
+    drawSnapshotTextureSourceIntoCanvasBaseGeometry
+      cb
+      snapshotTexture
+      snapshotTextureModulateColor
+      destinationGeometry
+      (SnapshotTextureSourceGeometry sourceX sourceY (sourceRight - sourceX) (sourceBottom - sourceY))
     G.draw_rect cb debugRect borderColor False 1.0 False
 
 -- Draws the lower cropped preview for one damage event in the HUD cell.
 -- It finds the bounding box around all damaged rects, fits that cropped
 -- region into the available preview area, then delegates per-rect pixel
 -- copying and outlining to drawDebugDamagedRegionPreviewRects.
-drawDebugDamagedRegionPreview :: CanvasBase -> GodotTexture -> GodotColor -> GodotColor -> Float -> Float -> Float -> Float -> Float -> Float -> [DebugDamagedRegionRect] -> IO ()
-drawDebugDamagedRegionPreview cb snapshotTexture snapshotTextureModulateColor borderColor x y availableWidth availableHeight surfaceWidth surfaceHeight rects =
+drawDebugDamagedRegionPreview :: CanvasBase -> GodotTexture -> GodotColor -> GodotColor -> CanvasBaseGeometry -> Float -> Float -> [DebugDamagedRegionRect] -> IO ()
+drawDebugDamagedRegionPreview cb snapshotTexture snapshotTextureModulateColor borderColor previewAreaGeometry surfaceWidth surfaceHeight rects =
   forM_ (debugDamagedRegionUnionRectClampedToGSVSBounds surfaceWidth surfaceHeight rects) $ \unionRect@(_, _, sourceWidth, sourceHeight) -> do
+    let (x, y, availableWidth, availableHeight) = canvasBaseGeometryTuple previewAreaGeometry
     let aspect = if sourceHeight <= 0 then 1 else sourceWidth / sourceHeight
     let previewWidth = max 3 (min availableWidth (availableHeight * aspect))
     let previewHeight = max 3 (min availableHeight (previewWidth / max 0.1 aspect))
     let previewX = x + max 0 ((availableWidth - previewWidth) / 2)
     let previewY = y + max 0 ((availableHeight - previewHeight) / 2)
-    drawDebugDamagedRegionPreviewRects cb snapshotTexture snapshotTextureModulateColor borderColor previewX previewY previewWidth previewHeight unionRect rects
+    drawDebugDamagedRegionPreviewRects
+      cb
+      snapshotTexture
+      snapshotTextureModulateColor
+      borderColor
+      (CanvasBaseGeometry (OffsetRight previewX) (OffsetDown previewY) (Width previewWidth) (Height previewHeight))
+      unionRect
+      rects
 
 -- Draws every damaged rect that intersects the cropped preview's union
 -- rect. Each rect is clipped to that union, scaled into the preview area,
 -- filled with the matching snapshot pixels, and outlined.
-drawDebugDamagedRegionPreviewRects :: CanvasBase -> GodotTexture -> GodotColor -> GodotColor -> Float -> Float -> Float -> Float -> DebugDamagedRegionRect -> [DebugDamagedRegionRect] -> IO ()
-drawDebugDamagedRegionPreviewRects cb snapshotTexture snapshotTextureModulateColor borderColor previewX previewY previewWidth previewHeight (unionX, unionY, unionWidth, unionHeight) rects = do
+drawDebugDamagedRegionPreviewRects :: CanvasBase -> GodotTexture -> GodotColor -> GodotColor -> CanvasBaseGeometry -> DebugDamagedRegionRect -> [DebugDamagedRegionRect] -> IO ()
+drawDebugDamagedRegionPreviewRects cb snapshotTexture snapshotTextureModulateColor borderColor previewGeometry (unionX, unionY, unionWidth, unionHeight) rects = do
+  let (previewX, previewY, previewWidth, previewHeight) = canvasBaseGeometryTuple previewGeometry
   let scaleX = previewWidth / max 1 unionWidth
   let scaleY = previewHeight / max 1 unionHeight
   forM_ rects $ \(rectX, rectY, rectWidth, rectHeight) -> do
@@ -497,14 +541,26 @@ drawDebugDamagedRegionPreviewRects cb snapshotTexture snapshotTextureModulateCol
       let destinationY = previewY + (sourceY - unionY) * scaleY
       let destinationWidth = (sourceRight - sourceX) * scaleX
       let destinationHeight = (sourceBottom - sourceY) * scaleY
-      previewRect <- toLowLevel $ V2 (V2 destinationX destinationY) (V2 destinationWidth destinationHeight)
-      drawSnapshotTextureRegionIntoCanvasBaseRect cb snapshotTexture snapshotTextureModulateColor previewRect (sourceX, sourceY, sourceRight - sourceX, sourceBottom - sourceY)
+      let destinationGeometry =
+            CanvasBaseGeometry
+              { canvasBaseGeometryOffsetRight = OffsetRight destinationX
+              , canvasBaseGeometryOffsetDown = OffsetDown destinationY
+              , canvasBaseGeometryWidth = Width destinationWidth
+              , canvasBaseGeometryHeight = Height destinationHeight
+              }
+      previewRect <- canvasBaseGeometryToGodotRect2 destinationGeometry
+      drawSnapshotTextureSourceIntoCanvasBaseGeometry
+        cb
+        snapshotTexture
+        snapshotTextureModulateColor
+        destinationGeometry
+        (SnapshotTextureSourceGeometry sourceX sourceY (sourceRight - sourceX) (sourceBottom - sourceY))
       G.draw_rect cb previewRect borderColor False 1.0 False
 
 -- Draws one damaged source rectangle from the captured viewport texture into
 -- the requested HUD destination rectangle.
-drawSnapshotTextureRegionIntoCanvasBaseRect :: CanvasBase -> GodotTexture -> GodotColor -> GodotRect2 -> DebugDamagedRegionRect -> IO ()
-drawSnapshotTextureRegionIntoCanvasBaseRect cb snapshotTexture snapshotTextureModulateColor destinationRect (x, y, width, height) =
+drawSnapshotTextureSourceIntoCanvasBaseGeometry :: CanvasBase -> GodotTexture -> GodotColor -> CanvasBaseGeometry -> SnapshotTextureSourceGeometry -> IO ()
+drawSnapshotTextureSourceIntoCanvasBaseGeometry cb snapshotTexture snapshotTextureModulateColor destinationGeometry sourceGeometry =
   -- snapshotTexture will be supplied from DebugDamagedRegionSnapshot.ddrsTexture
   -- destinationRect is in CanvasBase coordinates, which includes the normal
   -- surfaces smashed together AND the bounds of the FULL HUD (including
@@ -515,9 +571,21 @@ drawSnapshotTextureRegionIntoCanvasBaseRect cb snapshotTexture snapshotTextureMo
     -- 2. Convert the damaged-region tuple into the Godot Rect2 source
     -- region to sample from snapshotTexture.
     sourceRect <- toLowLevel $ V2 (V2 x y) (V2 width height)
+    destinationRect <- canvasBaseGeometryToGodotRect2 destinationGeometry
     -- 3. Draw only that source region from snapshotTexture into the
     -- destinationRect on the CanvasBase HUD.
     G.draw_texture_rect_region cb snapshotTexture destinationRect sourceRect snapshotTextureModulateColor False (coerce nullPtr) True
+  where
+    (x, y, width, height) = snapshotTextureSourceGeometryTuple sourceGeometry
+
+debugDamagedRegionRectToCanvasBaseGeometry :: DebugDamagedRegionRect -> CanvasBaseGeometry
+debugDamagedRegionRectToCanvasBaseGeometry (x, y, width, height) =
+  CanvasBaseGeometry
+    { canvasBaseGeometryOffsetRight = OffsetRight x
+    , canvasBaseGeometryOffsetDown = OffsetDown y
+    , canvasBaseGeometryWidth = Width width
+    , canvasBaseGeometryHeight = Height height
+    }
 
 -- Computes the smallest GSVS-coordinate rectangle that contains all
 -- positive-area damaged rects, clamped to the GSVS source bounds (first two arguments).

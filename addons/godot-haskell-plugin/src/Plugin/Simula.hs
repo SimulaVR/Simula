@@ -228,15 +228,18 @@ onButton self gsc button pressed = do
   gst = _sGrabState self
   onSpriteInput rc sprite = do
     debugPutStrLn $ "Plugin.Simula.onSpriteInput button=" ++ show button ++ " pressed=" ++ show pressed
-    G.get_collision_point rc >>= case button of
-      OVR_Button_Trigger -> processClickEvent sprite (Button pressed G.BUTTON_LEFT)
-      OVR_Button_AppMenu -> processClickEvent sprite (Button pressed G.BUTTON_RIGHT)
-      OVR_Button_Grip    -> const $
+    worldCoordinates <- G.get_collision_point rc >>= worldCoordinates3DFromGodotVector
+    case button of
+      OVR_Button_Trigger ->
+        processClickEvent sprite (Button pressed G.BUTTON_LEFT) worldCoordinates
+      OVR_Button_AppMenu ->
+        processClickEvent sprite (Button pressed G.BUTTON_RIGHT) worldCoordinates
+      OVR_Button_Grip ->
         readTVarIO gst
           >>= processGrabEvent gsc (Just sprite) pressed
           >>= atomically
           .   writeTVar gst
-      _                  -> const $ return ()
+      _ -> return ()
 
   onOffSpriteInput :: Int -> Bool -> IO ()
   onOffSpriteInput button pressed =

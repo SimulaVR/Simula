@@ -151,8 +151,8 @@ debugKeyboardPress button pressed = do
 debugMoveCursor :: GodotSimulaViewSprite -> (Float, Float) -> IO ()
 debugMoveCursor gsvs (sx, sy) = do
   debugPutStrLn "Plugin.Debug.debugMoveCursor"
-  processClickEvent' gsvs Motion (SurfaceLocalCoordinates (sx, sy))
-  atomically $ writeTVar (gsvs ^. gsvsCursorCoordinates) (SurfaceLocalCoordinates (sx, sy))
+  processClickEvent' gsvs Motion (CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy))
+  atomically $ writeTVar (gsvs ^. gsvsCursorCoordinates) (CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy))
 
 debugTerminateSimula :: GodotSimulaServer -> IO ()
 debugTerminateSimula gss = do
@@ -179,7 +179,7 @@ testRightclickPopup gss app screenshotBase = do
   let screenshotPath = dataDir </> "screenshots" </> screenshotBase
   screenshotFullPath <- savePngPancake gss screenshotPath
 
-  SurfaceLocalCoordinates (cx, cy) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+  CanvasBaseCoordinates (RightCoordinate cx) (DownCoordinate cy) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
   depthFirstBaseSurfaces <- case eitherSurface of

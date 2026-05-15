@@ -33,12 +33,13 @@ import Godot.Core.GodotVisualServer as G
 
 import Plugin.Debug.DamagedRegions
 import Plugin.Debug.DamagedRegionTypes
+import Plugin.Debug.HUD
+import Plugin.Debug.HudTypes
 import Plugin.Debug.MemoryHud
 import Plugin.Debug.MemoryHudTypes
 import Plugin.Debug.ProfileHud
 import Plugin.Debug.ProfileHudTypes
 import Plugin.Types
-import Data.Maybe
 import Data.Either
 
 import           Foreign
@@ -72,6 +73,7 @@ instance NativeScript CanvasBase where
                   <$> atomically (newTVar (error "Failed to initialize CanvasBase."))
                   <*> atomically (newTVar (error "Failed to initialize CanvasBase."))
                   <*> atomically (newTVar (error "Failed to initialize CanvasBase."))
+                  <*> atomically (newTVar (error "Failed to initialize CanvasBase."))
   classMethods =
     [
       func NoRPC "_process" (catchGodot Plugin.CanvasBase._process)
@@ -88,15 +90,13 @@ newCanvasBase gsvs = do
     >>= deRefStablePtr . castPtrToStablePtr :: IO CanvasBase
 
   viewport <- initializeRenderTarget gsvs ViewportBase
-  debugFont <- unsafeInstance GodotDynamicFont "DynamicFont"
-  dynamicFontData' <- load GodotDynamicFontData "DynamicFontData" "res://OpenSansEmoji.ttf"
-  let dynamicFontData = Data.Maybe.fromJust dynamicFontData'
-  G.set_font_data debugFont dynamicFontData
-  G.set_size debugFont 24
+  debugContentFont <- newDebugHudFont 24
+  debugHudTabFont <- newDebugHudFont 16
 
   atomically $ writeTVar (_cbGSVS cb) gsvs
   atomically $ writeTVar (_cbViewport cb) viewport
-  atomically $ writeTVar (_cbDebugFont cb) debugFont
+  atomically $ writeTVar (_cbDebugContentFont cb) debugContentFont
+  atomically $ writeTVar (_cbDebugHudTabFont cb) debugHudTabFont
 
   return cb
 
@@ -119,26 +119,35 @@ _draw cb gvArgs = do
   profileScope "Plugin.CanvasBase._draw" $ do
     debugPutStrLn "Plugin.CanvasBase._draw"
     gsvs <- readTVarIO (cb ^. cbGSVS)
+    debugSurfaceBoundariesActive <- debugSurfaceBoundariesEnabled
+    debugDepthFirstThumbnailsActive <- debugDepthFirstThumbnailsEnabled
+    debugDamagedRegionsActive <- debugDamagedRegionsEnabled
+    debugMouseEventsActive <- debugMouseEventsEnabled
+    debugKeyboardEventsActive <- debugKeyboardEventsEnabled
+    debugHudActive <- debugHudEnabled
     let showSurfaceDebugOverlays =
-          debugSurfaceBoundariesEnabled || debugDepthFirstThumbnailsEnabled
+          debugSurfaceBoundariesActive
+            || debugDepthFirstThumbnailsActive
+            || debugMouseEventsActive
+            || debugKeyboardEventsActive
 
     when showSurfaceDebugOverlays $
       drawDebugBackground cb gsvs
 
     drawCanvasSurface cb gsvs
 
-    when debugDamagedRegionsEnabled $
+    when debugDamagedRegionsActive $
       drawDebugDamagedRegionOverlays cb gsvs
 
     when showSurfaceDebugOverlays $ do
       -- Outline raw wlr_surface buffers as red
       drawRedWlrSurfaceBoundaries cb gsvs
 
-      when (debugDepthFirstThumbnailsEnabled || debugMouseEventsEnabled || debugKeyboardEventsEnabled) $
-        -- Show pointer IDs inside surfaces when debugging mouse/keyboard events (where it's likely useful)
+      when (debugSurfaceBoundariesActive || debugDepthFirstThumbnailsActive || debugMouseEventsActive || debugKeyboardEventsActive) $
+        -- Show depth-order pointer IDs inside surfaces in modes where surface identity is useful.
         drawRedWlrSurfacePointerIds cb gsvs
 
-    when (debugSurfaceBoundariesEnabled && not debugDepthFirstThumbnailsEnabled) $ do
+    when (debugSurfaceBoundariesActive && not debugDepthFirstThumbnailsActive) $ do
       -- Show xdg/xwayland geometry rectangles as blue WITHOUT their x/y offsets
       drawBlueGeometryBordersWithoutOffsets cb gsvs
 
@@ -146,7 +155,7 @@ _draw cb gvArgs = do
       drawGreenGeometryBordersWithOffsets cb gsvs
 
     -- Debug HUD can show targetted, uncluttered messages on gsvs
-    when debugHudEnabled $
+    when debugHudActive $
       drawDebugHud cb gsvs
 
     -- Draw cursor
@@ -192,88 +201,134 @@ _draw cb gvArgs = do
     drawDebugHud cb gsvs = do
       debugPutStrLn "Plugin.CanvasBase.drawDebugHud"
       messages <- getDebugHudVisibleMessages gsvs
-      unless (Data.List.null messages && not debugDepthFirstThumbnailsEnabled && not debugDamagedRegionsEnabled && not debugMemoryHudEnabled && not debugProfileHudEnabled) $ do
-        cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
-        viewportSurface <- readTVarIO (cs ^. csViewport)
-        when debugDamagedRegionsEnabled $
-          withGodotRef (G.get_texture viewportSurface :: IO GodotViewportTexture) $ \viewportSurfaceTexture ->
-            flushDebugDamagedRegionPendingSnapshot gsvs (safeCast viewportSurfaceTexture)
-        damagedRegionHistory <- getDebugDamagedRegionHistory gsvs
-        maybeDebugMemorySnapshot <- if debugMemoryHudEnabled
-          then do
-            gss <- readTVarIO (gsvs ^. gsvsServer)
-            Just <$> getDebugMemoryHudSnapshot gss
-          else return Nothing
-        maybeDebugProfileSnapshot <- if debugProfileHudEnabled
-          then Just <$> getDebugProfileHudSnapshot
-          else return Nothing
-        let visibleDamagedRegionHistory = keepLast debugDamagedRegionHistoryMax damagedRegionHistory
-        viewportBase <- readTVarIO (cb ^. cbViewport)
-        V2 _viewportSurfaceWidth viewportSurfaceHeight <- G.get_size viewportSurface >>= fromLowLevel :: IO (V2 Float)
-        V2 viewportBaseWidth viewportBaseHeight <- G.get_size viewportBase >>= fromLowLevel :: IO (V2 Float)
-        debugFont <- readTVarIO (cb ^. cbDebugFont)
-        G.set_size debugFont 16
-        fontHeight <- G.get_height (safeCast debugFont :: GodotFont)
-        fontAscent <- G.get_ascent (safeCast debugFont :: GodotFont)
-        let padding = 8
-        let lineGap = 2
-        let lineStep = fontHeight + lineGap
-        let depthFirstThumbnailsHeight = if debugDepthFirstThumbnailsEnabled then debugDepthFirstThumbnailHeight else 0
-        let damagedRegionThumbnailsHeight = if debugDamagedRegionsEnabled && not (Data.List.null visibleDamagedRegionHistory) then debugDamagedRegionHudHeightForCount (Data.List.length visibleDamagedRegionHistory) else 0
-        let memoryHudReservedHeight =
-              case maybeDebugMemorySnapshot of
-                Just debugMemorySnapshot -> debugMemoryHudHeightForRows (max 1 $ Data.List.length $ debugMemoryHudVisibleRows debugMemorySnapshot)
-                Nothing -> if debugMemoryHudEnabled then debugMemoryHudHeight else 0
-        let profileHudReservedHeight =
-              case maybeDebugProfileSnapshot of
-                Just debugProfileSnapshot -> debugProfileHudHeightForRows (max 1 $ Data.List.length $ debugProfileHudVisibleRows debugProfileSnapshot)
-                Nothing -> if debugProfileHudEnabled then debugProfileHudHeight else 0
-        let requestedHudHeight = fromIntegral padding * 2 + fromIntegral depthFirstThumbnailsHeight + fromIntegral damagedRegionThumbnailsHeight + fromIntegral memoryHudReservedHeight + fromIntegral profileHudReservedHeight + lineStep * fromIntegral (Data.List.length messages)
-        let availableHudHeight = max 0 (viewportBaseHeight - viewportSurfaceHeight)
-        let hudHeight = min availableHudHeight requestedHudHeight
-        let hudTop = viewportSurfaceHeight
-        hudRect <- toLowLevel $
-          V2
-            (V2 0 hudTop)
-            (V2 viewportBaseWidth hudHeight)
-        backgroundColor <- (toLowLevel $ (rgb 0.0 0.0 0.0) `withOpacity` 0.82) :: IO GodotColor
-        textColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1.0) :: IO GodotColor
-        G.draw_rect cb hudRect backgroundColor True 1.0 False
-        when debugDepthFirstThumbnailsEnabled $
-          drawDebugHudDepthFirstThumbnails cb gsvs debugFont (fromIntegral padding) (hudTop + fromIntegral padding) (viewportBaseWidth - fromIntegral padding * 2) (fromIntegral depthFirstThumbnailsHeight)
-        when debugDamagedRegionsEnabled $
-          drawDebugHudDamagedRegionThumbnails cb visibleDamagedRegionHistory debugFont $
-            DebugHudDamagedRegionThumbnailsArea
-              { debugHudDamagedRegionThumbnailsAreaLeft = fromIntegral padding
-              , debugHudDamagedRegionThumbnailsAreaTop = hudTop + fromIntegral padding + fromIntegral depthFirstThumbnailsHeight
-              , debugHudDamagedRegionThumbnailsAreaWidth = viewportBaseWidth - fromIntegral padding * 2
-              , debugHudDamagedRegionThumbnailsAreaHeight = fromIntegral damagedRegionThumbnailsHeight
+      activeMode <- debugHudActiveMode
+      let depthFirstThumbnailsActive = activeMode == DebugHudDepthFirstSurfaces
+      let damagedRegionsActive = activeMode == DebugHudDamagedRegions
+      let memoryHudActive = activeMode == DebugHudMemory
+      let profileHudActive = activeMode == DebugHudProfile
+      cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
+      viewportSurface <- readTVarIO (cs ^. csViewport)
+      when damagedRegionsActive $
+        withGodotRef (G.get_texture viewportSurface :: IO GodotViewportTexture) $ \viewportSurfaceTexture ->
+          flushDebugDamagedRegionPendingSnapshot gsvs (safeCast viewportSurfaceTexture)
+      damagedRegionHistory <-
+        if damagedRegionsActive
+          then getDebugDamagedRegionHistory gsvs
+          else return []
+      maybeDebugMemorySnapshot <- if memoryHudActive
+        then do
+          gss <- readTVarIO (gsvs ^. gsvsServer)
+          Just <$> getDebugMemoryHudSnapshot gss
+        else return Nothing
+      maybeDebugProfileSnapshot <- if profileHudActive
+        then Just <$> getDebugProfileHudSnapshot
+        else return Nothing
+      let visibleDamagedRegionHistory = keepLast debugDamagedRegionHistoryMax damagedRegionHistory
+      viewportBase <- readTVarIO (cb ^. cbViewport)
+      V2 _viewportSurfaceWidth viewportSurfaceHeight <- G.get_size viewportSurface >>= fromLowLevel :: IO (V2 Float)
+      V2 viewportBaseWidth viewportBaseHeight <- G.get_size viewportBase >>= fromLowLevel :: IO (V2 Float)
+      debugContentFont <- readTVarIO (cb ^. cbDebugContentFont)
+      debugHudTabFont <- readTVarIO (cb ^. cbDebugHudTabFont)
+      G.set_size debugContentFont 16
+      fontHeight <- G.get_height (safeCast debugContentFont :: GodotFont)
+      fontAscent <- G.get_ascent (safeCast debugContentFont :: GodotFont)
+      let padding = debugHudPaddingPixels
+      let lineGap = 2
+      let lineStep = fontHeight + lineGap
+      let tabBarHeight = fromIntegral debugHudTabBarHeight
+      let contentTop = viewportSurfaceHeight + tabBarHeight
+      let contentStartY = contentTop + fromIntegral padding
+      let depthFirstThumbnailsHeight = if depthFirstThumbnailsActive then debugDepthFirstThumbnailHeight else 0
+      let damagedRegionThumbnailsHeight = if damagedRegionsActive && not (Data.List.null visibleDamagedRegionHistory) then debugDamagedRegionHudHeightForCount (Data.List.length visibleDamagedRegionHistory) else 0
+      let memoryHudReservedHeight =
+            case maybeDebugMemorySnapshot of
+              Just debugMemorySnapshot -> debugMemoryHudHeightForRows (max 1 $ Data.List.length $ debugMemoryHudVisibleRows debugMemorySnapshot)
+              Nothing -> if memoryHudActive then debugMemoryHudHeight else 0
+      let profileHudReservedHeight =
+            case maybeDebugProfileSnapshot of
+              Just debugProfileSnapshot -> debugProfileHudHeightForRows (max 1 $ Data.List.length $ debugProfileHudVisibleRows debugProfileSnapshot)
+              Nothing -> if profileHudActive then debugProfileHudHeight else 0
+      let requestedHudHeight =
+            tabBarHeight
+              + fromIntegral padding * 2
+              + fromIntegral depthFirstThumbnailsHeight
+              + fromIntegral damagedRegionThumbnailsHeight
+              + fromIntegral memoryHudReservedHeight
+              + fromIntegral profileHudReservedHeight
+              + lineStep * fromIntegral (Data.List.length messages)
+      let availableHudHeight = max 0 (viewportBaseHeight - viewportSurfaceHeight)
+      let hudHeight = min availableHudHeight requestedHudHeight
+      let hudTop = viewportSurfaceHeight
+      let debugHudGeometries =
+            DebugHudGeometries
+              { debugHudGeometriesBackgroundGeometry =
+                  CanvasBaseGeometry
+                    { canvasBaseGeometryOffsetRight = OffsetRight 0
+                    , canvasBaseGeometryOffsetDown = OffsetDown hudTop
+                    , canvasBaseGeometryWidth = Width viewportBaseWidth
+                    , canvasBaseGeometryHeight = Height hudHeight
+                    }
+              , debugHudGeometriesTabBarGeometry =
+                  CanvasBaseGeometry
+                    { canvasBaseGeometryOffsetRight = OffsetRight 0
+                    , canvasBaseGeometryOffsetDown = OffsetDown hudTop
+                    , canvasBaseGeometryWidth = Width viewportBaseWidth
+                    , canvasBaseGeometryHeight = Height tabBarHeight
+                    }
+              , debugHudGeometriesContentGeometry =
+                  CanvasBaseGeometry
+                    { canvasBaseGeometryOffsetRight = OffsetRight (fromIntegral padding)
+                    , canvasBaseGeometryOffsetDown = OffsetDown contentStartY
+                    , canvasBaseGeometryWidth = Width (viewportBaseWidth - fromIntegral padding * 2)
+                    , canvasBaseGeometryHeight = Height (max 0 (hudHeight - tabBarHeight - fromIntegral padding * 2))
+                    }
               }
-        forM_ maybeDebugMemorySnapshot $ \debugMemorySnapshot ->
-          drawDebugHudMemoryUsage cb debugMemorySnapshot debugFont
-            (fromIntegral padding)
-            (hudTop + fromIntegral padding + fromIntegral depthFirstThumbnailsHeight + fromIntegral damagedRegionThumbnailsHeight)
-            (viewportBaseWidth - fromIntegral padding * 2)
-            (fromIntegral memoryHudReservedHeight)
-        forM_ maybeDebugProfileSnapshot $ \debugProfileSnapshot ->
-          drawDebugHudProfileUsage cb debugProfileSnapshot debugFont
-            (fromIntegral padding)
-            (hudTop + fromIntegral padding + fromIntegral depthFirstThumbnailsHeight + fromIntegral damagedRegionThumbnailsHeight + fromIntegral memoryHudReservedHeight)
-            (viewportBaseWidth - fromIntegral padding * 2)
-            (fromIntegral profileHudReservedHeight)
-        G.set_size debugFont 16
-        bracket
-          (mapM (toLowLevel . pack) messages :: IO [GodotString])
-          (mapM_ Api.godot_string_destroy)
-          (\messageStrs -> do
-            let firstBaselineY = hudTop + fromIntegral padding + fromIntegral depthFirstThumbnailsHeight + fromIntegral damagedRegionThumbnailsHeight + fromIntegral memoryHudReservedHeight + fromIntegral profileHudReservedHeight + fontAscent
-            let maxTextWidth = max 1 (round viewportBaseWidth - padding * 2)
-            forM_ (zip [0..] messageStrs) $ \(lineIndex :: Int, messageStr) -> do
-              renderPosition <- toLowLevel (V2 (fromIntegral padding) (firstBaselineY + lineStep * fromIntegral lineIndex)) :: IO GodotVector2
-              G.draw_string cb (safeCast debugFont :: GodotFont) renderPosition messageStr textColor maxTextWidth)
+      hudRect <- canvasBaseGeometryToGodotRect2 (debugHudGeometriesBackgroundGeometry debugHudGeometries)
+      backgroundColor <- (toLowLevel $ (rgb 0.0 0.0 0.0) `withOpacity` 0.82) :: IO GodotColor
+      textColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1.0) :: IO GodotColor
+      G.draw_rect cb hudRect backgroundColor True 1.0 False
+      drawDebugHudTabs cb debugHudTabFont activeMode (debugHudGeometriesTabBarGeometry debugHudGeometries)
+      when depthFirstThumbnailsActive $
+        drawDebugHudDepthFirstThumbnails cb gsvs debugContentFont $
+          CanvasBaseGeometry
+            { canvasBaseGeometryOffsetRight = OffsetRight (fromIntegral padding)
+            , canvasBaseGeometryOffsetDown = OffsetDown contentStartY
+            , canvasBaseGeometryWidth = canvasBaseGeometryWidth (debugHudGeometriesContentGeometry debugHudGeometries)
+            , canvasBaseGeometryHeight = Height (fromIntegral depthFirstThumbnailsHeight)
+            }
+      when damagedRegionsActive $
+        drawDebugHudDamagedRegionThumbnails cb visibleDamagedRegionHistory debugContentFont $
+          DebugHudDamagedRegionThumbnailsArea
+            { debugHudDamagedRegionThumbnailsAreaLeft = fromIntegral padding
+            , debugHudDamagedRegionThumbnailsAreaTop = contentStartY + fromIntegral depthFirstThumbnailsHeight
+            , debugHudDamagedRegionThumbnailsAreaWidth = viewportBaseWidth - fromIntegral padding * 2
+            , debugHudDamagedRegionThumbnailsAreaHeight = fromIntegral damagedRegionThumbnailsHeight
+            }
+      forM_ maybeDebugMemorySnapshot $ \debugMemorySnapshot ->
+        drawDebugHudMemoryUsage cb debugMemorySnapshot debugContentFont
+          (fromIntegral padding)
+          (contentStartY + fromIntegral depthFirstThumbnailsHeight + fromIntegral damagedRegionThumbnailsHeight)
+          (viewportBaseWidth - fromIntegral padding * 2)
+          (fromIntegral memoryHudReservedHeight)
+      forM_ maybeDebugProfileSnapshot $ \debugProfileSnapshot ->
+        drawDebugHudProfileUsage cb debugProfileSnapshot debugContentFont
+          (fromIntegral padding)
+          (contentStartY + fromIntegral depthFirstThumbnailsHeight + fromIntegral damagedRegionThumbnailsHeight + fromIntegral memoryHudReservedHeight)
+          (viewportBaseWidth - fromIntegral padding * 2)
+          (fromIntegral profileHudReservedHeight)
+      G.set_size debugContentFont 16
+      bracket
+        (mapM (toLowLevel . pack) messages :: IO [GodotString])
+        (mapM_ Api.godot_string_destroy)
+        (\messageStrs -> do
+          let firstBaselineY = contentStartY + fromIntegral depthFirstThumbnailsHeight + fromIntegral damagedRegionThumbnailsHeight + fromIntegral memoryHudReservedHeight + fromIntegral profileHudReservedHeight + fontAscent
+          let maxTextWidth = max 1 (round viewportBaseWidth - padding * 2)
+          forM_ (zip [0..] messageStrs) $ \(lineIndex :: Int, messageStr) -> do
+            renderPosition <- toLowLevel (V2 (fromIntegral padding) (firstBaselineY + lineStep * fromIntegral lineIndex)) :: IO GodotVector2
+            G.draw_string cb (safeCast debugContentFont :: GodotFont) renderPosition messageStr textColor maxTextWidth)
 
-    drawDebugHudDepthFirstThumbnails :: CanvasBase -> GodotSimulaViewSprite -> GodotDynamicFont -> Float -> Float -> Float -> Float -> IO ()
-    drawDebugHudDepthFirstThumbnails cb gsvs debugFont left top availableWidth availableHeight = do
+    drawDebugHudDepthFirstThumbnails :: CanvasBase -> GodotSimulaViewSprite -> GodotDynamicFont -> CanvasBaseGeometry -> IO ()
+    drawDebugHudDepthFirstThumbnails cb gsvs debugContentFont thumbnailAreaGeometry = do
       debugPutStrLn "Plugin.CanvasBase.drawDebugHudDepthFirstThumbnails"
       bracket
         (getDepthFirstSurfaces gsvs)
@@ -281,9 +336,10 @@ _draw cb gvArgs = do
         (\depthFirstSurfaces -> do
           let layerCount = Data.List.length depthFirstSurfaces
           when (layerCount > 0) $ do
-            G.set_size debugFont 16
-            fontHeight <- G.get_height (safeCast debugFont :: GodotFont)
-            fontAscent <- G.get_ascent (safeCast debugFont :: GodotFont)
+            let (left, top, availableWidth, availableHeight) = canvasBaseGeometryTuple thumbnailAreaGeometry
+            G.set_size debugContentFont 16
+            fontHeight <- G.get_height (safeCast debugContentFont :: GodotFont)
+            fontAscent <- G.get_ascent (safeCast debugContentFont :: GodotFont)
             let gap = 4
             let labelHeight = fontHeight + 6
             let thumbnailAreaHeight = max 4 (availableHeight - labelHeight)
@@ -315,9 +371,9 @@ _draw cb gvArgs = do
                 (toLowLevel (pack label) :: IO GodotString)
                 Api.godot_string_destroy
                 (\labelStr -> do
-                  V2 textWidth _ <- G.get_string_size (safeCast debugFont :: GodotFont) labelStr >>= fromLowLevel :: IO (V2 Float)
+                  V2 textWidth _ <- G.get_string_size (safeCast debugContentFont :: GodotFont) labelStr >>= fromLowLevel :: IO (V2 Float)
                   labelPos <- toLowLevel (V2 (left + fromIntegral layerIndex * (cellWidth + gap) + max 0 ((cellWidth - textWidth) / 2)) (labelTop + fontAscent)) :: IO GodotVector2
-                  G.draw_string cb (safeCast debugFont :: GodotFont) labelPos labelStr labelColor (round cellWidth)))
+                  G.draw_string cb (safeCast debugContentFont :: GodotFont) labelPos labelStr labelColor (round cellWidth)))
 
     depthLayerFillColor :: Int -> IO GodotColor
     depthLayerFillColor layerIndex =
@@ -338,10 +394,7 @@ _draw cb gvArgs = do
     getSurfaceLabel layerIndex wlrSurface width height = do
       surfaceRole <- getWlrSurfaceRoleName wlrSurface
       let baseLabel = surfaceRole ++ ":" ++ pointerIdSuffix width height (show wlrSurface)
-      return $
-        if debugDepthFirstThumbnailsEnabled
-          then "L" ++ show layerIndex ++ ":" ++ baseLabel
-          else baseLabel
+      return $ "L" ++ show layerIndex ++ ":" ++ baseLabel
 
     getWlrSurfaceRoleName :: GodotWlrSurface -> IO String
     getWlrSurfaceRoleName wlrSurface = do
@@ -400,14 +453,14 @@ _draw cb gvArgs = do
     drawRedWlrSurfacePointerIds cb gsvs = do
       debugPutStrLn "Plugin.CanvasBase.drawRedWlrSurfacePointerIds"
       redColor <- (toLowLevel $ (rgb 1.0 0.0 0.0) `withOpacity` 1.0) :: IO GodotColor
-      debugFont <- readTVarIO (cb ^. cbDebugFont)
+      debugContentFont <- readTVarIO (cb ^. cbDebugContentFont)
       bracket
         (getDepthFirstSurfaces gsvs)
         destroyWlrSurfacesWithCoords
         (\depthFirstSurfaces -> do
           labelGroups <- foldM addSurfaceLabel M.empty (zip [0 :: Int ..] depthFirstSurfaces)
           forM_ (M.elems labelGroups) $
-            drawSurfaceLabelGroup cb debugFont redColor)
+            drawSurfaceLabelGroup cb debugContentFont redColor)
       where
         addSurfaceLabel :: M.Map (Int, Int) ((Int, Int, Int, Int), [String]) -> (Int, (GodotWlrSurface, Int, Int)) -> IO (M.Map (Int, Int) ((Int, Int, Int, Int), [String]))
         addSurfaceLabel labelsByCenter (layerIndex, (wlrSurface, x, y)) = do
@@ -431,10 +484,7 @@ _draw cb gvArgs = do
         getSurfaceLabel layerIndex wlrSurface width height = do
           surfaceRole <- getWlrSurfaceRoleName wlrSurface
           let baseLabel = surfaceRole ++ ":" ++ pointerIdSuffix width height (show wlrSurface)
-          return $
-            if debugDepthFirstThumbnailsEnabled
-              then "L" ++ show layerIndex ++ ":" ++ baseLabel
-              else baseLabel
+          return $ "L" ++ show layerIndex ++ ":" ++ baseLabel
 
         getWlrSurfaceRoleName :: GodotWlrSurface -> IO String
         getWlrSurfaceRoleName wlrSurface = do
@@ -707,7 +757,7 @@ _draw cb gvArgs = do
     drawCursor :: CanvasBase -> GodotSimulaViewSprite -> IO ()
     drawCursor cb gsvs = do
       debugPutStrLn "Plugin.CanvasBase.drawCursor"
-      activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+      activeGSVSCursorPos@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
       gss <- readTVarIO (gsvs ^. gsvsServer)
       (maybeWlrSurfaceCursor, maybeCursorTexture) <- readTVarIO (gsvs ^. gsvsCursor)
       maybeScreenshotCursorTexture <- readTVarIO (gss ^. gssScreenshotCursorTexture)
@@ -736,16 +786,16 @@ _draw cb gvArgs = do
 
            screenshotCoords@(origin, end) <- readTVarIO (gsvs ^. gsvsScreenshotCoords)
            case (origin, end) of
-             (Just (SurfaceLocalCoordinates (ox, oy)), Nothing) -> do
+             (Just (CanvasBaseCoordinates (RightCoordinate ox) (DownCoordinate oy)), Nothing) -> do
                -- Allow user to see screenshot region
-               activeGSVSCursorPos@(SurfaceLocalCoordinates (cx, cy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+               activeGSVSCursorPos@(CanvasBaseCoordinates (RightCoordinate cx) (DownCoordinate cy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
                let sizeX = cx - ox
                let sizeY = cy - oy
                let m22Rect = V2 (V2 ox oy) (V2  sizeX sizeY)
                m22Rect' <- toLowLevel m22Rect
                grayColor <- (toLowLevel $ (rgb 0.0 0.0 0.0) `withOpacity` 0.5) :: IO GodotColor
                G.draw_rect cb m22Rect' grayColor False 2.0 False
-             (Just (SurfaceLocalCoordinates (ox, oy)), Just (SurfaceLocalCoordinates (ex, ey))) -> do
+             (Just (CanvasBaseCoordinates (RightCoordinate ox) (DownCoordinate oy)), Just (CanvasBaseCoordinates (RightCoordinate ex) (DownCoordinate ey))) -> do
                putStrLn $ "Screenshot mode: taking screenshot from (" ++ (show ox) ++ ", " ++ (show oy) ++ ") to (" ++ (show ex) ++ ", " ++ (show ey) ++ ")"
 
                -- Take screenshot & save to X clipboard
