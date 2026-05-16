@@ -65,18 +65,50 @@ debugProfileHudSnapshotWindowInSeconds = realToFrac debugProfileHudWindowSeconds
 debugProfileHudSampleRetentionWindowInSeconds :: NominalDiffTime
 debugProfileHudSampleRetentionWindowInSeconds = debugProfileHudSnapshotWindowInSeconds
 
-debugProfileHudSnapshotIntervalInSeconds :: NominalDiffTime
-debugProfileHudSnapshotIntervalInSeconds = 0.25
+-- The following throttles the performance of the frame profiling itself.
+-- These do not decide whether a frame is timed; they instead decide how often retained
+-- frames are summarized, and how much slow-frame call-tree evidence is retained
+-- for HUD/file analysis.
 
+-- Minimum time between rebuilding the cached DebugProfileHudSnapshot. A larger
+-- value lowers HUD analysis cost but makes the on-screen profile table update
+-- less often.
+debugProfileHudSnapshotIntervalInSeconds :: NominalDiffTime
+debugProfileHudSnapshotIntervalInSeconds = 2.0
+
+-- Minimum time between writing HUD_profile_live.txt and
+-- HUD_profile_recent_missed_frames.txt. A larger value lowers file-formatting
+-- and write cost, but makes the text files less fresh.
 debugProfileHudOutputIntervalInSeconds :: NominalDiffTime
 debugProfileHudOutputIntervalInSeconds = 1.0
 
-debugProfileHudMaxRetainedSlowFrames :: Int
-debugProfileHudMaxRetainedSlowFrames = 64
-
+-- Number of time "frame buckets" used for the HUD's recent-frame strip. More buckets
+-- give finer visual time resolution, but require more per-snapshot aggregation
+-- and more draw calls.
 debugProfileHudFrameStripBucketCount :: Int
 debugProfileHudFrameStripBucketCount = 60
 
+-- Maximum number of slow FrameProfile call trees retained for culprit analysis.
+debugProfileHudMaxRetainedSlowFrames :: Int
+debugProfileHudMaxRetainedSlowFrames = 64
+
+-- Maximum number of top-level scopes retained inside one slow frame. If a frame
+-- has more roots than this, keep the most expensive roots by inclusive time.
+debugProfileHudMaxRootScopesPerFrame :: Int
+debugProfileHudMaxRootScopesPerFrame = 128
+
+-- Maximum number of direct child scopes retained below any one scope. If a scope
+-- has more children than this, keep the most expensive children by inclusive time.
+debugProfileHudMaxChildrenPerScope :: Int
+debugProfileHudMaxChildrenPerScope = 48
+
+-- Maximum retained call-tree depth. Scopes at this depth are kept, but their
+-- children are dropped to stop very deep helper chains from dominating evidence.
+debugProfileHudMaxScopeDepth :: Int
+debugProfileHudMaxScopeDepth = 16
+
+-- Fraction of the frame budget at which a frame-strip bucket is marked "near
+-- budget" rather than comfortably fast.
 debugProfileHudNearBudgetFactor :: Double
 debugProfileHudNearBudgetFactor = 0.80
 
@@ -522,9 +554,43 @@ appendCompletedFrame now frame state =
     frameHistory' = trimFrameSamples now (profileFrameHistory state |> sample)
     retainedSlowFrames'
       | frameSampleMs sample > debugProfileHudBudgetMs =
-          trimRetainedSlowFrames now (retainedSlowFrames state |> frame)
+          trimRetainedSlowFrames now (retainedSlowFrames state |> pruneFrameProfile frame)
       | otherwise =
           trimRetainedSlowFrames now (retainedSlowFrames state)
+
+pruneFrameProfile :: FrameProfile -> FrameProfile
+pruneFrameProfile frame =
+  frame
+    { frameRootScopes =
+        fmap (pruneClosedScope 0) $
+          takeMostExpensiveScopes debugProfileHudMaxRootScopesPerFrame $
+            frameRootScopes frame
+    }
+
+pruneClosedScope :: Int -> ClosedScope -> ClosedScope
+pruneClosedScope depth scope =
+  if depth >= debugProfileHudMaxScopeDepth
+    then scope { closedChildren = [] }
+    else
+      scope
+        { closedChildren =
+            fmap (pruneClosedScope (depth + 1)) $
+              takeMostExpensiveScopes debugProfileHudMaxChildrenPerScope $
+                closedChildren scope
+        }
+
+takeMostExpensiveScopes :: Int -> [ClosedScope] -> [ClosedScope]
+takeMostExpensiveScopes maxCount scopes
+  | List.length scopes <= maxCount = scopes
+  | otherwise =
+      fmap snd $
+        List.sortOn fst $
+          List.take maxCount $
+            List.sortBy compareScopeCostDesc $
+              zip [0 :: Int ..] scopes
+  where
+    compareScopeCostDesc (_, scopeA) (_, scopeB) =
+      compare (closedInclusive scopeB) (closedInclusive scopeA)
 
 frameSampleFromProfile :: FrameProfile -> FrameSample
 frameSampleFromProfile frame =
