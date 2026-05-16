@@ -548,6 +548,12 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsActiveSurface     :: TVar (Maybe GodotWlrSurface)
   , _gsvsFrameCount        :: TVar Integer
   , _gsvsSpilloverDims     :: TVar (Maybe (Int, Int))
+  -- Encodes `Just ((width, height), stableFrameCount)` i.e. the last visible surface dimensions observed
+  -- while waiting to place the app, plus how many consecutive placement checks have seen those same dimensions.
+  -- We wait for stabilization to avoid weird placement behavior otherwise.
+  , _gsvsLaunchPlacementStableDims :: TVar (Maybe ((Int, Int), Int))
+
+  , _gsvsLaunchResizeCompensationGraceFrames :: TVar Int
   , _gsvsResizedLastFrame  :: TVar Bool
   , _gsvsCursor            :: TVar ((Maybe GodotWlrSurface), (Maybe GodotTexture))
   , _gsvsIsAtTargetDims    :: TVar Bool

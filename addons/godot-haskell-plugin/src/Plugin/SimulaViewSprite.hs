@@ -84,6 +84,8 @@ instance NativeScript GodotSimulaViewSprite where
                       <*> atomically (newTVar Nothing)
                       <*> atomically (newTVar 0)
                       <*> atomically (newTVar Nothing)
+                      <*> atomically (newTVar Nothing)
+                      <*> atomically (newTVar 0)
                       <*> atomically (newTVar False)
                       <*> atomically (newTVar (error "Failed to initialize GodotSimulaViewSprite."))
                       <*> atomically (newTVar False)
@@ -123,6 +125,20 @@ instance NativeScript GodotSimulaViewSprite where
   classSignals = [ signal "map" [("gsvs", GodotVariantTypeObject)]
                  , signal "map_free_child" [("wlrXWaylandSurface", GodotVariantTypeObject)]
                  ]
+
+
+
+-- How many frames to wait before attempting to place a default/starting app
+startingAppPlacementStableFrameCount :: Int
+startingAppPlacementStableFrameCount = 2
+
+-- How many frames to wait for a launched app's size to stabilize before allowing compensatory
+-- centering (which keeps it centered). If we don't do this, some starting apps (like gvim, which
+-- changes size a few frames in a row) will trigger compensatory movement, causing them to launch in
+-- weird locations.
+launchResizeCompensationGraceFrameCount :: Int
+launchResizeCompensationGraceFrameCount = 12
+
 
 -- | Updates the GodotSimulaViewSprite state (including updating its texture).
 -- | Intended to be called every frame.
@@ -175,7 +191,9 @@ updateSimulaViewSprite gsvs = do
       case maybeLocation of
         Just location -> moveToStartingPosition gsvs location
         Nothing -> return ()
-      atomically $ writeTVar (_gsvsShouldMove gsvs) False
+      atomically $ do
+        writeTVar (_gsvsShouldMove gsvs) False
+        writeTVar (gsvs ^. gsvsLaunchPlacementStableDims) Nothing
   where -- Necessary for window manipulation to function
         setBoxShapeExtentsToMatchAABB :: GodotSimulaViewSprite -> IO ()
         setBoxShapeExtentsToMatchAABB gsvs = do
@@ -200,7 +218,18 @@ spriteReadyToMove gsvs = do
                         aabb <- G.get_aabb meshInstance
                         size <- godot_aabb_get_size aabb
                         vsize <- fromLowLevel size
-                        return (vsize > 0) -- The first frame or so, the sprite has vsize 0
+                        simulaView <- readTVarIO (gsvs ^. gsvsView)
+                        visibleDims <- getVisibleSurfaceDimensions (simulaView ^. svWlrEitherSurface)
+                        stableDims <- atomically $ do
+                          oldStableDims <- readTVar (gsvs ^. gsvsLaunchPlacementStableDims)
+                          let newStableDims = case oldStableDims of
+                                Just (oldDims, oldCount) | oldDims == visibleDims -> (visibleDims, oldCount + 1)
+                                _ -> (visibleDims, 1)
+                          writeTVar (gsvs ^. gsvsLaunchPlacementStableDims) (Just newStableDims)
+                          return newStableDims
+                        let aabbReady = vsize > 0 -- The first frame or so, the sprite has vsize 0
+                        let dimsReady = snd stableDims >= startingAppPlacementStableFrameCount
+                        return (aabbReady && dimsReady)
                    else return False
 
 moveToStartingPosition :: GodotSimulaViewSprite -> String -> IO ()
@@ -212,7 +241,6 @@ moveToStartingPosition gsvs appLocation = do
   size   <- Api.godot_aabb_get_size aabb >>= fromLowLevel
   let sizeX  = size ^. _x
   let sizeY  = size ^. _y
-  gsvsTransform <- G.get_global_transform gsvs
   startingAppTransform <- readTVarIO (gss ^. gssStartingAppTransform)
   startingAppTransform' <- case startingAppTransform of
     Nothing -> do
@@ -321,6 +349,12 @@ setTargetDimensions gsvs = do
   maybeSpilloverDimsOld <- readTVarIO (gsvs ^. gsvsSpilloverDims)
   resizedLastFrame <- readTVarIO (gsvs ^. gsvsResizedLastFrame)
   transOld <- readTVarIO (gsvs ^. gsvsTransparency)
+  launchPlacementPending <- readTVarIO (gsvs ^. gsvsShouldMove)
+  launchResizeGraceFrames <- atomically $ do
+    frames <- readTVar (gsvs ^. gsvsLaunchResizeCompensationGraceFrames)
+    when (frames > 0) $
+      writeTVar (gsvs ^. gsvsLaunchResizeCompensationGraceFrames) (frames - 1)
+    return frames
   case maybeSpilloverDimsOld of
     Nothing -> do
       if (spilloverWidth > 0) then atomically $ writeTVar (gsvs ^. gsvsSpilloverDims) (Just spilloverDims) else return ()
@@ -333,13 +367,18 @@ setTargetDimensions gsvs = do
                              markGSVSForFullRedrawsByDefaultFrameAmount gsvs
         (True, False) -> do let pushX = spilloverWidth - oldSpilloverWidth
                             let pushY = spilloverHeight - oldSpilloverHeight
-                            pushBackVector <- toLowLevel (V3 (-0.5 * 0.001 * (fromIntegral pushX)) (-0.5 * 0.001 * (fromIntegral pushY)) 0) :: IO GodotVector3
-                            G.translate_object_local gsvs pushBackVector
-                            atomically $ writeTVar (gsvs ^. gsvsSpilloverDims) (Just spilloverDims)
-                            case (transOld == 1, (spilloverWidth > targetWidth || spilloverHeight > targetHeight)) of
-                              (True, False) ->  return () -- Avoid changing shader when apps first launch
-                              (True, True) -> markGSVSForFullRedrawsByDefaultFrameAmount gsvs
-                              (False, _) -> return ()
+                            -- Don't engage in compensatory translation when an app first launches, because sometimes they change in size on launch for a few frames.
+                            if (launchPlacementPending || launchResizeGraceFrames > 0)
+                              then do
+                                atomically $ writeTVar (gsvs ^. gsvsSpilloverDims) (Just spilloverDims)
+                              else do
+                                pushBackVector <- toLowLevel (V3 (-0.5 * 0.001 * (fromIntegral pushX)) (-0.5 * 0.001 * (fromIntegral pushY)) 0) :: IO GodotVector3
+                                G.translate_object_local gsvs pushBackVector
+                                atomically $ writeTVar (gsvs ^. gsvsSpilloverDims) (Just spilloverDims)
+                                case (transOld == 1, (spilloverWidth > targetWidth || spilloverHeight > targetHeight)) of
+                                  (True, False) ->  return () -- Avoid changing shader when apps first launch
+                                  (True, True) -> markGSVSForFullRedrawsByDefaultFrameAmount gsvs
+                                  (False, _) -> return ()
   updateQuadShader gsvs targetDims spilloverDims
   return ()
 
@@ -1132,7 +1171,9 @@ mapAsStandaloneSurface gsvs simulaView eitherSurface = do
   G.set_process gsvs True
   G.set_process_input gsvs True
   atomically $ modifyTVar' (_gssViews gss) (M.insert simulaView gsvs) -- TVar (M.Map SimulaView GodotSimulaViewSprite)
-  atomically $ writeTVar (_gsvsShouldMove gsvs) True
+  atomically $ do
+    writeTVar (_gsvsShouldMove gsvs) True
+    writeTVar (gsvs ^. gsvsLaunchResizeCompensationGraceFrames) launchResizeCompensationGraceFrameCount
 
   -- Add the gsvs as a child to the current workspace
   (workspace, workspaceStr) <- readTVarIO (gss ^. gssWorkspace)
