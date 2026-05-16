@@ -75,7 +75,7 @@ instance NativeScript CanvasSurface where
     ]
 
 _ready :: CanvasSurface -> [GodotVariant] -> IO ()
-_ready self gvArgs = do
+_ready self gvArgs = profileScope "Plugin.CanvasSurface._ready" $ do
   debugPutStrLn "Plugin.CanvasSurface._ready"
   clearshm <- load GodotShaderMaterial "ShaderMaterial" "res://addons/godot-haskell-plugin/CanvasClearShader.tres"
   passthroughshm <- load GodotShaderMaterial "ShaderMaterial" "res://addons/godot-haskell-plugin/CanvasPassthroughShader.tres"
@@ -91,7 +91,7 @@ _ready self gvArgs = do
   return ()
 
 initializeCanvasItemChildrenToBeClearAndPassthroughShaders :: CanvasSurface -> GodotShaderMaterial -> GodotShaderMaterial -> IO ()
-initializeCanvasItemChildrenToBeClearAndPassthroughShaders cs clearShader passthroughShader = do
+initializeCanvasItemChildrenToBeClearAndPassthroughShaders cs clearShader passthroughShader = profileScope "Plugin.CanvasSurface.initializeCanvasItemChildrenToBeClearAndPassthroughShaders" $ do
   debugPutStrLn "Plugin.CanvasSurface.initializeCanvasItemChildrenToBeClearAndPassthroughShaders"
   visualServer <- getVisualServer cs
   parentCanvasItem <- G.get_canvas_item cs -- returns RID of the underlying cs
@@ -121,7 +121,7 @@ initializeCanvasItemChildrenToBeClearAndPassthroughShaders cs clearShader passth
   atomically $ writeTVar (cs ^. csPassthroughCanvasItem) passthroughCanvasItem
 
 getVisualServer :: CanvasSurface -> IO GodotVisualServer
-getVisualServer cs = do
+getVisualServer cs = profileScope "Plugin.CanvasSurface.getVisualServer" $ do
   debugPutStrLn "Plugin.CanvasSurface.getVisualServer"
   gsvs <- readTVarIO (cs ^. csGSVS)
   gss <- readTVarIO (gsvs ^. gsvsServer)
@@ -144,7 +144,7 @@ processCanvasSurface self gvArgs = do
   return ()
 
 clearViewportIfFullyRedrawing :: CanvasSurface -> GodotSimulaViewSprite -> IO ()
-clearViewportIfFullyRedrawing cs gsvs = do
+clearViewportIfFullyRedrawing cs gsvs = profileScope "Plugin.CanvasSurface.clearViewportIfFullyRedrawing" $ do
   fullRedrawFramesRemaining <- readTVarIO (gsvs ^. gsvsFullRedrawFramesRemaining)
   isEntirelyDamaged <- readTVarIO (gsvs ^. gsvsIsDamaged)
   fullRedrawMillisecondsRemaining <- getGSVSFullRedrawMillisecondsRemaining gsvs
@@ -155,7 +155,7 @@ clearViewportIfFullyRedrawing cs gsvs = do
    G.set_clear_mode viewport G.CLEAR_MODE_ONLY_NEXT_FRAME
 
 getAccumulatedDamageRegions :: GodotSimulaViewSprite -> [(GodotWlrSurface, Int, Int)] -> IO [GodotRect2]
-getAccumulatedDamageRegions gsvs depthFirstSurfaces = do
+getAccumulatedDamageRegions gsvs depthFirstSurfaces = profileScope "Plugin.CanvasSurface.getAccumulatedDamageRegions" $ do
   let surfaces = fmap (\(wlrSurface, _, _) -> wlrSurface) depthFirstSurfaces
   let xs = fmap (\(_, x, _) -> x) depthFirstSurfaces
   let ys = fmap (\(_, _, y) -> y) depthFirstSurfaces
@@ -239,7 +239,7 @@ drawCanvasSurfaceFrame cs gvArgs = do
   mapM_ Api.godot_variant_destroy gvArgs
   where
     savePngCS :: (GodotWlrSurface, CanvasSurface) -> IO ()
-    savePngCS arg@((wlrSurface, cs)) = do
+    savePngCS arg@((wlrSurface, cs)) = profileScope "Plugin.CanvasSurface._draw.savePngCS" $ do
       debugPutStrLn "Plugin.CanvasSurface.savePngCS"
       validateSurfaceE wlrSurface
       viewportSurface <- readTVarIO (cs ^. csViewport) :: IO GodotViewport
@@ -247,7 +247,7 @@ drawCanvasSurfaceFrame cs gvArgs = do
         savePng cs viewportSurfaceTexture wlrSurface >> return ()
 
     drawWlrSurface :: CanvasSurface -> GodotVisualServer -> GodotRid -> (GodotWlrSurface, Int, Int) -> IO Bool
-    drawWlrSurface cs visualServer canvasItem (wlrSurface, x, y) = do
+    drawWlrSurface cs visualServer canvasItem (wlrSurface, x, y) = profileScope "Plugin.CanvasSurface._draw.drawWlrSurface" $ do
       debugPutStrLn "Plugin.CanvasSurface.drawWlrSurface"
       validateSurfaceE wlrSurface
       gsvs <- readTVarIO (cs ^. csGSVS)
@@ -275,14 +275,14 @@ drawCanvasSurfaceFrame cs gvArgs = do
       return drewTexture
 
     getTransparency :: CanvasSurface -> IO Double
-    getTransparency cs = do
+    getTransparency cs = profileScope "Plugin.CanvasSurface._draw.getTransparency" $ do
       debugPutStrLn "Plugin.CanvasSurface.getTransparency"
       gsvs <- readTVarIO (cs ^. csGSVS)
       gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
       return (realToFrac gsvsTransparency)
 
     clearCanvasSurfaceRegions :: CanvasSurface -> GodotVisualServer -> GodotRid -> [GodotRect2] -> IO ()
-    clearCanvasSurfaceRegions _ visualServer canvasItem regions = do
+    clearCanvasSurfaceRegions _ visualServer canvasItem regions = profileScope "Plugin.CanvasSurface._draw.clearCanvasSurfaceRegions" $ do
       debugPutStrLn "Plugin.CanvasSurface.clearCanvasSurfaceRegions"
       -- Since we're using the clear shader, all of the pixels drawn are forced to (0,0,0,0) anyway, so
       -- coverColor is really just ceremonial. Note we need the clear shader here since it disables blending
@@ -293,7 +293,7 @@ drawCanvasSurfaceFrame cs gvArgs = do
         G.canvas_item_add_rect visualServer canvasItem gsvsRegion coverColor
 
     drawWlrSurfaceRegions :: CanvasSurface -> GodotVisualServer -> GodotRid -> [GodotRect2] -> (GodotWlrSurface, Int, Int) -> IO ()
-    drawWlrSurfaceRegions cs visualServer canvasItem regions (wlrSurface, x, y) = do
+    drawWlrSurfaceRegions cs visualServer canvasItem regions (wlrSurface, x, y) = profileScope "Plugin.CanvasSurface._draw.drawWlrSurfaceRegions" $ do
       debugPutStrLn "Plugin.CanvasSurface.drawWlrSurfaceRegions"
       gsvs <- readTVarIO (cs ^. csGSVS)
       validateSurfaceE wlrSurface
@@ -318,7 +318,7 @@ drawCanvasSurfaceFrame cs gvArgs = do
                  G.send_frame_done wlrSurface
 
     getSurfaceRegion :: GodotSimulaViewSprite -> GodotRect2 -> (GodotWlrSurface, Int, Int) -> IO (Maybe GodotRect2)
-    getSurfaceRegion gsvs regionGSVS (wlrSurface, x, y) = do
+    getSurfaceRegion gsvs regionGSVS (wlrSurface, x, y) = profileScope "Plugin.CanvasSurface._draw.getSurfaceRegion" $ do
       debugPutStrLn "Plugin.CanvasSurface.getSurfaceRegion"
       V2 (V2 rx ry) (V2 rWidth rHeight) <- fromLowLevel regionGSVS
       regionSurfaceRect2 <- toLowLevel $ V2 (V2 (rx - (fromIntegral x)) (ry - (fromIntegral y))) (V2 rWidth rHeight)
@@ -336,7 +336,7 @@ drawCanvasSurfaceFrame cs gvArgs = do
 
     -- | Returns intersection of wlrSurface with damage region in gsvs local coordinates
     getIntersectedGSVSRegion :: GodotRect2 -> (GodotWlrSurface, Int, Int) -> IO (Maybe GodotRect2)
-    getIntersectedGSVSRegion regionGSVS (wlrSurface, x, y) = do
+    getIntersectedGSVSRegion regionGSVS (wlrSurface, x, y) = profileScope "Plugin.CanvasSurface._draw.getIntersectedGSVSRegion" $ do
       debugPutStrLn "Plugin.CanvasSurface.getIntersectedGSVSRegion"
       (wlrSurfaceWidth, wlrSurfaceHeight) <- getBufferDimensions wlrSurface
       wlrSurfaceRect2 <- toLowLevel $ V2 (V2 (fromIntegral x) (fromIntegral y)) (V2 (fromIntegral wlrSurfaceWidth) (fromIntegral wlrSurfaceHeight))

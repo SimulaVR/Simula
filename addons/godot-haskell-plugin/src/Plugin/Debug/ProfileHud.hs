@@ -193,8 +193,7 @@ formatFoldedEvidenceRow (rank, row) =
     ++ padLeft 8 (formatCulpritTag $ foldedTag row)
 
 drawDebugHudProfileUsage :: CanvasBase -> DebugProfileHudSnapshot -> GodotDynamicFont -> Float -> Float -> Float -> Float -> IO ()
-drawDebugHudProfileUsage cb snapshot debugFont left top availableWidth availableHeight =
-  profileScope "Plugin.Debug.ProfileHud.drawDebugHudProfileUsage" $ do
+drawDebugHudProfileUsage cb snapshot debugFont left top availableWidth availableHeight = do
     debugPutStrLn "Plugin.Debug.ProfileHud.drawDebugHudProfileUsage"
     G.set_size debugFont 16
     let fontAscent = 14

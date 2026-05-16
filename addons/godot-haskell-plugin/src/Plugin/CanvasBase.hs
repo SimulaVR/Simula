@@ -82,7 +82,7 @@ instance NativeScript CanvasBase where
     ]
 
 newCanvasBase :: GodotSimulaViewSprite -> IO (CanvasBase)
-newCanvasBase gsvs = do
+newCanvasBase gsvs = profileScope "Plugin.CanvasBase.newCanvasBase" $ do
   debugPutStrLn "Plugin.CanvasBase.newCanvasBase"
   cb <- "res://addons/godot-haskell-plugin/CanvasBase.gdns"
     & newNS' []
@@ -101,7 +101,7 @@ newCanvasBase gsvs = do
   return cb
 
 _ready :: CanvasBase -> [GodotVariant] -> IO ()
-_ready cb gvArgs = do
+_ready cb gvArgs = profileScope "Plugin.CanvasBase._ready" $ do
   debugPutStrLn "Plugin.CanvasBase._ready"
   G.set_process cb True
   mapM_ Api.godot_variant_destroy gvArgs
@@ -115,66 +115,65 @@ _process self gvArgs =
     return ()
 
 _draw :: CanvasBase -> [GodotVariant] -> IO ()
-_draw cb gvArgs = do
-  profileScope "Plugin.CanvasBase._draw" $ do
-    debugPutStrLn "Plugin.CanvasBase._draw"
-    gsvs <- readTVarIO (cb ^. cbGSVS)
-    debugSurfaceBoundariesActive <- debugSurfaceBoundariesEnabled
-    debugDepthFirstThumbnailsActive <- debugDepthFirstThumbnailsEnabled
-    debugDamagedRegionsActive <- debugDamagedRegionsEnabled
-    debugMouseEventsActive <- debugMouseEventsEnabled
-    debugKeyboardEventsActive <- debugKeyboardEventsEnabled
-    debugHudActive <- debugHudEnabled
-    let showSurfaceDebugOverlays =
-          debugSurfaceBoundariesActive
-            || debugDepthFirstThumbnailsActive
-            || debugMouseEventsActive
-            || debugKeyboardEventsActive
+_draw cb gvArgs = profileScope "Plugin.CanvasBase._draw" $ do
+  debugPutStrLn "Plugin.CanvasBase._draw"
+  gsvs <- readTVarIO (cb ^. cbGSVS)
+  debugSurfaceBoundariesActive <- debugSurfaceBoundariesEnabled
+  debugDepthFirstThumbnailsActive <- debugDepthFirstThumbnailsEnabled
+  debugDamagedRegionsActive <- debugDamagedRegionsEnabled
+  debugMouseEventsActive <- debugMouseEventsEnabled
+  debugKeyboardEventsActive <- debugKeyboardEventsEnabled
+  debugHudActive <- debugHudEnabled
+  let showSurfaceDebugOverlays =
+        debugSurfaceBoundariesActive
+          || debugDepthFirstThumbnailsActive
+          || debugMouseEventsActive
+          || debugKeyboardEventsActive
 
-    when showSurfaceDebugOverlays $
-      drawDebugBackground cb gsvs
+  when showSurfaceDebugOverlays $
+    drawDebugBackground cb gsvs
 
-    drawCanvasSurface cb gsvs
+  drawCanvasSurface cb gsvs
 
-    when debugDamagedRegionsActive $
-      drawDebugDamagedRegionOverlays cb gsvs
+  when debugDamagedRegionsActive $
+    drawDebugDamagedRegionOverlays cb gsvs
 
-    when showSurfaceDebugOverlays $ do
-      -- Outline raw wlr_surface buffers as red
-      drawRedWlrSurfaceBoundaries cb gsvs
+  when showSurfaceDebugOverlays $ do
+    -- Outline raw wlr_surface buffers as red
+    drawRedWlrSurfaceBoundaries cb gsvs
 
-      when (debugSurfaceBoundariesActive || debugDepthFirstThumbnailsActive || debugMouseEventsActive || debugKeyboardEventsActive) $
-        -- Show depth-order pointer IDs inside surfaces in modes where surface identity is useful.
-        drawRedWlrSurfacePointerIds cb gsvs
+    when (debugSurfaceBoundariesActive || debugDepthFirstThumbnailsActive || debugMouseEventsActive || debugKeyboardEventsActive) $
+      -- Show depth-order pointer IDs inside surfaces in modes where surface identity is useful.
+      drawRedWlrSurfacePointerIds cb gsvs
 
-    when (debugSurfaceBoundariesActive && not debugDepthFirstThumbnailsActive) $ do
-      -- Show xdg/xwayland geometry rectangles as blue WITHOUT their x/y offsets
-      drawBlueGeometryBordersWithoutOffsets cb gsvs
+  when (debugSurfaceBoundariesActive && not debugDepthFirstThumbnailsActive) $ do
+    -- Show xdg/xwayland geometry rectangles as blue WITHOUT their x/y offsets
+    drawBlueGeometryBordersWithoutOffsets cb gsvs
 
-      -- Show xdg/xwayland geometry rectangles as green WITH their x/y offsets
-      drawGreenGeometryBordersWithOffsets cb gsvs
+    -- Show xdg/xwayland geometry rectangles as green WITH their x/y offsets
+    drawGreenGeometryBordersWithOffsets cb gsvs
 
-    -- Debug HUD can show targetted, uncluttered messages on gsvs
-    when debugHudActive $
-      drawDebugHud cb gsvs
+  -- Debug HUD can show targetted, uncluttered messages on gsvs
+  when debugHudActive $
+    drawDebugHud cb gsvs
 
-    -- Draw cursor
-    drawCursor cb gsvs
+  -- Draw cursor
+  drawCursor cb gsvs
 
-    -- Increment global framecount
-    atomically $ modifyTVar' (gsvs ^. gsvsFrameCount) (+1)
+  -- Increment global framecount
+  atomically $ modifyTVar' (gsvs ^. gsvsFrameCount) (+1)
 
-    mapM_ Api.godot_variant_destroy gvArgs
+  mapM_ Api.godot_variant_destroy gvArgs
 
   where
     getTransparency :: CanvasBase -> IO Double
-    getTransparency cb = do
+    getTransparency cb = profileScope "Plugin.CanvasBase._draw.getTransparency" $ do
       debugPutStrLn "Plugin.CanvasBase.getTransparency"
       gsvs <- readTVarIO (cb ^. cbGSVS)
       gsvsTransparency <- readTVarIO (gsvs ^. gsvsTransparency)
       return (realToFrac gsvsTransparency)
     savePngCS :: (GodotWlrSurface, CanvasSurface) -> IO ()
-    savePngCS arg@((wlrSurface, cs)) = do
+    savePngCS arg@((wlrSurface, cs)) = profileScope "Plugin.CanvasBase._draw.savePngCS" $ do
       debugPutStrLn "Plugin.CanvasBase.savePngCS"
       viewportSurface <- readTVarIO (cs ^. csViewport) :: IO GodotViewport
       withGodotRef (G.get_texture (viewportSurface :: GodotViewport) :: IO GodotViewportTexture) $ \viewportSurfaceTexture ->
@@ -198,7 +197,7 @@ _draw cb gvArgs = do
         G.draw_rect cb debugRect backgroundColor True 1.0 False
 
     drawDebugHud :: CanvasBase -> GodotSimulaViewSprite -> IO ()
-    drawDebugHud cb gsvs = do
+    drawDebugHud cb gsvs = profileScope "Plugin.CanvasBase._draw.drawDebugHud" $ do
       debugPutStrLn "Plugin.CanvasBase.drawDebugHud"
       messages <- getDebugHudVisibleMessages gsvs
       activeMode <- debugHudActiveMode
@@ -328,7 +327,7 @@ _draw cb gvArgs = do
             G.draw_string cb (safeCast debugContentFont :: GodotFont) renderPosition messageStr textColor maxTextWidth)
 
     drawDebugHudDepthFirstThumbnails :: CanvasBase -> GodotSimulaViewSprite -> GodotDynamicFont -> CanvasBaseGeometry -> IO ()
-    drawDebugHudDepthFirstThumbnails cb gsvs debugContentFont thumbnailAreaGeometry = do
+    drawDebugHudDepthFirstThumbnails cb gsvs debugContentFont thumbnailAreaGeometry = profileScope "Plugin.CanvasBase._draw.drawDebugHudDepthFirstThumbnails" $ do
       debugPutStrLn "Plugin.CanvasBase.drawDebugHudDepthFirstThumbnails"
       bracket
         (getDepthFirstSurfaces gsvs)
@@ -377,6 +376,7 @@ _draw cb gvArgs = do
 
     depthLayerFillColor :: Int -> IO GodotColor
     depthLayerFillColor layerIndex =
+      profileScope "Plugin.CanvasBase._draw.depthLayerFillColor" $
       (toLowLevel $ paletteColor `withOpacity` 0.92) :: IO GodotColor
       where
         -- These are just some random colors that we use to help us visualize surfaces in the HUD when they are transparent/NULL
@@ -391,13 +391,13 @@ _draw cb gvArgs = do
         paletteColor = palette !! (layerIndex `mod` Data.List.length palette)
 
     getSurfaceLabel :: Int -> GodotWlrSurface -> Int -> Int -> IO String
-    getSurfaceLabel layerIndex wlrSurface width height = do
+    getSurfaceLabel layerIndex wlrSurface width height = profileScope "Plugin.CanvasBase._draw.getSurfaceLabel" $ do
       surfaceRole <- getWlrSurfaceRoleName wlrSurface
       let baseLabel = surfaceRole ++ ":" ++ pointerIdSuffix width height (show wlrSurface)
       return $ "L" ++ show layerIndex ++ ":" ++ baseLabel
 
     getWlrSurfaceRoleName :: GodotWlrSurface -> IO String
-    getWlrSurfaceRoleName wlrSurface = do
+    getWlrSurfaceRoleName wlrSurface = profileScope "Plugin.CanvasBase._draw.getWlrSurfaceRoleName" $ do
       isSubsurface <- G.is_wlr_subsurface wlrSurface
       isXdgSurface <- G.is_wlr_xdg_surface wlrSurface
       isXWaylandSurface <- G.is_wlr_xwayland_surface wlrSurface
@@ -434,7 +434,7 @@ _draw cb gvArgs = do
           G.draw_texture cb ((safeCast viewportSurfaceTexture) :: GodotTexture) renderPosition modulateColor (coerce nullPtr)
 
     drawRedWlrSurfaceBoundaries :: CanvasBase -> GodotSimulaViewSprite -> IO ()
-    drawRedWlrSurfaceBoundaries cb gsvs = do
+    drawRedWlrSurfaceBoundaries cb gsvs = profileScope "Plugin.CanvasBase._draw.drawRedWlrSurfaceBoundaries" $ do
       debugPutStrLn "Plugin.CanvasBase.drawRedWlrSurfaceBoundaries"
       redColor <- (toLowLevel $ (rgb 1.0 0.0 0.0) `withOpacity` 1.0) :: IO GodotColor
       bracket
@@ -450,7 +450,7 @@ _draw cb gvArgs = do
             G.draw_rect cb debugRect redColor False 2.0 False)
 
     drawRedWlrSurfacePointerIds :: CanvasBase -> GodotSimulaViewSprite -> IO ()
-    drawRedWlrSurfacePointerIds cb gsvs = do
+    drawRedWlrSurfacePointerIds cb gsvs = profileScope "Plugin.CanvasBase._draw.drawRedWlrSurfacePointerIds" $ do
       debugPutStrLn "Plugin.CanvasBase.drawRedWlrSurfacePointerIds"
       redColor <- (toLowLevel $ (rgb 1.0 0.0 0.0) `withOpacity` 1.0) :: IO GodotColor
       debugContentFont <- readTVarIO (cb ^. cbDebugContentFont)
@@ -463,7 +463,7 @@ _draw cb gvArgs = do
             drawSurfaceLabelGroup cb debugContentFont redColor)
       where
         addSurfaceLabel :: M.Map (Int, Int) ((Int, Int, Int, Int), [String]) -> (Int, (GodotWlrSurface, Int, Int)) -> IO (M.Map (Int, Int) ((Int, Int, Int, Int), [String]))
-        addSurfaceLabel labelsByCenter (layerIndex, (wlrSurface, x, y)) = do
+        addSurfaceLabel labelsByCenter (layerIndex, (wlrSurface, x, y)) = profileScope "Plugin.CanvasBase._draw.drawRedWlrSurfacePointerIds.addSurfaceLabel" $ do
           (width, height) <- getBufferDimensions wlrSurface
           if width > 0 && height > 0
             then do
@@ -481,13 +481,13 @@ _draw cb gvArgs = do
           (2 * x + width, 2 * y + height)
 
         getSurfaceLabel :: Int -> GodotWlrSurface -> Int -> Int -> IO String
-        getSurfaceLabel layerIndex wlrSurface width height = do
+        getSurfaceLabel layerIndex wlrSurface width height = profileScope "Plugin.CanvasBase._draw.drawRedWlrSurfacePointerIds.getSurfaceLabel" $ do
           surfaceRole <- getWlrSurfaceRoleName wlrSurface
           let baseLabel = surfaceRole ++ ":" ++ pointerIdSuffix width height (show wlrSurface)
           return $ "L" ++ show layerIndex ++ ":" ++ baseLabel
 
         getWlrSurfaceRoleName :: GodotWlrSurface -> IO String
-        getWlrSurfaceRoleName wlrSurface = do
+        getWlrSurfaceRoleName wlrSurface = profileScope "Plugin.CanvasBase._draw.drawRedWlrSurfacePointerIds.getWlrSurfaceRoleName" $ do
           isSubsurface <- G.is_wlr_subsurface wlrSurface
           isXdgSurface <- G.is_wlr_xdg_surface wlrSurface
           isXWaylandSurface <- G.is_wlr_xwayland_surface wlrSurface
@@ -520,7 +520,7 @@ _draw cb gvArgs = do
             drawCenteredLabelLines cb font color fontSize visibleLabels x y width height
 
     drawCenteredLabelLines :: CanvasBase -> GodotDynamicFont -> GodotColor -> Int -> [String] -> Int -> Int -> Int -> Int -> IO ()
-    drawCenteredLabelLines cb font color fontSize labels x y width height = do
+    drawCenteredLabelLines cb font color fontSize labels x y width height = profileScope "Plugin.CanvasBase._draw.drawCenteredLabelLines" $ do
       debugPutStrLn "Plugin.CanvasBase.drawCenteredLabelLines"
       G.set_size font fontSize
       fontHeight <- G.get_height (safeCast font :: GodotFont)
@@ -543,6 +543,7 @@ _draw cb gvArgs = do
 
     fitSurfaceLabels :: GodotDynamicFont -> [String] -> Int -> Int -> IO (Maybe (Int, [String]))
     fitSurfaceLabels font labels width height =
+      profileScope "Plugin.CanvasBase._draw.fitSurfaceLabels" $
       findFittingFontSize candidateSizes
       where
         minReadableFontSize = 14
@@ -557,8 +558,8 @@ _draw cb gvArgs = do
           | otherwise = take (maxLines - 1) labels ++ ["+" ++ show (length labels - maxLines + 1)]
 
         findFittingFontSize :: [Int] -> IO (Maybe (Int, [String]))
-        findFittingFontSize [] = return Nothing
-        findFittingFontSize (fontSize:rest) = do
+        findFittingFontSize [] = profileScope "Plugin.CanvasBase._draw.fitSurfaceLabels.findFittingFontSize" $ return Nothing
+        findFittingFontSize (fontSize:rest) = profileScope "Plugin.CanvasBase._draw.fitSurfaceLabels.findFittingFontSize" $ do
           G.set_size font fontSize
           fontHeight <- G.get_height (safeCast font :: GodotFont)
           let maxLines = floor ((fromIntegral (max 1 height) - 4) / max 1 fontHeight)
@@ -581,7 +582,7 @@ _draw cb gvArgs = do
                 else findFittingFontSize rest
 
     drawBlueGeometryBordersWithoutOffsets :: CanvasBase -> GodotSimulaViewSprite -> IO ()
-    drawBlueGeometryBordersWithoutOffsets cb gsvs = do
+    drawBlueGeometryBordersWithoutOffsets cb gsvs = profileScope "Plugin.CanvasBase._draw.drawBlueGeometryBordersWithoutOffsets" $ do
       debugPutStrLn "Plugin.CanvasBase.drawBlueGeometryBordersWithoutOffsets"
       blueColor <- (toLowLevel $ (rgb 0.0 0.3 1.0) `withOpacity` 1.0) :: IO GodotColor
       simulaView <- readTVarIO (gsvs ^. gsvsView)
@@ -605,7 +606,7 @@ _draw cb gvArgs = do
         G.draw_rect cb debugRect blueColor False 4.0 False
 
     drawGreenGeometryBordersWithOffsets :: CanvasBase -> GodotSimulaViewSprite -> IO ()
-    drawGreenGeometryBordersWithOffsets cb gsvs = do
+    drawGreenGeometryBordersWithOffsets cb gsvs = profileScope "Plugin.CanvasBase._draw.drawGreenGeometryBordersWithOffsets" $ do
       debugPutStrLn "Plugin.CanvasBase.drawGreenGeometryBordersWithOffsets"
       greenColor <- (toLowLevel $ (rgb 0.0 1.0 0.0) `withOpacity` 1.0) :: IO GodotColor
       simulaView <- readTVarIO (gsvs ^. gsvsView)
@@ -629,7 +630,7 @@ _draw cb gvArgs = do
         G.draw_rect cb debugRect greenColor False 2.0 False
 
     getXdgGeometryRootRects :: Int -> Int -> GodotWlrXdgSurface -> IO [(Int, Int, Int, Int)]
-    getXdgGeometryRootRects rootX rootY wlrXdgSurface = do
+    getXdgGeometryRootRects rootX rootY wlrXdgSurface = profileScope "Plugin.CanvasBase._draw.getXdgGeometryRootRects" $ do
       debugPutStrLn "Plugin.CanvasBase.getXdgGeometryRootRects"
       validateSurfaceE wlrXdgSurface
       rect <- getXdgGeometryRootRect rootX rootY wlrXdgSurface
@@ -640,7 +641,7 @@ _draw cb gvArgs = do
       return (rect : childRects)
 
     getXdgGeometryRects :: Int -> Int -> GodotWlrXdgSurface -> IO [(Int, Int, Int, Int)]
-    getXdgGeometryRects rootX rootY wlrXdgSurface = do
+    getXdgGeometryRects rootX rootY wlrXdgSurface = profileScope "Plugin.CanvasBase._draw.getXdgGeometryRects" $ do
       debugPutStrLn "Plugin.CanvasBase.getXdgGeometryRects"
       validateSurfaceE wlrXdgSurface
       rect <- getXdgGeometryRect rootX rootY wlrXdgSurface
@@ -651,7 +652,7 @@ _draw cb gvArgs = do
       return (rect : childRects)
 
     getMappedXdgPopupChildrenAndRoots :: GodotWlrXdgSurface -> IO [(GodotWlrXdgSurface, Int, Int)]
-    getMappedXdgPopupChildrenAndRoots wlrXdgSurface = do
+    getMappedXdgPopupChildrenAndRoots wlrXdgSurface = profileScope "Plugin.CanvasBase._draw.getMappedXdgPopupChildrenAndRoots" $ do
       debugPutStrLn "Plugin.CanvasBase.getMappedXdgPopupChildrenAndRoots"
       arrayOfChildren <- G.get_children wlrXdgSurface :: IO GodotArray
       arrayOfChildrenGV <- fromGodotArray arrayOfChildren
@@ -671,7 +672,7 @@ _draw cb gvArgs = do
           childrenY
 
     getXWaylandGeometryRootRects :: Int -> Int -> GodotWlrXWaylandSurface -> IO [(Int, Int, Int, Int)]
-    getXWaylandGeometryRootRects rootX rootY wlrXWaylandSurface = do
+    getXWaylandGeometryRootRects rootX rootY wlrXWaylandSurface = profileScope "Plugin.CanvasBase._draw.getXWaylandGeometryRootRects" $ do
       debugPutStrLn "Plugin.CanvasBase.getXWaylandGeometryRootRects"
       validateSurfaceE wlrXWaylandSurface
       rect <- getXWaylandGeometryRootRect rootX rootY wlrXWaylandSurface
@@ -682,7 +683,7 @@ _draw cb gvArgs = do
       return (rect : childRects)
 
     getXWaylandGeometryRects :: Int -> Int -> GodotWlrXWaylandSurface -> IO [(Int, Int, Int, Int)]
-    getXWaylandGeometryRects rootX rootY wlrXWaylandSurface = do
+    getXWaylandGeometryRects rootX rootY wlrXWaylandSurface = profileScope "Plugin.CanvasBase._draw.getXWaylandGeometryRects" $ do
       debugPutStrLn "Plugin.CanvasBase.getXWaylandGeometryRects"
       validateSurfaceE wlrXWaylandSurface
       rect <- getXWaylandGeometryRect rootX rootY wlrXWaylandSurface
@@ -693,7 +694,7 @@ _draw cb gvArgs = do
       return (rect : childRects)
 
     getMappedXWaylandChildrenAndRoots :: GodotWlrXWaylandSurface -> IO [(GodotWlrXWaylandSurface, Int, Int)]
-    getMappedXWaylandChildrenAndRoots wlrXWaylandSurface = do
+    getMappedXWaylandChildrenAndRoots wlrXWaylandSurface = profileScope "Plugin.CanvasBase._draw.getMappedXWaylandChildrenAndRoots" $ do
       debugPutStrLn "Plugin.CanvasBase.getMappedXWaylandChildrenAndRoots"
       arrayOfChildren <- G.get_children wlrXWaylandSurface :: IO GodotArray
       arrayOfChildrenGV <- fromGodotArray arrayOfChildren
@@ -707,7 +708,7 @@ _draw cb gvArgs = do
       return $ Data.List.zipWith (\child (childX, childY) -> (child, childX, childY)) validatedChildren effectiveChildCoords
 
     getXdgGeometryRect :: Int -> Int -> GodotWlrXdgSurface -> IO (Int, Int, Int, Int)
-    getXdgGeometryRect rootX rootY wlrXdgSurface = do
+    getXdgGeometryRect rootX rootY wlrXdgSurface = profileScope "Plugin.CanvasBase._draw.getXdgGeometryRect" $ do
       debugPutStrLn "Plugin.CanvasBase.getXdgGeometryRect"
       V2 (V2 geometryX geometryY) (V2 geometryWidth geometryHeight) <-
         G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
@@ -719,7 +720,7 @@ _draw cb gvArgs = do
         )
 
     getXdgGeometryRootRect :: Int -> Int -> GodotWlrXdgSurface -> IO (Int, Int, Int, Int)
-    getXdgGeometryRootRect rootX rootY wlrXdgSurface = do
+    getXdgGeometryRootRect rootX rootY wlrXdgSurface = profileScope "Plugin.CanvasBase._draw.getXdgGeometryRootRect" $ do
       debugPutStrLn "Plugin.CanvasBase.getXdgGeometryRootRect"
       V2 _ (V2 geometryWidth geometryHeight) <-
         G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
@@ -731,7 +732,7 @@ _draw cb gvArgs = do
         )
 
     getXWaylandGeometryRect :: Int -> Int -> GodotWlrXWaylandSurface -> IO (Int, Int, Int, Int)
-    getXWaylandGeometryRect rootX rootY wlrXWaylandSurface = do
+    getXWaylandGeometryRect rootX rootY wlrXWaylandSurface = profileScope "Plugin.CanvasBase._draw.getXWaylandGeometryRect" $ do
       debugPutStrLn "Plugin.CanvasBase.getXWaylandGeometryRect"
       V2 (V2 geometryX geometryY) (V2 geometryWidth geometryHeight) <-
         G.get_geometry wlrXWaylandSurface >>= fromLowLevel :: IO (V2 (V2 Float))
@@ -743,7 +744,7 @@ _draw cb gvArgs = do
         )
 
     getXWaylandGeometryRootRect :: Int -> Int -> GodotWlrXWaylandSurface -> IO (Int, Int, Int, Int)
-    getXWaylandGeometryRootRect rootX rootY wlrXWaylandSurface = do
+    getXWaylandGeometryRootRect rootX rootY wlrXWaylandSurface = profileScope "Plugin.CanvasBase._draw.getXWaylandGeometryRootRect" $ do
       debugPutStrLn "Plugin.CanvasBase.getXWaylandGeometryRootRect"
       V2 _ (V2 geometryWidth geometryHeight) <-
         G.get_geometry wlrXWaylandSurface >>= fromLowLevel :: IO (V2 (V2 Float))
@@ -755,7 +756,7 @@ _draw cb gvArgs = do
         )
 
     drawCursor :: CanvasBase -> GodotSimulaViewSprite -> IO ()
-    drawCursor cb gsvs = do
+    drawCursor cb gsvs = profileScope "Plugin.CanvasBase._draw.drawCursor" $ do
       debugPutStrLn "Plugin.CanvasBase.drawCursor"
       activeGSVSCursorPos@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
       gss <- readTVarIO (gsvs ^. gsvsServer)

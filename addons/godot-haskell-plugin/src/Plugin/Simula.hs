@@ -7,6 +7,7 @@
 module Plugin.Simula (GodotSimula(..)) where
 
 import           Plugin.Imports
+import           Plugin.Debug.ProfileHudTypes
 import           Data.Maybe
 
 import           Plugin.Input
@@ -60,7 +61,7 @@ instance HasBaseClass GodotSimula where
 
 
 ready :: GodotSimula -> [GodotVariant] -> IO ()
-ready self gvArgs = do
+ready self gvArgs = profileScope "Plugin.Simula.ready" $ do
   debugPutStrLn "Plugin.Simula.ready"
   -- OpenHMD is unfortunately not yet a working substitute for OpenVR
   -- https://github.com/SimulaVR/Simula/issues/72
@@ -130,7 +131,7 @@ ready self gvArgs = do
   --   img.load("image.png")
   --   tex.create_from_image(img)
   getTextureFromURL :: String -> IO (GodotTexture)
-  getTextureFromURL urlStr = do
+  getTextureFromURL urlStr = profileScope "Plugin.Simula.ready.getTextureFromURL" $ do
     debugPutStrLn $ "Plugin.Simula.getTextureFromURL " ++ urlStr
     -- instance new types
     godotImage <- unsafeInstance GodotImage "Image" :: IO GodotImage
@@ -145,7 +146,7 @@ ready self gvArgs = do
 
 
   addSimulaServerNode :: IO GodotSpatial
-  addSimulaServerNode = do
+  addSimulaServerNode = profileScope "Plugin.Simula.ready.addSimulaServerNode" $ do
     debugPutStrLn "Plugin.Simula.addSimulaServerNode"
     gss <- "res://addons/godot-haskell-plugin/SimulaServer.gdns"
       & newNS'' GodotSpatial "Spatial" []
@@ -158,7 +159,7 @@ ready self gvArgs = do
     return gss
 
   connectController :: GodotSimulaController -> IO ()
-  connectController ct = do
+  connectController ct = profileScope "Plugin.Simula.ready.connectController" $ do
     debugPutStrLn "Plugin.Simula.connectController"
     -- putStrLn "connectController"
     argsPressed <- Api.godot_array_new
@@ -189,7 +190,7 @@ ready self gvArgs = do
 
 
 on_button_signal :: GodotSimula -> [GodotVariant] -> IO ()
-on_button_signal self gvArgs@[buttonVar, controllerVar, pressedVar] = do
+on_button_signal self gvArgs@[buttonVar, controllerVar, pressedVar] = profileScope "Plugin.Simula.on_button_signal" $ do
   debugPutStrLn "Plugin.Simula.on_button_signal"
   -- putStrLn "on_button_signal in Simula.hs"
   button <- fromGodotVariant buttonVar
@@ -204,7 +205,7 @@ on_button_signal self gvArgs@[buttonVar, controllerVar, pressedVar] = do
 
 
 onButton :: GodotSimula -> GodotSimulaController -> Int -> Bool -> IO ()
-onButton self gsc button pressed = do
+onButton self gsc button pressed = profileScope "Plugin.Simula.onButton" $ do
   debugPutStrLn $ "Plugin.Simula.onButton button=" ++ show button ++ " pressed=" ++ show pressed
   -- putStrLn "onButton in Simula.hs"
   case (button, pressed) of
@@ -243,20 +244,21 @@ onButton self gsc button pressed = do
 
   onOffSpriteInput :: Int -> Bool -> IO ()
   onOffSpriteInput button pressed =
+    profileScope "Plugin.Simula.onButton.onOffSpriteInput" $
     case button of
       OVR_Button_Trigger -> sendOutsideClick G.BUTTON_LEFT pressed
       OVR_Button_AppMenu -> sendOutsideClick G.BUTTON_RIGHT pressed
       _ -> return ()
 
   sendOutsideClick :: Int -> Bool -> IO ()
-  sendOutsideClick buttonIndex pressed = do
+  sendOutsideClick buttonIndex pressed = profileScope "Plugin.Simula.onButton.sendOutsideClick" $ do
     wlrSeat <- getWlrSeatFromPath self
     G.pointer_clear_focus wlrSeat
     G.pointer_notify_button wlrSeat (fromIntegral buttonIndex) pressed
     G.pointer_notify_frame wlrSeat
 
   getWlrSeatFromPath :: GodotSimula -> IO GodotWlrSeat
-  getWlrSeatFromPath self = do
+  getWlrSeatFromPath self = profileScope "Plugin.Simula.onButton.getWlrSeatFromPath" $ do
     let nodePathStr = "/root/Root/SimulaServer"
     nodePath <- toLowLevel (pack nodePathStr) :: IO GodotNodePath
     gssNode <- G.get_node ((safeCast self) :: GodotNode) nodePath
@@ -267,7 +269,7 @@ onButton self gsc button pressed = do
 
 
 process :: GodotSimula -> [GodotVariant] -> IO ()
-process self gvArgs = do
+process self gvArgs = profileScope "Plugin.Simula.process" $ do
   debugPutStrLn "Plugin.Simula.process"
   -- putStrLn "process in Simula.hs"
   let gst = _sGrabState self
