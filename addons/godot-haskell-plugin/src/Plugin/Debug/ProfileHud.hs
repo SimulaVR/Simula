@@ -78,23 +78,27 @@ formatDebugProfileHudLiveSnapshot snapshot =
   List.unlines $
     [ "SIMULA_DEBUG_PROFILE_HUD live"
     , "updated: " ++ show (debugProfileHudSnapshotUpdatedAt snapshot)
-    , "mode: slow-frame summary"
-    , "budget_ms: " ++ formatMsValue (debugProfileHudSnapshotBudgetMs snapshot)
+    , "mode: " ++ profileHudModeSummary snapshot
+    ]
+      ++ profileRootLines snapshot
+      ++ [ "budget_ms: " ++ formatMsValue (debugProfileHudSnapshotBudgetMs snapshot)
+    , "frame_retention_min_ms: " ++ formatMsValue (debugProfileHudSnapshotFrameRetentionMinimumMs snapshot)
     , "window_s: " ++ formatSecondsValue (debugProfileHudSnapshotWindowSeconds snapshot)
     , "last_frame_ms: " ++ formatMaybeMs (debugProfileHudSnapshotLastFrameMs snapshot)
     , "worst_recent_frame_ms: " ++ formatMaybeMs (debugProfileHudSnapshotWorstFrameMs snapshot)
-    , "missed_frames_last_window: "
+    , retainedFrameCounterLabel snapshot
+        ++ ": "
         ++ show (debugProfileHudSnapshotSlowFrameCount snapshot)
         ++ " / "
         ++ show (debugProfileHudSnapshotFramesSeenInWindow snapshot)
     , "frame_strip: " ++ formatFrameBucketStrip (debugProfileHudSnapshotFrameBuckets snapshot)
     , ""
-    , "Top culprits from retained slow frames:"
+    , profileRowsHeading snapshot
     , padRight 72 "function/path" ++ padLeft 9 "sum_ms" ++ padLeft 9 "avg_ms" ++ padLeft 9 "max_ms" ++ padLeft 8 "calls" ++ padLeft 8 "frames" ++ padLeft 8 "tag"
     , List.replicate 123 '-'
     ]
       ++ ( if List.null rows
-             then ["No over-budget frames retained in the current window."]
+             then [emptyRowsMessage snapshot]
              else fmap formatDebugProfileHudLiveRow rows
          )
       ++ formatWorstFrameSummary snapshot
@@ -142,7 +146,7 @@ formatDebugProfileHudRecentMissedFrames :: DebugProfileHudSnapshot -> String
 formatDebugProfileHudRecentMissedFrames snapshot =
   List.intercalate "\n" $
     if List.null frames
-      then ["No retained slow frames."]
+      then [emptyRetainedFramesMessage snapshot]
       else fmap (formatSlowFrameEvidence snapshot) frames
   where
     frames = debugProfileHudSnapshotRetainedSlowFrames snapshot
@@ -151,7 +155,7 @@ formatSlowFrameEvidence :: DebugProfileHudSnapshot -> FrameProfile -> String
 formatSlowFrameEvidence snapshot frame =
   List.unlines $
     [ List.replicate 80 '='
-    , "slow frame " ++ show (frameId frame)
+    , frameEvidenceLabel snapshot ++ " " ++ show (frameId frame)
     , "started: " ++ show (frameStart frame)
     , "ended: " ++ show (frameEnd frame)
     , "frame_ms: " ++ formatMsValue frameMs
@@ -225,7 +229,7 @@ drawDebugHudProfileUsage cb snapshot debugFont left top availableWidth available
     drawRightAlignedText "tag" headerColor tagRight tableHeaderBaseline numberWidth
     drawHorizontalLine lineColor (tableHeaderBaseline + 5)
     when (List.null $ debugProfileHudVisibleRows snapshot) $
-      drawText "No over-budget frames retained in the current window" neutralColor left firstRowBaseline availableWidth
+      drawText (emptyRowsMessage snapshot) neutralColor left firstRowBaseline availableWidth
     forM_ (zip [0 :: Int ..] (take rowsAvailable $ debugProfileHudVisibleRows snapshot)) $ \(rowIndex, row) -> do
       let baseline = firstRowBaseline + lineStep * fromIntegral rowIndex
       let rowColor = if foldedTag row `elem` [CulpritHud, CulpritSpike] || foldedSumMs row >= debugProfileHudSnapshotBudgetMs snapshot then hotColor else neutralColor
@@ -301,16 +305,79 @@ drawDebugHudProfileUsage cb snapshot debugFont left top availableWidth available
 
 formatHudHeader :: DebugProfileHudSnapshot -> String
 formatHudHeader snapshot =
-  "SIMULA_DEBUG_PROFILE_HUD budget="
+  "SIMULA_DEBUG_PROFILE_HUD"
+    ++ profileRootHeader snapshot
+    ++ " budget="
     ++ formatMsValue (debugProfileHudSnapshotBudgetMs snapshot)
     ++ "ms window="
     ++ formatSecondsValue (debugProfileHudSnapshotWindowSeconds snapshot)
-    ++ "s missed_frames="
+    ++ "s "
+    ++ retainedFrameHeaderLabel snapshot
+    ++ "="
     ++ show (debugProfileHudSnapshotSlowFrameCount snapshot)
     ++ "/"
     ++ show (debugProfileHudSnapshotFramesSeenInWindow snapshot)
     ++ " worst="
     ++ formatMaybeMs (debugProfileHudSnapshotWorstFrameMs snapshot)
+
+profileHudModeSummary :: DebugProfileHudSnapshot -> String
+profileHudModeSummary snapshot =
+  case debugProfileHudSnapshotProfileRoot snapshot of
+    Nothing -> "slow-frame summary"
+    Just _ -> "profile-root summary"
+
+profileRootLines :: DebugProfileHudSnapshot -> [String]
+profileRootLines snapshot =
+  case debugProfileHudSnapshotProfileRoot snapshot of
+    Nothing -> []
+    Just root -> ["root: " ++ root]
+
+profileRootHeader :: DebugProfileHudSnapshot -> String
+profileRootHeader snapshot =
+  case debugProfileHudSnapshotProfileRoot snapshot of
+    Nothing -> ""
+    Just root ->
+      " root="
+        ++ fitText 44 root
+        ++ " frame_retention_min="
+        ++ formatMsValue (debugProfileHudSnapshotFrameRetentionMinimumMs snapshot)
+        ++ "ms"
+
+retainedFrameCounterLabel :: DebugProfileHudSnapshot -> String
+retainedFrameCounterLabel snapshot =
+  case debugProfileHudSnapshotProfileRoot snapshot of
+    Nothing -> "missed_frames_last_window"
+    Just _ -> "retained_profiled_frames_last_window"
+
+retainedFrameHeaderLabel :: DebugProfileHudSnapshot -> String
+retainedFrameHeaderLabel snapshot =
+  case debugProfileHudSnapshotProfileRoot snapshot of
+    Nothing -> "missed_frames"
+    Just _ -> "retained_frames"
+
+profileRowsHeading :: DebugProfileHudSnapshot -> String
+profileRowsHeading snapshot =
+  case debugProfileHudSnapshotProfileRoot snapshot of
+    Nothing -> "Top culprits from retained slow frames:"
+    Just _ -> "Top culprits from retained profiled frames:"
+
+emptyRowsMessage :: DebugProfileHudSnapshot -> String
+emptyRowsMessage snapshot =
+  case debugProfileHudSnapshotProfileRoot snapshot of
+    Nothing -> "No over-budget frames retained in the current window."
+    Just _ -> "No profiled root frames retained in the current window."
+
+emptyRetainedFramesMessage :: DebugProfileHudSnapshot -> String
+emptyRetainedFramesMessage snapshot =
+  case debugProfileHudSnapshotProfileRoot snapshot of
+    Nothing -> "No retained slow frames."
+    Just _ -> "No retained profiled frames."
+
+frameEvidenceLabel :: DebugProfileHudSnapshot -> String
+frameEvidenceLabel snapshot =
+  case debugProfileHudSnapshotProfileRoot snapshot of
+    Nothing -> "slow frame"
+    Just _ -> "profiled frame"
 
 formatMaybeMs :: Maybe Double -> String
 formatMaybeMs Nothing = "n/a"

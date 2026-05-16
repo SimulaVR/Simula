@@ -2,7 +2,7 @@ module Plugin.Debug.ProfileHudTypes where
 
 import Control.Concurrent (ThreadId, myThreadId)
 import Control.Concurrent.STM.TVar
-import Control.Exception (bracket_)
+import Control.Exception (bracket)
 import Control.Monad
 import Control.Monad.STM
 import qualified Data.Char as Char
@@ -51,6 +51,20 @@ debugProfileHudHeightForRows rowCount =
 debugProfileHudBudgetMs :: Double
 debugProfileHudBudgetMs = unsafePerformIO $ readDoubleEnv "SIMULA_DEBUG_PROFILE_HUD_BUDGET_MS" 16.67
 {-# NOINLINE debugProfileHudBudgetMs #-}
+
+debugProfileRoot :: Maybe String
+debugProfileRoot = unsafePerformIO $ do
+  maybeValue <- lookupEnv "SIMULA_DEBUG_PROFILE_ROOT"
+  return $ maybeValue >>= normalizeEnvString
+{-# NOINLINE debugProfileRoot #-}
+
+-- When SIMULA_DEBUG_PROFILE_ROOT is passed, we have to retain all frames, not
+-- just those which exceed our frame skipping threshold/budget.
+debugProfileHudFrameRetentionMinimumMs :: Double
+debugProfileHudFrameRetentionMinimumMs =
+  case debugProfileRoot of
+    Just _ -> 0.0 -- If SIMULA_DEBUG_PROFILE_ROOT is passed, retain all frames
+    Nothing -> debugProfileHudBudgetMs
 
 debugProfileHudBudgetInSeconds :: NominalDiffTime
 debugProfileHudBudgetInSeconds = realToFrac (debugProfileHudBudgetMs / 1000.0)
@@ -119,6 +133,17 @@ readDoubleEnv name fallback = do
     case maybeValue >>= readMaybe of
       Just value -> value
       Nothing -> fallback
+
+normalizeEnvString :: String -> Maybe String
+normalizeEnvString value =
+  let trimmed = trim value
+   in if List.null trimmed
+        then Nothing
+        else Just trimmed
+  where
+    trim :: String -> String
+    trim =
+      List.dropWhileEnd Char.isSpace . List.dropWhile Char.isSpace
 
 type FrameId = Int
 type ProfileStack = [OpenScope]
@@ -224,7 +249,9 @@ data FrameBucket = FrameBucket
 data DebugProfileHudSnapshot = DebugProfileHudSnapshot
   { debugProfileHudSnapshotUpdatedAt          :: UTCTime
   , debugProfileHudSnapshotBudgetMs           :: Double
+  , debugProfileHudSnapshotFrameRetentionMinimumMs :: Double
   , debugProfileHudSnapshotWindowSeconds      :: Double
+  , debugProfileHudSnapshotProfileRoot        :: Maybe String
   , debugProfileHudSnapshotRows               :: [FoldedRow]
   , debugProfileHudSnapshotFrameBuckets       :: [FrameBucket]
   , debugProfileHudSnapshotFramesSeenInWindow :: Int
@@ -282,25 +309,46 @@ profileScope label action = do
   enabled <- debugProfileHudEnabled
   if not enabled
     then action
-    else bracket_ (profileEnterNow label) profileExitNow action
+    else bracket (profileEnterNow label) profileExitAfterEnter (const action)
+  where
+    profileExitAfterEnter entered =
+      when entered profileExitNow
 
 profileEnter :: String -> IO ()
 profileEnter label = do
   enabled <- debugProfileHudEnabled
   when enabled $
-    profileEnterNow label
+    void $ profileEnterNow label
 
 profileExit :: IO ()
 profileExit =
   profileExitNow
 
-profileEnterNow :: String -> IO ()
+profileEnterNow :: String -> IO Bool
 profileEnterNow label = do
-  now <- getCurrentTime
   threadId <- myThreadId
-  atomically $
-    modifyTVar' debugProfileHudStateVar $
-      pushOpenScope threadId (OpenScope label now 0 [])
+  shouldProfile <- shouldProfileScope threadId label
+  if not shouldProfile
+    then return False
+    else do
+      now <- getCurrentTime
+      atomically $
+        modifyTVar' debugProfileHudStateVar $
+          pushOpenScope threadId (OpenScope label now 0 [])
+      return True
+
+shouldProfileScope :: ThreadId -> String -> IO Bool
+shouldProfileScope threadId label =
+  case debugProfileRoot of
+    Nothing -> return True
+    Just rootLabel
+      | label == rootLabel -> return True
+      | otherwise -> do
+          state <- readTVarIO debugProfileHudStateVar
+          return $
+            not $
+              List.null $
+                M.findWithDefault [] threadId (profileStacksByThread state)
 
 profileExitNow :: IO ()
 profileExitNow = do
@@ -324,7 +372,9 @@ buildDebugProfileHudSnapshot now state =
   DebugProfileHudSnapshot
     { debugProfileHudSnapshotUpdatedAt = now
     , debugProfileHudSnapshotBudgetMs = debugProfileHudBudgetMs
+    , debugProfileHudSnapshotFrameRetentionMinimumMs = debugProfileHudFrameRetentionMinimumMs
     , debugProfileHudSnapshotWindowSeconds = debugProfileHudWindowSeconds
+    , debugProfileHudSnapshotProfileRoot = debugProfileRoot
     , debugProfileHudSnapshotRows = debugProfileHudVisibleRowsFromRows foldedRows
     , debugProfileHudSnapshotFrameBuckets = buildFrameBuckets now frameSamples
     , debugProfileHudSnapshotFramesSeenInWindow = List.length frameSamples
@@ -351,7 +401,9 @@ emptyDebugProfileHudSnapshot now =
   DebugProfileHudSnapshot
     { debugProfileHudSnapshotUpdatedAt = now
     , debugProfileHudSnapshotBudgetMs = debugProfileHudBudgetMs
+    , debugProfileHudSnapshotFrameRetentionMinimumMs = debugProfileHudFrameRetentionMinimumMs
     , debugProfileHudSnapshotWindowSeconds = debugProfileHudWindowSeconds
+    , debugProfileHudSnapshotProfileRoot = debugProfileRoot
     , debugProfileHudSnapshotRows = []
     , debugProfileHudSnapshotFrameBuckets = buildFrameBuckets now []
     , debugProfileHudSnapshotFramesSeenInWindow = 0
@@ -553,10 +605,18 @@ appendCompletedFrame now frame state =
     sample = frameSampleFromProfile frame
     frameHistory' = trimFrameSamples now (profileFrameHistory state |> sample)
     retainedSlowFrames'
-      | frameSampleMs sample > debugProfileHudBudgetMs =
+      | shouldRetainFrame frame sample =
           trimRetainedSlowFrames now (retainedSlowFrames state |> pruneFrameProfile frame)
       | otherwise =
           trimRetainedSlowFrames now (retainedSlowFrames state)
+
+shouldRetainFrame :: FrameProfile -> FrameSample -> Bool
+shouldRetainFrame frame sample =
+  frameSampleMs sample > debugProfileHudFrameRetentionMinimumMs
+    && ( case debugProfileRoot of
+           Nothing -> True
+           Just _ -> not (List.null $ frameRootScopes frame)
+       )
 
 pruneFrameProfile :: FrameProfile -> FrameProfile
 pruneFrameProfile frame =
