@@ -20,6 +20,7 @@ import Plugin.Debug.DamagedRegions
 import Plugin.Debug.DamagedRegionTypes
 import Plugin.Debug.HudTypes
 import Plugin.Debug.MemoryHudTypes
+import Plugin.Debug.ProfileHud
 import Plugin.Debug.ProfileHudTypes
 import Plugin.Imports
 import Plugin.Types
@@ -103,7 +104,10 @@ handleDebugHudClick gsvs coords pressed buttonIndex =
           gss <- readTVarIO (gsvs ^. gsvsServer)
           hudGeometry <- getDebugHudGeometry gsvs
           case debugHudControlAt hudGeometry coords of
-            Nothing -> return False
+            Nothing ->
+              if debugHudRuntimeActiveMode state == DebugHudProfile
+                then handleDebugProfileHudClick gss gsvs coords pressed
+                else return False
             Just DebugHudControlClose -> do
               when pressed $
                 closeDebugHud gss
@@ -112,6 +116,49 @@ handleDebugHudClick gsvs coords pressed buttonIndex =
               when pressed $
                 selectDebugHudMode gss mode
               return True
+
+handleDebugProfileHudClick :: GodotSimulaServer -> GodotSimulaViewSprite -> CanvasBaseCoordinates -> Bool -> IO Bool
+handleDebugProfileHudClick gss gsvs coords pressed = do
+  snapshot <- getDebugProfileHudSnapshot
+  profileGeometry <- getDebugHudProfileGeometry gsvs snapshot
+  case debugProfileHudControlAt snapshot profileGeometry coords of
+    Nothing -> return False
+    Just control -> do
+      when pressed $ do
+        changed <- handleDebugProfileHudControl control
+        when changed $
+          markAllDebugHudViewsForRedraw gss
+      return True
+
+-- Returns the geometry for the whole "content area" of the of the Profile HUD
+getDebugHudProfileGeometry :: GodotSimulaViewSprite -> DebugProfileHudSnapshot -> IO CanvasBaseGeometry
+getDebugHudProfileGeometry gsvs snapshot = do
+  cb <- readTVarIO (gsvs ^. gsvsCanvasBase)
+  cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
+  viewportBase <- readTVarIO (cb ^. cbViewport)
+  viewportSurface <- readTVarIO (cs ^. csViewport)
+  V2 _ viewportSurfaceHeight <- G.get_size viewportSurface >>= fromLowLevel :: IO (V2 Float)
+  V2 viewportBaseWidth viewportBaseHeight <- G.get_size viewportBase >>= fromLowLevel :: IO (V2 Float)
+  let padding = fromIntegral debugHudPaddingPixels
+  let profileRows = max 1 $ List.length $ debugProfileHudVisibleRows snapshot
+  let requestedProfileHeight = fromIntegral $ debugProfileHudHeightForRows profileRows
+  let availableHudHeight = max 0 (viewportBaseHeight - viewportSurfaceHeight)
+  let availableProfileHeight =
+        max 0 $
+          availableHudHeight
+            - fromIntegral debugHudTabBarHeight
+            - padding * 2
+  return $
+    CanvasBaseGeometry
+      { canvasBaseGeometryOffsetRight = OffsetRight padding
+      , canvasBaseGeometryOffsetDown =
+          OffsetDown $
+            viewportSurfaceHeight
+              + fromIntegral debugHudTabBarHeight
+              + padding
+      , canvasBaseGeometryWidth = Width (max 0 $ viewportBaseWidth - padding * 2)
+      , canvasBaseGeometryHeight = Height (min requestedProfileHeight availableProfileHeight)
+      }
 
 getDebugHudGeometry :: GodotSimulaViewSprite -> IO CanvasBaseGeometry
 getDebugHudGeometry gsvs = do

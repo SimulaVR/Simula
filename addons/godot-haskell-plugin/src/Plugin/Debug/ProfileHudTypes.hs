@@ -37,11 +37,29 @@ debugProfileHudReservedRows = 10
 debugProfileHudLineHeightPixels :: Int
 debugProfileHudLineHeightPixels = 18
 
+-- The height of the "main part" of the font (which excludes the bottom part of letters like "y", "g")
+debugProfileHudFontAscentPixels :: Float
+debugProfileHudFontAscentPixels = 14
+
+-- The font baseline-to-baseline distance between successive rows
+debugProfileHudLineStepPixels :: Float
+debugProfileHudLineStepPixels =
+  fromIntegral debugProfileHudLineHeightPixels
+
 debugProfileHudFixedHeaderRows :: Int
 debugProfileHudFixedHeaderRows = 4
 
 debugProfileHudBottomPaddingPixels :: Int
 debugProfileHudBottomPaddingPixels = 12
+
+debugProfileHudNavigationButtonWidth :: Float
+debugProfileHudNavigationButtonWidth = 72
+
+debugProfileHudNavigationButtonHeight :: Float
+debugProfileHudNavigationButtonHeight = 18
+
+debugProfileHudNavigationButtonGap :: Float
+debugProfileHudNavigationButtonGap = 4
 
 debugProfileHudHeightForRows :: Int -> Int
 debugProfileHudHeightForRows rowCount =
@@ -52,17 +70,108 @@ debugProfileHudBudgetMs :: Double
 debugProfileHudBudgetMs = unsafePerformIO $ readDoubleEnv "SIMULA_DEBUG_PROFILE_HUD_BUDGET_MS" 16.67
 {-# NOINLINE debugProfileHudBudgetMs #-}
 
-debugProfileRoot :: Maybe String
-debugProfileRoot = unsafePerformIO $ do
+debugProfileHudInitialRoot :: Maybe String
+debugProfileHudInitialRoot = unsafePerformIO $ do
   maybeValue <- lookupEnv "SIMULA_DEBUG_PROFILE_ROOT"
   return $ maybeValue >>= normalizeEnvString
-{-# NOINLINE debugProfileRoot #-}
+{-# NOINLINE debugProfileHudInitialRoot #-}
+
+-- Nothing means no root is currently being inspected (same as SIMULA_DEBUG_PROFILE_ROOT="")
+data DebugProfileRootNavigation = DebugProfileRootNavigation
+  { debugProfileRootNavigationBackStack    :: [Maybe String]
+  , debugProfileRootNavigationCurrent      :: Maybe String -- The currently viewed root being inspected in the profiler
+  , debugProfileRootNavigationForwardStack :: [Maybe String]
+  }
+  deriving (Show)
+
+debugProfileRootNavigationInitialState :: DebugProfileRootNavigation
+debugProfileRootNavigationInitialState =
+  DebugProfileRootNavigation
+    { debugProfileRootNavigationBackStack =
+        case debugProfileHudInitialRoot of
+          Nothing -> []
+          Just _ -> [Nothing]
+    , debugProfileRootNavigationCurrent = debugProfileHudInitialRoot
+    , debugProfileRootNavigationForwardStack = []
+    }
+
+debugProfileRootNavigationVar :: TVar DebugProfileRootNavigation
+debugProfileRootNavigationVar = unsafePerformIO $ newTVarIO debugProfileRootNavigationInitialState
+{-# NOINLINE debugProfileRootNavigationVar #-}
+
+getDebugProfileRootNavigation :: IO DebugProfileRootNavigation
+getDebugProfileRootNavigation =
+  readTVarIO debugProfileRootNavigationVar
+
+getDebugProfileRoot :: IO (Maybe String)
+getDebugProfileRoot =
+  debugProfileRootNavigationCurrent <$> getDebugProfileRootNavigation
+
+debugProfileHudCanGoBack :: DebugProfileRootNavigation -> Bool
+debugProfileHudCanGoBack =
+  not . List.null . debugProfileRootNavigationBackStack
+
+debugProfileHudCanGoForward :: DebugProfileRootNavigation -> Bool
+debugProfileHudCanGoForward =
+  not . List.null . debugProfileRootNavigationForwardStack
+
+debugProfileHudSetRoot :: Maybe String -> IO Bool
+debugProfileHudSetRoot maybeRoot =
+  atomically $ do
+    nav <- readTVar debugProfileRootNavigationVar
+    let newRoot = maybeRoot >>= normalizeEnvString
+    if debugProfileRootNavigationCurrent nav == newRoot
+      then return False
+      else do
+        writeTVar debugProfileRootNavigationVar $
+          DebugProfileRootNavigation
+            { debugProfileRootNavigationBackStack =
+                debugProfileRootNavigationCurrent nav : debugProfileRootNavigationBackStack nav
+            , debugProfileRootNavigationCurrent = newRoot
+            , debugProfileRootNavigationForwardStack = []
+            }
+        clearDebugProfileHudCollectedSamplesSTM
+        return True
+
+debugProfileHudGoBack :: IO Bool
+debugProfileHudGoBack =
+  atomically $ do
+    nav <- readTVar debugProfileRootNavigationVar
+    case debugProfileRootNavigationBackStack nav of
+      [] -> return False
+      previousRoot : rest -> do
+        writeTVar debugProfileRootNavigationVar $
+          nav
+            { debugProfileRootNavigationBackStack = rest
+            , debugProfileRootNavigationCurrent = previousRoot
+            , debugProfileRootNavigationForwardStack =
+                debugProfileRootNavigationCurrent nav : debugProfileRootNavigationForwardStack nav
+            }
+        clearDebugProfileHudCollectedSamplesSTM
+        return True
+
+debugProfileHudGoForward :: IO Bool
+debugProfileHudGoForward =
+  atomically $ do
+    nav <- readTVar debugProfileRootNavigationVar
+    case debugProfileRootNavigationForwardStack nav of
+      [] -> return False
+      nextRoot : rest -> do
+        writeTVar debugProfileRootNavigationVar $
+          nav
+            { debugProfileRootNavigationBackStack =
+                debugProfileRootNavigationCurrent nav : debugProfileRootNavigationBackStack nav
+            , debugProfileRootNavigationCurrent = nextRoot
+            , debugProfileRootNavigationForwardStack = rest
+            }
+        clearDebugProfileHudCollectedSamplesSTM
+        return True
 
 -- When SIMULA_DEBUG_PROFILE_ROOT is passed, we have to retain all frames, not
 -- just those which exceed our frame skipping threshold/budget.
-debugProfileHudFrameRetentionMinimumMs :: Double
-debugProfileHudFrameRetentionMinimumMs =
-  case debugProfileRoot of
+debugProfileHudFrameRetentionMinimumMsForRoot :: Maybe String -> Double
+debugProfileHudFrameRetentionMinimumMsForRoot root =
+  case root of
     Just _ -> 0.0 -- If SIMULA_DEBUG_PROFILE_ROOT is passed, retain all frames
     Nothing -> debugProfileHudBudgetMs
 
@@ -237,6 +346,13 @@ data FoldedRow = FoldedRow
   }
   deriving (Show)
 
+-- Encodes "things inside the profile HUD that can be clicked"
+data DebugProfileHudControl
+  = DebugProfileHudControlBack
+  | DebugProfileHudControlForward
+  | DebugProfileHudControlRow FoldedRow
+  deriving (Show)
+
 data FrameBucket = FrameBucket
   { frameBucketIndex      :: Int
   , frameBucketFrameCount :: Int
@@ -304,6 +420,19 @@ debugProfileHudStateVar :: TVar DebugProfileHudState
 debugProfileHudStateVar = unsafePerformIO $ newTVarIO debugProfileHudInitialState
 {-# NOINLINE debugProfileHudStateVar #-}
 
+clearDebugProfileHudCollectedSamplesSTM :: STM ()
+clearDebugProfileHudCollectedSamplesSTM = do
+  writeTVar debugProfileHudSnapshotCacheVar Nothing
+  modifyTVar' debugProfileHudStateVar $ \state ->
+    state
+      { profileFramesSeenInWindow = 0
+      , retainedSlowFrames = Seq.empty
+      , profileCurrentFrame =
+          fmap (\frame -> frame { openFrameRootScopes = [] }) (profileCurrentFrame state)
+      , profilePendingRootScopes = []
+      , profileFrameHistory = Seq.empty
+      }
+
 profileScope :: String -> IO a -> IO a
 profileScope label action = do
   enabled <- debugProfileHudEnabled
@@ -327,7 +456,8 @@ profileExit =
 profileEnterNow :: String -> IO Bool
 profileEnterNow label = do
   threadId <- myThreadId
-  shouldProfile <- shouldProfileScope threadId label
+  root <- getDebugProfileRoot
+  shouldProfile <- shouldProfileScope root threadId label
   if not shouldProfile
     then return False
     else do
@@ -337,9 +467,9 @@ profileEnterNow label = do
           pushOpenScope threadId (OpenScope label now 0 [])
       return True
 
-shouldProfileScope :: ThreadId -> String -> IO Bool
-shouldProfileScope threadId label =
-  case debugProfileRoot of
+shouldProfileScope :: Maybe String -> ThreadId -> String -> IO Bool
+shouldProfileScope root threadId label =
+  case root of
     Nothing -> return True
     Just rootLabel
       | label == rootLabel -> return True
@@ -363,18 +493,19 @@ profileFrameBoundary = do
   enabled <- debugProfileHudEnabled
   when enabled $ do
     now <- getCurrentTime
+    root <- getDebugProfileRoot
     atomically $
       modifyTVar' debugProfileHudStateVar $
-        advanceProfileFrame now
+        advanceProfileFrame now root
 
-buildDebugProfileHudSnapshot :: UTCTime -> DebugProfileHudState -> DebugProfileHudSnapshot
-buildDebugProfileHudSnapshot now state =
+buildDebugProfileHudSnapshot :: UTCTime -> Maybe String -> DebugProfileHudState -> DebugProfileHudSnapshot
+buildDebugProfileHudSnapshot now root state =
   DebugProfileHudSnapshot
     { debugProfileHudSnapshotUpdatedAt = now
     , debugProfileHudSnapshotBudgetMs = debugProfileHudBudgetMs
-    , debugProfileHudSnapshotFrameRetentionMinimumMs = debugProfileHudFrameRetentionMinimumMs
+    , debugProfileHudSnapshotFrameRetentionMinimumMs = debugProfileHudFrameRetentionMinimumMsForRoot root
     , debugProfileHudSnapshotWindowSeconds = debugProfileHudWindowSeconds
-    , debugProfileHudSnapshotProfileRoot = debugProfileRoot
+    , debugProfileHudSnapshotProfileRoot = root
     , debugProfileHudSnapshotRows = debugProfileHudVisibleRowsFromRows foldedRows
     , debugProfileHudSnapshotFrameBuckets = buildFrameBuckets now frameSamples
     , debugProfileHudSnapshotFramesSeenInWindow = List.length frameSamples
@@ -396,14 +527,14 @@ buildDebugProfileHudSnapshot now state =
         [] -> Nothing
         _ -> Just $ List.maximumBy compareFrameElapsed slowFrames
 
-emptyDebugProfileHudSnapshot :: UTCTime -> DebugProfileHudSnapshot
-emptyDebugProfileHudSnapshot now =
+emptyDebugProfileHudSnapshot :: UTCTime -> Maybe String -> DebugProfileHudSnapshot
+emptyDebugProfileHudSnapshot now root =
   DebugProfileHudSnapshot
     { debugProfileHudSnapshotUpdatedAt = now
     , debugProfileHudSnapshotBudgetMs = debugProfileHudBudgetMs
-    , debugProfileHudSnapshotFrameRetentionMinimumMs = debugProfileHudFrameRetentionMinimumMs
+    , debugProfileHudSnapshotFrameRetentionMinimumMs = debugProfileHudFrameRetentionMinimumMsForRoot root
     , debugProfileHudSnapshotWindowSeconds = debugProfileHudWindowSeconds
-    , debugProfileHudSnapshotProfileRoot = debugProfileRoot
+    , debugProfileHudSnapshotProfileRoot = root
     , debugProfileHudSnapshotRows = []
     , debugProfileHudSnapshotFrameBuckets = buildFrameBuckets now []
     , debugProfileHudSnapshotFramesSeenInWindow = 0
@@ -564,12 +695,12 @@ attachRootScope rootClosed state =
         { profilePendingRootScopes = List.take 128 (rootClosed : profilePendingRootScopes state)
         }
 
-advanceProfileFrame :: UTCTime -> DebugProfileHudState -> DebugProfileHudState
-advanceProfileFrame now state =
+advanceProfileFrame :: UTCTime -> Maybe String -> DebugProfileHudState -> DebugProfileHudState
+advanceProfileFrame now root state =
   startNextFrame now $
     case profileCurrentFrame state of
       Nothing -> state
-      Just currentFrame -> appendCompletedFrame now (closeFrame now currentFrame) state
+      Just currentFrame -> appendCompletedFrame now root (closeFrame now currentFrame) state
 
 startNextFrame :: UTCTime -> DebugProfileHudState -> DebugProfileHudState
 startNextFrame now state =
@@ -594,8 +725,8 @@ closeFrame now frame =
     , frameRootScopes = List.reverse (openFrameRootScopes frame)
     }
 
-appendCompletedFrame :: UTCTime -> FrameProfile -> DebugProfileHudState -> DebugProfileHudState
-appendCompletedFrame now frame state =
+appendCompletedFrame :: UTCTime -> Maybe String -> FrameProfile -> DebugProfileHudState -> DebugProfileHudState
+appendCompletedFrame now root frame state =
   state
     { profileFrameHistory = frameHistory'
     , retainedSlowFrames = retainedSlowFrames'
@@ -605,15 +736,15 @@ appendCompletedFrame now frame state =
     sample = frameSampleFromProfile frame
     frameHistory' = trimFrameSamples now (profileFrameHistory state |> sample)
     retainedSlowFrames'
-      | shouldRetainFrame frame sample =
+      | shouldRetainFrame root frame sample =
           trimRetainedSlowFrames now (retainedSlowFrames state |> pruneFrameProfile frame)
       | otherwise =
           trimRetainedSlowFrames now (retainedSlowFrames state)
 
-shouldRetainFrame :: FrameProfile -> FrameSample -> Bool
-shouldRetainFrame frame sample =
-  frameSampleMs sample > debugProfileHudFrameRetentionMinimumMs
-    && ( case debugProfileRoot of
+shouldRetainFrame :: Maybe String -> FrameProfile -> FrameSample -> Bool
+shouldRetainFrame root frame sample =
+  frameSampleMs sample > debugProfileHudFrameRetentionMinimumMsForRoot root
+    && ( case root of
            Nothing -> True
            Just _ -> not (List.null $ frameRootScopes frame)
        )

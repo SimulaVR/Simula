@@ -27,10 +27,11 @@ import Plugin.Types
 getDebugProfileHudSnapshot :: IO DebugProfileHudSnapshot
 getDebugProfileHudSnapshot = do
   enabled <- debugProfileHudEnabled
+  root <- getDebugProfileRoot
   if not enabled
     then do
       now <- getCurrentTime
-      return $ emptyDebugProfileHudSnapshot now
+      return $ emptyDebugProfileHudSnapshot now root
     else do
       now <- getCurrentTime
       cached <- readTVarIO debugProfileHudSnapshotCacheVar
@@ -40,7 +41,7 @@ getDebugProfileHudSnapshot = do
               return snapshot
         _ -> do
           state <- readTVarIO debugProfileHudStateVar
-          let snapshot = buildDebugProfileHudSnapshot now state
+          let snapshot = buildDebugProfileHudSnapshot now root state
           atomically $ writeTVar debugProfileHudSnapshotCacheVar (Just (now, snapshot))
           queueDebugProfileHudOutputs snapshot
           return snapshot
@@ -196,16 +197,152 @@ formatFoldedEvidenceRow (rank, row) =
     ++ padLeft 8 (show $ foldedCalls row)
     ++ padLeft 8 (formatCulpritTag $ foldedTag row)
 
+debugProfileHudControlAt :: DebugProfileHudSnapshot -> CanvasBaseGeometry -> CanvasBaseCoordinates -> Maybe DebugProfileHudControl
+debugProfileHudControlAt snapshot geometry coords =
+  if not (profileHudCoordinatesInsideGeometry coords geometry)
+    then Nothing
+    else
+      fmap fst $
+        List.find
+          (\(_, controlGeometry) -> profileHudCoordinatesInsideGeometry coords controlGeometry)
+          (debugProfileHudControlGeometries snapshot geometry)
+
+debugProfileHudControlGeometries :: DebugProfileHudSnapshot -> CanvasBaseGeometry -> [(DebugProfileHudControl, CanvasBaseGeometry)]
+debugProfileHudControlGeometries snapshot geometry =
+  debugProfileHudNavigationControlGeometries geometry
+    ++ debugProfileHudRowControlGeometries snapshot geometry
+
+debugProfileHudNavigationControlGeometries :: CanvasBaseGeometry -> [(DebugProfileHudControl, CanvasBaseGeometry)]
+debugProfileHudNavigationControlGeometries geometry =
+  [ (DebugProfileHudControlBack, buttonGeometry backLeft)
+  , (DebugProfileHudControlForward, buttonGeometry forwardLeft)
+  ]
+  where
+    (left, top, availableWidth, _) = canvasBaseGeometryTuple geometry
+    forwardLeft = left + max 0 (availableWidth - debugProfileHudNavigationButtonWidth)
+    backLeft = max left (forwardLeft - debugProfileHudNavigationButtonGap - debugProfileHudNavigationButtonWidth)
+    buttonGeometry buttonLeft =
+      CanvasBaseGeometry
+        { canvasBaseGeometryOffsetRight = OffsetRight buttonLeft
+        , canvasBaseGeometryOffsetDown = OffsetDown top
+        , canvasBaseGeometryWidth = Width debugProfileHudNavigationButtonWidth
+        , canvasBaseGeometryHeight = Height debugProfileHudNavigationButtonHeight
+        }
+
+debugProfileHudRowControlGeometries :: DebugProfileHudSnapshot -> CanvasBaseGeometry -> [(DebugProfileHudControl, CanvasBaseGeometry)]
+debugProfileHudRowControlGeometries snapshot geometry =
+  fmap rowGeometry $
+    zip [0 :: Int ..] $
+      take (debugProfileHudRowsAvailable availableHeight) $
+        debugProfileHudVisibleRows snapshot
+  where
+    (left, top, availableWidth, availableHeight) = canvasBaseGeometryTuple geometry
+    rowGeometry (rowIndex, row) =
+      ( DebugProfileHudControlRow row
+      , CanvasBaseGeometry
+          { canvasBaseGeometryOffsetRight = OffsetRight left
+          , canvasBaseGeometryOffsetDown =
+              OffsetDown $
+                debugProfileHudFirstRowBaseline top
+                  + debugProfileHudLineStepPixels * fromIntegral rowIndex
+                  - debugProfileHudFontAscentPixels
+          , canvasBaseGeometryWidth = Width availableWidth
+          , canvasBaseGeometryHeight = Height debugProfileHudLineStepPixels
+          }
+      )
+
+debugProfileHudRowsAvailable :: Float -> Int
+debugProfileHudRowsAvailable availableHeight =
+  max 0 (floor ((availableHeight - 4 * debugProfileHudLineStepPixels) / debugProfileHudLineStepPixels) :: Int)
+
+debugProfileHudTableHeaderBaseline :: Float -> Float
+debugProfileHudTableHeaderBaseline top =
+  top + debugProfileHudFontAscentPixels + debugProfileHudLineStepPixels * 2
+
+debugProfileHudFirstRowBaseline :: Float -> Float
+debugProfileHudFirstRowBaseline top =
+  debugProfileHudTableHeaderBaseline top + debugProfileHudLineStepPixels
+
+debugProfileHudHeaderTextWidth :: CanvasBaseGeometry -> Float
+debugProfileHudHeaderTextWidth geometry =
+  max 1 (availableWidth - debugProfileHudNavigationButtonWidth * 2 - debugProfileHudNavigationButtonGap - 8)
+  where
+    (_, _, availableWidth, _) = canvasBaseGeometryTuple geometry
+
+profileHudCoordinatesInsideGeometry :: CanvasBaseCoordinates -> CanvasBaseGeometry -> Bool
+profileHudCoordinatesInsideGeometry coords geometry =
+  x >= left && x <= left + width && y >= top && y <= top + height
+  where
+    (x, y) = canvasBaseCoordinatesTuple coords
+    (left, top, width, height) = canvasBaseGeometryTuple geometry
+
+handleDebugProfileHudControl :: DebugProfileHudControl -> IO Bool
+handleDebugProfileHudControl DebugProfileHudControlBack =
+  debugProfileHudGoBack
+handleDebugProfileHudControl DebugProfileHudControlForward =
+  debugProfileHudGoForward
+handleDebugProfileHudControl (DebugProfileHudControlRow row) =
+  debugProfileHudSetRoot (Just $ foldedLeafLabel row)
+
+drawDebugProfileHudNavigationButtons :: CanvasBase -> GodotDynamicFont -> DebugProfileRootNavigation -> CanvasBaseGeometry -> IO ()
+drawDebugProfileHudNavigationButtons cb debugFont nav geometry = do
+  activeFill <- (toLowLevel $ (rgb 0.14 0.20 0.28) `withOpacity` 0.95) :: IO GodotColor
+  disabledFill <- (toLowLevel $ (rgb 0.10 0.11 0.13) `withOpacity` 0.75) :: IO GodotColor
+  activeBorder <- (toLowLevel $ (rgb 0.38 0.70 1.0) `withOpacity` 0.95) :: IO GodotColor
+  disabledBorder <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 0.14) :: IO GodotColor
+  activeText <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1.0) :: IO GodotColor
+  disabledText <- (toLowLevel $ (rgb 0.60 0.64 0.68) `withOpacity` 0.82) :: IO GodotColor
+  forM_ (debugProfileHudNavigationControlGeometries geometry) $ \(control, controlGeometry) -> do
+    let enabled =
+          case control of
+            DebugProfileHudControlBack -> debugProfileHudCanGoBack nav
+            DebugProfileHudControlForward -> debugProfileHudCanGoForward nav
+            DebugProfileHudControlRow _ -> True
+    drawButton controlGeometry (if enabled then activeFill else disabledFill) (if enabled then activeBorder else disabledBorder)
+    drawDebugProfileHudCenteredButtonText cb debugFont (buttonLabel control) (if enabled then activeText else disabledText) controlGeometry
+  where
+    buttonLabel DebugProfileHudControlBack = "Back"
+    buttonLabel DebugProfileHudControlForward = "Forward"
+    buttonLabel (DebugProfileHudControlRow _) = ""
+
+    drawButton controlGeometry fillColor borderColor = do
+      rect <- canvasBaseGeometryToGodotRect2 controlGeometry
+      G.draw_rect cb rect fillColor True 1.0 False
+      G.draw_rect cb rect borderColor False 1.0 False
+
+drawDebugProfileHudCenteredButtonText :: CanvasBase -> GodotDynamicFont -> String -> GodotColor -> CanvasBaseGeometry -> IO ()
+drawDebugProfileHudCenteredButtonText cb debugFont text color geometry = do
+  fontHeight <- G.get_height (safeCast debugFont :: GodotFont)
+  fontAscent <- G.get_ascent (safeCast debugFont :: GodotFont)
+  let (left, top, width, height) = canvasBaseGeometryTuple geometry
+  bracket
+    (toLowLevel (pack text) :: IO GodotString)
+    Api.godot_string_destroy
+    (\textStr -> do
+      V2 textWidth _ <- G.get_string_size (safeCast debugFont :: GodotFont) textStr >>= fromLowLevel :: IO (V2 Float)
+      let x = left + max 0 ((width - textWidth) / 2)
+      let baseline = top + max fontAscent ((height - fontHeight) / 2 + fontAscent)
+      renderPosition <- toLowLevel (V2 x baseline) :: IO GodotVector2
+      G.draw_string cb (safeCast debugFont :: GodotFont) renderPosition textStr color (round width))
+
 drawDebugHudProfileUsage :: CanvasBase -> DebugProfileHudSnapshot -> GodotDynamicFont -> Float -> Float -> Float -> Float -> IO ()
 drawDebugHudProfileUsage cb snapshot debugFont left top availableWidth availableHeight = do
     debugPutStrLn "Plugin.Debug.ProfileHud.drawDebugHudProfileUsage"
     G.set_size debugFont 16
-    let fontAscent = 14
-    let lineStep = 18
+    nav <- getDebugProfileRootNavigation
+    let profileGeometry =
+          CanvasBaseGeometry
+            { canvasBaseGeometryOffsetRight = OffsetRight left
+            , canvasBaseGeometryOffsetDown = OffsetDown top
+            , canvasBaseGeometryWidth = Width availableWidth
+            , canvasBaseGeometryHeight = Height availableHeight
+            }
+    let fontAscent = debugProfileHudFontAscentPixels
+    let lineStep = debugProfileHudLineStepPixels
     let stripTop = top + lineStep + 3
     let stripHeight = 12
-    let tableHeaderBaseline = top + fontAscent + lineStep * 2
-    let firstRowBaseline = tableHeaderBaseline + lineStep
+    let tableHeaderBaseline = debugProfileHudTableHeaderBaseline top
+    let firstRowBaseline = debugProfileHudFirstRowBaseline top
     let sumRight = left + availableWidth * 0.60
     let avgRight = left + availableWidth * 0.70
     let maxRight = left + availableWidth * 0.80
@@ -213,13 +350,14 @@ drawDebugHudProfileUsage cb snapshot debugFont left top availableWidth available
     let tagRight = left + availableWidth
     let pathWidth = max 1 (sumRight - left - 8)
     let numberWidth = max 1 (avgRight - sumRight - 8)
-    let rowsAvailable = max 0 (floor ((availableHeight - 4 * lineStep) / lineStep) :: Int)
+    let rowsAvailable = debugProfileHudRowsAvailable availableHeight
     headerColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 1.0) :: IO GodotColor
     neutralColor <- (toLowLevel $ (rgb 0.74 0.78 0.82) `withOpacity` 1.0) :: IO GodotColor
     hotColor <- (toLowLevel $ (rgb 1.0 0.42 0.24) `withOpacity` 1.0) :: IO GodotColor
     lineColor <- (toLowLevel $ (rgb 1.0 1.0 1.0) `withOpacity` 0.18) :: IO GodotColor
     let headerBaseline = top + fontAscent
-    drawText (formatHudHeader snapshot) headerColor left headerBaseline availableWidth
+    drawText (formatHudHeader snapshot) headerColor left headerBaseline (debugProfileHudHeaderTextWidth profileGeometry)
+    drawDebugProfileHudNavigationButtons cb debugFont nav profileGeometry
     drawFrameStrip stripTop stripHeight
     drawText "culprit path" headerColor left tableHeaderBaseline pathWidth
     drawRightAlignedText "sum" headerColor sumRight tableHeaderBaseline numberWidth
