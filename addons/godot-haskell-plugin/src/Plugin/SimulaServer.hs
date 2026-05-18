@@ -1296,7 +1296,7 @@ debugPrintWlrSurfaceDetails :: String -> GodotWlrSurface -> IO ()
 debugPrintWlrSurfaceDetails prefix wlrSurface = profileScope "debugPrintWlrSurfaceDetails" $ do
   debugSurfaceCreationsActive <- debugSurfaceCreationsEnabled
   when debugSurfaceCreationsActive $ do
-    (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+    (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions wlrSurface
     let msg =
           prefix
             ++ " surface="
@@ -1316,7 +1316,7 @@ debugPrintXdgSurfaceDetails prefix wlrXdgSurface = profileScope "debugPrintXdgSu
     pid <- G.get_pid wlrXdgSurface
     V2 (V2 posX posY) (V2 xdgWidth xdgHeight) <- G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
     withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
-      (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+      (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions wlrSurface
       let msg =
             prefix
               ++ " protocol=xdg role="

@@ -344,7 +344,7 @@ debugLogDepthFirstSurfaces gsvs = do
   where logWlrSurface :: CanvasSurface -> (GodotWlrSurface, Int, Int) -> IO ()
         logWlrSurface cs (wlrSurface, x, y) = do
           path <- saveWlrSurfacePng cs wlrSurface
-          dims <- getBufferDimensions wlrSurface
+          dims <- getWlrSurfaceStateCurrentDimensions wlrSurface
           logStr $ "wlrSurface: " ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ " @ (" ++ (show (x,y)) ++ ", " ++ (show dims) ++ ")"
           logStr $ "[[" ++ path ++ "]]"
 

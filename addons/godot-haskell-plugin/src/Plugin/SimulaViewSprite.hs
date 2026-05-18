@@ -145,8 +145,8 @@ launchResizeCompensationGraceFrameCount = 12
 updateSimulaViewSprite :: GodotSimulaViewSprite -> IO ()
 updateSimulaViewSprite gsvs = profileScope "updateSimulaViewSprite" $ do
   debugPutStrLn "Plugin.SimulaViewSprite.updateSimulaViewSprite"
-  setTargetDimensions gsvs
-  applyViewportBaseTexture gsvs
+  setSpilloverSizesAndKeepCentered gsvs
+  setQuadMeshShaderMaterialAlbedoTextureToCanvasBaseViewportTexture gsvs
   setBoxShapeExtentsToMatchAABB gsvs
 
   whenM (spriteReadyToMove gsvs) $ do
@@ -263,9 +263,9 @@ moveToStartingPosition gsvs appLocation = profileScope "moveToStartingPosition" 
 
 -- Sets gsvs wlr_xwayland_surface size and all associated viewports to the
 -- gsvsTargetSize every frame
-setTargetDimensions :: GodotSimulaViewSprite -> IO ()
-setTargetDimensions gsvs = profileScope "setTargetDimensions" $ do
-  debugPutStrLn "Plugin.SimulaViewSprite.setTargetDimensions"
+setSpilloverSizesAndKeepCentered :: GodotSimulaViewSprite -> IO ()
+setSpilloverSizesAndKeepCentered gsvs = profileScope "setSpilloverSizesAndKeepCentered" $ do
+  debugPutStrLn "Plugin.SimulaViewSprite.setSpilloverSizesAndKeepCentered"
   cb <- readTVarIO (gsvs ^. gsvsCanvasBase)
   renderTargetBase <- readTVarIO (cb ^. cbViewport)
   cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
@@ -652,7 +652,7 @@ debugPrintMouseButtonIntercept gsvs inputEventType wlrSurface (CanvasBaseCoordin
     case inputEventType of
       Motion -> return ()
       Button pressed buttonIndex -> do
-        (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+        (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions wlrSurface
         let msg =
               "Mouse button intercepted by surface="
                 ++ show wlrSurface
@@ -745,7 +745,7 @@ debugPrintPointerSeatState gsvs inputEventType surfaceLocalCoords@(CanvasBaseCoo
           Nothing -> return "nothing"
           Just validFocusedSurface -> do
             validFocusedSurface <- validateSurfaceE validFocusedSurface
-            (bufferWidth, bufferHeight) <- getBufferDimensions validFocusedSurface
+            (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions validFocusedSurface
             return $
               "surface="
                 ++ show validFocusedSurface
@@ -769,7 +769,7 @@ debugPrintPointerSeatState gsvs inputEventType surfaceLocalCoords@(CanvasBaseCoo
         Nothing -> return "nothing"
         Just (godotWlrSurface, SubSurfaceLocalCoordinates (RightCoordinate ssx) (DownCoordinate ssy)) ->
           (`finally` destroyMaybe (safeCast godotWlrSurface)) $ do
-            (bufferWidth, bufferHeight) <- getBufferDimensions godotWlrSurface
+            (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions godotWlrSurface
             return $
               "surface="
                 ++ show godotWlrSurface
@@ -885,7 +885,7 @@ describeMaybeWlrSurface :: Maybe GodotWlrSurface -> IO String
 describeMaybeWlrSurface Nothing = profileScope "describeMaybeWlrSurface" $ return "nothing"
 describeMaybeWlrSurface (Just wlrSurface) = profileScope "describeMaybeWlrSurface" $ do
   validWlrSurface <- validateSurfaceE wlrSurface
-  (bufferWidth, bufferHeight) <- getBufferDimensions validWlrSurface
+  (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions validWlrSurface
   return $
     "surface="
       ++ show validWlrSurface
@@ -945,7 +945,7 @@ debugPrintWlrSurfaceMapDetails :: String -> GodotWlrSurface -> IO ()
 debugPrintWlrSurfaceMapDetails prefix wlrSurface = profileScope "debugPrintWlrSurfaceMapDetails" $ do
   debugSurfaceCreationsActive <- debugSurfaceCreationsEnabled
   when debugSurfaceCreationsActive $ do
-    (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+    (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions wlrSurface
     let msg =
           prefix
             ++ " surface="
@@ -992,7 +992,7 @@ debugPrintXdgMapDetails prefix wlrXdgSurface = profileScope "debugPrintXdgMapDet
     pid <- G.get_pid wlrXdgSurface
     V2 (V2 posX posY) (V2 width height) <- G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
     withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
-      (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+      (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions wlrSurface
       let msg =
             prefix
               ++ " protocol=xdg role="
@@ -1376,7 +1376,7 @@ processSimulaViewSprite self gvArgs = do
               wlrXdgSurface <- validateSurfaceE wlrXdgSurface
               V2 _ (V2 xdgWidth xdgHeight) <- G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
               withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
-                (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+                (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions wlrSurface
                 return $
                   ((round xdgWidth) > 0 && (round xdgHeight) > 0)
                     || (bufferWidth > 0 && bufferHeight > 0)
@@ -1385,7 +1385,7 @@ processSimulaViewSprite self gvArgs = do
               surfaceWidth <- G.get_width wlrXWaylandSurface
               surfaceHeight <- G.get_height wlrXWaylandSurface
               withGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
-                (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+                (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions wlrSurface
                 return $
                   (surfaceWidth > 0 && surfaceHeight > 0)
                     || (bufferWidth > 0 && bufferHeight > 0)
@@ -1520,13 +1520,13 @@ safeSetActivated gsvs active = profileScope "safeSetActivated" $ do
       return ()
       -- G.set_activated toplevel True
 
-applyViewportBaseTexture :: GodotSimulaViewSprite -> IO ()
-applyViewportBaseTexture gsvs =
-  profileScope "applyViewportBaseTexture" $ applyViewportBaseTextureImpl gsvs
+setQuadMeshShaderMaterialAlbedoTextureToCanvasBaseViewportTexture :: GodotSimulaViewSprite -> IO ()
+setQuadMeshShaderMaterialAlbedoTextureToCanvasBaseViewportTexture gsvs =
+  profileScope "setQuadMeshShaderMaterialAlbedoTextureToCanvasBaseViewportTexture" $ setQuadMeshShaderMaterialAlbedoTextureToCanvasBaseViewportTextureImpl gsvs
 
-applyViewportBaseTextureImpl :: GodotSimulaViewSprite -> IO ()
-applyViewportBaseTextureImpl gsvs = do
-  debugPutStrLn "Plugin.SimulaViewSprite.applyViewportBaseTexture"
+setQuadMeshShaderMaterialAlbedoTextureToCanvasBaseViewportTextureImpl :: GodotSimulaViewSprite -> IO ()
+setQuadMeshShaderMaterialAlbedoTextureToCanvasBaseViewportTextureImpl gsvs = do
+  debugPutStrLn "Plugin.SimulaViewSprite.setQuadMeshShaderMaterialAlbedoTextureToCanvasBaseViewportTexture"
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
   cb <- readTVarIO (gsvs ^. gsvsCanvasBase)
@@ -1626,7 +1626,7 @@ getAdjustedXY gsvs wlrXWaylandSurface = profileScope "getAdjustedXY" $ do
                         simulaView <- readTVarIO (gsvs ^. gsvsView)
                         let eitherSurface = (simulaView ^. svWlrEitherSurface)
                         withWlrSurface eitherSurface $ \wlrSurface ->
-                          getBufferDimensions wlrSurface
+                          getWlrSurfaceStateCurrentDimensions wlrSurface
                      Just (SpriteDimensions (parentWidth, parentHeight)) -> return (parentWidth, parentHeight)
 
   let overlapHeight = (childSY + childHeight) - parentHeight
@@ -1683,7 +1683,7 @@ getAdjustedXYFreeChild gsvs wlrXWaylandSurface = profileScope "getAdjustedXYFree
                         simulaView <- readTVarIO (gsvs ^. gsvsView)
                         let eitherSurface = (simulaView ^. svWlrEitherSurface)
                         withWlrSurface eitherSurface $ \wlrSurface ->
-                          getBufferDimensions wlrSurface
+                          getWlrSurfaceStateCurrentDimensions wlrSurface
                      Just (SpriteDimensions (parentWidth, parentHeight)) -> return (parentWidth, parentHeight)
 
   let overlapHeight = (childSY + childHeight) - parentHeight
@@ -2017,7 +2017,7 @@ getHitMappedXWaylandChildWithCoords (CanvasBaseCoordinates (RightCoordinate cx) 
         Nothing -> return Nothing
         Just validWlrSurface -> do
           validWlrSurface <- validateSurfaceE validWlrSurface
-          (bufferWidth, bufferHeight) <- getBufferDimensions validWlrSurface
+          (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions validWlrSurface
           subX <- G.get_sub_x wlrSurfaceAtResult
           subY <- G.get_sub_y wlrSurfaceAtResult
           case (0 <= subX, subX < fromIntegral bufferWidth, 0 <= subY, subY < fromIntegral bufferHeight) of
@@ -2059,7 +2059,7 @@ getFreeChildCoords parentWlrXWaylandSurface (CanvasBaseCoordinates (RightCoordin
     fsy' <- G.get_surface_origin_y wlrXWaylandSurface
 
     let (fsx, fsy) = (fromIntegral fsx', fromIntegral fsy')
-    (fLengthX', fLengthY') <- getBufferDimensions freeChildSurface
+    (fLengthX', fLengthY') <- getWlrSurfaceStateCurrentDimensions freeChildSurface
     let (fLengthX, fLengthY) = (fromIntegral fLengthX', fromIntegral fLengthY')
     case (fsx < cx, cx < fsx + fLengthX, fsy < cy, cy < fsy + fLengthY) of
       (True, True, True, True) -> do
@@ -2084,7 +2084,7 @@ getFreeChildrenCoords parentWlrXWaylandSurface coords@(CanvasBaseCoordinates (Ri
 getWlrSurfaceCoords :: CanvasBaseCoordinates -> (GodotWlrSurface, Int, Int)-> IO (Maybe (GodotWlrSurface, SubSurfaceLocalCoordinates))
 getWlrSurfaceCoords cursorCoords@(CanvasBaseCoordinates (RightCoordinate cx) (DownCoordinate cy)) (wlrSurfaceFree, fsx', fsy') = profileScope "getWlrSurfaceCoords" $ do
   debugPutStrLn "Plugin.SimulaViewSprite.getWlrSurfaceCoords"
-  (fLengthX', fLengthY') <- getBufferDimensions wlrSurfaceFree
+  (fLengthX', fLengthY') <- getWlrSurfaceStateCurrentDimensions wlrSurfaceFree
   let (fLengthX, fLengthY) = (fromIntegral fLengthX', fromIntegral fLengthY')
   let (fsx, fsy) = (fromIntegral fsx', fromIntegral fsy')
   case (fsx < cx, cx < fsx + fLengthX, fsy < cy, cy < fsy + fLengthY) of

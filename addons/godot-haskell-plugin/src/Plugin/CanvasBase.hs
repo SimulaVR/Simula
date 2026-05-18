@@ -346,7 +346,7 @@ _draw cb gvArgs = profileScope "CanvasBase._draw" $ do
             let maxBoxWidth = min cellWidth 240
             let maxBoxHeight = max 4 (thumbnailAreaHeight - 6)
             forM_ (zip [0 :: Int ..] depthFirstSurfaces) $ \(layerIndex, (wlrSurface, _, _)) -> do
-              (surfaceWidth, surfaceHeight) <- getBufferDimensions wlrSurface
+              (surfaceWidth, surfaceHeight) <- getWlrSurfaceStateCurrentDimensions wlrSurface
               label <- getSurfaceLabel layerIndex wlrSurface surfaceWidth surfaceHeight
               let aspect = if surfaceHeight <= 0 then 1 else fromIntegral surfaceWidth / fromIntegral surfaceHeight
               let boxWidth = max 3 (min maxBoxWidth (maxBoxHeight * aspect))
@@ -442,7 +442,7 @@ _draw cb gvArgs = profileScope "CanvasBase._draw" $ do
         destroyWlrSurfacesWithCoords
         (\depthFirstSurfaces ->
           forM_ depthFirstSurfaces $ \(wlrSurface, x, y) -> do
-            (width, height) <- getBufferDimensions wlrSurface
+            (width, height) <- getWlrSurfaceStateCurrentDimensions wlrSurface
             debugRect <- toLowLevel $
               V2
                 (V2 (fromIntegral x) (fromIntegral y))
@@ -464,7 +464,7 @@ _draw cb gvArgs = profileScope "CanvasBase._draw" $ do
       where
         addSurfaceLabel :: M.Map (Int, Int) ((Int, Int, Int, Int), [String]) -> (Int, (GodotWlrSurface, Int, Int)) -> IO (M.Map (Int, Int) ((Int, Int, Int, Int), [String]))
         addSurfaceLabel labelsByCenter (layerIndex, (wlrSurface, x, y)) = profileScope "addSurfaceLabel" $ do
-          (width, height) <- getBufferDimensions wlrSurface
+          (width, height) <- getWlrSurfaceStateCurrentDimensions wlrSurface
           if width > 0 && height > 0
             then do
               label <- getSurfaceLabel layerIndex wlrSurface width height

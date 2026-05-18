@@ -842,7 +842,7 @@ getVisibleSurfaceDimensions eitherSurface = profileScope "getVisibleSurfaceDimen
       wlrXdgSurface <- validateSurfaceE wlrXdgSurface
       V2 _ (V2 xdgWidth xdgHeight) <- G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
       withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
-        (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+        (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions wlrSurface
         let width = if round xdgWidth > 0 then round xdgWidth else bufferWidth
         let height = if round xdgHeight > 0 then round xdgHeight else bufferHeight
         return (width, height)
@@ -851,7 +851,7 @@ getVisibleSurfaceDimensions eitherSurface = profileScope "getVisibleSurfaceDimen
       width <- G.get_width wlrXWaylandSurface
       height <- G.get_height wlrXWaylandSurface
       withGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
-        (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+        (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions wlrSurface
         return (if width > 0 then width else bufferWidth, if height > 0 then height else bufferHeight)
 
 getGSVSTargetDimsOrFallbackToItsCurrentEffectiveSize :: GodotSimulaViewSprite -> IO (Int, Int)
@@ -871,7 +871,7 @@ getAttachedXdgChildRootOffset parentGSVS childWlrXdgSurface = profileScope "getA
   childWlrXdgSurface <- validateSurfaceE childWlrXdgSurface
   V2 (V2 childGeomX childGeomY) (V2 childGeomWidth childGeomHeight) <- G.get_geometry childWlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
   withGodotRef (G.get_wlr_surface childWlrXdgSurface :: IO GodotWlrSurface) $ \childWlrSurface -> do
-    (childBufferWidth, childBufferHeight) <- getBufferDimensions childWlrSurface
+    (childBufferWidth, childBufferHeight) <- getWlrSurfaceStateCurrentDimensions childWlrSurface
     let childVisibleWidth = if round childGeomWidth > 0 then round childGeomWidth else childBufferWidth
     let childVisibleHeight = if round childGeomHeight > 0 then round childGeomHeight else childBufferHeight
     let childRootX = ((parentWidth - childVisibleWidth) `div` 2) - round childGeomX
@@ -915,7 +915,7 @@ getCoordsToCenterXWaylandChildRelativeToParent parentWlrXWaylandSurface childWlr
   childWlrXWaylandSurface <- validateSurfaceE childWlrXWaylandSurface
   V2 (V2 childGeomX childGeomY) (V2 childGeomWidth childGeomHeight) <- G.get_geometry childWlrXWaylandSurface >>= fromLowLevel :: IO (V2 (V2 Float))
   withGodotRef (G.get_wlr_surface childWlrXWaylandSurface :: IO GodotWlrSurface) $ \childWlrSurface -> do
-    (childBufferWidth, childBufferHeight) <- getBufferDimensions childWlrSurface
+    (childBufferWidth, childBufferHeight) <- getWlrSurfaceStateCurrentDimensions childWlrSurface
     -- XWayland geometry is currently always rooted at (0,0), but using the
     -- same geometry-aware formula as xdg keeps the two paths symmetric.
     let childVisibleWidth = if round childGeomWidth > 0 then round childGeomWidth else childBufferWidth
@@ -1243,7 +1243,7 @@ getCoordinatesFromCenter :: GodotWlrSurface -> Int -> Int -> IO GodotVector2
 getCoordinatesFromCenter wlrSurface sx sy = profileScope "getCoordinatesFromCenter" $ do
   debugPutStrLn "Plugin.Types.getCoordinatesFromCenter"
   -- putStrLn "getCoordinatesFromCenter"
-  (bufferWidth', bufferHeight')    <- getBufferDimensions wlrSurface
+  (bufferWidth', bufferHeight')    <- getWlrSurfaceStateCurrentDimensions wlrSurface
   let (bufferWidth, bufferHeight)  = (fromIntegral bufferWidth', fromIntegral bufferHeight')
   let (fromTopLeftX, fromTopLeftY) = (fromIntegral sx, fromIntegral sy)
   let fromCenterX                  = -(bufferWidth/2) + fromTopLeftX
@@ -1267,7 +1267,7 @@ initializeRenderTarget gsvs viewportType = profileScope "initializeRenderTarget"
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
   renderTarget <- unsafeInstance GodotViewport "Viewport"
   dimensions <- withWlrSurface eitherSurface $ \wlrSurface -> do
-    getBufferDimensions wlrSurface
+    getWlrSurfaceStateCurrentDimensions wlrSurface
   pixelDimensionsOfWlrSurface <- toGodotVector2 dimensions
 
   G.set_disable_input renderTarget True
@@ -1283,14 +1283,14 @@ initializeRenderTarget gsvs viewportType = profileScope "initializeRenderTarget"
 
   return renderTarget
 
-getBufferDimensions :: GodotWlrSurface -> IO (Int, Int)
-getBufferDimensions wlrSurface =
-  profileScope "getBufferDimensions" $ getBufferDimensionsImpl wlrSurface
+getWlrSurfaceStateCurrentDimensions :: GodotWlrSurface -> IO (Int, Int)
+getWlrSurfaceStateCurrentDimensions wlrSurface =
+  profileScope "getWlrSurfaceStateCurrentDimensions" $ getWlrSurfaceStateCurrentDimensionsImpl wlrSurface
 
-getBufferDimensionsImpl :: GodotWlrSurface -> IO (Int, Int)
-getBufferDimensionsImpl wlrSurface = do
-  debugPutStrLn "Plugin.Types.getBufferDimensions"
-  dims@(bufferWidth, bufferHeight) <- withCurrentState $ getBufferDimensions'
+getWlrSurfaceStateCurrentDimensionsImpl :: GodotWlrSurface -> IO (Int, Int)
+getWlrSurfaceStateCurrentDimensionsImpl wlrSurface = do
+  debugPutStrLn "Plugin.Types.getWlrSurfaceStateCurrentDimensions"
+  dims <- withCurrentState getCurrentStateDimensions
   return dims
   where withCurrentState :: (GodotWlrSurfaceState -> IO b) -> IO b
         withCurrentState stateAction = profileScope "withCurrentState" $ do
@@ -1298,9 +1298,9 @@ getBufferDimensionsImpl wlrSurface = do
           ret             <- stateAction wlrSurfaceState
           G.delete_state wlrSurfaceState
           return ret
-        getBufferDimensions' :: GodotWlrSurfaceState -> IO (Int, Int)
-        getBufferDimensions' wlrSurfaceState = profileScope "getBufferDimensions'" $ do
-          debugPutStrLn "Plugin.Types.getBufferDimensions"
+        getCurrentStateDimensions :: GodotWlrSurfaceState -> IO (Int, Int)
+        getCurrentStateDimensions wlrSurfaceState = profileScope "getCurrentStateDimensions" $ do
+          debugPutStrLn "Plugin.Types.getWlrSurfaceStateCurrentDimensions"
           -- bufferWidth <- G.get_buffer_width wlrSurfaceState
           -- bufferHeight <- G.get_buffer_height wlrSurfaceState
           -- return (bufferWidth, bufferHeight)
@@ -1328,7 +1328,7 @@ xdgSurfaceHasInsetGeometry wlrXdgSurface = profileScope "xdgSurfaceHasInsetGeome
   V2 (V2 geomX geomY) (V2 geomWidth geomHeight) <-
     G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
   withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
-    (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+    (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions wlrSurface
     return $
       (round geomX /= 0)
         || (round geomY /= 0)
@@ -1341,7 +1341,7 @@ xWaylandSurfaceHasInsetGeometry wlrXWaylandSurface = profileScope "xWaylandSurfa
   V2 (V2 geomX geomY) (V2 geomWidth geomHeight) <-
     G.get_geometry wlrXWaylandSurface >>= fromLowLevel :: IO (V2 (V2 Float))
   withGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
-    (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+    (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions wlrSurface
     return $
       (round geomX /= 0)
         || (round geomY /= 0)
@@ -1694,18 +1694,18 @@ resizeGSVS gsvs resizeMethod factor = profileScope "resizeGSVS" $ do
     Nothing -> do simulaView <- readTVarIO (gsvs ^. gsvsView)
                   let eitherSurface = (simulaView ^. svWlrEitherSurface)
                   withWlrSurface eitherSurface $ \wlrSurface -> do
-                    (x, y) <- getBufferDimensions wlrSurface
+                    (x, y) <- getWlrSurfaceStateCurrentDimensions wlrSurface
                     return $ SpriteDimensions (x, y)
 
   newTargetDims@(SpriteDimensions (wTarget, hTarget)) <- case resizeMethod of
          Horizontal -> do
            case (((fromIntegral w) * factor) > 500) of
-             True -> do -- orientSpriteTowardsGaze gsvs -- Avoid quadMesh rotational behavior (see `setTargetDimensions`)
+             True -> do -- orientSpriteTowardsGaze gsvs -- Avoid quadMesh rotational behavior (see `setSpilloverSizesAndKeepCentered`)
                         return $ SpriteDimensions (round $ ((fromIntegral w) * factor), round $ ((fromIntegral h)))
              False -> return $ oldTargetDims
          Vertical   -> do
            case (((fromIntegral h) * factor) > 500) of
-             True -> do -- orientSpriteTowardsGaze gsvs -- Avoid quadMesh rotational behavior (see `setTargetDimensions`)
+             True -> do -- orientSpriteTowardsGaze gsvs -- Avoid quadMesh rotational behavior (see `setSpilloverSizesAndKeepCentered`)
                         return $ SpriteDimensions (round $ ((fromIntegral w)), round $ ((fromIntegral h) * factor))
              False -> return $ oldTargetDims
          Zoom       -> do
@@ -1860,7 +1860,7 @@ getSurfacesCoordinateBounds :: [(GodotWlrSurface, Int, Int)] -> IO (Int, Int, In
 getSurfacesCoordinateBounds surfaces = profileScope "getSurfacesCoordinateBounds" $ do
   debugPutStrLn "Plugin.Types.getSurfacesCoordinateBounds"
   boxes <- forM surfaces $ \(wlrSurface, x, y) -> do
-    (width, height) <- getBufferDimensions wlrSurface
+    (width, height) <- getWlrSurfaceStateCurrentDimensions wlrSurface
     return (x, y, x + width, y + height)
   let xs1 = 0 : fmap (\(x1, _, _, _) -> x1) boxes
   let ys1 = 0 : fmap (\(_, y1, _, _) -> y1) boxes
@@ -2058,7 +2058,7 @@ getBaseDimensions gsvs = profileScope "getBaseDimensions" $ do
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
   withWlrSurface eitherSurface $ \wlrSurfaceParent ->
-    getBufferDimensions wlrSurfaceParent
+    getWlrSurfaceStateCurrentDimensions wlrSurfaceParent
 
 getSpilloverDims :: GodotSimulaViewSprite -> IO (Int, Int)
 getSpilloverDims gsvs = profileScope "getSpilloverDims" $ do

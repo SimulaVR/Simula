@@ -260,7 +260,7 @@ drawCanvasSurfaceFrame cs gvArgs = do
             markGSVSForFullRedrawsByDefaultFrameAmount gsvs
             return False
           Just validSurfaceTexture -> do
-            (bufferWidth, bufferHeight) <- getBufferDimensions wlrSurface
+            (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions wlrSurface
             destinationRect <- toLowLevel $
               V2
                 (V2 (fromIntegral x) (fromIntegral y))
@@ -310,7 +310,7 @@ drawCanvasSurfaceFrame cs gvArgs = do
                    maybeGsvsRegionIntersected <- getIntersectedGSVSRegion gsvsRegion (wlrSurface, x, y)
                    case (maybeRegionSurface, maybeGsvsRegionIntersected) of
                      (Just regionSurface, Just gsvsRegionIntersected) -> do
-                       bufferDims <- getBufferDimensions wlrSurface
+                       bufferDims <- getWlrSurfaceStateCurrentDimensions wlrSurface
                        gsvsRegion' <- fromLowLevel gsvsRegion
                        regionSurface' <- fromLowLevel regionSurface
                        G.canvas_item_add_texture_rect_region visualServer canvasItem gsvsRegionIntersected textureRid regionSurface modulateColor False emptyRid True
@@ -322,7 +322,7 @@ drawCanvasSurfaceFrame cs gvArgs = do
       debugPutStrLn "Plugin.CanvasSurface.getSurfaceRegion"
       V2 (V2 rx ry) (V2 rWidth rHeight) <- fromLowLevel regionGSVS
       regionSurfaceRect2 <- toLowLevel $ V2 (V2 (rx - (fromIntegral x)) (ry - (fromIntegral y))) (V2 rWidth rHeight)
-      (wlrSurfaceWidth, wlrSurfaceHeight) <- getBufferDimensions wlrSurface
+      (wlrSurfaceWidth, wlrSurfaceHeight) <- getWlrSurfaceStateCurrentDimensions wlrSurface
       wlrSurfaceRect2 <- toLowLevel $ V2 (V2 0 0) (V2 (fromIntegral wlrSurfaceWidth) (fromIntegral wlrSurfaceHeight))
       regionSurfaceIntersected <- Api.godot_rect2_clip wlrSurfaceRect2 regionSurfaceRect2
       hasNoArea <- (Api.godot_rect2_has_no_area regionSurfaceIntersected)
@@ -338,7 +338,7 @@ drawCanvasSurfaceFrame cs gvArgs = do
     getIntersectedGSVSRegion :: GodotRect2 -> (GodotWlrSurface, Int, Int) -> IO (Maybe GodotRect2)
     getIntersectedGSVSRegion regionGSVS (wlrSurface, x, y) = profileScope "getIntersectedGSVSRegion" $ do
       debugPutStrLn "Plugin.CanvasSurface.getIntersectedGSVSRegion"
-      (wlrSurfaceWidth, wlrSurfaceHeight) <- getBufferDimensions wlrSurface
+      (wlrSurfaceWidth, wlrSurfaceHeight) <- getWlrSurfaceStateCurrentDimensions wlrSurface
       wlrSurfaceRect2 <- toLowLevel $ V2 (V2 (fromIntegral x) (fromIntegral y)) (V2 (fromIntegral wlrSurfaceWidth) (fromIntegral wlrSurfaceHeight))
       regionSurfaceIntersected <- Api.godot_rect2_clip wlrSurfaceRect2 regionGSVS
       hasNoArea <- (Api.godot_rect2_has_no_area regionSurfaceIntersected)
