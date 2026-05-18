@@ -105,17 +105,67 @@ restore_tty() {
 }
 trap restore_tty EXIT
 
+matching_local_simula_pids() {
+    local repo_cwd pid cwd
+    repo_cwd="$(pwd -P)"
+    pgrep -f 'simula-unwrapped --local|script -qfc .*godot\.x11\.tools\.64|godot\.x11\.tools\.64 -m "\./\."|godot\.x11\.tools\.64 -m \./\.' |
+        while read -r pid; do
+            [[ "$pid" == "$$" ]] && continue
+            cwd="$(readlink -f "/proc/$pid/cwd" 2>/dev/null)" || continue
+            [[ "$cwd" == "$repo_cwd" ]] && printf '%s\n' "$pid"
+        done
+}
+
+pid_in_list() {
+    local needle="$1"
+    local pid
+    shift
+    for pid in "$@"; do
+        [[ "$pid" == "$needle" ]] && return 0
+    done
+    return 1
+}
+
+cleanup_timed_out_simula_processes() {
+    local pid
+    local -a pids_to_kill=()
+    mapfile -t current_matching_pids < <(matching_local_simula_pids)
+
+    for pid in "${current_matching_pids[@]}"; do
+        if ! pid_in_list "$pid" "${preexisting_matching_pids[@]}"; then
+            pids_to_kill+=("$pid")
+        fi
+    done
+
+    [[ "${#pids_to_kill[@]}" -eq 0 ]] && return 0
+
+    echo "profile-haskell-function.sh: timeout reached; terminating local Simula/Godot pids: ${pids_to_kill[*]}" >&2
+    kill -TERM "${pids_to_kill[@]}" 2>/dev/null || true
+    sleep 1
+
+    for pid in "${pids_to_kill[@]}"; do
+        if kill -0 "$pid" 2>/dev/null; then
+            kill -KILL "$pid" 2>/dev/null || true
+        fi
+    done
+}
+
 set +e
+mapfile -t preexisting_matching_pids < <(matching_local_simula_pids)
 SIMULA_DEBUG_PROFILE_HUD=1 \
 SIMULA_DEBUG_PROFILE_ROOT="$profile_function" \
-    timeout "$test_time" "${command[@]}"
+    timeout --foreground "$test_time" "${command[@]}"
 exit_code=$?
+if [[ "$exit_code" -eq 124 ]]; then
+    cleanup_timed_out_simula_processes
+fi
 restore_tty
 
 ended_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
 if [[ ! -s "$hud_live_path" ]]; then
     echo "profile-haskell-function.sh: $hud_live_path was not written or is empty" >&2
+    echo "profile-haskell-function.sh: simula exit code was $exit_code" >&2
     exit 1
 fi
 
