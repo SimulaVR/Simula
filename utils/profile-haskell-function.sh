@@ -89,6 +89,45 @@ if [[ ${#command[@]} -eq 0 ]]; then
     command=(./result/bin/simula --local)
 fi
 
+test_time_seconds() {
+    local value="$1"
+    awk -v value="$value" '
+        BEGIN {
+            if (value ~ /^[0-9]+([.][0-9]+)?$/) {
+                print value
+                exit 0
+            }
+            if (value ~ /^[0-9]+([.][0-9]+)?[smhd]$/) {
+                number = substr(value, 1, length(value) - 1) + 0
+                unit = substr(value, length(value), 1)
+                if (unit == "s") {
+                    print number
+                } else if (unit == "m") {
+                    print number * 60
+                } else if (unit == "h") {
+                    print number * 3600
+                } else if (unit == "d") {
+                    print number * 86400
+                }
+                exit 0
+            }
+            exit 1
+        }
+    '
+}
+
+profile_window_seconds="$(test_time_seconds "$test_time" || true)"
+if [[ -n "$profile_window_seconds" ]]; then
+    : "${SIMULA_DEBUG_PROFILE_HUD_WINDOW_S:=$profile_window_seconds}"
+    if [[ -z "${SIMULA_DEBUG_PROFILE_HUD_MAX_RETAINED_FRAMES:-}" ]]; then
+        SIMULA_DEBUG_PROFILE_HUD_MAX_RETAINED_FRAMES="$(
+            awk -v seconds="$profile_window_seconds" 'BEGIN { frames = int(seconds * 240 + 0.999); if (frames < 512) frames = 512; print frames }'
+        )"
+    fi
+    export SIMULA_DEBUG_PROFILE_HUD_WINDOW_S
+    export SIMULA_DEBUG_PROFILE_HUD_MAX_RETAINED_FRAMES
+fi
+
 rm -f "$hud_live_path"
 
 started_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"

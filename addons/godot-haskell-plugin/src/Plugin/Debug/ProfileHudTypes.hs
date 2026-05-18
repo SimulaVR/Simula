@@ -213,7 +213,9 @@ debugProfileHudFrameStripBucketCount = 60
 
 -- Maximum number of slow FrameProfile call trees retained for culprit analysis.
 debugProfileHudMaxRetainedSlowFrames :: Int
-debugProfileHudMaxRetainedSlowFrames = 64
+debugProfileHudMaxRetainedSlowFrames =
+  unsafePerformIO $ readIntEnv "SIMULA_DEBUG_PROFILE_HUD_MAX_RETAINED_FRAMES" 64
+{-# NOINLINE debugProfileHudMaxRetainedSlowFrames #-}
 
 -- Maximum number of top-level scopes retained inside one slow frame. If a frame
 -- has more roots than this, keep the most expensive roots by inclusive time.
@@ -237,6 +239,14 @@ debugProfileHudNearBudgetFactor = 0.80
 
 readDoubleEnv :: String -> Double -> IO Double
 readDoubleEnv name fallback = do
+  maybeValue <- lookupEnv name
+  return $
+    case maybeValue >>= readMaybe of
+      Just value -> value
+      Nothing -> fallback
+
+readIntEnv :: String -> Int -> IO Int
+readIntEnv name fallback = do
   maybeValue <- lookupEnv name
   return $
     case maybeValue >>= readMaybe of
