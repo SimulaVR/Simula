@@ -19,14 +19,15 @@ static int env_is_enabled(const char *env_name) {
 
 static void flib_init() __attribute__((constructor)); //forces flib_init to execute when the library is loaded
 
-/* We build up a RTS command of form libGodotHaskellPlugin.so +RTS -N ... -RTS.
+/* We build up a RTS command of form libGodotHaskellPlugin.so +RTS -N4 ... -RTS.
  *
  * 1. If SIMULA_HS_PROFILE_PREFIX is set/non-empty, we add `-l -s<prefix>.rts-stats -ol<prefix>.eventlog`
  * 2. If cost-centre profiling is also enabled (SIMULA_HS_PROFILE_COST_CENTER=1), we add `-l -s<prefix>.rts-stats -ol<prefix>.eventlog -p -po<prefix>.prof`
  * 3. What all this means:
  *
  *  - +RTS ... -RTS: delimit args for the Haskell runtime system (RTS).
- *  - -N: run RTS with multiple cores. We run this no matter what.
+ *  - -N4: run RTS with four capabilities. This keeps Haskell parallelism
+ *    available without letting the embedded runtime fan out across every CPU.
  *  - -l: enable RTS eventlog generation (a timestamped timeline of runtime events including GC start/end, scheduler activities, thread wakes/blocks, etc in an *.eventlog file)
  *  - -ol<file>: set eventlog output file path.
  *  - -s<file>: write RTS summary stats to that file (a one-shot aggregate report at program end in *.rts-stats form)
@@ -48,7 +49,7 @@ static void flib_init() {
 
   argv[argc++] = "libGodotHaskellPlugin.so";
   argv[argc++] = "+RTS";
-  argv[argc++] = "-N";
+  argv[argc++] = "-N4";
 
   if (enable_profile) {
     argv[argc++] = "-l";
