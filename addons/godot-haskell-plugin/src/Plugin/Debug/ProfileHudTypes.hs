@@ -1,3 +1,5 @@
+{-# LANGUAGE ForeignFunctionInterface #-}
+
 module Plugin.Debug.ProfileHudTypes where
 
 import Control.Concurrent (ThreadId, myThreadId)
@@ -12,11 +14,15 @@ import qualified Data.Map.Strict as M
 import Data.Sequence (Seq, (|>))
 import qualified Data.Sequence as Seq
 import Data.Time.Clock
+import Foreign.C.Types (CLong(..))
 import System.Environment (lookupEnv)
+import System.Clock (Clock(Monotonic), getTime, toNanoSecs)
 import System.IO.Unsafe
 import Text.Read (readMaybe)
 
 import Plugin.Debug.HudTypes
+
+foreign import ccall unsafe "simula_gettid" c_simula_gettid :: IO CLong
 
 debugProfileHudEnabled :: IO Bool
 debugProfileHudEnabled =
@@ -270,6 +276,7 @@ type ProfileStack = [OpenScope]
 data OpenFrame = OpenFrame
   { openFrameId         :: FrameId
   , openFrameStart      :: UTCTime
+  , openFrameStartMonoNs :: Integer
   , openFrameRootScopes :: [ClosedScope]
   }
 
@@ -277,6 +284,8 @@ data FrameProfile = FrameProfile
   { frameId         :: FrameId
   , frameStart      :: UTCTime
   , frameEnd        :: UTCTime
+  , frameStartMonoNs :: Integer
+  , frameEndMonoNs   :: Integer
   , frameRootScopes :: [ClosedScope]
   }
   deriving (Show)
@@ -298,6 +307,9 @@ data OpenScope = OpenScope
     -- On exit, inclusive time is computed as:
     --   now - openStart
   , openStart :: UTCTime
+  , openStartMonoNs :: Integer
+  , openOsTid :: Integer
+  , openThreadLabel :: String
 
     -- Sum of inclusive times of child scopes that already finished
     -- while this scope was still open.
@@ -318,6 +330,14 @@ data ClosedScope = ClosedScope
   { -- Human-readable name copied from the OpenScope when it exits.
     closedLabel :: String
 
+  , closedStart :: UTCTime
+  , closedEnd :: UTCTime
+  , closedStartMonoNs :: Integer
+  , closedEndMonoNs :: Integer
+  , closedOsTid :: Integer
+  , closedExitOsTid :: Integer
+  , closedThreadLabel :: String
+
     -- Total wall-clock time from entering this scope to exiting it.
     -- This includes child scopes.
   , closedInclusive :: NominalDiffTime
@@ -333,6 +353,19 @@ data ClosedScope = ClosedScope
     -- This is the actual tree edge:
     --   A has children [B, B, B, B]
   , closedChildren :: [ClosedScope]
+  }
+  deriving (Show)
+
+data MaxScopeEvidence = MaxScopeEvidence
+  { maxScopeFrameId      :: FrameId
+  , maxScopeFrameMs      :: Double
+  , maxScopePath         :: [String]
+  , maxScopeStartMonoNs  :: Integer
+  , maxScopeEndMonoNs    :: Integer
+  , maxScopeElapsedMs    :: Double
+  , maxScopeOsTid        :: Integer
+  , maxScopeExitOsTid    :: Integer
+  , maxScopeThreadLabel  :: String
   }
   deriving (Show)
 
@@ -353,6 +386,7 @@ data FoldedRow = FoldedRow
   , foldedMaxMs  :: Double
   , foldedFrames :: Int
   , foldedTag    :: CulpritTag
+  , foldedMaxEvidence :: Maybe MaxScopeEvidence
   }
   deriving (Show)
 
@@ -472,9 +506,11 @@ profileEnterNow label = do
     then return False
     else do
       now <- getCurrentTime
+      nowMonoNs <- profileHudMonotonicNs
+      osTid <- profileHudOsTid
       atomically $
         modifyTVar' debugProfileHudStateVar $
-          pushOpenScope threadId (OpenScope label now 0 [])
+          pushOpenScope threadId (OpenScope label now nowMonoNs osTid (show threadId) 0 [])
       return True
 
 shouldProfileScope :: Maybe String -> ThreadId -> String -> IO Bool
@@ -490,23 +526,34 @@ shouldProfileScope root threadId label =
               List.null $
                 M.findWithDefault [] threadId (profileStacksByThread state)
 
+profileHudMonotonicNs :: IO Integer
+profileHudMonotonicNs =
+  toNanoSecs <$> getTime Monotonic
+
+profileHudOsTid :: IO Integer
+profileHudOsTid =
+  fromIntegral <$> c_simula_gettid
+
 profileExitNow :: IO ()
 profileExitNow = do
   now <- getCurrentTime
+  nowMonoNs <- profileHudMonotonicNs
+  osTid <- profileHudOsTid
   threadId <- myThreadId
   atomically $
     modifyTVar' debugProfileHudStateVar $
-      popOpenScope now threadId
+      popOpenScope now nowMonoNs osTid threadId
 
 profileFrameBoundary :: IO ()
 profileFrameBoundary = do
   enabled <- debugProfileHudEnabled
   when enabled $ do
     now <- getCurrentTime
+    nowMonoNs <- profileHudMonotonicNs
     root <- getDebugProfileRoot
     atomically $
       modifyTVar' debugProfileHudStateVar $
-        advanceProfileFrame now root
+        advanceProfileFrame now nowMonoNs root
 
 buildDebugProfileHudSnapshot :: UTCTime -> Maybe String -> DebugProfileHudState -> DebugProfileHudSnapshot
 buildDebugProfileHudSnapshot now root state =
@@ -582,10 +629,10 @@ foldFrameProfile :: FrameProfile -> M.Map [String] FoldedRow
 foldFrameProfile frame =
   M.map (\row -> row { foldedFrames = 1 }) rawRows
   where
-    rawRows = M.unionsWith mergeFoldedRows $ fmap (foldScope []) (frameRootScopes frame)
+    rawRows = M.unionsWith mergeFoldedRows $ fmap (foldScope frame []) (frameRootScopes frame)
 
-foldScope :: [String] -> ClosedScope -> M.Map [String] FoldedRow
-foldScope parentPath scope =
+foldScope :: FrameProfile -> [String] -> ClosedScope -> M.Map [String] FoldedRow
+foldScope frame parentPath scope =
   M.unionsWith mergeFoldedRows (selfRow : childRows)
   where
     path = parentPath ++ [closedLabel scope]
@@ -599,8 +646,9 @@ foldScope parentPath scope =
           , foldedMaxMs = nominalDiffTimeToMs (closedInclusive scope)
           , foldedFrames = 0
           , foldedTag = CulpritSelf
+          , foldedMaxEvidence = Just $ maxScopeEvidenceFromScope frame path scope
           }
-    childRows = fmap (foldScope path) (closedChildren scope)
+    childRows = fmap (foldScope frame path) (closedChildren scope)
 
 mergeFoldedRows :: FoldedRow -> FoldedRow -> FoldedRow
 mergeFoldedRows a b =
@@ -610,7 +658,32 @@ mergeFoldedRows a b =
     , foldedCalls = foldedCalls a + foldedCalls b
     , foldedMaxMs = max (foldedMaxMs a) (foldedMaxMs b)
     , foldedFrames = foldedFrames a + foldedFrames b
+    , foldedMaxEvidence = chooseMaxScopeEvidence (foldedMaxEvidence a) (foldedMaxEvidence b)
     }
+
+maxScopeEvidenceFromScope :: FrameProfile -> [String] -> ClosedScope -> MaxScopeEvidence
+maxScopeEvidenceFromScope frame path scope =
+  MaxScopeEvidence
+    { maxScopeFrameId = frameId frame
+    , maxScopeFrameMs = frameElapsedMs frame
+    , maxScopePath = path
+    , maxScopeStartMonoNs = closedStartMonoNs scope
+    , maxScopeEndMonoNs = closedEndMonoNs scope
+    , maxScopeElapsedMs = nominalDiffTimeToMs (closedInclusive scope)
+    , maxScopeOsTid = closedOsTid scope
+    , maxScopeExitOsTid = closedExitOsTid scope
+    , maxScopeThreadLabel = closedThreadLabel scope
+    }
+
+chooseMaxScopeEvidence :: Maybe MaxScopeEvidence -> Maybe MaxScopeEvidence -> Maybe MaxScopeEvidence
+chooseMaxScopeEvidence Nothing Nothing = Nothing
+chooseMaxScopeEvidence (Just evidence) Nothing = Just evidence
+chooseMaxScopeEvidence Nothing (Just evidence) = Just evidence
+chooseMaxScopeEvidence (Just a) (Just b)
+  | maxScopeElapsedMs b > maxScopeElapsedMs a = Just b
+  | maxScopeElapsedMs b == maxScopeElapsedMs a
+      && maxScopeEndMonoNs b > maxScopeEndMonoNs a = Just b
+  | otherwise = Just a
 
 classifyFoldedRow :: Int -> FoldedRow -> FoldedRow
 classifyFoldedRow slowFrameCount row =
@@ -663,11 +736,11 @@ pushOpenScope threadId scope state =
         M.insert threadId (scope : M.findWithDefault [] threadId (profileStacksByThread state)) (profileStacksByThread state)
     }
 
-popOpenScope :: UTCTime -> ThreadId -> DebugProfileHudState -> DebugProfileHudState
-popOpenScope now threadId state =
+popOpenScope :: UTCTime -> Integer -> Integer -> ThreadId -> DebugProfileHudState -> DebugProfileHudState
+popOpenScope now nowMonoNs osTid threadId state =
   case M.findWithDefault [] threadId (profileStacksByThread state) of
     childOpen : parentOpen : rest ->
-      let childClosed = closeScope now childOpen
+      let childClosed = closeScope now nowMonoNs osTid childOpen
           parentOpen' =
             parentOpen
               { openChildTime = openChildTime parentOpen + closedInclusive childClosed
@@ -675,16 +748,23 @@ popOpenScope now threadId state =
               }
        in state { profileStacksByThread = M.insert threadId (parentOpen' : rest) (profileStacksByThread state) }
     rootOpen : [] ->
-      let rootClosed = closeScope now rootOpen
+      let rootClosed = closeScope now nowMonoNs osTid rootOpen
           stacks' = M.delete threadId (profileStacksByThread state)
        in attachRootScope rootClosed state { profileStacksByThread = stacks' }
     [] ->
       recordProfilerError "profileExit with empty stack" state
 
-closeScope :: UTCTime -> OpenScope -> ClosedScope
-closeScope now scope =
+closeScope :: UTCTime -> Integer -> Integer -> OpenScope -> ClosedScope
+closeScope now nowMonoNs osTid scope =
   ClosedScope
     { closedLabel = openLabel scope
+    , closedStart = openStart scope
+    , closedEnd = now
+    , closedStartMonoNs = openStartMonoNs scope
+    , closedEndMonoNs = nowMonoNs
+    , closedOsTid = openOsTid scope
+    , closedExitOsTid = osTid
+    , closedThreadLabel = openThreadLabel scope
     , closedInclusive = inclusive
     , closedExclusive = max 0 (inclusive - openChildTime scope)
     , closedChildren = List.reverse (openChildren scope)
@@ -705,33 +785,36 @@ attachRootScope rootClosed state =
         { profilePendingRootScopes = List.take 128 (rootClosed : profilePendingRootScopes state)
         }
 
-advanceProfileFrame :: UTCTime -> Maybe String -> DebugProfileHudState -> DebugProfileHudState
-advanceProfileFrame now root state =
-  startNextFrame now $
+advanceProfileFrame :: UTCTime -> Integer -> Maybe String -> DebugProfileHudState -> DebugProfileHudState
+advanceProfileFrame now nowMonoNs root state =
+  startNextFrame now nowMonoNs $
     case profileCurrentFrame state of
       Nothing -> state
-      Just currentFrame -> appendCompletedFrame now root (closeFrame now currentFrame) state
+      Just currentFrame -> appendCompletedFrame now root (closeFrame now nowMonoNs currentFrame) state
 
-startNextFrame :: UTCTime -> DebugProfileHudState -> DebugProfileHudState
-startNextFrame now state =
+startNextFrame :: UTCTime -> Integer -> DebugProfileHudState -> DebugProfileHudState
+startNextFrame now nowMonoNs state =
   state
     { profileCurrentFrame =
         Just
           OpenFrame
             { openFrameId = profileNextFrameId state
             , openFrameStart = now
+            , openFrameStartMonoNs = nowMonoNs
             , openFrameRootScopes = profilePendingRootScopes state
             }
     , profileNextFrameId = profileNextFrameId state + 1
     , profilePendingRootScopes = []
     }
 
-closeFrame :: UTCTime -> OpenFrame -> FrameProfile
-closeFrame now frame =
+closeFrame :: UTCTime -> Integer -> OpenFrame -> FrameProfile
+closeFrame now nowMonoNs frame =
   FrameProfile
     { frameId = openFrameId frame
     , frameStart = openFrameStart frame
     , frameEnd = now
+    , frameStartMonoNs = openFrameStartMonoNs frame
+    , frameEndMonoNs = nowMonoNs
     , frameRootScopes = List.reverse (openFrameRootScopes frame)
     }
 

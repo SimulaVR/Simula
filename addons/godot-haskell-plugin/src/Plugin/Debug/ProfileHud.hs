@@ -102,6 +102,8 @@ formatDebugProfileHudLiveSnapshot snapshot =
              then [emptyRowsMessage snapshot]
              else fmap formatDebugProfileHudLiveRow rows
          )
+      ++ formatTopRowMaxCallSummary rows
+      ++ formatVisibleRowMaxCalls rows
       ++ formatWorstFrameSummary snapshot
       ++ formatProfilerErrors snapshot
   where
@@ -116,6 +118,63 @@ formatDebugProfileHudLiveRow row =
     ++ padLeft 8 (show $ foldedCalls row)
     ++ padLeft 8 (show $ foldedFrames row)
     ++ padLeft 8 (formatCulpritTag $ foldedTag row)
+
+formatTopRowMaxCallSummary :: [FoldedRow] -> [String]
+formatTopRowMaxCallSummary rows =
+  case firstMaybe rows >>= foldedMaxEvidence of
+    Nothing -> []
+    Just evidence ->
+      [ ""
+      , "Top row max call:"
+      , "max_frame_id: " ++ show (maxScopeFrameId evidence)
+      , "max_path: " ++ formatMaxScopeEvidencePath evidence
+      , "max_os_tid: " ++ show (maxScopeOsTid evidence)
+      , "max_exit_os_tid: " ++ show (maxScopeExitOsTid evidence)
+      , "max_thread_label: " ++ maxScopeThreadLabel evidence
+      , "max_start_mono_ns: " ++ show (maxScopeStartMonoNs evidence)
+      , "max_end_mono_ns: " ++ show (maxScopeEndMonoNs evidence)
+      , "max_elapsed_ns: " ++ show (maxScopeEndMonoNs evidence - maxScopeStartMonoNs evidence)
+      , "max_elapsed_ms: " ++ formatMsValue (maxScopeElapsedMs evidence)
+      , "max_frame_ms: " ++ formatMsValue (maxScopeFrameMs evidence)
+      ]
+
+formatVisibleRowMaxCalls :: [FoldedRow] -> [String]
+formatVisibleRowMaxCalls rows =
+  case rowsWithEvidence of
+    [] -> []
+    _ ->
+      [ ""
+      , "Visible row max calls:"
+      , padRight 5 "rank"
+          ++ padRight 72 "function/path"
+          ++ padLeft 9 "max_ms"
+          ++ padLeft 12 "frame_id"
+          ++ padLeft 12 "os_tid"
+          ++ padLeft 20 "start_mono_ns"
+          ++ padLeft 20 "end_mono_ns"
+      , List.replicate 150 '-'
+      ]
+        ++ fmap formatVisibleRowMaxCall rowsWithEvidence
+  where
+    rowsWithEvidence =
+      [ (rank, row, evidence)
+      | (rank, row) <- zip [1 :: Int ..] rows
+      , Just evidence <- [foldedMaxEvidence row]
+      ]
+
+formatVisibleRowMaxCall :: (Int, FoldedRow, MaxScopeEvidence) -> String
+formatVisibleRowMaxCall (rank, row, evidence) =
+  padRight 5 (show rank)
+    ++ padRight 72 (fitText 72 $ formatFoldedPath row)
+    ++ padLeft 9 (formatMsValue $ maxScopeElapsedMs evidence)
+    ++ padLeft 12 (show $ maxScopeFrameId evidence)
+    ++ padLeft 12 (show $ maxScopeOsTid evidence)
+    ++ padLeft 20 (show $ maxScopeStartMonoNs evidence)
+    ++ padLeft 20 (show $ maxScopeEndMonoNs evidence)
+
+formatMaxScopeEvidencePath :: MaxScopeEvidence -> String
+formatMaxScopeEvidencePath =
+  List.intercalate " > " . maxScopePath
 
 formatWorstFrameSummary :: DebugProfileHudSnapshot -> [String]
 formatWorstFrameSummary snapshot =
@@ -159,6 +218,8 @@ formatSlowFrameEvidence snapshot frame =
     , frameEvidenceLabel snapshot ++ " " ++ show (frameId frame)
     , "started: " ++ show (frameStart frame)
     , "ended: " ++ show (frameEnd frame)
+    , "start_mono_ns: " ++ show (frameStartMonoNs frame)
+    , "end_mono_ns: " ++ show (frameEndMonoNs frame)
     , "frame_ms: " ++ formatMsValue frameMs
     , "budget_ms: " ++ formatMsValue (debugProfileHudSnapshotBudgetMs snapshot)
     , "over_ms: " ++ formatMsValue (max 0 $ frameMs - debugProfileHudSnapshotBudgetMs snapshot)
@@ -181,7 +242,13 @@ formatScopeTree indent scope =
     ++ " inc "
     ++ padLeft 7 (formatNominalMs $ closedInclusive scope)
     ++ " self "
-    ++ padLeft 7 (formatNominalMs $ closedExclusive scope))
+    ++ padLeft 7 (formatNominalMs $ closedExclusive scope)
+    ++ " tid "
+    ++ show (closedOsTid scope)
+    ++ " mono "
+    ++ show (closedStartMonoNs scope)
+    ++ "-"
+    ++ show (closedEndMonoNs scope))
     : concatMap (formatScopeTree (indent + 2)) (closedChildren scope)
   where
     indentText = List.replicate indent ' '

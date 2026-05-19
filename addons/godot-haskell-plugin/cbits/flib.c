@@ -2,6 +2,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+
+//Used in profiling to get TID of godot threads to compare with perf output
+long simula_gettid(void) {
+  return (long)syscall(SYS_gettid);
+}
 
 // Hedlper function for GHC profiling flags
 static int env_is_enabled(const char *env_name) {
