@@ -18,6 +18,8 @@ output_was_set=0
 parse_fields="avg_ms,max_ms"
 parse_fields_was_set=0
 hud_live_path="./HUD_profile_live.txt"
+ghc_eventlog_enabled=0
+ghc_eventlog_prefix=""
 perf_enabled=0
 perf_output_dir=""
 perf_events="task-clock,context-switches,cpu-migrations,page-faults,major-faults,cycles,instructions,sched:sched_switch"
@@ -57,6 +59,15 @@ while [[ $# -gt 0 ]]; do
             ;;
         --hud-live-path)
             hud_live_path="${2:?profile-haskell-function.sh: --hud-live-path requires a value}"
+            shift 2
+            ;;
+        --ghc-eventlog|--ghc-events)
+            ghc_eventlog_enabled=1
+            shift
+            ;;
+        --ghc-eventlog-prefix)
+            ghc_eventlog_enabled=1
+            ghc_eventlog_prefix="${2:?profile-haskell-function.sh: --ghc-eventlog-prefix requires a value}"
             shift 2
             ;;
         --perf)
@@ -122,11 +133,16 @@ profile-haskell-function.sh [FLAGS] [COMMAND...]
 Flags:
   --test-time TIME       How long to let Simula run before timeout. Default: 10s
   --function NAME        Value passed to SIMULA_DEBUG_PROFILE_ROOT. Required.
+                         If SIMULA_HS_PROFILE_PREFIX is set and
+                         SIMULA_DEBUG_PROFILE_EVENTLOG_SCOPE is unset, NAME is
+                         also used as the eventlog marker scope.
   --test-setup TEXT      Free-form note describing the test setup.
   --output FILE          CSV file to append. Default: <function>-profile.csv
   --parse FIELDS         Comma/space-separated HUD_profile_live.txt fields.
                          Default: avg_ms,max_ms
   --hud-live-path FILE   Live HUD file to parse. Default: ./HUD_profile_live.txt
+  --ghc-eventlog         Emit GHC RTS eventlog/stats into the run artifact dir.
+                         Alias: --ghc-events
   --perf                 Run the HUD capture and attach perf to the Godot PID.
   --perf-output-dir DIR  Directory for perf/HUD artifacts. Default:
                          ./perf-runs/<utc timestamp>-<function>
@@ -193,6 +209,12 @@ if [[ "$perf_enabled" -eq 1 && "$parse_fields_was_set" -eq 0 ]]; then
     parse_fields="$perf_default_parse_fields"
 fi
 
+default_run_dir() {
+    local timestamp_slug
+    timestamp_slug="$(date -u +"%Y%m%dT%H%M%SZ")"
+    printf './perf-runs/%s-%s\n' "$timestamp_slug" "$safe_function"
+}
+
 test_time_seconds() {
     local value="$1"
     awk -v value="$value" '
@@ -230,6 +252,22 @@ if [[ -n "$profile_window_seconds" ]]; then
     fi
     export SIMULA_DEBUG_PROFILE_HUD_WINDOW_S
     export SIMULA_DEBUG_PROFILE_HUD_MAX_RETAINED_FRAMES
+fi
+
+if [[ "$ghc_eventlog_enabled" -eq 1 && ! ( "$perf_enabled" -eq 1 && "$perf_child" -eq 0 ) ]]; then
+    if [[ -z "$ghc_eventlog_prefix" ]]; then
+        if [[ -z "$perf_output_dir" ]]; then
+            ghc_eventlog_prefix="$(default_run_dir)/godot-haskell-plugin"
+        else
+            ghc_eventlog_prefix="$perf_output_dir/godot-haskell-plugin"
+        fi
+    fi
+    mkdir -p "$(dirname "$ghc_eventlog_prefix")"
+    export SIMULA_HS_PROFILE_PREFIX="$ghc_eventlog_prefix"
+fi
+
+if [[ -n "${SIMULA_HS_PROFILE_PREFIX:-}" && -z "${SIMULA_DEBUG_PROFILE_EVENTLOG_SCOPE+x}" ]]; then
+    export SIMULA_DEBUG_PROFILE_EVENTLOG_SCOPE="$profile_function"
 fi
 
 rm -f "$hud_live_path"
@@ -857,6 +895,9 @@ run_perf_parent() {
     fi
 
     mkdir -p "$run_dir"
+    if [[ "$ghc_eventlog_enabled" -eq 1 && -z "$ghc_eventlog_prefix" ]]; then
+        ghc_eventlog_prefix="$run_dir/godot-haskell-plugin"
+    fi
 
     profile_log="$run_dir/profile-command.log"
     profile_csv="$run_dir/profile.csv"
@@ -892,6 +933,12 @@ run_perf_parent() {
         --
         "${command[@]}"
     )
+    if [[ "$ghc_eventlog_enabled" -eq 1 ]]; then
+        child_args=(
+            --ghc-eventlog-prefix "$ghc_eventlog_prefix"
+            "${child_args[@]}"
+        )
+    fi
 
     {
         printf 'Profile command:\n'
@@ -1171,4 +1218,7 @@ fi
 } >> "$output"
 
 echo "profile-haskell-function.sh: appended $(basename "$output")"
+if [[ "$ghc_eventlog_enabled" -eq 1 ]]; then
+    echo "profile-haskell-function.sh: GHC eventlog prefix $SIMULA_HS_PROFILE_PREFIX"
+fi
 echo "profile-haskell-function.sh: simula exit code was $exit_code"

@@ -14,6 +14,7 @@ import qualified Data.Map.Strict as M
 import Data.Sequence (Seq, (|>))
 import qualified Data.Sequence as Seq
 import Data.Time.Clock
+import Debug.Trace (traceEventIO)
 import Foreign.C.Types (CLong(..))
 import System.Environment (lookupEnv)
 import System.Clock (Clock(Monotonic), getTime, toNanoSecs)
@@ -81,6 +82,15 @@ debugProfileHudInitialRoot = unsafePerformIO $ do
   maybeValue <- lookupEnv "SIMULA_DEBUG_PROFILE_ROOT"
   return $ maybeValue >>= normalizeEnvString
 {-# NOINLINE debugProfileHudInitialRoot #-}
+
+-- If set, emit eventlog markers for matching profile scopes. The marker text
+-- includes the same monotonic nanoseconds that the HUD stores, so decoded GHC
+-- eventlog timestamps can be aligned with HUD max_start_mono_ns/max_end_mono_ns.
+debugProfileEventlogScope :: Maybe String
+debugProfileEventlogScope = unsafePerformIO $ do
+  maybeValue <- lookupEnv "SIMULA_DEBUG_PROFILE_EVENTLOG_SCOPE"
+  return $ maybeValue >>= normalizeEnvString
+{-# NOINLINE debugProfileEventlogScope #-}
 
 -- Nothing means no root is currently being inspected (same as SIMULA_DEBUG_PROFILE_ROOT="")
 data DebugProfileRootNavigation = DebugProfileRootNavigation
@@ -508,6 +518,7 @@ profileEnterNow label = do
       now <- getCurrentTime
       nowMonoNs <- profileHudMonotonicNs
       osTid <- profileHudOsTid
+      traceProfileEventlogScope "start" label nowMonoNs nowMonoNs osTid (show threadId)
       atomically $
         modifyTVar' debugProfileHudStateVar $
           pushOpenScope threadId (OpenScope label now nowMonoNs osTid (show threadId) 0 [])
@@ -540,9 +551,44 @@ profileExitNow = do
   nowMonoNs <- profileHudMonotonicNs
   osTid <- profileHudOsTid
   threadId <- myThreadId
-  atomically $
-    modifyTVar' debugProfileHudStateVar $
-      popOpenScope now nowMonoNs osTid threadId
+  maybeOpenScope <- atomically $ do
+    state <- readTVar debugProfileHudStateVar
+    let maybeScope =
+          case M.findWithDefault [] threadId (profileStacksByThread state) of
+            scope : _ -> Just scope
+            [] -> Nothing
+    writeTVar debugProfileHudStateVar $
+      popOpenScope now nowMonoNs osTid threadId state
+    return maybeScope
+  case maybeOpenScope of
+    Just openScope ->
+      traceProfileEventlogScope
+        "end"
+        (openLabel openScope)
+        (openStartMonoNs openScope)
+        nowMonoNs
+        osTid
+        (show threadId)
+    Nothing -> return ()
+
+traceProfileEventlogScope :: String -> String -> Integer -> Integer -> Integer -> String -> IO ()
+traceProfileEventlogScope phase label startMonoNs nowMonoNs osTid threadLabel =
+  case debugProfileEventlogScope of
+    Just wanted
+      | wanted == "*" || wanted == label ->
+          traceEventIO $
+            "simula-profile"
+              ++ " phase=" ++ phase
+              ++ " label=" ++ label
+              ++ " start_mono_ns=" ++ show startMonoNs
+              ++ " mono_ns=" ++ show nowMonoNs
+              ++ " elapsed_ns=" ++ show (max 0 (nowMonoNs - startMonoNs))
+              ++ " os_tid=" ++ show osTid
+              ++ " thread=" ++ map spaceToUnderscore threadLabel
+    _ -> return ()
+  where
+    spaceToUnderscore c =
+      if Char.isSpace c then '_' else c
 
 profileFrameBoundary :: IO ()
 profileFrameBoundary = do

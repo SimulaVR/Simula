@@ -10,7 +10,7 @@ long simula_gettid(void) {
   return (long)syscall(SYS_gettid);
 }
 
-// Hedlper function for GHC profiling flags
+// Helper function for GHC profiling flags
 static int env_is_enabled(const char *env_name) {
   const char *value = getenv(env_name);
   if (value == NULL) {
@@ -26,16 +26,24 @@ static int env_is_enabled(const char *env_name) {
 
 static void flib_init() __attribute__((constructor)); //forces flib_init to execute when the library is loaded
 
-/* We build up a RTS command of form libGodotHaskellPlugin.so +RTS -N4 ... -RTS.
+/* We build up a RTS command of form libGodotHaskellPlugin.so +RTS -N1 ... -RTS.
  *
- * 1. If SIMULA_HS_PROFILE_PREFIX is set/non-empty, we add `-l -s<prefix>.rts-stats -ol<prefix>.eventlog`
- * 2. If cost-centre profiling is also enabled (SIMULA_HS_PROFILE_COST_CENTER=1), we add `-l -s<prefix>.rts-stats -ol<prefix>.eventlog -p -po<prefix>.prof`
+ * 1. If SIMULA_HS_PROFILE_PREFIX is set/non-empty, we add `-lnu -s<prefix>.rts-stats -ol<prefix>.eventlog`
+ * 2. If cost-centre profiling is also enabled (SIMULA_HS_PROFILE_COST_CENTER=1), we add `-lnu -s<prefix>.rts-stats -ol<prefix>.eventlog -p -po<prefix>.prof`
  * 3. What all this means:
  *
  *  - +RTS ... -RTS: delimit args for the Haskell runtime system (RTS).
- *  - -N4: run RTS with four capabilities. This keeps Haskell parallelism
- *    available without letting the embedded runtime fan out across every CPU.
- *  - -l: enable RTS eventlog generation (a timestamped timeline of runtime events including GC start/end, scheduler activities, thread wakes/blocks, etc in an *.eventlog file)
+ *  - -N4: run RTS with four capabilities (GHC speak for threads). Avoid setting
+      higher to avoid potential higher synchronization costs.
+ *  - --nonmoving-gc: use the concurrent nonmoving collector for old-generation
+ *    collections to test whether it reduces frame-visible GC pauses.
+ *  - --long-gc-sync=0.008: print an RTS warning if GC synchronization takes
+ *    longer than 8ms.
+ *  - -lnu: enable RTS eventlog generation with the default event classes
+ *    (including scheduler/thread events and GC events), plus nonmoving-GC
+ *    events (-n) and user trace events (-u). This is larger than a GC-only log,
+ *    but it lets us inspect what the RTS scheduler was doing during no-GC
+ *    profile spikes.
  *  - -ol<file>: set eventlog output file path.
  *  - -s<file>: write RTS summary stats to that file (a one-shot aggregate report at program end in *.rts-stats form)
  *  - -p: enable cost-center time/allocation profiling (s.t. "cost centers" = functions/regions; outputs *.prof file)
@@ -50,16 +58,18 @@ static void flib_init() {
   static char rts_stats_arg[4096];
   static char eventlog_arg[4096];
   static char prof_arg[4096];
-  static char *argv[12];
+  static char *argv[20];
   char **argv_ = argv;
   int argc = 0;
 
   argv[argc++] = "libGodotHaskellPlugin.so";
   argv[argc++] = "+RTS";
   argv[argc++] = "-N4";
+  argv[argc++] = "--nonmoving-gc";
+  argv[argc++] = "--long-gc-sync=0.008";
 
   if (enable_profile) {
-    argv[argc++] = "-l";
+    argv[argc++] = "-lnu";
 
     snprintf(rts_stats_arg, sizeof(rts_stats_arg), "-s%s.rts-stats", profile_prefix);
     snprintf(eventlog_arg, sizeof(eventlog_arg), "-ol%s.eventlog", profile_prefix);
