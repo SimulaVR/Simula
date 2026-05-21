@@ -135,6 +135,7 @@
               ${pkgs.procps}/bin/pkill monado-service
               export XRT_COMPOSITOR_LOG=debug
               export XRT_COMPOSITOR_SCALE_PERCENTAGE=100
+              export U_PACING_APP_MIN_TIME_MS="''${U_PACING_APP_MIN_TIME_MS:-8.0}"
               export XR_RUNTIME_JSON=${monado}/share/openxr/1/openxr_monado.json
 
               # If --local is passed, use the monado binary compiled in ./submodules/monado
