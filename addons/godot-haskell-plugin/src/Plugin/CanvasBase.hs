@@ -37,6 +37,8 @@ import Plugin.Debug.HUD
 import Plugin.Debug.HudTypes
 import Plugin.Debug.MemoryHud
 import Plugin.Debug.MemoryHudTypes
+import Plugin.Debug.MonadoHud
+import Plugin.Debug.MonadoHudTypes
 import Plugin.Debug.ProfileHud
 import Plugin.Debug.ProfileHudTypes
 import Plugin.Types
@@ -204,6 +206,7 @@ _draw cb gvArgs = profileScope "CanvasBase._draw" $ do
       let depthFirstThumbnailsActive = activeMode == DebugHudDepthFirstSurfaces
       let damagedRegionsActive = activeMode == DebugHudDamagedRegions
       let memoryHudActive = activeMode == DebugHudMemory
+      let monadoHudActive = activeMode == DebugHudMonado
       let profileHudActive = activeMode == DebugHudProfile
       cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
       viewportSurface <- readTVarIO (cs ^. csViewport)
@@ -218,6 +221,9 @@ _draw cb gvArgs = profileScope "CanvasBase._draw" $ do
         then do
           gss <- readTVarIO (gsvs ^. gsvsServer)
           Just <$> getDebugMemoryHudSnapshot gss
+        else return Nothing
+      maybeDebugMonadoSnapshot <- if monadoHudActive
+        then Just <$> getDebugMonadoHudSnapshot
         else return Nothing
       maybeDebugProfileSnapshot <- if profileHudActive
         then Just <$> getDebugProfileHudSnapshot
@@ -243,6 +249,8 @@ _draw cb gvArgs = profileScope "CanvasBase._draw" $ do
             case maybeDebugMemorySnapshot of
               Just debugMemorySnapshot -> debugMemoryHudHeightForRows (max 1 $ Data.List.length $ debugMemoryHudVisibleRows debugMemorySnapshot)
               Nothing -> if memoryHudActive then debugMemoryHudHeight else 0
+      let monadoHudReservedHeight =
+            if monadoHudActive then debugMonadoHudHeight else 0
       let profileHudReservedHeight =
             case maybeDebugProfileSnapshot of
               Just debugProfileSnapshot -> debugProfileHudHeightForRows (max 1 $ Data.List.length $ debugProfileHudVisibleRows debugProfileSnapshot)
@@ -253,6 +261,7 @@ _draw cb gvArgs = profileScope "CanvasBase._draw" $ do
               + fromIntegral depthFirstThumbnailsHeight
               + fromIntegral damagedRegionThumbnailsHeight
               + fromIntegral memoryHudReservedHeight
+              + fromIntegral monadoHudReservedHeight
               + fromIntegral profileHudReservedHeight
               + lineStep * fromIntegral (Data.List.length messages)
       let availableHudHeight = max 0 (viewportBaseHeight - viewportSurfaceHeight)
@@ -309,10 +318,16 @@ _draw cb gvArgs = profileScope "CanvasBase._draw" $ do
           (contentStartY + fromIntegral depthFirstThumbnailsHeight + fromIntegral damagedRegionThumbnailsHeight)
           (viewportBaseWidth - fromIntegral padding * 2)
           (fromIntegral memoryHudReservedHeight)
+      forM_ maybeDebugMonadoSnapshot $ \debugMonadoSnapshot ->
+        drawDebugHudMonado cb debugMonadoSnapshot debugContentFont
+          (fromIntegral padding)
+          (contentStartY + fromIntegral depthFirstThumbnailsHeight + fromIntegral damagedRegionThumbnailsHeight + fromIntegral memoryHudReservedHeight)
+          (viewportBaseWidth - fromIntegral padding * 2)
+          (fromIntegral monadoHudReservedHeight)
       forM_ maybeDebugProfileSnapshot $ \debugProfileSnapshot ->
         drawDebugHudProfileUsage cb debugProfileSnapshot debugContentFont
           (fromIntegral padding)
-          (contentStartY + fromIntegral depthFirstThumbnailsHeight + fromIntegral damagedRegionThumbnailsHeight + fromIntegral memoryHudReservedHeight)
+          (contentStartY + fromIntegral depthFirstThumbnailsHeight + fromIntegral damagedRegionThumbnailsHeight + fromIntegral memoryHudReservedHeight + fromIntegral monadoHudReservedHeight)
           (viewportBaseWidth - fromIntegral padding * 2)
           (fromIntegral profileHudReservedHeight)
       G.set_size debugContentFont 16
@@ -320,7 +335,7 @@ _draw cb gvArgs = profileScope "CanvasBase._draw" $ do
         (mapM (toLowLevel . pack) messages :: IO [GodotString])
         (mapM_ Api.godot_string_destroy)
         (\messageStrs -> do
-          let firstBaselineY = contentStartY + fromIntegral depthFirstThumbnailsHeight + fromIntegral damagedRegionThumbnailsHeight + fromIntegral memoryHudReservedHeight + fromIntegral profileHudReservedHeight + fontAscent
+          let firstBaselineY = contentStartY + fromIntegral depthFirstThumbnailsHeight + fromIntegral damagedRegionThumbnailsHeight + fromIntegral memoryHudReservedHeight + fromIntegral monadoHudReservedHeight + fromIntegral profileHudReservedHeight + fontAscent
           let maxTextWidth = max 1 (round viewportBaseWidth - padding * 2)
           forM_ (zip [0..] messageStrs) $ \(lineIndex :: Int, messageStr) -> do
             renderPosition <- toLowLevel (V2 (fromIntegral padding) (firstBaselineY + lineStep * fromIntegral lineIndex)) :: IO GodotVector2

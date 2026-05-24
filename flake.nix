@@ -133,10 +133,15 @@
               ${monadoEnvVars}
 
               ${pkgs.procps}/bin/pkill monado-service
+              export IPC_IGNORE_VERSION="''${IPC_IGNORE_VERSION:-1}"
               export XRT_COMPOSITOR_LOG=debug
               export XRT_COMPOSITOR_SCALE_PERCENTAGE=100
+              export XRT_NO_STDIN="''${XRT_NO_STDIN:-1}"
               export U_PACING_APP_MIN_TIME_MS="''${U_PACING_APP_MIN_TIME_MS:-8.0}"
+              export U_PACING_APP_LOG="''${U_PACING_APP_LOG:-debug}"
+              export U_PACING_COMPOSITOR_LOG="''${U_PACING_COMPOSITOR_LOG:-trace}"
               export XR_RUNTIME_JSON=${monado}/share/openxr/1/openxr_monado.json
+              mkdir -p "$SIMULA_LOG_DIR"
 
               # If --local is passed, use the monado binary compiled in ./submodules/monado
               if [[ "''${1:-}" == "--local" ]]; then

@@ -25,6 +25,7 @@ debugHudTabGap = 3
 
 data DebugHudMode
   = DebugHudProfile
+  | DebugHudMonado
   | DebugHudMemory
   | DebugHudSurfaceBoundaries
   | DebugHudSurfaceCreations
@@ -52,6 +53,7 @@ debugHudModes = [minBound .. maxBound]
 
 debugHudModeLabel :: DebugHudMode -> String
 debugHudModeLabel DebugHudProfile = "Profile"
+debugHudModeLabel DebugHudMonado = "Monado\nFrame Timings"
 debugHudModeLabel DebugHudMemory = "Memory"
 debugHudModeLabel DebugHudSurfaceBoundaries = "Surface Boundaries"
 debugHudModeLabel DebugHudSurfaceCreations = "Surface Creations"
@@ -66,6 +68,7 @@ debugHudInitialVisible = unsafePerformIO $ do
     mapM
       lookupEnv
       [ "SIMULA_DEBUG_PROFILE_HUD"
+      , "SIMULA_DEBUG_MONADO_HUD"
       , "SIMULA_DEBUG_MEMORY_HUD"
       , "SIMULA_DEBUG_SURFACE_BOUNDARIES"
       , "SIMULA_DEBUG_SURFACE_CREATIONS"
@@ -84,11 +87,34 @@ debugHudInitialVisible = unsafePerformIO $ do
   return (exactFlagEnabled || damagedRegionsEnabled)
 {-# NOINLINE debugHudInitialVisible #-}
 
+debugHudInitialActiveMode :: DebugHudMode
+debugHudInitialActiveMode = unsafePerformIO $ do
+  profileValue <- lookupEnv "SIMULA_DEBUG_PROFILE_HUD"
+  monadoValue <- lookupEnv "SIMULA_DEBUG_MONADO_HUD"
+  memoryValue <- lookupEnv "SIMULA_DEBUG_MEMORY_HUD"
+  damagedRegionsValue <- lookupEnv "SIMULA_DEBUG_DAMAGED_REGIONS"
+  return $
+    case () of
+      _
+        | profileValue == Just "1" -> DebugHudProfile
+        | monadoValue == Just "1" -> DebugHudMonado
+        | memoryValue == Just "1" -> DebugHudMemory
+        | damagedRegionsValueEnabled damagedRegionsValue -> DebugHudDamagedRegions
+        | otherwise -> DebugHudProfile
+  where
+    damagedRegionsValueEnabled value =
+      case value of
+        Just "" -> False
+        Just "0" -> False
+        Just _ -> True
+        Nothing -> False
+{-# NOINLINE debugHudInitialActiveMode #-}
+
 debugHudInitialState :: DebugHudRuntimeState
 debugHudInitialState =
   DebugHudRuntimeState
     { debugHudRuntimeVisible = debugHudInitialVisible
-    , debugHudRuntimeActiveMode = DebugHudProfile
+    , debugHudRuntimeActiveMode = debugHudInitialActiveMode
     }
 
 debugHudRuntimeStateVar :: TVar DebugHudRuntimeState

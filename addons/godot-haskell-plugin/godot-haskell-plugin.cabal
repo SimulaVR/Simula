@@ -100,6 +100,11 @@ library
       Plugin.Debug.DamagedRegionTypes
       Plugin.Debug.MemoryHud
       Plugin.Debug.MemoryHudTypes
+      Plugin.Debug.MonadoHud
+      Plugin.Debug.MonadoHudParse
+      Plugin.Debug.MonadoHudSnapshot
+      Plugin.Debug.MonadoHudState
+      Plugin.Debug.MonadoHudTypes
       Plugin.Debug.ProfileHud
       Plugin.Debug.ProfileHudTypes
       Plugin.CanvasAR
@@ -155,6 +160,11 @@ foreign-library godot-haskell-plugin
     Plugin.Debug.DamagedRegionTypes
     Plugin.Debug.MemoryHud
     Plugin.Debug.MemoryHudTypes
+    Plugin.Debug.MonadoHud
+    Plugin.Debug.MonadoHudParse
+    Plugin.Debug.MonadoHudSnapshot
+    Plugin.Debug.MonadoHudState
+    Plugin.Debug.MonadoHudTypes
     Plugin.Debug.ProfileHud
     Plugin.Debug.ProfileHudTypes
     Plugin.CanvasAR

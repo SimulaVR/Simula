@@ -20,6 +20,7 @@ import Plugin.Debug.DamagedRegions
 import Plugin.Debug.DamagedRegionTypes
 import Plugin.Debug.HudTypes
 import Plugin.Debug.MemoryHudTypes
+import Plugin.Debug.MonadoHudTypes
 import Plugin.Debug.ProfileHud
 import Plugin.Debug.ProfileHudTypes
 import Plugin.Imports
@@ -55,6 +56,7 @@ getDebugHudReservedHeight = do
 
 debugHudModeReservedContentHeight :: DebugHudMode -> Int
 debugHudModeReservedContentHeight DebugHudProfile = debugProfileHudHeight
+debugHudModeReservedContentHeight DebugHudMonado = debugMonadoHudHeight
 debugHudModeReservedContentHeight DebugHudMemory = debugMemoryHudHeight
 debugHudModeReservedContentHeight DebugHudDepthFirstSurfaces = debugDepthFirstThumbnailHeight
 debugHudModeReservedContentHeight DebugHudDamagedRegions = debugDamagedRegionThumbnailHeight
@@ -319,6 +321,7 @@ measureDebugHudLabel debugFont label =
 
 debugHudModeLabelCandidates :: DebugHudMode -> [[String]]
 debugHudModeLabelCandidates DebugHudProfile = [["Profile"]]
+debugHudModeLabelCandidates DebugHudMonado = [["Monado", "Frame Timings"], ["Monado"], ["M"]]
 debugHudModeLabelCandidates DebugHudMemory = [["Memory"], ["Mem"]]
 debugHudModeLabelCandidates DebugHudSurfaceBoundaries = [["Surface", "Boundaries"], ["Surface", "Bounds"], ["Bounds"]]
 debugHudModeLabelCandidates DebugHudSurfaceCreations = [["Surface", "Creations"], ["Surface", "Create"], ["Create"]]
