@@ -99,9 +99,10 @@ data MonadoAppTiming = MonadoAppTiming
 data MonadoCompositorTiming = MonadoCompositorTiming
   { -- (when_submitted_ns - when_woke_ns) / 1e6; HUD "compositor cpu time" actual.
     monadoCompositorWakeToSubmitMs                 :: Maybe Double
-  -- ((actual_present_time_ns - present_margin_ns) - when_submitted_ns) / 1e6; inferred HUD "compositor gpu time" actual.
+  -- (gpu_end_ns - when_submitted_ns) / 1e6 when GPU timestamps are available, otherwise
+  -- ((actual_present_time_ns - present_margin_ns) - when_submitted_ns) / 1e6.
   , monadoCompositorSubmitToInferredGpuDoneMs      :: Maybe Double
-  -- (desired_present_time_ns - (actual_present_time_ns - present_margin_ns)) / 1e6; slack from inferred GPU done to desired present.
+  -- (desired_present_time_ns - gpu_done_ns) / 1e6; scheduled slack from GPU done to desired present.
   , monadoCompositorInferredGpuDoneToDesiredMs     :: Maybe Double
   -- (actual_present_time_ns - when_submitted_ns) / 1e6; post-submit time until actual present feedback.
   , monadoCompositorSubmitToActualPresentMs        :: Maybe Double
@@ -233,6 +234,8 @@ data PendingMonadoCompositorTiming = PendingMonadoCompositorTiming
   , pendingCompositorActualPresentNs  :: Maybe Integer
   -- Parsed from "earliest_present_time_ns:"; used for earliest-to-actual-present.
   , pendingCompositorEarliestPresentNs :: Maybe Integer
+  -- Parsed from "gpu_end_ns:"; real compositor GPU done timestamp if calibrated timestamps are available.
+  , pendingCompositorGpuEndNs         :: Maybe Integer
   -- Parsed from "present_margin_ns:"; actual_present_time_ns - present_margin_ns gives inferred GPU-done ns.
   , pendingCompositorPresentMarginNs  :: Maybe Integer
   -- Parsed from "present_margin_ms:"; completed into monadoCompositorPresentMarginMs.
@@ -432,6 +435,7 @@ emptyPendingMonadoCompositorTiming =
     , pendingCompositorDesiredPresentNs = Nothing
     , pendingCompositorActualPresentNs = Nothing
     , pendingCompositorEarliestPresentNs = Nothing
+    , pendingCompositorGpuEndNs = Nothing
     , pendingCompositorPresentMarginNs = Nothing
     , pendingCompositorPresentMarginMs = Nothing
     , pendingCompositorSinceLastFrameMs = Nothing

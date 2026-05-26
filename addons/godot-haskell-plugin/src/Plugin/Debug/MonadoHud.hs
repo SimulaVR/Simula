@@ -447,12 +447,30 @@ drawDebugHudMonado cb snapshot debugFont left top availableWidth availableHeight
       firstBaseline = do
         let appTiming = debugMonadoHudSnapshotLatestAppTiming snapshot
         let compTiming = debugMonadoHudSnapshotLatestCompositorTiming snapshot
+        let openXRTiming = debugMonadoHudSnapshotLatestOpenXRFrameTimingSample snapshot
+        let latestPreXRActual = openXRFrameTimingSampleGodotFrameStartToXrWaitFrameMs <$> openXRTiming
+        let latestXrWaitFrameSleepActual = openXRFrameTimingSampleXrWaitFrameSleepMs <$> openXRTiming
         let latestAppEstimate = monadoAppEstimatedTotalMs <$> appTiming
         let latestAppActual = monadoAppObservedTotalMs <$> appTiming
         let latestCompositorCpuActual = compTiming >>= monadoCompositorWakeToSubmitMs
         let latestCompositorGpuActual = compTiming >>= monadoCompositorSubmitToInferredGpuDoneMs
         let latestCompositorActual = (+) <$> latestCompositorCpuActual <*> latestCompositorGpuActual
-        let latestKnownWithoutSleepActual = (+) <$> latestAppActual <*> latestCompositorActual
+        let latestMarginActual = compTiming >>= monadoCompositorPresentMarginMs
+        let latestEstimatedMargin = compTiming >>= monadoCompositorInferredGpuDoneToDesiredMs
+        let latestMarginForWarn =
+              case latestEstimatedMargin of
+                Just _ -> latestEstimatedMargin
+                Nothing -> latestMarginActual
+        let sumMaybes values = sum <$> sequence values
+        let latestKnownWithoutSleepActual = sumMaybes [latestPreXRActual, latestAppActual, latestCompositorActual]
+        let latestTotalActual =
+              sumMaybes
+                [ latestPreXRActual
+                , latestXrWaitFrameSleepActual
+                , latestAppActual
+                , latestCompositorActual
+                , latestMarginActual
+                ]
         let unknown = Nothing :: Maybe Double
         let avgCompositorActual =
               (+)
@@ -467,17 +485,31 @@ drawDebugHudMonado cb snapshot debugFont left top availableWidth availableHeight
                 <$> debugMonadoHudSnapshotWorstCompositorSessionMs snapshot
                 <*> debugMonadoHudSnapshotWorstCompositorSubmitToInferredGpuDoneSessionMs snapshot
         let avgKnownWithoutSleepActual =
-              (+)
-                <$> debugMonadoHudSnapshotAvgAppObservedMs snapshot
-                <*> avgCompositorActual
+              sumMaybes
+                [ debugMonadoHudSnapshotAvgOpenXRGodotFrameStartToXrWaitFrameMs snapshot
+                , debugMonadoHudSnapshotAvgAppObservedMs snapshot
+                , avgCompositorActual
+                ]
+        let avgTotalActual =
+              sumMaybes
+                [ debugMonadoHudSnapshotAvgOpenXRGodotFrameStartToXrWaitFrameMs snapshot
+                , debugMonadoHudSnapshotAvgOpenXRXrWaitFrameSleepMs snapshot
+                , debugMonadoHudSnapshotAvgAppObservedMs snapshot
+                , avgCompositorActual
+                , debugMonadoHudSnapshotAvgPresentMarginMs snapshot
+                ]
         let worstWindowKnownWithoutSleepActual =
-              (+)
-                <$> debugMonadoHudSnapshotWorstAppObservedWindowMs snapshot
-                <*> worstWindowCompositorActual
+              sumMaybes
+                [ debugMonadoHudSnapshotWorstOpenXRGodotFrameStartToXrWaitFrameWindowMs snapshot
+                , debugMonadoHudSnapshotWorstAppObservedWindowMs snapshot
+                , worstWindowCompositorActual
+                ]
         let worstSessionKnownWithoutSleepActual =
-              (+)
-                <$> debugMonadoHudSnapshotWorstAppObservedSessionMs snapshot
-                <*> worstSessionCompositorActual
+              sumMaybes
+                [ debugMonadoHudSnapshotWorstOpenXRGodotFrameStartToXrWaitFrameSessionMs snapshot
+                , debugMonadoHudSnapshotWorstAppObservedSessionMs snapshot
+                , worstSessionCompositorActual
+                ]
         let eventRow label count latest worstWindow worstSession =
               MonadoHudRow
                 { monadoHudRowMetric = label
@@ -673,15 +705,15 @@ drawDebugHudMonado cb snapshot debugFont left top availableWidth availableHeight
                   False
               , timingRow
                   "monado margins"
-                  unknown
+                  latestEstimatedMargin
                   (compTiming >>= monadoCompositorPresentMarginMs)
-                  unknown
+                  (debugMonadoHudSnapshotAvgCompositorInferredGpuDoneToDesiredMs snapshot)
                   (debugMonadoHudSnapshotAvgPresentMarginMs snapshot)
-                  unknown
+                  (debugMonadoHudSnapshotWorstCompositorInferredGpuDoneToDesiredWindowMs snapshot)
                   (debugMonadoHudSnapshotWorstPresentMarginWindowMs snapshot)
-                  unknown
+                  (debugMonadoHudSnapshotWorstCompositorInferredGpuDoneToDesiredSessionMs snapshot)
                   (debugMonadoHudSnapshotWorstPresentMarginSessionMs snapshot)
-                  (maybe False (<= 0.5) (compTiming >>= monadoCompositorPresentMarginMs))
+                  (maybe False (<= 0.5) latestMarginForWarn)
               , timingRow
                   "total (without sleep/margins)"
                   unknown
@@ -693,7 +725,17 @@ drawDebugHudMonado cb snapshot debugFont left top availableWidth availableHeight
                   unknown
                   worstSessionKnownWithoutSleepActual
                   False
-              , timingRow "total" unknown unknown unknown unknown unknown unknown unknown unknown False
+              , timingRow
+                  "total"
+                  unknown
+                  latestTotalActual
+                  unknown
+                  avgTotalActual
+                  unknown
+                  unknown
+                  unknown
+                  unknown
+                  False
               ]
         let colorForTone tone =
               case tone of

@@ -23,11 +23,12 @@ import Plugin.Debug.MonadoHudTypes
 --   TRACE [u_pacing_app]     gpu  o: 5.20ms n: 6.05ms
 --
 -- Compositor timing block:
---   TRACE [u_pacing_compositor] Got frame timing info from compositor pacer
+--   TRACE [pc_info] Got
 --   TRACE [u_pacing_compositor]     since_last_frame_ms: 11.11
 --   TRACE [u_pacing_compositor]     when_woke_ns: 9066425898123456
 --   TRACE [u_pacing_compositor]     when_submitted_ns: 9066425901567890
 --   TRACE [u_pacing_compositor]     desired_present_time_ns: 9066425910000000
+--   TRACE [u_pacing_compositor]     gpu_end_ns: 9066425905500000
 --   TRACE [u_pacing_compositor]     actual_present_time_ns: 9066425916800000
 --   TRACE [u_pacing_compositor]     earliest_present_time_ns: 9066425909200000
 --   TRACE [u_pacing_compositor]     when_infoed_ns: 9066425919100000
@@ -104,8 +105,16 @@ completePendingAppTiming pending = do
       , monadoAppGpuObservedMs = gpuObserved
       }
 
--- Block-start examples:
---   TRACE [u_pacing_compositor] Got frame timing info from compositor pacer
+-- We accept both compositor timing block starts:
+--
+--   TRACE [pc_info] Got
+--     Display-timing-aware pacer, followed by actual present/margin fields.
+--
+--   TRACE [log_measured_compositor_timing] Got measured compositor timing from compositor pacer
+--     Fake compositor pacer fallback, followed by real wake/submit/gpu_end fields
+--     but no actual_present_time_ns or present_margin_ns.
+--
+-- Field examples:
 --   TRACE [u_pacing_compositor]     since_last_frame_ms: 11.11
 --   TRACE [u_pacing_compositor]     when_woke_ns: 9066425898123456
 --   TRACE [u_pacing_compositor]     desired_present_time_ns: 9066425910000000
@@ -114,19 +123,30 @@ completePendingAppTiming pending = do
 --   TRACE [u_pacing_compositor]     present_margin_ns: 4200000
 startsMonadoCompositorTimingBlock :: String -> Bool
 startsMonadoCompositorTimingBlock line =
-  "Got" `List.isInfixOf` line
+  startsNewMonadoCompositorTimingBlock line
     || "when_woke_ns:" `List.isInfixOf` line
+    || "when_submitted_ns:" `List.isInfixOf` line
+    || "when_infoed_ns:" `List.isInfixOf` line
     || "since_last_frame_ms:" `List.isInfixOf` line
     || "desired_present_time_ns:" `List.isInfixOf` line
+    || "gpu_end_ns:" `List.isInfixOf` line
     || "actual_present_time_ns:" `List.isInfixOf` line
     || "earliest_present_time_ns:" `List.isInfixOf` line
     || "present_margin_ns:" `List.isInfixOf` line
+
+startsNewMonadoCompositorTimingBlock :: String -> Bool
+startsNewMonadoCompositorTimingBlock line =
+  "Got" `List.isInfixOf` line
+    && ( "[pc_info]" `List.isInfixOf` line
+           || "compositor pacer" `List.isInfixOf` line
+       )
 
 -- Field examples:
 --   TRACE [u_pacing_compositor]     since_last_frame_ms: 11.11
 --   TRACE [u_pacing_compositor]     when_woke_ns: 9066425898123456
 --   TRACE [u_pacing_compositor]     when_submitted_ns: 9066425901567890
 --   TRACE [u_pacing_compositor]     desired_present_time_ns: 9066425910000000
+--   TRACE [u_pacing_compositor]     gpu_end_ns: 9066425905500000
 --   TRACE [u_pacing_compositor]     actual_present_time_ns: 9066425916800000
 --   TRACE [u_pacing_compositor]     earliest_present_time_ns: 9066425909200000
 --   TRACE [u_pacing_compositor]     when_infoed_ns: 9066425919100000
@@ -144,6 +164,8 @@ updatePendingCompositorTimingFromLine pending line
       pending { pendingCompositorSinceLastFrameMs = parseDoubleAfter "since_last_frame_ms:" line }
   | "desired_present_time_ns:" `List.isInfixOf` line =
       pending { pendingCompositorDesiredPresentNs = parseIntegerAfter "desired_present_time_ns:" line }
+  | "gpu_end_ns:" `List.isInfixOf` line =
+      pending { pendingCompositorGpuEndNs = parseIntegerAfter "gpu_end_ns:" line }
   | "actual_present_time_ns:" `List.isInfixOf` line =
       pending { pendingCompositorActualPresentNs = parseIntegerAfter "actual_present_time_ns:" line }
   | "earliest_present_time_ns:" `List.isInfixOf` line =
@@ -155,9 +177,8 @@ updatePendingCompositorTimingFromLine pending line
   | otherwise = pending
 
 completePendingCompositorTiming :: PendingMonadoCompositorTiming -> Maybe MonadoCompositorTiming
-completePendingCompositorTiming pending =
-  case (pendingCompositorPresentMarginMs pending, pendingCompositorWhenWokeNs pending, pendingCompositorWhenSubmittedNs pending) of
-    (Just _, _, _) ->
+completePendingCompositorTiming pending
+  | hasActualMargin || hasMeasuredCompositorGpuDone =
       Just
         MonadoCompositorTiming
           { monadoCompositorWakeToSubmitMs = wakeToSubmit
@@ -171,23 +192,29 @@ completePendingCompositorTiming pending =
           , monadoCompositorPresentMarginMs = pendingCompositorPresentMarginMs pending
           , monadoCompositorSinceLastFrameMs = pendingCompositorSinceLastFrameMs pending
           }
-    _ -> Nothing
+  | otherwise = Nothing
   where
+    hasActualMargin = isJust (pendingCompositorPresentMarginMs pending)
+    hasMeasuredCompositorGpuDone = isJust wakeToSubmit && isJust submitToInferredGpuDone
     wakeToSubmit =
       case (pendingCompositorWhenWokeNs pending, pendingCompositorWhenSubmittedNs pending) of
         (Just woke, Just submitted)
           | submitted >= woke -> Just $ fromIntegral (submitted - woke) / 1000000.0
         _ -> Nothing
-    inferredGpuDoneNs =
+    inferredGpuDoneNsFromPresentFeedback =
       case (pendingCompositorActualPresentNs pending, pendingCompositorPresentMarginNs pending) of
         (Just actual, Just margin) -> Just (actual - margin)
         _ -> Nothing
+    gpuDoneNs =
+      case pendingCompositorGpuEndNs pending of
+        Just gpuEnd -> Just gpuEnd
+        Nothing -> inferredGpuDoneNsFromPresentFeedback
     submitToInferredGpuDone =
-      case (pendingCompositorWhenSubmittedNs pending, inferredGpuDoneNs) of
+      case (pendingCompositorWhenSubmittedNs pending, gpuDoneNs) of
         (Just submitted, Just gpuDone) -> positiveDeltaNsToMs submitted gpuDone
         _ -> Nothing
     inferredGpuDoneToDesired =
-      case (inferredGpuDoneNs, pendingCompositorDesiredPresentNs pending) of
+      case (gpuDoneNs, pendingCompositorDesiredPresentNs pending) of
         (Just gpuDone, Just desired) -> Just $ signedDeltaNsToMs gpuDone desired
         _ -> Nothing
     submitToActualPresent =
@@ -236,11 +263,15 @@ parseLeadingDouble =
 
 parseLeadingInteger :: String -> Maybe Integer
 parseLeadingInteger =
-  readMaybe . takeWhile Char.isDigit . dropWhile (\c -> Char.isSpace c || c == '=')
+  readMaybe . takeIntegerToken . dropWhile (\c -> Char.isSpace c || c == '=')
 
 takeNumberToken :: String -> String
 takeNumberToken =
   takeWhile (\c -> Char.isDigit c || c == '.' || c == '-')
+
+takeIntegerToken :: String -> String
+takeIntegerToken =
+  takeWhile (\c -> Char.isDigit c || c == '-')
 
 positiveDeltaNsToMs :: Integer -> Integer -> Maybe Double
 positiveDeltaNsToMs start end

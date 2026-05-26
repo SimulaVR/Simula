@@ -237,9 +237,10 @@ updateMonadoCompositorTiming now line state =
     Nothing ->
       state1 { monadoHudStatePendingCompositorTiming = pending1 }
   where
+    startsNewBlock = startsNewMonadoCompositorTimingBlock line
     startsBlock = startsMonadoCompositorTimingBlock line
     state0 =
-      if startsBlock && isNothing (monadoHudStatePendingCompositorTiming state)
+      if startsNewBlock || (startsBlock && isNothing (monadoHudStatePendingCompositorTiming state))
         then state { monadoHudStatePendingCompositorTiming = Just emptyPendingMonadoCompositorTiming }
         else state
     pending0 = monadoHudStatePendingCompositorTiming state0
