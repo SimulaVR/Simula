@@ -101,10 +101,6 @@ refreshDebugMonadoHudState now path = do
     atomically $
       modifyTVar' debugMonadoHudStateVar $
         recordMonadoHudError "OpenXR timing symbols not found; rebuild/restart godot-openxr for pre-openxr/xrWaitFrame/GC rows"
-  when (openXRFrameTimingDrainActive openXRDrain && openXRFrameTimingDrainFnsFound openXRDrain && List.null openXRFrameTimingSamples) $
-    atomically $
-      modifyTVar' debugMonadoHudStateVar $
-        recordMonadoHudError "OpenXR timing bridge found but produced 0 samples; process_openxr may not be running, may return before xrWaitFrame, or may be in another libgodot_openxr instance"
   gcStatsEnabled <- ghcGCFrameTimingStatsEnabled
   when (not gcStatsEnabled && not (List.null openXRFrameTimingSamples)) $
     atomically $
