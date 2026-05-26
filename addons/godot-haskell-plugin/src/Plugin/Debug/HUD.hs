@@ -20,6 +20,7 @@ import Plugin.Debug.DamagedRegions
 import Plugin.Debug.DamagedRegionTypes
 import Plugin.Debug.HudTypes
 import Plugin.Debug.MemoryHudTypes
+import Plugin.Debug.MonadoHudState (setDebugMonadoHudOpenXRFrameTimingActive)
 import Plugin.Debug.MonadoHudTypes
 import Plugin.Debug.ProfileHud
 import Plugin.Debug.ProfileHudTypes
@@ -65,18 +66,28 @@ debugHudModeReservedContentHeight _ = 0
 toggleDebugHud :: GodotSimulaServer -> IO ()
 toggleDebugHud gss = do
   debugHudToggleVisible
+  syncDebugMonadoHudOpenXRFrameTimingActive
   markAllDebugHudViewsForRedraw gss
 
 selectDebugHudMode :: GodotSimulaServer -> DebugHudMode -> IO ()
 selectDebugHudMode gss mode = do
   clearAllDebugHudMessages gss
   debugHudSetMode mode
+  syncDebugMonadoHudOpenXRFrameTimingActive
   markAllDebugHudViewsForRedraw gss
 
 closeDebugHud :: GodotSimulaServer -> IO ()
 closeDebugHud gss = do
   debugHudClose
+  syncDebugMonadoHudOpenXRFrameTimingActive
   markAllDebugHudViewsForRedraw gss
+
+syncDebugMonadoHudOpenXRFrameTimingActive :: IO ()
+syncDebugMonadoHudOpenXRFrameTimingActive = do
+  state <- getDebugHudRuntimeState
+  setDebugMonadoHudOpenXRFrameTimingActive $
+    debugHudRuntimeVisible state
+      && debugHudRuntimeActiveMode state == DebugHudMonado
 
 -- Right now: all GSVS HUDs are forced to be in one state (we might need to change this later).
 -- So this function is used for HUD state changes, where tell all other gsvs to fully redraw (to synchronize HUD states).

@@ -25,6 +25,8 @@ import System.IO
 
 import Plugin.Debug.MonadoHudSnapshot
 import Plugin.Debug.MonadoHudState
+import Plugin.Debug.MonadoHudGC
+import Plugin.Debug.MonadoHudOpenXRFrameTiming
 import Plugin.Debug.MonadoHudTypes
 import Plugin.Imports
 import Plugin.Types
@@ -58,25 +60,20 @@ data MonadoHudRow = MonadoHudRow
 getDebugMonadoHudSnapshot :: IO DebugMonadoHudSnapshot
 getDebugMonadoHudSnapshot = do
   path <- getDebugMonadoHudLogPath
-  enabled <- debugMonadoHudEnabled
-  if not enabled
-    then do
-      now <- getCurrentTime
-      return $ emptyDebugMonadoHudSnapshot now path
-    else do
-      now <- getCurrentTime
-      cached <- readTVarIO debugMonadoHudSnapshotCacheVar
-      case cached of
-        Just (cachedAt, snapshot)
-          | diffUTCTime now cachedAt < debugMonadoHudSnapshotIntervalInSeconds ->
-              return snapshot
-        _ -> do
-          refreshDebugMonadoHudState now path
-          state <- readTVarIO debugMonadoHudStateVar
-          let snapshot = buildDebugMonadoHudSnapshot now path state
-          atomically $ writeTVar debugMonadoHudSnapshotCacheVar (Just (now, snapshot))
-          queueDebugMonadoHudOutput snapshot
+  setDebugMonadoHudOpenXRFrameTimingActive True
+  now <- getCurrentTime
+  cached <- readTVarIO debugMonadoHudSnapshotCacheVar
+  case cached of
+    Just (cachedAt, snapshot)
+      | diffUTCTime now cachedAt < debugMonadoHudSnapshotIntervalInSeconds ->
           return snapshot
+    _ -> do
+      refreshDebugMonadoHudState now path
+      state <- readTVarIO debugMonadoHudStateVar
+      let snapshot = buildDebugMonadoHudSnapshot now path state
+      atomically $ writeTVar debugMonadoHudSnapshotCacheVar (Just (now, snapshot))
+      queueDebugMonadoHudOutput snapshot
+      return snapshot
 
 refreshDebugMonadoHudState :: UTCTime -> FilePath -> IO ()
 refreshDebugMonadoHudState now path = do
@@ -98,6 +95,36 @@ refreshDebugMonadoHudState now path = do
           atomically $
             modifyTVar' debugMonadoHudStateVar $
               processMonadoHudChunk now path newOffset resetLog chunk
+  openXRDrain <- drainDebugMonadoHudOpenXRFrameTiming
+  let openXRFrameTimingSamples = openXRFrameTimingDrainSamples openXRDrain
+  when (openXRFrameTimingDrainActive openXRDrain && not (openXRFrameTimingDrainFnsFound openXRDrain)) $
+    atomically $
+      modifyTVar' debugMonadoHudStateVar $
+        recordMonadoHudError "OpenXR timing symbols not found; rebuild/restart godot-openxr for pre-openxr/xrWaitFrame/GC rows"
+  when (openXRFrameTimingDrainActive openXRDrain && openXRFrameTimingDrainFnsFound openXRDrain && List.null openXRFrameTimingSamples) $
+    atomically $
+      modifyTVar' debugMonadoHudStateVar $
+        recordMonadoHudError "OpenXR timing bridge found but produced 0 samples; process_openxr may not be running, may return before xrWaitFrame, or may be in another libgodot_openxr instance"
+  gcStatsEnabled <- ghcGCFrameTimingStatsEnabled
+  when (not gcStatsEnabled && not (List.null openXRFrameTimingSamples)) $
+    atomically $
+      modifyTVar' debugMonadoHudStateVar $
+        recordMonadoHudError "GHC RTS stats are disabled; Monado GC rows need RTS -T at startup"
+  gcTimings <- drainDebugMonadoHudGhcGCFrameTimingSamples openXRFrameTimingSamples
+  atomically $
+    modifyTVar' debugMonadoHudStateVar $
+      recordMonadoHudSamplerStatus
+        gcStatsEnabled
+        (List.length openXRFrameTimingSamples)
+        (List.length gcTimings)
+  unless (List.null openXRFrameTimingSamples) $
+    atomically $
+      modifyTVar' debugMonadoHudStateVar $
+        recordMonadoHudOpenXRFrameTimingSamples now openXRFrameTimingSamples
+  unless (List.null gcTimings) $
+    atomically $
+      modifyTVar' debugMonadoHudStateVar $
+        recordMonadoHudGhcGCFrameTimingSamples now gcTimings
 
 readMonadoLogChunk :: FilePath -> MonadoHudState -> IO (Integer, Bool, String)
 readMonadoLogChunk path state =
@@ -150,17 +177,30 @@ formatDebugMonadoHudLiveSnapshot snapshot =
     , "stale_late_frames_dropped: " ++ show (debugMonadoHudSnapshotOldFrameDropCount snapshot)
     , "frames_missed: " ++ show (debugMonadoHudSnapshotPacingMissCount snapshot)
     , "prediction_skips: " ++ show (debugMonadoHudSnapshotPredictionSkipCount snapshot)
+    , "openxr_frame_timing_samples_window: " ++ show (debugMonadoHudSnapshotOpenXRFrameTimingSampleCount snapshot)
+    , "openxr_frame_timing_samples_latest_drain: " ++ show (debugMonadoHudSnapshotLastOpenXRFrameTimingDrainCount snapshot)
+    , "gc_timing_samples_window: " ++ show (debugMonadoHudSnapshotGhcGCFrameTimingSampleCount snapshot)
+    , "gc_timing_samples_latest_drain: " ++ show (debugMonadoHudSnapshotLastGhcGCFrameTimingDrainCount snapshot)
+    , "ghc_rts_stats_enabled: " ++ formatMaybeBool (debugMonadoHudSnapshotGhcGCStatsEnabled snapshot)
     , "latest_compositor_probably_missed_frame_warning_ms: " ++ formatMaybeMs (debugMonadoHudSnapshotLatestDisplayMissMs snapshot)
     , "worst_window_compositor_probably_missed_frame_warning_ms: " ++ formatMaybeMs (debugMonadoHudSnapshotWorstDisplayMissWindowMs snapshot)
     , "worst_session_compositor_probably_missed_frame_warning_ms: " ++ formatMaybeMs (debugMonadoHudSnapshotWorstDisplayMissSessionMs snapshot)
-    , "latest_pre_xr_godot_work_ms: ?"
-    , "worst_window_pre_xr_godot_work_ms: ?"
-    , "worst_session_pre_xr_godot_work_ms: ?"
-    , "avg_pre_xr_godot_work_ms: ?"
-    , "latest_xrWaitFrame_wait_ms: ?"
-    , "worst_window_xrWaitFrame_wait_ms: ?"
-    , "worst_session_xrWaitFrame_wait_ms: ?"
-    , "avg_xrWaitFrame_wait_ms: ?"
+    , "latest_pre_xr_godot_work_ms: " ++ formatMaybeMs (openXRFrameTimingSampleGodotFrameStartToXrWaitFrameMs <$> debugMonadoHudSnapshotLatestOpenXRFrameTimingSample snapshot)
+    , "worst_window_pre_xr_godot_work_ms: " ++ formatMaybeMs (debugMonadoHudSnapshotWorstOpenXRGodotFrameStartToXrWaitFrameWindowMs snapshot)
+    , "worst_session_pre_xr_godot_work_ms: " ++ formatMaybeMs (debugMonadoHudSnapshotWorstOpenXRGodotFrameStartToXrWaitFrameSessionMs snapshot)
+    , "avg_pre_xr_godot_work_ms: " ++ formatMaybeMs (debugMonadoHudSnapshotAvgOpenXRGodotFrameStartToXrWaitFrameMs snapshot)
+    , "latest_pre_xr_gc_ms: " ++ formatMaybeMs (ghcGCFrameTimingSampleGcMs <$> debugMonadoHudSnapshotLatestGhcGCFrameTimingSample snapshot)
+    , "worst_window_pre_xr_gc_ms: " ++ formatMaybeMs (debugMonadoHudSnapshotWorstGhcGCTimeWindowMs snapshot)
+    , "worst_session_pre_xr_gc_ms: " ++ formatMaybeMs (debugMonadoHudSnapshotWorstGhcGCTimeSessionMs snapshot)
+    , "avg_pre_xr_gc_ms: " ++ formatMaybeMs (debugMonadoHudSnapshotAvgGhcGCTimeMs snapshot)
+    , "latest_pre_xr_non_gc_ms: " ++ formatMaybeMs (ghcGCFrameTimingSampleNonGCGodotFrameStartToXrWaitFrameMs <$> debugMonadoHudSnapshotLatestGhcGCFrameTimingSample snapshot)
+    , "worst_window_pre_xr_non_gc_ms: " ++ formatMaybeMs (debugMonadoHudSnapshotWorstNonGCGodotFrameStartToXrWaitFrameWindowMs snapshot)
+    , "worst_session_pre_xr_non_gc_ms: " ++ formatMaybeMs (debugMonadoHudSnapshotWorstNonGCGodotFrameStartToXrWaitFrameSessionMs snapshot)
+    , "avg_pre_xr_non_gc_ms: " ++ formatMaybeMs (debugMonadoHudSnapshotAvgNonGCGodotFrameStartToXrWaitFrameMs snapshot)
+    , "latest_xrWaitFrame_wait_ms: " ++ formatMaybeMs (openXRFrameTimingSampleXrWaitFrameSleepMs <$> debugMonadoHudSnapshotLatestOpenXRFrameTimingSample snapshot)
+    , "worst_window_xrWaitFrame_wait_ms: " ++ formatMaybeMs (debugMonadoHudSnapshotWorstOpenXRXrWaitFrameSleepWindowMs snapshot)
+    , "worst_session_xrWaitFrame_wait_ms: " ++ formatMaybeMs (debugMonadoHudSnapshotWorstOpenXRXrWaitFrameSleepSessionMs snapshot)
+    , "avg_xrWaitFrame_wait_ms: " ++ formatMaybeMs (debugMonadoHudSnapshotAvgOpenXRXrWaitFrameSleepMs snapshot)
     , "latest_app_observed_ms: " ++ formatMaybeMs (monadoAppObservedTotalMs <$> debugMonadoHudSnapshotLatestAppTiming snapshot)
     , "worst_window_app_observed_ms: " ++ formatMaybeMs (debugMonadoHudSnapshotWorstAppObservedWindowMs snapshot)
     , "worst_session_app_observed_ms: " ++ formatMaybeMs (debugMonadoHudSnapshotWorstAppObservedSessionMs snapshot)
@@ -462,6 +502,47 @@ drawDebugHudMonado cb snapshot debugFont left top availableWidth availableHeight
                 , monadoHudRowHot = False
                 , monadoHudRowWarn = warn
                 }
+        let actualOnlyTimingRow label sampleCount latestActual avgActual worstWindowActual worstSessionActual warn =
+              MonadoHudRow
+                { monadoHudRowMetric = label
+                , monadoHudRowCount = show sampleCount
+                , monadoHudRowRate = ""
+                , monadoHudRowLatest = plainMonadoHudCell MonadoHudToneActual (formatMaybeMsOne latestActual)
+                , monadoHudRowAverage = plainMonadoHudCell MonadoHudToneActual (formatMaybeMsOne avgActual)
+                , monadoHudRowWorstWindow = plainMonadoHudCell MonadoHudToneActual (formatMaybeMsOne worstWindowActual)
+                , monadoHudRowWorstSession = plainMonadoHudCell MonadoHudToneActual (formatMaybeMsOne worstSessionActual)
+                , monadoHudRowHot = False
+                , monadoHudRowWarn = warn
+                }
+        let actualOnlyTimingRowWithLatestCell label sampleCount latestCell avgActual worstWindowActual worstSessionActual warn =
+              MonadoHudRow
+                { monadoHudRowMetric = label
+                , monadoHudRowCount = show sampleCount
+                , monadoHudRowRate = ""
+                , monadoHudRowLatest = latestCell
+                , monadoHudRowAverage = plainMonadoHudCell MonadoHudToneActual (formatMaybeMsOne avgActual)
+                , monadoHudRowWorstWindow = plainMonadoHudCell MonadoHudToneActual (formatMaybeMsOne worstWindowActual)
+                , monadoHudRowWorstSession = plainMonadoHudCell MonadoHudToneActual (formatMaybeMsOne worstSessionActual)
+                , monadoHudRowHot = False
+                , monadoHudRowWarn = warn
+                }
+        let missingGCLatestCell latestActual =
+              case latestActual of
+                Just _ ->
+                  plainMonadoHudCell MonadoHudToneActual (formatMaybeMsOne latestActual)
+                Nothing
+                  | debugMonadoHudSnapshotOpenXRFrameTimingSampleCount snapshot == 0 ->
+                      plainMonadoHudCell MonadoHudToneWarn "no OpenXR"
+                  | debugMonadoHudSnapshotGhcGCStatsEnabled snapshot == Just False ->
+                      plainMonadoHudCell MonadoHudToneWarn "-T off"
+                  | otherwise ->
+                      plainMonadoHudCell MonadoHudToneWarn "no GC"
+        let missingOpenXRLatestCell latestActual =
+              case latestActual of
+                Just _ ->
+                  plainMonadoHudCell MonadoHudToneActual (formatMaybeMsOne latestActual)
+                Nothing ->
+                  plainMonadoHudCell MonadoHudToneWarn "no OpenXR"
         let rows =
               [ eventRow
                   "compositor probably missed frame warning"
@@ -481,8 +562,38 @@ drawDebugHudMonado cb snapshot debugFont left top availableWidth availableHeight
                   Nothing
                   Nothing
                   Nothing
-              , timingRow "godot pre-openxr work" unknown unknown unknown unknown unknown unknown unknown unknown False
-              , timingRow "xrWaitFrame sleep" unknown unknown unknown unknown unknown unknown unknown unknown False
+              , actualOnlyTimingRowWithLatestCell
+                  "godot pre-openxr work"
+                  (debugMonadoHudSnapshotOpenXRFrameTimingSampleCount snapshot)
+                  (missingOpenXRLatestCell (openXRFrameTimingSampleGodotFrameStartToXrWaitFrameMs <$> debugMonadoHudSnapshotLatestOpenXRFrameTimingSample snapshot))
+                  (debugMonadoHudSnapshotAvgOpenXRGodotFrameStartToXrWaitFrameMs snapshot)
+                  (debugMonadoHudSnapshotWorstOpenXRGodotFrameStartToXrWaitFrameWindowMs snapshot)
+                  (debugMonadoHudSnapshotWorstOpenXRGodotFrameStartToXrWaitFrameSessionMs snapshot)
+                  False
+              , actualOnlyTimingRowWithLatestCell
+                  "  GC time"
+                  (debugMonadoHudSnapshotGhcGCFrameTimingSampleCount snapshot)
+                  (missingGCLatestCell (ghcGCFrameTimingSampleGcMs <$> debugMonadoHudSnapshotLatestGhcGCFrameTimingSample snapshot))
+                  (debugMonadoHudSnapshotAvgGhcGCTimeMs snapshot)
+                  (debugMonadoHudSnapshotWorstGhcGCTimeWindowMs snapshot)
+                  (debugMonadoHudSnapshotWorstGhcGCTimeSessionMs snapshot)
+                  False
+              , actualOnlyTimingRowWithLatestCell
+                  "  non-GC time"
+                  (debugMonadoHudSnapshotGhcGCFrameTimingSampleCount snapshot)
+                  (missingGCLatestCell (ghcGCFrameTimingSampleNonGCGodotFrameStartToXrWaitFrameMs <$> debugMonadoHudSnapshotLatestGhcGCFrameTimingSample snapshot))
+                  (debugMonadoHudSnapshotAvgNonGCGodotFrameStartToXrWaitFrameMs snapshot)
+                  (debugMonadoHudSnapshotWorstNonGCGodotFrameStartToXrWaitFrameWindowMs snapshot)
+                  (debugMonadoHudSnapshotWorstNonGCGodotFrameStartToXrWaitFrameSessionMs snapshot)
+                  False
+              , actualOnlyTimingRowWithLatestCell
+                  "xrWaitFrame sleep"
+                  (debugMonadoHudSnapshotOpenXRFrameTimingSampleCount snapshot)
+                  (missingOpenXRLatestCell (openXRFrameTimingSampleXrWaitFrameSleepMs <$> debugMonadoHudSnapshotLatestOpenXRFrameTimingSample snapshot))
+                  (debugMonadoHudSnapshotAvgOpenXRXrWaitFrameSleepMs snapshot)
+                  (debugMonadoHudSnapshotWorstOpenXRXrWaitFrameSleepWindowMs snapshot)
+                  (debugMonadoHudSnapshotWorstOpenXRXrWaitFrameSleepSessionMs snapshot)
+                  False
               , timingRow
                   "monado app (openxr rendering) time"
                   latestAppEstimate
@@ -723,6 +834,11 @@ formatMonadoHudHeader snapshot =
 formatMaybeMs :: Maybe Double -> String
 formatMaybeMs Nothing = "n/a"
 formatMaybeMs (Just value) = formatMsValue value ++ "ms"
+
+formatMaybeBool :: Maybe Bool -> String
+formatMaybeBool Nothing = "n/a"
+formatMaybeBool (Just True) = "true"
+formatMaybeBool (Just False) = "false"
 
 formatMaybeMsOne :: Maybe Double -> String
 formatMaybeMsOne Nothing = "?"

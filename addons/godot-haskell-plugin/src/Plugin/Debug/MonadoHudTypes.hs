@@ -3,6 +3,9 @@ module Plugin.Debug.MonadoHudTypes where
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import Data.Time.Clock
+import Data.Word
+import Foreign
+import Foreign.C
 import System.Environment
 import System.IO.Unsafe
 import Text.Read (readMaybe)
@@ -117,6 +120,82 @@ data MonadoCompositorTiming = MonadoCompositorTiming
   }
   deriving (Show)
 
+data OpenXRFrameTimingSample = OpenXRFrameTimingSample
+  { -- Selected Godot frame boundary to just before xrWaitFrame, normally Main::iteration, as measured by godot-openxr.
+    -- No sample is recorded if the Main::iteration hook has not marked a usable frame start.
+    openXRFrameTimingSampleGodotFrameStartToXrWaitFrameMs     :: Double
+  -- Measured in godot-openxr around the xrWaitFrame call itself.
+  , openXRFrameTimingSampleXrWaitFrameSleepMs  :: Double
+  }
+  deriving (Show)
+
+data OpenXRFrameTimingDrain = OpenXRFrameTimingDrain
+  { -- Whether the Haskell HUD currently believes godot-openxr sampling should be active.
+    openXRFrameTimingDrainActive       :: Bool
+  -- Whether both exported godot-openxr timing symbols were resolved.
+  , openXRFrameTimingDrainFnsFound     :: Bool
+  -- Number of godot-openxr timing samples drained during this HUD refresh.
+  , openXRFrameTimingDrainSampleCount  :: Int
+  -- Frame timing samples drained from godot-openxr.
+  , openXRFrameTimingDrainSamples      :: [OpenXRFrameTimingSample]
+  }
+  deriving (Show)
+
+data GhcGCFrameTimingSample = GhcGCFrameTimingSample
+  { -- Per-frame delta of GHC RTS gc_elapsed_ns, sampled at the SimulaServer.process frame boundary.
+    ghcGCFrameTimingSampleGcMs                  :: Double
+  -- openXRFrameTimingSampleGodotFrameStartToXrWaitFrameMs - ghcGCFrameTimingSampleGcMs for the newest-aligned OpenXR frame sample.
+  , ghcGCFrameTimingSampleNonGCGodotFrameStartToXrWaitFrameMs  :: Double
+  }
+  deriving (Show)
+
+data COpenXRFrameTimingSample = COpenXRFrameTimingSample
+  { cOpenXRFrameTimingSampleId         :: Word64
+  , cOpenXRFrameTimingGodotFrameStartToXrWaitFrameMs  :: CDouble
+  , cOpenXRFrameTimingXrWaitFrameMs    :: CDouble
+  }
+
+-- Mirrors submodules/godot-openxr/src/openxr/simula_monado_hud_timing.h:
+--
+--   typedef struct SimulaOpenXRFrameTimingSample {
+--           uint64_t sample_id;
+--           double godot_frame_start_to_xr_wait_frame_ms;
+--           double xr_wait_frame_ms;
+--   } SimulaOpenXRFrameTimingSample;
+--
+-- uint64_t and double are both 8-byte fields with
+-- 8-byte alignment. That gives the C struct this layout:
+--
+--   byte 0:  uint64_t sample_id
+--   byte 8:  double godot_frame_start_to_xr_wait_frame_ms
+--   byte 16: double xr_wait_frame_ms
+--   size:    24 bytes
+instance Storable COpenXRFrameTimingSample where
+  sizeOf _ = 24
+  alignment _ = alignment (undefined :: CDouble)
+  peek ptr =
+    COpenXRFrameTimingSample
+      <$> peekByteOff ptr 0
+      <*> peekByteOff ptr 8
+      <*> peekByteOff ptr 16
+  poke ptr sample = do
+    pokeByteOff ptr 0 (cOpenXRFrameTimingSampleId sample)
+    pokeByteOff ptr 8 (cOpenXRFrameTimingGodotFrameStartToXrWaitFrameMs sample)
+    pokeByteOff ptr 16 (cOpenXRFrameTimingXrWaitFrameMs sample)
+
+-- C: void simula_openxr_debug_monado_hud_set_active(int active)
+type CFunctionTypeSimulaOpenXRDebugMonadoHudSetActive = CInt -> IO ()
+
+-- C: uint32_t simula_openxr_debug_monado_hud_read_samples(
+--      SimulaOpenXRFrameTimingSample *out_samples,
+--      uint32_t max_samples)
+type CFunctionTypeSimulaOpenXRDebugMonadoHudReadSamples = Ptr COpenXRFrameTimingSample -> CUInt -> IO CUInt
+
+data OpenXRFrameTimingFns = OpenXRFrameTimingFns
+  { openXRFrameTimingSetActive   :: CFunctionTypeSimulaOpenXRDebugMonadoHudSetActive
+  , openXRFrameTimingReadSamples :: CFunctionTypeSimulaOpenXRDebugMonadoHudReadSamples
+  }
+
 data MonadoTimed a = MonadoTimed
   { -- Simula receipt time for the completed parsed sample.
     monadoTimedAt    :: UTCTime
@@ -170,7 +249,15 @@ data MonadoHudState = MonadoHudState
   , monadoHudStateFrameSkipEvents         :: Seq MonadoHudFrameSkipEvent
   , monadoHudStateAppTimingSamples        :: Seq (MonadoTimed MonadoAppTiming)
   , monadoHudStateCompositorTimingSamples :: Seq (MonadoTimed MonadoCompositorTiming)
+  , monadoHudStateOpenXRFrameTimingSamples :: Seq (MonadoTimed OpenXRFrameTimingSample)
+  , monadoHudStateGhcGCFrameTimingSamples :: Seq (MonadoTimed GhcGCFrameTimingSample)
+  , monadoHudStateLastOpenXRFrameTimingDrainCount :: Int
+  , monadoHudStateLastGhcGCFrameTimingDrainCount :: Int
+  , monadoHudStateGhcGCStatsEnabled :: Maybe Bool
   , monadoHudStateWorstDisplayMissSessionMs :: Maybe Double
+  , monadoHudStateWorstOpenXRGodotFrameStartToXrWaitFrameSessionMs :: Maybe Double
+  , monadoHudStateWorstOpenXRXrWaitFrameSleepSessionMs :: Maybe Double
+  , monadoHudStateWorstGhcGCTimeSessionMs :: Maybe Double
   , monadoHudStateWorstAppObservedSessionMs :: Maybe Double
   , monadoHudStateWorstAppEstimateSessionMs :: Maybe Double
   , monadoHudStateWorstAppCpuEstimateSessionMs :: Maybe Double
@@ -215,6 +302,25 @@ data DebugMonadoHudSnapshot = DebugMonadoHudSnapshot
   , debugMonadoHudSnapshotLatestDisplayMissMs    :: Maybe Double
   , debugMonadoHudSnapshotWorstDisplayMissWindowMs :: Maybe Double
   , debugMonadoHudSnapshotWorstDisplayMissSessionMs :: Maybe Double
+  , debugMonadoHudSnapshotLatestOpenXRFrameTimingSample :: Maybe OpenXRFrameTimingSample
+  , debugMonadoHudSnapshotWorstOpenXRGodotFrameStartToXrWaitFrameWindowMs :: Maybe Double
+  , debugMonadoHudSnapshotWorstOpenXRGodotFrameStartToXrWaitFrameSessionMs :: Maybe Double
+  , debugMonadoHudSnapshotAvgOpenXRGodotFrameStartToXrWaitFrameMs :: Maybe Double
+  , debugMonadoHudSnapshotWorstOpenXRXrWaitFrameSleepWindowMs :: Maybe Double
+  , debugMonadoHudSnapshotWorstOpenXRXrWaitFrameSleepSessionMs :: Maybe Double
+  , debugMonadoHudSnapshotAvgOpenXRXrWaitFrameSleepMs :: Maybe Double
+  , debugMonadoHudSnapshotOpenXRFrameTimingSampleCount :: Int
+  , debugMonadoHudSnapshotLastOpenXRFrameTimingDrainCount :: Int
+  , debugMonadoHudSnapshotLatestGhcGCFrameTimingSample :: Maybe GhcGCFrameTimingSample
+  , debugMonadoHudSnapshotWorstGhcGCTimeWindowMs :: Maybe Double
+  , debugMonadoHudSnapshotWorstGhcGCTimeSessionMs :: Maybe Double
+  , debugMonadoHudSnapshotAvgGhcGCTimeMs :: Maybe Double
+  , debugMonadoHudSnapshotGhcGCFrameTimingSampleCount :: Int
+  , debugMonadoHudSnapshotLastGhcGCFrameTimingDrainCount :: Int
+  , debugMonadoHudSnapshotGhcGCStatsEnabled :: Maybe Bool
+  , debugMonadoHudSnapshotWorstNonGCGodotFrameStartToXrWaitFrameWindowMs :: Maybe Double
+  , debugMonadoHudSnapshotWorstNonGCGodotFrameStartToXrWaitFrameSessionMs :: Maybe Double
+  , debugMonadoHudSnapshotAvgNonGCGodotFrameStartToXrWaitFrameMs :: Maybe Double
   , debugMonadoHudSnapshotLatestAppTiming        :: Maybe MonadoAppTiming
   , debugMonadoHudSnapshotWorstAppObservedWindowMs :: Maybe Double
   , debugMonadoHudSnapshotWorstAppObservedSessionMs :: Maybe Double
@@ -285,7 +391,15 @@ emptyMonadoHudState =
     , monadoHudStateFrameSkipEvents = Seq.empty
     , monadoHudStateAppTimingSamples = Seq.empty
     , monadoHudStateCompositorTimingSamples = Seq.empty
+    , monadoHudStateOpenXRFrameTimingSamples = Seq.empty
+    , monadoHudStateGhcGCFrameTimingSamples = Seq.empty
+    , monadoHudStateLastOpenXRFrameTimingDrainCount = 0
+    , monadoHudStateLastGhcGCFrameTimingDrainCount = 0
+    , monadoHudStateGhcGCStatsEnabled = Nothing
     , monadoHudStateWorstDisplayMissSessionMs = Nothing
+    , monadoHudStateWorstOpenXRGodotFrameStartToXrWaitFrameSessionMs = Nothing
+    , monadoHudStateWorstOpenXRXrWaitFrameSleepSessionMs = Nothing
+    , monadoHudStateWorstGhcGCTimeSessionMs = Nothing
     , monadoHudStateWorstAppObservedSessionMs = Nothing
     , monadoHudStateWorstAppEstimateSessionMs = Nothing
     , monadoHudStateWorstAppCpuEstimateSessionMs = Nothing

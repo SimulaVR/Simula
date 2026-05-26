@@ -48,6 +48,7 @@ import Plugin.SimulaViewSprite
 import Plugin.Types
 import Plugin.Debug
 import qualified Plugin.Debug.HUD as DebugHUD
+import Plugin.Debug.MonadoHudGC (recordDebugMonadoHudGhcGCFrame)
 import Plugin.Debug.ProfileHudTypes
 
 import Control.Monad
@@ -721,11 +722,16 @@ instance NativeScript GodotSimulaServer where
   classSignals = []
 
 process :: GodotSimulaServer -> [GodotVariant] -> IO ()
-process gss gvArgs@[deltaGV] = profileScope "SimulaServer.process" $ do
-  -- We choose this as the "frame boundary" point for our whole profiling system.
-  -- It rolls up the previous open frame and starts tracking the new frame.
-  profileFrameBoundary
-  processSimulaServer gss gvArgs
+process gss gvArgs@[deltaGV] =
+  profileScope "SimulaServer.process" $ do
+    -- We choose this as the "frame boundary" point for our whole profiling system.
+    -- It rolls up the previous open frame and starts tracking the new frame.
+    profileFrameBoundary
+
+    -- Obtain cumulative GC time for the Monado Frame Timing HUD (if it's active)
+    recordDebugMonadoHudGhcGCFrame
+
+    processSimulaServer gss gvArgs
 
 processSimulaServer :: GodotSimulaServer -> [GodotVariant] -> IO ()
 processSimulaServer gss gvArgs@[deltaGV] = do

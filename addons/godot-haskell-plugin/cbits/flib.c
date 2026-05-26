@@ -1,4 +1,9 @@
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include "Rts.h"
+#include <dlfcn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,6 +13,25 @@
 //Used in profiling to get TID of godot threads to compare with perf output
 long simula_gettid(void) {
   return (long)syscall(SYS_gettid);
+}
+
+// Resolve a symbol from a specific already-loaded shared library (e.g. libgodot_openxr.so).
+// Used in Monado's Frame Timing HUD.
+void *simula_dlsym_library(const char *library_path, const char *symbol) {
+  void *handle = dlopen(library_path, RTLD_NOW | RTLD_NOLOAD);
+  if (handle == NULL) {
+    return NULL;
+  }
+  void *result = dlsym(handle, symbol);
+  dlclose(handle);
+  return result;
+}
+
+// Resolve a symbol from the process-wide dynamic linker scope. The Haskell
+// Monado HUD uses this as a fallback for finding godot-openxr frame timing
+// functions.
+void *simula_dlsym_rtld_default(const char *symbol) {
+  return dlsym(RTLD_DEFAULT, symbol);
 }
 
 // Helper function for GHC profiling flags
@@ -39,6 +63,8 @@ static void flib_init() __attribute__((constructor)); //forces flib_init to exec
  *    collections to test whether it reduces frame-visible GC pauses.
  *  - --long-gc-sync=0.008: print an RTS warning if GC synchronization takes
  *    longer than 8ms.
+ *  - -T: maintain RTS stats so GHC.Stats can report cumulative GC time to our
+ *    Monado Frame Timing HUD without enabling full eventlog output.
  *  - -lnu: enable RTS eventlog generation with the default event classes
  *    (including scheduler/thread events and GC events), plus nonmoving-GC
  *    events (-n) and user trace events (-u). This is larger than a GC-only log,
@@ -67,6 +93,7 @@ static void flib_init() {
   argv[argc++] = "-N4";
   argv[argc++] = "--nonmoving-gc";
   argv[argc++] = "--long-gc-sync=0.008";
+  argv[argc++] = "-T";
 
   if (enable_profile) {
     argv[argc++] = "-lnu";

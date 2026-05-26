@@ -2,6 +2,7 @@ module Plugin.Debug.MonadoHudState where
 
 import Control.Concurrent.STM.TVar
 import Control.Monad
+import Control.Monad.STM (atomically)
 import qualified Data.Char as Char
 import qualified Data.List as List
 import Data.Maybe
@@ -14,6 +15,8 @@ import System.FilePath ((</>))
 import System.IO.Unsafe
 
 import Plugin.Debug.MonadoHudParse
+import Plugin.Debug.MonadoHudGC (setDebugMonadoHudGhcGCFrameTimingActive)
+import Plugin.Debug.MonadoHudOpenXRFrameTiming (setOpenXRFrameTimingBridgeActive)
 import Plugin.Debug.MonadoHudTypes
 
 debugMonadoHudStateVar :: TVar MonadoHudState
@@ -80,6 +83,15 @@ normalizeEnvString value =
     trim =
       List.dropWhileEnd Char.isSpace . List.dropWhile Char.isSpace
 
+setDebugMonadoHudOpenXRFrameTimingActive :: Bool -> IO ()
+setDebugMonadoHudOpenXRFrameTimingActive active = do
+  changed <- setOpenXRFrameTimingBridgeActive active
+  when changed $ do
+    atomically $ do
+        modifyTVar' debugMonadoHudStateVar clearMonadoHudOpenXRFrameTimingState
+        writeTVar debugMonadoHudSnapshotCacheVar Nothing
+    setDebugMonadoHudGhcGCFrameTimingActive active
+
 processMonadoHudChunk :: UTCTime -> FilePath -> Integer -> Bool -> String -> MonadoHudState -> MonadoHudState
 processMonadoHudChunk now path newOffset resetLog chunk state =
   trimMonadoHudState now $
@@ -121,6 +133,12 @@ trimMonadoHudState now state =
     , monadoHudStateCompositorTimingSamples =
         trimSeqToLast debugMonadoHudMaxTimingSamples $
           Seq.dropWhileL (\sample -> diffUTCTime now (monadoTimedAt sample) > debugMonadoHudWindowInSeconds) (monadoHudStateCompositorTimingSamples state)
+    , monadoHudStateOpenXRFrameTimingSamples =
+        trimSeqToLast debugMonadoHudMaxTimingSamples $
+          Seq.dropWhileL (\sample -> diffUTCTime now (monadoTimedAt sample) > debugMonadoHudWindowInSeconds) (monadoHudStateOpenXRFrameTimingSamples state)
+    , monadoHudStateGhcGCFrameTimingSamples =
+        trimSeqToLast debugMonadoHudMaxTimingSamples $
+          Seq.dropWhileL (\sample -> diffUTCTime now (monadoTimedAt sample) > debugMonadoHudWindowInSeconds) (monadoHudStateGhcGCFrameTimingSamples state)
     }
 
 trimSeqToLast :: Int -> Seq.Seq a -> Seq.Seq a
@@ -251,6 +269,74 @@ recordMonadoHudCompositorTimingSession timing state =
         updateSessionMin (monadoHudStateWorstPresentMarginSessionMs state) (monadoCompositorPresentMarginMs timing)
     , monadoHudStateWorstCompositorSinceLastFrameSessionMs =
         updateSessionMax (monadoHudStateWorstCompositorSinceLastFrameSessionMs state) (monadoCompositorSinceLastFrameMs timing)
+    }
+
+recordMonadoHudOpenXRFrameTimingSamples :: UTCTime -> [OpenXRFrameTimingSample] -> MonadoHudState -> MonadoHudState
+recordMonadoHudOpenXRFrameTimingSamples now timings state =
+  trimMonadoHudState now $
+    List.foldl' recordOpenXRFrameTimingSample state timings
+  where
+    recordOpenXRFrameTimingSample current timing =
+      recordMonadoHudOpenXRFrameTimingSampleSession timing $
+        current
+          { monadoHudStateOpenXRFrameTimingSamples =
+              monadoHudStateOpenXRFrameTimingSamples current
+                |> MonadoTimed now timing
+          }
+
+recordMonadoHudOpenXRFrameTimingSampleSession :: OpenXRFrameTimingSample -> MonadoHudState -> MonadoHudState
+recordMonadoHudOpenXRFrameTimingSampleSession timing state =
+  state
+    { monadoHudStateWorstOpenXRGodotFrameStartToXrWaitFrameSessionMs =
+        updateSessionMax
+          (monadoHudStateWorstOpenXRGodotFrameStartToXrWaitFrameSessionMs state)
+          (Just $ openXRFrameTimingSampleGodotFrameStartToXrWaitFrameMs timing)
+    , monadoHudStateWorstOpenXRXrWaitFrameSleepSessionMs =
+        updateSessionMax
+          (monadoHudStateWorstOpenXRXrWaitFrameSleepSessionMs state)
+          (Just $ openXRFrameTimingSampleXrWaitFrameSleepMs timing)
+    }
+
+recordMonadoHudGhcGCFrameTimingSamples :: UTCTime -> [GhcGCFrameTimingSample] -> MonadoHudState -> MonadoHudState
+recordMonadoHudGhcGCFrameTimingSamples now timings state =
+  trimMonadoHudState now $
+    List.foldl' recordGhcGCTiming state timings
+  where
+    recordGhcGCTiming current timing =
+      recordMonadoHudGhcGCFrameTimingSession timing $
+        current
+          { monadoHudStateGhcGCFrameTimingSamples =
+              monadoHudStateGhcGCFrameTimingSamples current
+                |> MonadoTimed now timing
+          }
+
+recordMonadoHudGhcGCFrameTimingSession :: GhcGCFrameTimingSample -> MonadoHudState -> MonadoHudState
+recordMonadoHudGhcGCFrameTimingSession timing state =
+  state
+    { monadoHudStateWorstGhcGCTimeSessionMs =
+        updateSessionMax
+          (monadoHudStateWorstGhcGCTimeSessionMs state)
+          (Just $ ghcGCFrameTimingSampleGcMs timing)
+    }
+
+recordMonadoHudSamplerStatus :: Bool -> Int -> Int -> MonadoHudState -> MonadoHudState
+recordMonadoHudSamplerStatus gcStatsEnabled openXRDrainCount gcDrainCount state =
+  state
+    { monadoHudStateGhcGCStatsEnabled = Just gcStatsEnabled
+    , monadoHudStateLastOpenXRFrameTimingDrainCount = openXRDrainCount
+    , monadoHudStateLastGhcGCFrameTimingDrainCount = gcDrainCount
+    }
+
+clearMonadoHudOpenXRFrameTimingState :: MonadoHudState -> MonadoHudState
+clearMonadoHudOpenXRFrameTimingState state =
+  state
+    { monadoHudStateOpenXRFrameTimingSamples = Seq.empty
+    , monadoHudStateGhcGCFrameTimingSamples = Seq.empty
+    , monadoHudStateLastOpenXRFrameTimingDrainCount = 0
+    , monadoHudStateLastGhcGCFrameTimingDrainCount = 0
+    , monadoHudStateWorstOpenXRGodotFrameStartToXrWaitFrameSessionMs = Nothing
+    , monadoHudStateWorstOpenXRXrWaitFrameSleepSessionMs = Nothing
+    , monadoHudStateWorstGhcGCTimeSessionMs = Nothing
     }
 
 splitCompleteLines :: String -> (String, [String])

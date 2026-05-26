@@ -101,6 +101,8 @@ library
       Plugin.Debug.MemoryHud
       Plugin.Debug.MemoryHudTypes
       Plugin.Debug.MonadoHud
+      Plugin.Debug.MonadoHudGC
+      Plugin.Debug.MonadoHudOpenXRFrameTiming
       Plugin.Debug.MonadoHudParse
       Plugin.Debug.MonadoHudSnapshot
       Plugin.Debug.MonadoHudState
@@ -123,7 +125,7 @@ library
       TypeOperators
       MultiParamTypeClasses
       FunctionalDependencies
-  ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code -g2 -threaded -eventlog
+  ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code -g2 -threaded -eventlog -with-rtsopts=-T
  
 -- | After adding hsroots, we are forced to copy cabal fields for `library`
 -- down to `foreign-library godot-haskell-plugin` (unclear why).
@@ -161,6 +163,8 @@ foreign-library godot-haskell-plugin
     Plugin.Debug.MemoryHud
     Plugin.Debug.MemoryHudTypes
     Plugin.Debug.MonadoHud
+    Plugin.Debug.MonadoHudGC
+    Plugin.Debug.MonadoHudOpenXRFrameTiming
     Plugin.Debug.MonadoHudParse
     Plugin.Debug.MonadoHudSnapshot
     Plugin.Debug.MonadoHudState
@@ -172,7 +176,7 @@ foreign-library godot-haskell-plugin
     -- Debug.C
     -- Debug.Marshal
   other-modules: FLib
-  ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code -g2 -threaded -eventlog
+  ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code -g2 -threaded -eventlog -with-rtsopts=-T
   build-depends:
       base
     , lens
