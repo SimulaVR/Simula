@@ -81,6 +81,9 @@ data MonadoAppTiming = MonadoAppTiming
   , monadoAppDeliveredLate    :: Bool
   -- Parsed from the app pacing "period:" line.
   , monadoAppPeriodMs         :: Maybe Double
+  -- Parsed from "total o: estimate, n: observed" when Monado logs it; this is
+  -- the effective app estimate used for scheduling, including U_PACING_APP_MIN_TIME_MS.
+  , monadoAppEffectiveEstimateMs :: Maybe Double
   -- Parsed from "cpu  o: estimate, n: observed"; this is Monado's old/estimated CPU value.
   , monadoAppCpuEstimateMs    :: Double
   -- Parsed from "cpu  o: estimate, n: observed"; this is Monado's new/observed CPU value.
@@ -212,6 +215,8 @@ data PendingMonadoAppTiming = PendingMonadoAppTiming
   , pendingAppDeliveredLate    :: Bool
   -- Parsed from "period:"; copied to monadoAppPeriodMs.
   , pendingAppPeriodMs         :: Maybe Double
+  -- Parsed from "total o: estimate, n: observed"; copied to monadoAppEffectiveEstimateMs.
+  , pendingAppEffectiveEstimateMs :: Maybe Double
   -- Parsed from "cpu  o: estimate, n: observed"; completed into CPU estimate/observed fields.
   , pendingAppCpu              :: Maybe (Double, Double)
   -- Parsed from "draw o: estimate, n: observed"; completed into draw estimate/observed fields.
@@ -448,8 +453,13 @@ monadoAppObservedTotalMs timing =
 
 monadoAppEstimatedTotalMs :: MonadoAppTiming -> Double
 monadoAppEstimatedTotalMs timing =
-  -- HUD "monado app (openxr rendering) time" estimate.
-  monadoAppCpuEstimateMs timing + monadoAppDrawEstimateMs timing + monadoAppGpuEstimateMs timing
+  -- HUD "monado app (openxr rendering) time" estimate. Newer Monado logs the
+  -- effective scheduling estimate, including U_PACING_APP_MIN_TIME_MS; older
+  -- logs only expose the raw CPU/draw/GPU component estimates.
+  case monadoAppEffectiveEstimateMs timing of
+    Just estimate -> estimate
+    Nothing ->
+      monadoAppCpuEstimateMs timing + monadoAppDrawEstimateMs timing + monadoAppGpuEstimateMs timing
 
 monadoEstimatedAppCompositorSubmitMs :: MonadoAppTiming -> MonadoCompositorTiming -> Maybe Double
 monadoEstimatedAppCompositorSubmitMs appTiming compositorTiming =

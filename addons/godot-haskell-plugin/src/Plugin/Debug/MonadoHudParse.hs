@@ -18,9 +18,14 @@ import Plugin.Debug.MonadoHudTypes
 -- App timing block:
 --   TRACE [u_pacing_app] Delivered frame 0.34ms late
 --   TRACE [u_pacing_app]     period: 11.111ms
+--   TRACE [u_pacing_app]     total o: 8.00ms n: 12.75ms
 --   TRACE [u_pacing_app]     cpu  o: 2.15ms n: 2.60ms
 --   TRACE [u_pacing_app]     draw o: 3.40ms n: 4.10ms
 --   TRACE [u_pacing_app]     gpu  o: 5.20ms n: 6.05ms
+--
+-- The optional total line is the effective app-time estimate Monado used for
+-- scheduling that frame. Unlike the component estimates, it includes
+-- U_PACING_APP_MIN_TIME_MS.
 --
 -- Compositor timing block:
 --   TRACE [pc_info] Got
@@ -64,6 +69,7 @@ parseDeliveredFrameLine line =
           { pendingAppDeliveredDeltaMs = parseDoubleAfter "Delivered frame " line
           , pendingAppDeliveredLate = " late" `List.isInfixOf` line
           , pendingAppPeriodMs = Nothing
+          , pendingAppEffectiveEstimateMs = Nothing
           , pendingAppCpu = Nothing
           , pendingAppDraw = Nothing
           , pendingAppGpu = Nothing
@@ -72,6 +78,7 @@ parseDeliveredFrameLine line =
 
 -- Examples:
 --   TRACE [u_pacing_app]     period: 11.111ms
+--   TRACE [u_pacing_app]     total o: 8.00ms n: 12.75ms
 --   TRACE [u_pacing_app]     cpu  o: 2.15ms n: 2.60ms
 --   TRACE [u_pacing_app]     draw o: 3.40ms n: 4.10ms
 --   TRACE [u_pacing_app]     gpu  o: 5.20ms n: 6.05ms
@@ -79,6 +86,8 @@ updatePendingAppTimingFromLine :: PendingMonadoAppTiming -> String -> PendingMon
 updatePendingAppTimingFromLine pending line
   | "period:" `List.isInfixOf` line =
       pending { pendingAppPeriodMs = parseDoubleAfter "period:" line }
+  | "total o:" `List.isInfixOf` line =
+      pending { pendingAppEffectiveEstimateMs = fst <$> parseOldNewPair line }
   | "cpu  o:" `List.isInfixOf` line =
       pending { pendingAppCpu = parseOldNewPair line }
   | "draw o:" `List.isInfixOf` line =
@@ -97,6 +106,7 @@ completePendingAppTiming pending = do
       { monadoAppDeliveredDeltaMs = pendingAppDeliveredDeltaMs pending
       , monadoAppDeliveredLate = pendingAppDeliveredLate pending
       , monadoAppPeriodMs = pendingAppPeriodMs pending
+      , monadoAppEffectiveEstimateMs = pendingAppEffectiveEstimateMs pending
       , monadoAppCpuEstimateMs = cpuEstimate
       , monadoAppCpuObservedMs = cpuObserved
       , monadoAppDrawEstimateMs = drawEstimate
