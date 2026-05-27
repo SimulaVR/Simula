@@ -126,7 +126,7 @@ getKeyboardAction gss keyboardShortcut =
     "terminateSimula" -> terminateSimula gss
     "cycleEnvironment" -> cycleEnvironment gss
     "cycleScene" -> cycleScene gss
-    "launchAppLauncher" -> shellLaunch gss "synapse"
+    "launchAppLauncher" -> launchAppLauncher gss
     "textToSpeech" -> textToSpeech gss
     "decreaseTransparency" -> decreaseTransparency
     "increaseTransparency" -> increaseTransparency
@@ -318,6 +318,13 @@ getKeyboardAction gss keyboardShortcut =
           appLaunch gss shellCmd Nothing
           return ()
         shellLaunch _ _ _ _ = return ()
+
+        launchAppLauncher :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
+        launchAppLauncher gss _ True = profileScope "launchAppLauncher" $ do
+          debugPutStrLn "Plugin.SimulaServer.launchAppLauncher"
+          appLaunch gss "synapse" (Just "defaultNoVerticalOffset")
+          return ()
+        launchAppLauncher _ _ _ = return ()
 
         textToSpeech :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
         textToSpeech gss _ True = profileScope "textToSpeech" $ do

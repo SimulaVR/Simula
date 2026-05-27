@@ -190,7 +190,7 @@ updateSimulaViewSprite gsvs = profileScope "updateSimulaViewSprite" $ do
       appendWindowLog $ "[placement] path=" ++ resolutionPath ++ " class=" ++ show maybeWindowClass ++ " location=" ++ show maybeLocation
       case maybeLocation of
         Just location -> moveToStartingPosition gsvs location
-        Nothing -> return ()
+        Nothing -> G.translate gsvs =<< toLowLevel (V3 0 (-0.2) 0)
       atomically $ do
         writeTVar (_gsvsShouldMove gsvs) False
         writeTVar (gsvs ^. gsvsLaunchPlacementStableDims) Nothing
@@ -233,6 +233,9 @@ spriteReadyToMove gsvs = profileScope "spriteReadyToMove" $ do
                    else return False
 
 moveToStartingPosition :: GodotSimulaViewSprite -> String -> IO ()
+moveToStartingPosition gsvs "defaultNoVerticalOffset" = profileScope "moveToStartingPosition" $ do
+  debugPutStrLn "Plugin.SimulaViewSprite.moveToStartingPosition"
+  return ()
 moveToStartingPosition gsvs appLocation = profileScope "moveToStartingPosition" $ do
   debugPutStrLn "Plugin.SimulaViewSprite.moveToStartingPosition"
   gss <- readTVarIO (gsvs ^. gsvsServer)
@@ -1208,7 +1211,7 @@ mapAsStandaloneSurface gsvs simulaView eitherSurface = profileScope "mapAsStanda
     then markGSVSForFullRedrawFrames gsvs 30
     else markGSVSForFullRedrawMilliseconds gsvs
 
-  setInFrontOfUser gsvs (-2)
+  setInFrontOfUser gsvs (-3)
 
   V3 1 1 1 ^* (1 + 1 * 1) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
 
