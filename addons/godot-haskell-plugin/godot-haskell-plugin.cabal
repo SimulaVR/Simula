@@ -259,3 +259,15 @@ foreign-library godot-haskell-plugin
     cbits/flib.c
 
   default-language: Haskell2010
+
+test-suite test-godot-haskell-plugin
+  type: exitcode-stdio-1.0
+  other-modules:
+    Plugin.Debug.HUDSpec
+
+  build-depends:
+    base,
+    hspec
+
+  main-is: Spec.hs
+  hs-source-dirs: tests
