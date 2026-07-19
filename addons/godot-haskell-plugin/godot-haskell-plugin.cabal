@@ -1,165 +1,91 @@
--- This file has been generated from package.yaml by hpack version 0.20.0.
---
--- see: https://github.com/sol/hpack
---
--- hash: 9dd8efd2e45c2898fb76a533380ee709713ad59d98865274345e6eac9e30c25b
-
-name:           godot-haskell-plugin
-version:        0.1.0.0
-description:    Please see the README on Github at <https://github.com/SimulaVR/Simula#readme>
-homepage:       https://github.com/SimulaVR/Simula#readme
-bug-reports:    https://github.com/SimulaVR/SImula/issues
-author:         Simula Team
-maintainer:     simulavr@gmail.com
-copyright:      2018
-license:        Apache
-license-file:   LICENSE
-build-type:     Simple
-cabal-version:  >= 1.10
-
+name: godot-haskell-plugin
+version: 0.1.0.0
+description: Please see the README on Github at <https://github.com/SimulaVR/Simula#readme>
+homepage: https://github.com/SimulaVR/Simula#readme
+bug-reports: https://github.com/SimulaVR/SImula/issues
+author: Simula Team
+maintainer: simulavr@gmail.com
+copyright: 2018
+license: Apache
+license-file: LICENSE
+build-type: Simple
+cabal-version: >= 1.10
 extra-source-files:
-    ChangeLog.md
-    README.md
+  ChangeLog.md
+  README.md
 
 source-repository head
   type: git
   location: https://github.com/SimulaVR/Simula/addons/godot-haskell-plugin
 
 flag no-tracking
-  default:     False
-  manual:      True
+  default: False
+  manual: True
 
 library
   if flag(no-tracking)
-     hs-source-dirs: src, no-telemetry
+    hs-source-dirs:
+      src
+      no-telemetry
   else
-     hs-source-dirs: src, telemetry
+    hs-source-dirs:
+      src
+      telemetry
+
   c-sources:
-      cbits/flib.c
-      -- cbits/xdg-shell-protocol.c
+    cbits/flib.c
+
+  -- cbits/xdg-shell-protocol.c
   -- include-dirs:
   --     include
   build-depends:
-      base
-    , lens
-    , godot-haskell
-    , colour
-    , linear
-    , text
-    , vector
-    , stm
-    , containers
-    , unix
-    , clock
-    , extra
-    , bytestring
-    , http-client
-    , http-types
-    , http-client-tls
-    , aeson
-    , process
-    , base64-bytestring
-    , directory
-    , uuid
-    , time
-    , iso8601-time
-    , raw-strings-qq
-    , inline-c
-    , ordered-containers
-    , process-extras
-    , dhall
-    , hspec
-    , hspec-core
-    , QuickCheck
-    , safe-exceptions
-    , io-streams
-    , filepath
-    , path-io
-    , path
+    QuickCheck,
+    aeson,
+    base,
+    base64-bytestring,
+    bytestring,
+    clock,
+    colour,
+    containers,
+    dhall,
+    directory,
+    extra,
+    filepath,
+    godot-haskell,
+    hspec,
+    hspec-core,
+    http-client,
+    http-client-tls,
+    http-types,
+    inline-c,
+    io-streams,
+    iso8601-time,
+    lens,
+    linear,
+    ordered-containers,
+    path,
+    path-io,
+    process,
+    process-extras,
+    raw-strings-qq,
+    safe-exceptions,
+    stm,
+    text,
+    time,
+    unix,
+    uuid,
+    vector
+
   exposed-modules:
-      Telemetry
-      Plugin
-      Plugin.Imports
-      Plugin.PancakeCamera
-      Plugin.Pointer
-      Plugin.Types
-      Plugin.SimulaViewSprite
-      Plugin.CanvasBase
-      Plugin.CanvasSurface
-      Plugin.Input
-      Plugin.Input.Grab
-      Plugin.Input.Telekinesis
-      Plugin.SimulaServer
-      Plugin.SimulaController
-      Plugin.Simula
-      Plugin.VR
-      Plugin.Debug
-      Plugin.Debug.HUD
-      Plugin.Debug.HudTypes
-      Plugin.Debug.DamagedRegions
-      Plugin.Debug.DamagedRegionTypes
-      Plugin.Debug.MemoryHud
-      Plugin.Debug.MemoryHudTypes
-      Plugin.Debug.MonadoHud
-      Plugin.Debug.MonadoHudGC
-      Plugin.Debug.MonadoHudOpenXRFrameTiming
-      Plugin.Debug.MonadoHudParse
-      Plugin.Debug.MonadoHudSnapshot
-      Plugin.Debug.MonadoHudState
-      Plugin.Debug.MonadoHudTypes
-      Plugin.Debug.ProfileHud
-      Plugin.Debug.ProfileHudTypes
-      Plugin.CanvasAR
-      Plugin.Input.HandTelekinesis
-      -- Debug.C
-      -- Debug.Marshal
-  default-language: Haskell2010
-  default-extensions:
-      FlexibleContexts
-      FlexibleInstances
-      LambdaCase
-      NamedFieldPuns
-      OverloadedStrings
-      PatternSynonyms
-      TypeApplications
-      TypeOperators
-      MultiParamTypeClasses
-      FunctionalDependencies
-  ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code -g2 -threaded -eventlog -with-rtsopts=-T
- 
--- | After adding hsroots, we are forced to copy cabal fields for `library`
--- down to `foreign-library godot-haskell-plugin` (unclear why).
--- TODO: Switch to package.yaml pending on this change: https://github.com/sol/hpack/issues/258
-foreign-library godot-haskell-plugin
-  if flag(no-tracking)
-     hs-source-dirs: src, no-telemetry, flib
-  else
-     hs-source-dirs: src, telemetry, flib
-  type: native-shared
-  if os(Windows)
-    options: standalone
-  other-modules:
-    Telemetry
     Plugin
-    Plugin.Imports
-    Plugin.PancakeCamera
-    Plugin.Pointer
-    Plugin.Types
-    Plugin.SimulaViewSprite
+    Plugin.CanvasAR
     Plugin.CanvasBase
     Plugin.CanvasSurface
-    Plugin.Input
-    Plugin.Input.Grab
-    Plugin.Input.Telekinesis
-    Plugin.SimulaServer
-    Plugin.SimulaController
-    Plugin.Simula
-    Plugin.VR
     Plugin.Debug
+    Plugin.Debug.DamagedRegionTypes
+    Plugin.Debug.DamagedRegions
     Plugin.Debug.HUD
     Plugin.Debug.HudTypes
-    Plugin.Debug.DamagedRegions
-    Plugin.Debug.DamagedRegionTypes
     Plugin.Debug.MemoryHud
     Plugin.Debug.MemoryHudTypes
     Plugin.Debug.MonadoHud
@@ -171,61 +97,165 @@ foreign-library godot-haskell-plugin
     Plugin.Debug.MonadoHudTypes
     Plugin.Debug.ProfileHud
     Plugin.Debug.ProfileHudTypes
-    Plugin.CanvasAR
+    Plugin.Imports
+    Plugin.Input
+    Plugin.Input.Grab
     Plugin.Input.HandTelekinesis
-    -- Debug.C
-    -- Debug.Marshal
+    Plugin.Input.Telekinesis
+    Plugin.PancakeCamera
+    Plugin.Pointer
+    Plugin.Simula
+    Plugin.SimulaController
+    Plugin.SimulaServer
+    Plugin.SimulaViewSprite
+    Plugin.Types
+    Plugin.VR
+    Telemetry
+
+  -- Debug.C
+  -- Debug.Marshal
+  default-language: Haskell2010
+  default-extensions:
+    FlexibleContexts
+    FlexibleInstances
+    FunctionalDependencies
+    LambdaCase
+    MultiParamTypeClasses
+    NamedFieldPuns
+    OverloadedStrings
+    PatternSynonyms
+    TypeApplications
+    TypeOperators
+
+  ghc-options:
+    -fno-warn-unused-do-bind
+    -fwarn-incomplete-uni-patterns
+    -fwarn-incomplete-record-updates
+    -fobject-code
+    -g2
+    -threaded
+    -eventlog
+    -with-rtsopts=-T
+
+-- | After adding hsroots, we are forced to copy cabal fields for `library`
+-- down to `foreign-library godot-haskell-plugin` (unclear why).
+-- TODO: Switch to package.yaml pending on this change: https://github.com/sol/hpack/issues/258
+foreign-library godot-haskell-plugin
+  if flag(no-tracking)
+    hs-source-dirs:
+      src
+      no-telemetry
+      flib
+  else
+    hs-source-dirs:
+      src
+      telemetry
+      flib
+
+  type: native-shared
+
+  if os(windows)
+    options: standalone
+  other-modules:
+    Plugin
+    Plugin.CanvasAR
+    Plugin.CanvasBase
+    Plugin.CanvasSurface
+    Plugin.Debug
+    Plugin.Debug.DamagedRegionTypes
+    Plugin.Debug.DamagedRegions
+    Plugin.Debug.HUD
+    Plugin.Debug.HudTypes
+    Plugin.Debug.MemoryHud
+    Plugin.Debug.MemoryHudTypes
+    Plugin.Debug.MonadoHud
+    Plugin.Debug.MonadoHudGC
+    Plugin.Debug.MonadoHudOpenXRFrameTiming
+    Plugin.Debug.MonadoHudParse
+    Plugin.Debug.MonadoHudSnapshot
+    Plugin.Debug.MonadoHudState
+    Plugin.Debug.MonadoHudTypes
+    Plugin.Debug.ProfileHud
+    Plugin.Debug.ProfileHudTypes
+    Plugin.Imports
+    Plugin.Input
+    Plugin.Input.Grab
+    Plugin.Input.HandTelekinesis
+    Plugin.Input.Telekinesis
+    Plugin.PancakeCamera
+    Plugin.Pointer
+    Plugin.Simula
+    Plugin.SimulaController
+    Plugin.SimulaServer
+    Plugin.SimulaViewSprite
+    Plugin.Types
+    Plugin.VR
+    Telemetry
+
+  -- Debug.C
+  -- Debug.Marshal
   other-modules: FLib
-  ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code -g2 -threaded -eventlog -with-rtsopts=-T
+  ghc-options:
+    -fno-warn-unused-do-bind
+    -fwarn-incomplete-uni-patterns
+    -fwarn-incomplete-record-updates
+    -fobject-code
+    -g2
+    -threaded
+    -eventlog
+    -with-rtsopts=-T
+
   build-depends:
-      base
-    , lens
-    , godot-haskell
-    , colour
-    , linear
-    , text
-    , vector
-    , stm
-    , containers
-    , unix
-    , clock
-    , extra
-    , bytestring
-    , http-client
-    , http-types
-    , http-client-tls
-    , aeson
-    , process
-    , base64-bytestring
-    , directory
-    , uuid
-    , time
-    , iso8601-time
-    , raw-strings-qq
-    , inline-c
-    , ordered-containers
-    , process-extras
-    , dhall
-    , hspec
-    , hspec-core
-    , QuickCheck
-    , safe-exceptions
-    , io-streams
-    , filepath
-    , path-io
-    , path
+    QuickCheck,
+    aeson,
+    base,
+    base64-bytestring,
+    bytestring,
+    clock,
+    colour,
+    containers,
+    dhall,
+    directory,
+    extra,
+    filepath,
+    godot-haskell,
+    hspec,
+    hspec-core,
+    http-client,
+    http-client-tls,
+    http-types,
+    inline-c,
+    io-streams,
+    iso8601-time,
+    lens,
+    linear,
+    ordered-containers,
+    path,
+    path-io,
+    process,
+    process-extras,
+    raw-strings-qq,
+    safe-exceptions,
+    stm,
+    text,
+    time,
+    unix,
+    uuid,
+    vector
 
   default-extensions:
-       FlexibleContexts
-       FlexibleInstances
-       LambdaCase
-       NamedFieldPuns
-       OverloadedStrings
-       PatternSynonyms
-       TypeApplications
-       TypeOperators
-       MultiParamTypeClasses
-       FunctionalDependencies
+    FlexibleContexts
+    FlexibleInstances
+    FunctionalDependencies
+    LambdaCase
+    MultiParamTypeClasses
+    NamedFieldPuns
+    OverloadedStrings
+    PatternSynonyms
+    TypeApplications
+    TypeOperators
+
   c-sources:
-      cbits/flib.c
+    cbits/flib.c
+
   default-language: Haskell2010
