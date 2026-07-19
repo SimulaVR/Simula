@@ -94,6 +94,21 @@ library
       Plugin.Simula
       Plugin.VR
       Plugin.Debug
+      Plugin.Debug.HUD
+      Plugin.Debug.HudTypes
+      Plugin.Debug.DamagedRegions
+      Plugin.Debug.DamagedRegionTypes
+      Plugin.Debug.MemoryHud
+      Plugin.Debug.MemoryHudTypes
+      Plugin.Debug.MonadoHud
+      Plugin.Debug.MonadoHudGC
+      Plugin.Debug.MonadoHudOpenXRFrameTiming
+      Plugin.Debug.MonadoHudParse
+      Plugin.Debug.MonadoHudSnapshot
+      Plugin.Debug.MonadoHudState
+      Plugin.Debug.MonadoHudTypes
+      Plugin.Debug.ProfileHud
+      Plugin.Debug.ProfileHudTypes
       Plugin.CanvasAR
       Plugin.Input.HandTelekinesis
       -- Debug.C
@@ -110,7 +125,7 @@ library
       TypeOperators
       MultiParamTypeClasses
       FunctionalDependencies
-  ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code -g2 -threaded
+  ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code -g2 -threaded -eventlog -with-rtsopts=-T
  
 -- | After adding hsroots, we are forced to copy cabal fields for `library`
 -- down to `foreign-library godot-haskell-plugin` (unclear why).
@@ -141,12 +156,27 @@ foreign-library godot-haskell-plugin
     Plugin.Simula
     Plugin.VR
     Plugin.Debug
+    Plugin.Debug.HUD
+    Plugin.Debug.HudTypes
+    Plugin.Debug.DamagedRegions
+    Plugin.Debug.DamagedRegionTypes
+    Plugin.Debug.MemoryHud
+    Plugin.Debug.MemoryHudTypes
+    Plugin.Debug.MonadoHud
+    Plugin.Debug.MonadoHudGC
+    Plugin.Debug.MonadoHudOpenXRFrameTiming
+    Plugin.Debug.MonadoHudParse
+    Plugin.Debug.MonadoHudSnapshot
+    Plugin.Debug.MonadoHudState
+    Plugin.Debug.MonadoHudTypes
+    Plugin.Debug.ProfileHud
+    Plugin.Debug.ProfileHudTypes
     Plugin.CanvasAR
     Plugin.Input.HandTelekinesis
     -- Debug.C
     -- Debug.Marshal
   other-modules: FLib
-  ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code -g2 -threaded
+  ghc-options: -fno-warn-unused-do-bind -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates -fobject-code -g2 -threaded -eventlog -with-rtsopts=-T
   build-depends:
       base
     , lens

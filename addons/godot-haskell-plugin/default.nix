@@ -17,6 +17,8 @@ haskellPackages.mkDerivation {
   version = "0.1.0.0";
   src = lib.cleanSource ./.;
 
+  prePatch = "rm -f cabal.project";
+
   libraryHaskellDepends = [
     godot-haskell
 

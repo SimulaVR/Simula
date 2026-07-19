@@ -6,7 +6,7 @@ on:
     tags:
       - '*'
     branches:
-      - 'main'
+      - 'master'
 
 permissions: {}
 
@@ -22,6 +22,7 @@ jobs:
           nix_path: nixpkgs=channel:nixos-unstable
       - name: Run nix flake check
         run: nix flake check --all-systems
+
   run-nix-build:
     runs-on: ubuntu-latest
     steps:

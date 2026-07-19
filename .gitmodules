@@ -34,3 +34,6 @@
 	path = submodules/monado
 	url = https://github.com/SimulaVR/monado-xv.git
 	branch = xr50
+[submodule "submodules/godot-openxr"]
+	path = submodules/godot-openxr
+	url = https://github.com/SimulaVR/godot-openxr

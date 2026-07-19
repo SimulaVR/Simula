@@ -44,7 +44,8 @@ physicsConfig = PhysicsBodyConfig
   }
 
 getPhysicsConfig :: GodotRigidBody -> IO PhysicsBodyConfig
-getPhysicsConfig body =
+getPhysicsConfig body = do
+  debugPutStrLn "Plugin.Input.Telekinesis.getPhysicsConfig"
   PhysicsBodyConfig
     <$> G.get_gravity_scale body
     <*> G.get_linear_damp body
@@ -53,6 +54,7 @@ getPhysicsConfig body =
 
 setPhysicsConfigGSS :: GodotSimulaServer -> GodotRigidBody -> IO ()
 setPhysicsConfigGSS gss body = do
+  debugPutStrLn "Plugin.Input.Telekinesis.setPhysicsConfigGSS"
   ds <- readTVarIO (gss ^. gssDampSensitivity)
   let translation = (ds ^. dsTranslation)
   let rotation = (ds ^. dsRotation)
@@ -64,6 +66,7 @@ setPhysicsConfigGSS gss body = do
 
 setPhysicsConfig :: PhysicsBodyConfig -> GodotRigidBody -> IO ()
 setPhysicsConfig config body = do
+  debugPutStrLn "Plugin.Input.Telekinesis.setPhysicsConfig"
   body `G.set_gravity_scale` (_pbcGravityScale config)
   body `G.set_linear_damp` (_pbcLinearDamp config)
   body `G.set_angular_damp` (_pbcAngularDamp config)
@@ -72,6 +75,7 @@ setPhysicsConfig config body = do
 
 grab :: GodotRigidBody -> Telekinesis -> IO Telekinesis
 grab body tk = do
+  debugPutStrLn "Plugin.Input.Telekinesis.grab"
   tf  <- tk & _tkController & G.get_global_transform >>= fromLowLevel
   -- Get current values before overwriting
   cfg <- getPhysicsConfig body
@@ -84,6 +88,7 @@ grab body tk = do
 
 letGo :: Telekinesis -> IO Telekinesis
 letGo tk = do
+  debugPutStrLn "Plugin.Input.Telekinesis.letGo"
   tk
     & _tkBody
     & \case
@@ -100,6 +105,7 @@ letGo tk = do
 
 manipulate :: Bool -> Float -> Telekinesis -> IO Telekinesis
 manipulate isMove factor tk = do
+  debugPutStrLn "Plugin.Input.Telekinesis.manipulate"
   tf@(TF bs pos) <- tk & _tkController & G.get_global_transform >>= fromLowLevel
   tk
     & _tkBody
@@ -139,7 +145,9 @@ manipulate isMove factor tk = do
 
 
 telekinesis :: Bool -> Bool -> Telekinesis -> IO Telekinesis
-telekinesis isLev isMove tk = do -- isLev = isGripped; isMove = True
+telekinesis isLev isMove tk = do
+  debugPutStrLn "Plugin.Input.Telekinesis.telekinesis"
+  -- isLev = isGripped; isMove = True
   _tkController tk
     &   asClass GodotARVRController "ARVRController"
     >>= \case

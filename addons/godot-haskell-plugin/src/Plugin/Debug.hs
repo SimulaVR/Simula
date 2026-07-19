@@ -91,6 +91,7 @@ import System.FilePath ((</>))
 
 debugLaunchApp :: GodotSimulaServer -> String -> IO GodotSimulaViewSprite
 debugLaunchApp gss app = do
+  debugPutStrLn "Plugin.Debug.debugLaunchApp"
   appLaunch gss app Nothing
   gsvs <- waitUntilAppLaunchSuccessful gss
   return gsvs
@@ -106,6 +107,7 @@ debugLaunchApp gss app = do
 
 debugWaitFrames :: GodotSimulaViewSprite -> Integer -> IO ()
 debugWaitFrames gsvs n = do
+  debugPutStrLn "Plugin.Debug.debugWaitFrames"
   gsvsOriginalFrameCount <- readTVarIO (gsvs ^. gsvsFrameCount)
   debugWaitFrames' gsvs gsvsOriginalFrameCount n
   where debugWaitFrames' :: GodotSimulaViewSprite -> Integer -> Integer -> IO ()
@@ -119,6 +121,7 @@ debugWaitFrames gsvs n = do
 -- https://docs.godotengine.org/en/stable/classes/class_@globalscope.html#enum-globalscope-buttonlist
 debugMouseClick :: Int -> Bool -> IO ()
 debugMouseClick button pressed = do
+  debugPutStrLn "Plugin.Debug.debugMouseClick"
   a <- unsafeInstance GodotInputEventMouseButton "InputEventMouseButton"
   G.set_button_index a button
   -- G.position a =<< toLowLevel V2 520 520
@@ -127,16 +130,19 @@ debugMouseClick button pressed = do
 
 debugLeftClick :: IO ()
 debugLeftClick = do
+  debugPutStrLn "Plugin.Debug.debugLeftClick"
   debugMouseClick 1 True
   debugMouseClick 1 False
 
 debugRightClick :: IO ()
 debugRightClick = do
+  debugPutStrLn "Plugin.Debug.debugRightClick"
   debugMouseClick 2 True
   debugMouseClick 2 False
 
 debugKeyboardPress :: Scancode -> Bool -> IO ()
 debugKeyboardPress button pressed = do
+  debugPutStrLn "Plugin.Debug.debugKeyboardPress"
   a <- unsafeInstance GodotInputEventKey "InputEventKey"
   G.set_scancode a button
   G.set_pressed a pressed
@@ -144,11 +150,13 @@ debugKeyboardPress button pressed = do
 
 debugMoveCursor :: GodotSimulaViewSprite -> (Float, Float) -> IO ()
 debugMoveCursor gsvs (sx, sy) = do
-  processClickEvent' gsvs Motion (SurfaceLocalCoordinates (sx, sy))
-  atomically $ writeTVar (gsvs ^. gsvsCursorCoordinates) (SurfaceLocalCoordinates (sx, sy))
+  debugPutStrLn "Plugin.Debug.debugMoveCursor"
+  processClickEvent' gsvs Motion (CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy))
+  atomically $ writeTVar (gsvs ^. gsvsCursorCoordinates) (CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy))
 
 debugTerminateSimula :: GodotSimulaServer -> IO ()
 debugTerminateSimula gss = do
+  debugPutStrLn "Plugin.Debug.debugTerminateSimula"
   let pid = (gss ^. gssPid)
   -- logStr $ "Terminating Simula with pid: " ++ (show pid)
   createProcess (shell $ "kill " ++ (show pid))
@@ -156,6 +164,7 @@ debugTerminateSimula gss = do
 
 testRightclickPopup :: GodotSimulaServer -> String -> ScreenshotBaseName -> IO ((Float, Float), (Float, Float), ScreenshotFullPath)
 testRightclickPopup gss app screenshotBase = do
+  debugPutStrLn "Plugin.Debug.testRightclickPopup"
   Control.Concurrent.threadDelay (2 * 1000000)
   gsvs <- debugLaunchApp gss app
   debugMoveCursor gsvs (300,300)
@@ -170,34 +179,43 @@ testRightclickPopup gss app screenshotBase = do
   let screenshotPath = dataDir </> "screenshots" </> screenshotBase
   screenshotFullPath <- savePngPancake gss screenshotPath
 
-  SurfaceLocalCoordinates (cx, cy) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+  CanvasBaseCoordinates (RightCoordinate cx) (DownCoordinate cy) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
-  wlrSurfaceParent <- getWlrSurface eitherSurface
   depthFirstBaseSurfaces <- case eitherSurface of
     Left wlrXdgSurface -> getDepthFirstXdgSurfaces wlrXdgSurface :: IO [(GodotWlrSurface, Int, Int)]
     Right wlrXWaylandSurface -> getDepthFirstXWaylandSurfaces wlrXWaylandSurface :: IO [(GodotWlrSurface, Int, Int)]
-  depthFirstWlrSurfaces <- getDepthFirstWlrSurfaces wlrSurfaceParent
-  let depthFirstSurfaces = depthFirstBaseSurfaces ++ depthFirstWlrSurfaces
-  let len = Data.List.length depthFirstSurfaces
-  freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
-  popup@(popupWlrSurface, px, py) <- case (Data.List.length freeChildren > 0, (len >= 2)) of
-                                             (True, _) -> do let freeChild = Data.List.head freeChildren
-                                                             wlrSurface <- G.get_wlr_surface freeChild
-                                                             x <- G.get_x freeChild
-                                                             y <- G.get_y freeChild
-                                                             return (wlrSurface, x, y)
-                                             (_, True) -> return $ depthFirstSurfaces !! 1
-                                             _ -> return $ depthFirstSurfaces !! 0
+  ((withWlrSurface eitherSurface $ \wlrSurfaceParent ->
+      bracket
+        (getDepthFirstWlrSurfaces wlrSurfaceParent)
+        destroyWlrSurfacesWithCoords
+        (\depthFirstWlrSurfaces -> do
+          let depthFirstSurfaces = depthFirstBaseSurfaces ++ depthFirstWlrSurfaces
+          let len = Data.List.length depthFirstSurfaces
+          freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
+          (px, py) <- case (Data.List.length freeChildren > 0, len >= 2) of
+            (True, _) -> do
+              let freeChild = Data.List.head freeChildren
+              x <- G.get_surface_origin_x freeChild
+              y <- G.get_surface_origin_y freeChild
+              return (x, y)
+            (_, True) -> do
+              let (_, x, y) = depthFirstSurfaces !! 1
+              return (x, y)
+            _ -> do
+              let (_, x, y) = depthFirstSurfaces !! 0
+              return (x, y)
 
-  Control.Concurrent.threadDelay (1 * 1000000)
-  debugLogDepthFirstSurfaces gsvs
-  Control.Concurrent.threadDelay (2 * 1000000)
-  createProcess (shell $ "pkill " ++ app)
-  return ((cx, cy), (fromIntegral px, fromIntegral py), screenshotFullPath)
+          Control.Concurrent.threadDelay (1 * 1000000)
+          debugLogDepthFirstSurfaces gsvs
+          Control.Concurrent.threadDelay (2 * 1000000)
+          createProcess (shell $ "pkill " ++ app)
+          return ((cx, cy), (fromIntegral px, fromIntegral py), screenshotFullPath))))
+    `finally` destroyWlrSurfacesWithCoords depthFirstBaseSurfaces
   
 testAppMemory :: GodotSimulaServer -> String -> Int -> IO (Float, Float)
 testAppMemory gss app sec = do
+  debugPutStrLn "Plugin.Debug.testAppMemory"
   pid1 <- logMemPid gss
   Control.Concurrent.threadDelay (2 * 1000000)
   gsvs <- debugLaunchApp gss app
@@ -211,6 +229,7 @@ testAppMemory gss app sec = do
 
 debugTerminateApps :: GodotSimulaServer -> IO ()
 debugTerminateApps gss = do
+  debugPutStrLn "Plugin.Debug.debugTerminateApps"
   views <- readTVarIO (gss ^. gssViews)
   let gsvsLst = fmap snd (M.toList views)
   mapM_ debugTerminateGSVS gsvsLst
@@ -220,6 +239,7 @@ debugTerminateApps gss = do
 -- | Suffers from threading issues, even with liberal threadDelay hack calls.
 debugTerminateGSVS :: GodotSimulaViewSprite -> IO ()
 debugTerminateGSVS gsvs = do
+  debugPutStrLn "Plugin.Debug.debugTerminateGSVS"
   Control.Concurrent.threadDelay (2 * 1000000)
   gss <- readTVarIO (gsvs ^. gsvsServer)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
@@ -244,6 +264,7 @@ debugTerminateGSVS gsvs = do
 
 testPopups :: GodotSimulaServer -> IO ()
 testPopups gss = do
+  debugPutStrLn "Plugin.Debug.testPopups"
   let app = "firefox"
   -- let config = defaultConfig { configOutputFile = Right $ "./hspec_output.txt" }
   let config = defaultConfig
@@ -255,6 +276,7 @@ testPopups gss = do
 
 testMemoryUsage :: GodotSimulaServer -> IO ()
 testMemoryUsage gss = do
+  debugPutStrLn "Plugin.Debug.testMemoryUsage"
   -- let config = defaultConfig { configOutputFile = Right $ "./hspec_output.txt" }
   let config = defaultConfig
   pid1 <- logMemPid gss
@@ -269,6 +291,7 @@ testMemoryUsage gss = do
 
 testMemoryUsageWithApp :: GodotSimulaServer -> String -> Int -> IO ()
 testMemoryUsageWithApp gss app sec = do
+  debugPutStrLn "Plugin.Debug.testMemoryUsageWithApp"
   -- let config = defaultConfig { configOutputFile = Right $ "./hspec_output.txt" }
   let config = defaultConfig
 
@@ -282,6 +305,7 @@ testMemoryUsageWithApp gss app sec = do
 
 logMemRecursively :: IO ()
 logMemRecursively = do
+  debugPutStrLn "Plugin.Debug.logMemRecursively"
   memoryUsage <- getSingleton Godot_OS "OS" >>= G.get_static_memory_usage
   logStr $ "G.get_static_memory_usage: " ++ (show memoryUsage)
   Control.Concurrent.threadDelay (1 * 1000000)
@@ -289,67 +313,75 @@ logMemRecursively = do
 
 debugLogDepthFirstSurfaces :: GodotSimulaViewSprite -> IO ()
 debugLogDepthFirstSurfaces gsvs = do
+  debugPutStrLn "Plugin.Debug.debugLogDepthFirstSurfaces"
   cs <- readTVarIO (gsvs ^. gsvsCanvasSurface)
   frame <- readTVarIO (gsvs ^. gsvsFrameCount)
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
-  wlrSurfaceParent <- getWlrSurface eitherSurface
   depthFirstBaseSurfaces <- getDepthFirstBaseSurfaces gsvs
-  depthFirstWlrSurfaces <- getDepthFirstWlrSurfaces wlrSurfaceParent
-  let depthFirstSurfaces = depthFirstBaseSurfaces ++ depthFirstWlrSurfaces
+  ((withWlrSurface eitherSurface $ \wlrSurfaceParent ->
+      bracket
+        (getDepthFirstWlrSurfaces wlrSurfaceParent)
+        destroyWlrSurfacesWithCoords
+        (\depthFirstWlrSurfaces -> do
+          let depthFirstSurfaces = depthFirstBaseSurfaces ++ depthFirstWlrSurfaces
 
-  maybeLogDir <- lookupEnv "SIMULA_LOG_DIR"
-  let logDir = fromMaybe "./log" maybeLogDir
-  createDirectoryIfMissing True logDir
-  let logFile = logDir </> "debug_log.txt"
+          maybeLogDir <- lookupEnv "SIMULA_LOG_DIR"
+          let logDir = fromMaybe "./log" maybeLogDir
+          createDirectoryIfMissing True logDir
+          let logFile = logDir </> "debug_log.txt"
 
-  appendFile logFile $ "===debugLogDepthFirstSurfaces frame: " ++ (show frame) ++ " ===\n"
-  appendFile logFile $ "depthFirstSurfaces:" ++ (show $ length depthFirstSurfaces) ++ "\n"
-  appendFile logFile $ "  depthFirstBaseSurfaces:" ++ (show $ length depthFirstBaseSurfaces) ++ "\n"
-  appendFile logFile $ "  " ++ (show depthFirstBaseSurfaces) ++ "\n"
-  appendFile logFile $ "  depthFirstWlrSurfaces:" ++ (show $ length depthFirstWlrSurfaces) ++ "\n"
-  appendFile logFile $ "  " ++ (show depthFirstWlrSurfaces) ++ "\n"
+          appendFile logFile $ "===debugLogDepthFirstSurfaces frame: " ++ (show frame) ++ " ===\n"
+          appendFile logFile $ "depthFirstSurfaces:" ++ (show $ length depthFirstSurfaces) ++ "\n"
+          appendFile logFile $ "  depthFirstBaseSurfaces:" ++ (show $ length depthFirstBaseSurfaces) ++ "\n"
+          appendFile logFile $ "  " ++ (show depthFirstBaseSurfaces) ++ "\n"
+          appendFile logFile $ "  depthFirstWlrSurfaces:" ++ (show $ length depthFirstWlrSurfaces) ++ "\n"
+          appendFile logFile $ "  " ++ (show depthFirstWlrSurfaces) ++ "\n"
 
-  mapM_ (logWlrSurface cs) depthFirstSurfaces
+          mapM_ (logWlrSurface cs) depthFirstSurfaces)))
+    `finally` destroyWlrSurfacesWithCoords depthFirstBaseSurfaces
 
   where logWlrSurface :: CanvasSurface -> (GodotWlrSurface, Int, Int) -> IO ()
         logWlrSurface cs (wlrSurface, x, y) = do
           path <- saveWlrSurfacePng cs wlrSurface
-          dims <- getBufferDimensions wlrSurface
+          dims <- getWlrSurfaceStateCurrentDimensions wlrSurface
           logStr $ "wlrSurface: " ++ (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ " @ (" ++ (show (x,y)) ++ ", " ++ (show dims) ++ ")"
           logStr $ "[[" ++ path ++ "]]"
 
         saveWlrSurfacePng :: CanvasSurface -> GodotWlrSurface -> IO String
         saveWlrSurfacePng cs wlrSurface = do
+          debugPutStrLn "Plugin.Debug.saveWlrSurfacePng"
           validateSurfaceE wlrSurface
           gsvs <- readTVarIO (cs ^. csGSVS)
           visualServer <- getVisualServer gsvs
-          wlrSurfaceTexture <- G.get_texture wlrSurface
-          rid <- G.get_rid wlrSurfaceTexture
-          wlrSurfaceImage <- G.texture_get_data visualServer rid 0
+          withGodotRef (G.get_texture wlrSurface :: IO GodotTexture) $ \wlrSurfaceTexture -> do
+            rid <- G.get_rid wlrSurfaceTexture
+            wlrSurfaceImage <- G.texture_get_data visualServer rid 0
 
-          -- Get file path
-          frame <- readTVarIO (gsvs ^. gsvsFrameCount)
-          maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
-          let dataDir = fromMaybe "./.local/share/Simula" maybeDataDir
-          createDirectoryIfMissing True (dataDir </> "media")
-          let fileName = (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
-          let pathStr = dataDir </> "media" </> fileName
-          canonicalPath <- canonicalizePath pathStr
-          pathStr' <- toLowLevel (pack pathStr)
+            -- Get file path
+            frame <- readTVarIO (gsvs ^. gsvsFrameCount)
+            maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
+            let dataDir = fromMaybe "./.local/share/Simula" maybeDataDir
+            createDirectoryIfMissing True (dataDir </> "media")
+            let fileName = (show (coerce wlrSurface :: Ptr GodotWlrSurface)) ++ "." ++ (show frame) ++ ".png"
+            let pathStr = dataDir </> "media" </> fileName
+            canonicalPath <- canonicalizePath pathStr
+            pathStr' <- toLowLevel (pack pathStr)
 
-          -- Save as png
-          G.save_png wlrSurfaceImage pathStr'
-          return canonicalPath
+            -- Save as png
+            G.save_png wlrSurfaceImage pathStr'
+            return canonicalPath
 
         getVisualServer :: GodotSimulaViewSprite -> IO GodotVisualServer
         getVisualServer gsvs = do
+          debugPutStrLn "Plugin.Debug.getVisualServer"
           gss <- readTVarIO (gsvs ^. gsvsServer)
           visualServer <- readTVarIO (gss ^. gssVisualServer)
           return visualServer
           
 debugFunc :: GodotSimulaServer -> IO ()
 debugFunc gss = do
+  debugPutStrLn "Plugin.Debug.debugFunc"
   (catch :: IO a -> (System.Exit.ExitCode -> IO a) -> IO a) (do -- testPopups gss
                                                                 -- testMemoryUsage gss
                                                                 -- testMemoryUsageWithApp gss "firefox" (60*1)

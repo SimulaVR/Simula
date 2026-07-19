@@ -19,6 +19,14 @@ dist-newstyle
 
 # Nix's result
 result
+result-*
+simula-pernosco-submit
 
 # nix-direnv
 .direnv/
+
+# Local profiling output
+profiling/
+
+# rr traces
+rr/

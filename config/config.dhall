@@ -18,7 +18,6 @@ let Configuration =
                                                            -- Set to `None { _1 : Natural, _2 : Natural }` for windows to launch with their default (typically non-square) resolutions
 
   , _defaultWindowScale      = 1.0 : Double                -- In addition to resolution, apps can be scaled up or down by this factor upon launch
-  , _axisScrollSpeed         = 0.02 : Double
   , _mouseSensitivityScaler  = 1.00 : Double
   , _keyBindings             = [ -- For keyboard shortcuts, use keynames from
                                  -- https://github.com/SimulaVR/godot/blob/3.2-simula/core/os/keyboard.h
@@ -36,6 +35,7 @@ let Configuration =
                               , { _keyCombination = ["KEY_MASK_META", "KEY_M"]                         , _keyAction = "grabWindows"                }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_MASK_SHIFT", "KEY_M"]       , _keyAction = "grabWorkspaces"             }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_A"]                         , _keyAction = "launchAppLauncher"          }
+                              , { _keyCombination = ["KEY_MASK_META", "KEY_D"]                         , _keyAction = "toggleDebugHud"             }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_E"]                         , _keyAction = "cycleEnvironment"           }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_F"]                         , _keyAction = "orientWindowTowardsGaze"    }
                               , { _keyCombination = ["KEY_MASK_META", "KEY_9"]                         , _keyAction = "scaleWindowDown"            }

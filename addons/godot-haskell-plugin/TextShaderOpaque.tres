@@ -61,6 +61,13 @@ float kaiser(float x, float alpha) {
 	return besselI0(alpha * sqrt(1.0-x*x));
 }
 
+vec3 srgb_to_linear(vec3 c) {
+	return mix(
+		pow((c + 0.055) / 1.055, vec3(2.4)),
+		c / 12.92,
+		lessThanEqual(c, vec3(0.04045)));
+}
+
 vec4 lowpassFilter(sampler2D tex, vec2 uv, float alpha) {
 	float PI = 3.14159265358;
 	
@@ -112,6 +119,6 @@ void fragment() {
 	outColor = lowpassFilter(texture_albedo, vec2(1.0 - UV.x, UV.y), ripple);
   //outColor = texture(texture_albedo, vec2(1.0 - UV.x, UV.y)); //to turn off
 
-	ALBEDO = outColor.xyz;
+	ALBEDO = srgb_to_linear(outColor.xyz);
   //ALPHA = outColor.w; //force to opaque
 }"

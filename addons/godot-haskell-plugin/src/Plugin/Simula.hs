@@ -7,6 +7,7 @@
 module Plugin.Simula (GodotSimula(..)) where
 
 import           Plugin.Imports
+import           Plugin.Debug.ProfileHudTypes
 import           Data.Maybe
 
 import           Plugin.Input
@@ -60,7 +61,8 @@ instance HasBaseClass GodotSimula where
 
 
 ready :: GodotSimula -> [GodotVariant] -> IO ()
-ready self _ = do
+ready self gvArgs = profileScope "Simula.ready" $ do
+  debugPutStrLn "Plugin.Simula.ready"
   -- OpenHMD is unfortunately not yet a working substitute for OpenVR
   -- https://github.com/SimulaVR/Simula/issues/72
 
@@ -119,6 +121,7 @@ ready self _ = do
   G.set_current gpc True
   G.add_child self (safeCast gpc) True
 
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()
  where
   -- Helper function for black texture debugging.
@@ -128,7 +131,8 @@ ready self _ = do
   --   img.load("image.png")
   --   tex.create_from_image(img)
   getTextureFromURL :: String -> IO (GodotTexture)
-  getTextureFromURL urlStr = do
+  getTextureFromURL urlStr = profileScope "ready.getTextureFromURL" $ do
+    debugPutStrLn $ "Plugin.Simula.getTextureFromURL " ++ urlStr
     -- instance new types
     godotImage <- unsafeInstance GodotImage "Image" :: IO GodotImage
     godotImageTexture <- unsafeInstance GodotImageTexture "ImageTexture"
@@ -142,7 +146,8 @@ ready self _ = do
 
 
   addSimulaServerNode :: IO GodotSpatial
-  addSimulaServerNode = do
+  addSimulaServerNode = profileScope "addSimulaServerNode" $ do
+    debugPutStrLn "Plugin.Simula.addSimulaServerNode"
     gss <- "res://addons/godot-haskell-plugin/SimulaServer.gdns"
       & newNS'' GodotSpatial "Spatial" []
 
@@ -154,7 +159,8 @@ ready self _ = do
     return gss
 
   connectController :: GodotSimulaController -> IO ()
-  connectController ct = do
+  connectController ct = profileScope "connectController" $ do
+    debugPutStrLn "Plugin.Simula.connectController"
     -- putStrLn "connectController"
     argsPressed <- Api.godot_array_new
     ctA <- toLowLevel $ toVariant $ asObj ct :: IO GodotVariant
@@ -184,7 +190,8 @@ ready self _ = do
 
 
 on_button_signal :: GodotSimula -> [GodotVariant] -> IO ()
-on_button_signal self [buttonVar, controllerVar, pressedVar] = do
+on_button_signal self gvArgs@[buttonVar, controllerVar, pressedVar] = profileScope "on_button_signal" $ do
+  debugPutStrLn "Plugin.Simula.on_button_signal"
   -- putStrLn "on_button_signal in Simula.hs"
   button <- fromGodotVariant buttonVar
   controllerObj <- fromGodotVariant controllerVar
@@ -193,11 +200,13 @@ on_button_signal self [buttonVar, controllerVar, pressedVar] = do
   --Just controller <- asNativeScript controllerObj -- tryObjectCast controllerObj
   pressed <- fromGodotVariant pressedVar
   onButton self controller button pressed
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
 
 onButton :: GodotSimula -> GodotSimulaController -> Int -> Bool -> IO ()
-onButton self gsc button pressed = do
+onButton self gsc button pressed = profileScope "onButton" $ do
+  debugPutStrLn $ "Plugin.Simula.onButton button=" ++ show button ++ " pressed=" ++ show pressed
   -- putStrLn "onButton in Simula.hs"
   case (button, pressed) of
     (OVR_Button_Grip, False) -> -- Release grabbed
@@ -209,31 +218,64 @@ onButton self gsc button pressed = do
     _ -> do
       let rc = _gscRayCast gsc
       G.force_raycast_update rc
-      whenM (G.is_colliding rc) $ do
-        maybeSprite <- G.get_collider rc >>= asNativeScript :: IO (Maybe GodotSimulaViewSprite) --fromNativeScript
-        -- let sprite = Data.Maybe.fromJust maybeSprite
-        maybe (return ()) (onSpriteInput rc) maybeSprite
-          -- >>= maybe (return ()) (onSpriteInput rc)
+      isColliding <- G.is_colliding rc
+      if isColliding
+        then do
+          maybeSprite <- G.get_collider rc >>= asNativeScript :: IO (Maybe GodotSimulaViewSprite) --fromNativeScript
+          maybe (return ()) (onSpriteInput rc) maybeSprite
+        else
+          onOffSpriteInput button pressed
  where
   gst = _sGrabState self
-  onSpriteInput rc sprite =
-    G.get_collision_point rc >>= case button of
-      OVR_Button_Trigger -> processClickEvent sprite (Button pressed G.BUTTON_LEFT)
-      OVR_Button_AppMenu -> processClickEvent sprite (Button pressed G.BUTTON_RIGHT)
-      OVR_Button_Grip    -> const $
+  onSpriteInput rc sprite = do
+    debugPutStrLn $ "Plugin.Simula.onSpriteInput button=" ++ show button ++ " pressed=" ++ show pressed
+    worldCoordinates <- G.get_collision_point rc >>= worldCoordinates3DFromGodotVector
+    case button of
+      OVR_Button_Trigger ->
+        processClickEvent sprite (Button pressed G.BUTTON_LEFT) worldCoordinates
+      OVR_Button_AppMenu ->
+        processClickEvent sprite (Button pressed G.BUTTON_RIGHT) worldCoordinates
+      OVR_Button_Grip ->
         readTVarIO gst
           >>= processGrabEvent gsc (Just sprite) pressed
           >>= atomically
           .   writeTVar gst
-      _                  -> const $ return ()
+      _ -> return ()
+
+  onOffSpriteInput :: Int -> Bool -> IO ()
+  onOffSpriteInput button pressed =
+    profileScope "onOffSpriteInput" $
+    case button of
+      OVR_Button_Trigger -> sendOutsideClick G.BUTTON_LEFT pressed
+      OVR_Button_AppMenu -> sendOutsideClick G.BUTTON_RIGHT pressed
+      _ -> return ()
+
+  sendOutsideClick :: Int -> Bool -> IO ()
+  sendOutsideClick buttonIndex pressed = profileScope "sendOutsideClick" $ do
+    wlrSeat <- getWlrSeatFromPath self
+    G.pointer_clear_focus wlrSeat
+    G.pointer_notify_button wlrSeat (fromIntegral buttonIndex) pressed
+    G.pointer_notify_frame wlrSeat
+
+  getWlrSeatFromPath :: GodotSimula -> IO GodotWlrSeat
+  getWlrSeatFromPath self = profileScope "getWlrSeatFromPath" $ do
+    let nodePathStr = "/root/Root/SimulaServer"
+    nodePath <- toLowLevel (pack nodePathStr) :: IO GodotNodePath
+    gssNode <- G.get_node ((safeCast self) :: GodotNode) nodePath
+    Api.godot_node_path_destroy nodePath
+    maybeGSS <- asNativeScript (safeCast gssNode) :: IO (Maybe GodotSimulaServer)
+    let gss = Data.Maybe.fromJust maybeGSS
+    readTVarIO (gss ^. gssWlrSeat)
 
 
 process :: GodotSimula -> [GodotVariant] -> IO ()
-process self _ = do
+process self gvArgs = profileScope "Simula.process" $ do
+  debugPutStrLn "Plugin.Simula.process"
   -- putStrLn "process in Simula.hs"
   let gst = _sGrabState self
   atomically (readTVar gst)
     >>= handleState
     >>= atomically . writeTVar gst
 
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()

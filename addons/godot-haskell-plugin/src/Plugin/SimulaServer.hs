@@ -47,6 +47,9 @@ import Plugin.Input
 import Plugin.SimulaViewSprite
 import Plugin.Types
 import Plugin.Debug
+import qualified Plugin.Debug.HUD as DebugHUD
+import Plugin.Debug.MonadoHudGC (recordDebugMonadoHudGhcGCFrame)
+import Plugin.Debug.ProfileHudTypes
 
 import Control.Monad
 import Control.Concurrent
@@ -85,7 +88,7 @@ import           Control.Monad.Extra
 
 import Godot.Core.GodotGlobalConstants as G
 import Godot.Core.GodotInput as G
-import Dhall
+import Dhall hiding (void)
 import Control.Exception
 import qualified Data.Vector as V
 
@@ -123,11 +126,12 @@ getKeyboardAction gss keyboardShortcut =
     "terminateSimula" -> terminateSimula gss
     "cycleEnvironment" -> cycleEnvironment gss
     "cycleScene" -> cycleScene gss
-    "launchAppLauncher" -> shellLaunch gss "synapse"
+    "launchAppLauncher" -> launchAppLauncher gss
     "textToSpeech" -> textToSpeech gss
     "decreaseTransparency" -> decreaseTransparency
     "increaseTransparency" -> increaseTransparency
     "toggleScreenshotMode" -> toggleScreenshotMode
+    "toggleDebugHud" -> toggleDebugHud
     "takeScreenshotGlobal" -> takeScreenshotGlobal
     "debugLogDepthFirstSurfaces" -> debugLogDepthFirstSurfaces
     "debugPrint" -> debugPrint
@@ -168,62 +172,65 @@ getKeyboardAction gss keyboardShortcut =
     _ -> shellLaunch gss (keyboardShortcut ^. keyAction)
 
   where moveCursor :: SpriteLocation -> Bool -> IO ()
-        moveCursor (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        moveCursor (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "moveCursor" $ do
           updateCursorStateAbsolute gsvs sx sy
           sendWlrootsMotion gsvs
         moveCursor _ _ = return ()
 
         debugLogDepthFirstSurfaces:: SpriteLocation -> Bool -> IO ()
-        debugLogDepthFirstSurfaces (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        debugLogDepthFirstSurfaces (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "debugLogDepthFirstSurfaces" $ do
+          debugPutStrLn "Plugin.SimulaServer.debugLogDepthFirstSurfaces"
           Plugin.Debug.debugLogDepthFirstSurfaces gsvs
-        debugLogDepthFirstSurfaces (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) False = do
+        debugLogDepthFirstSurfaces (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) False = do
           return ()
         debugLogDepthFirstSurfaces _ _ = return ()
 
         leftClick :: SpriteLocation -> Bool -> IO ()
-        leftClick (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        leftClick (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "leftClick" $ do
+          debugPutStrLn "Plugin.SimulaServer.leftClick"
           putStrLn $ "leftClick True"
-          -- updateCursorStateAbsolute gsvs sx sy
-          -- sendWlrootsMotion gsvs
+          updateCursorStateAbsolute gsvs sx sy
           processClickEvent' gsvs (Button True 1) coords -- BUTTON_LEFT = 1
-        leftClick (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) False = do
+        leftClick (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) False = do
           putStrLn $ "leftClick False"
+          updateCursorStateAbsolute gsvs sx sy
           processClickEvent' gsvs (Button False 1) coords -- BUTTON_LEFT = 1
         leftClick _ _ = return ()
 
         rightClick :: SpriteLocation -> Bool -> IO ()
-        rightClick (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        rightClick (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "rightClick" $ do
+          debugPutStrLn "Plugin.SimulaServer.rightClick"
           updateCursorStateAbsolute gsvs sx sy
-          sendWlrootsMotion gsvs
           processClickEvent' gsvs (Button True 2) coords -- BUTTON_RIGHT = 2
-        rightClick (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) False = do
+        rightClick (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) False = do
+          updateCursorStateAbsolute gsvs sx sy
           processClickEvent' gsvs (Button False 2) coords -- BUTTON_RIGHT = 2
         rightClick _ _ = return ()
 
         scrollUp :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
-        scrollUp gss (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
-          axisScrollSpeed <- readTVarIO (gss ^. gssAxisScrollSpeed)
-          G.pointer_notify_axis_continuous wlrSeat 0 (realToFrac axisScrollSpeed)
+        scrollUp _ (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "scrollUp" $ do
+          debugPutStrLn "Plugin.SimulaServer.scrollUp"
+          processClickEvent' gsvs (Button True G.BUTTON_WHEEL_UP) coords
         scrollUp _ _ _ = return ()
 
         scrollDown :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
-        scrollDown gss (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-          wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
-          axisScrollSpeed <- readTVarIO (gss ^. gssAxisScrollSpeed)
-          G.pointer_notify_axis_continuous wlrSeat 0 (-1.0 * (realToFrac axisScrollSpeed))
+        scrollDown _ (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "scrollDown" $ do
+          debugPutStrLn "Plugin.SimulaServer.scrollDown"
+          processClickEvent' gsvs (Button True G.BUTTON_WHEEL_DOWN) coords
         scrollDown _ _ _ = return ()
 
   
         grabWindow :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
-        grabWindow gss (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        grabWindow gss (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "grabWindow" $ do
+          debugPutStrLn "Plugin.SimulaServer.grabWindow"
           keyboardGrabInitiate gss (GrabWindow gsvs undefined)
-        grabWindow gss (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) False = do
+        grabWindow gss (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) False = do
           keyboardGrabLetGo gss (GrabWindow gsvs undefined)
         grabWindow _ _ _ = return ()
 
         grabWindows :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
-        grabWindows gss _ True = do
+        grabWindows gss _ True = profileScope "grabWindows" $ do
+          debugPutStrLn "Plugin.SimulaServer.grabWindows"
           maybeGrab <- readTVarIO (gss ^. gssGrab)
           case maybeGrab of
             Nothing -> keyboardGrabInitiate gss (GrabWindows undefined)
@@ -232,7 +239,8 @@ getKeyboardAction gss keyboardShortcut =
           keyboardGrabLetGo gss (GrabWindows undefined)
 
         grabWorkspaces :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
-        grabWorkspaces gss _ True = do
+        grabWorkspaces gss _ True = profileScope "grabWorkspaces" $ do
+          debugPutStrLn "Plugin.SimulaServer.grabWorkspaces"
           maybeGrab <- readTVarIO (gss ^. gssGrab)
           case maybeGrab of
             Nothing -> keyboardGrabInitiate gss (GrabWorkspaces undefined)
@@ -241,21 +249,24 @@ getKeyboardAction gss keyboardShortcut =
           keyboardGrabLetGo gss (GrabWorkspaces undefined)
 
         rotateWorkspaceHorizontally :: GodotSimulaServer -> Float -> SpriteLocation -> Bool -> IO ()
-        rotateWorkspaceHorizontally gss radians _ True = do
+        rotateWorkspaceHorizontally gss radians _ True = profileScope "processKey.rotateWorkspaceHorizontally" $ do
+          debugPutStrLn "Plugin.SimulaServer.rotateWorkspaceHorizontally"
           Plugin.Types.rotateWorkspaceHorizontally gss radians Workspace
           return ()
         rotateWorkspaceHorizontally gss radians _ False = do
           return ()
 
         rotateWorkspacesHorizontally :: GodotSimulaServer -> Float -> SpriteLocation -> Bool -> IO ()
-        rotateWorkspacesHorizontally gss radians _ True = do
+        rotateWorkspacesHorizontally gss radians _ True = profileScope "rotateWorkspacesHorizontally" $ do
+          debugPutStrLn "Plugin.SimulaServer.rotateWorkspacesHorizontally"
           Plugin.Types.rotateWorkspaceHorizontally gss radians Workspaces
           return ()
         rotateWorkspacesHorizontally gss radians _ False = do
           return ()
 
         recordScreen :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
-        recordScreen gss _ True = do
+        recordScreen gss _ True = profileScope "recordScreen" $ do
+          debugPutStrLn "Plugin.SimulaServer.recordScreen"
           maybePh <- readTVarIO (gss ^. gssScreenRecorder)
           case maybePh of
             Nothing -> do
@@ -266,10 +277,13 @@ getKeyboardAction gss keyboardShortcut =
                 let videoBaseName' = "simula_screen_recording_" <> timeStampStr
                 let videoBaseName = filter (\x -> x /= ' ') videoBaseName'
                 maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
-                let dataDir = fromMaybe "./media" maybeDataDir
+                let dataDir = fromMaybe "." maybeDataDir
                 createDirectoryIfMissing False dataDir
-                let relativePath = (dataDir ++ "/" ++ videoBaseName ++ ".mkv")
-                (_,_,_, ph) <- createProcess (proc ("ffmpeg") ["-nostdin", "-f", "x11grab", "-framerate", "90", "-i", ":0.0", "-c:v", "libx264", "-y", "-loglevel", "quiet", relativePath])
+                let mediaDir = dataDir </> "media"
+                createDirectoryIfMissing False mediaDir
+                let relativePath = mediaDir </> videoBaseName <> ".mkv"
+                putStrLn $ "Recording screen to " <> relativePath
+                (_,_,_, ph) <- createProcess (proc ("ffmpeg") ["-nostdin", "-f", "x11grab", "-framerate", "90", "-i", ":0.0", "-c:v", "libx264", "-y", relativePath])
                 atomically $ writeTVar (gss ^. gssScreenRecorder) (Just ph)
               return ()
             Just ph -> do
@@ -284,7 +298,8 @@ getKeyboardAction gss keyboardShortcut =
           return ()
 
         terminateWindow :: SpriteLocation -> Bool -> IO ()
-        terminateWindow (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        terminateWindow (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "terminateWindow" $ do
+          debugPutStrLn "Plugin.SimulaServer.terminateWindow"
           simulaView <- readTVarIO (gsvs ^. gsvsView)
           let eitherSurface = (simulaView ^. svWlrEitherSurface)
           case eitherSurface of
@@ -298,13 +313,22 @@ getKeyboardAction gss keyboardShortcut =
         terminateWindow _ _ = return ()
   
         shellLaunch :: GodotSimulaServer -> String -> SpriteLocation -> Bool -> IO ()
-        shellLaunch gss shellCmd _ True = do
+        shellLaunch gss shellCmd _ True = profileScope "shellLaunch" $ do
+          debugPutStrLn "Plugin.SimulaServer.shellLaunch"
           appLaunch gss shellCmd Nothing
           return ()
         shellLaunch _ _ _ _ = return ()
 
+        launchAppLauncher :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
+        launchAppLauncher gss _ True = profileScope "launchAppLauncher" $ do
+          debugPutStrLn "Plugin.SimulaServer.launchAppLauncher"
+          appLaunch gss "synapse" (Just "defaultNoVerticalOffset")
+          return ()
+        launchAppLauncher _ _ _ = return ()
+
         textToSpeech :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
-        textToSpeech gss _ True = do
+        textToSpeech gss _ True = profileScope "textToSpeech" $ do
+          debugPutStrLn "Plugin.SimulaServer.textToSpeech"
           let originalEnv = (gss ^. gssOriginalEnv)
           maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
           case maybeXwaylandDisplay of
@@ -321,70 +345,83 @@ getKeyboardAction gss keyboardShortcut =
         textToSpeech _ _ _ = return ()
   
         launchXpra' :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
-        launchXpra' gss _ True = do
+        launchXpra' gss _ True = profileScope "launchXpra'" $ do
+          debugPutStrLn "Plugin.SimulaServer.launchXpra"
           -- gss <- readTVarIO (gsvs ^. gsvsServer)
           launchXpra gss
         launchXpra' _ _ _ = return ()
   
         toggleGrabMode' :: SpriteLocation -> Bool -> IO ()
-        toggleGrabMode' (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        toggleGrabMode' (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "toggleGrabMode'" $ do
+          debugPutStrLn "Plugin.SimulaServer.toggleGrabMode"
           toggleGrabMode
         toggleGrabMode' _ _ = return ()
   
         launchHMDWebCam' :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
-        launchHMDWebCam' gss _ True = do
+        launchHMDWebCam' gss _ True = profileScope "launchHMDWebCam'" $ do
+          debugPutStrLn "Plugin.SimulaServer.launchHMDWebCam"
           -- gss <- readTVarIO (gsvs ^. gsvsServer)
           launchHMDWebCam gss Nothing
           return ()
         launchHMDWebCam' _ _ _ = return ()
   
         orientWindowTowardsGaze :: SpriteLocation -> Bool -> IO ()
-        orientWindowTowardsGaze (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
-         orientSpriteTowardsGaze gsvs
+        orientWindowTowardsGaze (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "orientWindowTowardsGaze" $ do
+          debugPutStrLn "Plugin.SimulaServer.orientWindowTowardsGaze"
+          orientSpriteTowardsGaze gsvs
         orientWindowTowardsGaze _ _ = return ()
   
         pushWindow :: SpriteLocation -> Bool -> IO ()
-        pushWindow (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        pushWindow (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "pushWindow" $ do
+          debugPutStrLn "Plugin.SimulaServer.pushWindow"
           moveSpriteAlongObjectZAxis gsvs 0.1
         pushWindow _ _ = return ()
   
         pullWindow :: SpriteLocation -> Bool -> IO ()
-        pullWindow (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        pullWindow (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "pullWindow" $ do
+          debugPutStrLn "Plugin.SimulaServer.pullWindow"
           moveSpriteAlongObjectZAxis gsvs (-0.1)
         pullWindow _ _ = return ()
   
         scaleWindowDown :: SpriteLocation -> Bool -> IO ()
-        scaleWindowDown (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        scaleWindowDown (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "scaleWindowDown" $ do
+          debugPutStrLn "Plugin.SimulaServer.scaleWindowDown"
           V3 1 1 1 ^* (1 + 1 * (-0.1)) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
         scaleWindowDown _ _ = return ()
   
         scaleWindowUp :: SpriteLocation -> Bool -> IO ()
-        scaleWindowUp (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        scaleWindowUp (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "scaleWindowUp" $ do
+          debugPutStrLn "Plugin.SimulaServer.scaleWindowUp"
           V3 1 1 1 ^* (1 + 1 * (0.1)) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
         scaleWindowUp _ _ = return ()
   
         zoomOut :: SpriteLocation -> Bool -> IO ()
-        zoomOut (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        zoomOut (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "zoomOut" $ do
+          debugPutStrLn "Plugin.SimulaServer.zoomOut"
           resizeGSVS gsvs Zoom 1.05
         zoomOut _ _ = return ()
 
         zoomIn :: SpriteLocation -> Bool -> IO ()
-        zoomIn (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        zoomIn (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "zoomIn" $ do
+          debugPutStrLn "Plugin.SimulaServer.zoomIn"
           resizeGSVS gsvs Zoom 0.95
         zoomIn _ _ = return ()
 
         horizontalContract :: SpriteLocation -> Bool -> IO ()
-        horizontalContract (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        horizontalContract (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "horizontalContract" $ do
+          debugPutStrLn "Plugin.SimulaServer.horizontalContract"
           resizeGSVS gsvs Horizontal 0.95
         horizontalContract _ _ = return ()
 
         horizontalExtend :: SpriteLocation -> Bool -> IO ()
-        horizontalExtend (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        horizontalExtend (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "horizontalExtend" $ do
+          debugPutStrLn "Plugin.SimulaServer.horizontalExtend"
           resizeGSVS gsvs Horizontal 1.05
         horizontalExtend _ _ = return ()
 
         decreaseTransparency :: SpriteLocation -> Bool -> IO ()
-        decreaseTransparency (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        decreaseTransparency (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "decreaseTransparency" $ do
+          debugPutStrLn "Plugin.SimulaServer.decreaseTransparency"
           transOld <- readTVarIO (gsvs ^. gsvsTransparency)
           let transNew = (constrainTransparency (transOld - 0.05))
           atomically $ writeTVar (gsvs ^. gsvsTransparency) transNew
@@ -395,7 +432,8 @@ getKeyboardAction gss keyboardShortcut =
         decreaseTransparency _ _ = return ()
 
         increaseTransparency :: SpriteLocation -> Bool -> IO ()
-        increaseTransparency (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        increaseTransparency (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "increaseTransparency" $ do
+          debugPutStrLn "Plugin.SimulaServer.increaseTransparency"
           transOld <- readTVarIO (gsvs ^. gsvsTransparency)
           let transNew = (constrainTransparency (transOld + 0.05))
           atomically $ writeTVar (gsvs ^. gsvsTransparency) transNew
@@ -406,7 +444,8 @@ getKeyboardAction gss keyboardShortcut =
         increaseTransparency _ _ = return ()
 
         toggleScreenshotMode :: SpriteLocation -> Bool -> IO ()
-        toggleScreenshotMode (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        toggleScreenshotMode (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "toggleScreenshotMode" $ do
+          debugPutStrLn "Plugin.SimulaServer.toggleScreenshotMode"
           screenshotMode <- readTVarIO (gsvs ^. gsvsScreenshotMode)
           case screenshotMode of
             True -> do atomically $ writeTVar (gsvs ^. gsvsScreenshotMode) False
@@ -415,8 +454,15 @@ getKeyboardAction gss keyboardShortcut =
             False -> do atomically $ writeTVar (gsvs ^. gsvsScreenshotMode) True
         toggleScreenshotMode _ _ = return ()
 
+        toggleDebugHud :: SpriteLocation -> Bool -> IO ()
+        toggleDebugHud _ True = profileScope "toggleDebugHud" $ do
+          debugPutStrLn "Plugin.SimulaServer.toggleDebugHud"
+          DebugHUD.toggleDebugHud gss
+        toggleDebugHud _ False = return ()
+
         takeScreenshotGlobal :: SpriteLocation -> Bool -> IO ()
-        takeScreenshotGlobal _ True = do
+        takeScreenshotGlobal _ True = profileScope "takeScreenshotGlobal" $ do
+          debugPutStrLn "Plugin.SimulaServer.takeScreenshotGlobal"
           timeStampStr <- show <$> getCurrentTime
           let screenshotBaseName' = "simula_pancake_picture_" <> timeStampStr
           let screenshotBaseName = filter (\x -> x /= ' ') screenshotBaseName'
@@ -426,23 +472,27 @@ getKeyboardAction gss keyboardShortcut =
         takeScreenshotGlobal _ _ = return ()
 
         verticalContract :: SpriteLocation -> Bool -> IO ()
-        verticalContract (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        verticalContract (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "verticalContract" $ do
+          debugPutStrLn "Plugin.SimulaServer.verticalContract"
           resizeGSVS gsvs Vertical 0.95
         verticalContract _ _ = return ()
 
         verticalExtend :: SpriteLocation -> Bool -> IO ()
-        verticalExtend (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        verticalExtend (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "verticalExtend" $ do
+          debugPutStrLn "Plugin.SimulaServer.verticalExtend"
           resizeGSVS gsvs Vertical 1.05
         verticalExtend _ _ = return ()
 
         resizeWindowToDefaultSize :: SpriteLocation -> Bool -> IO ()
-        resizeWindowToDefaultSize (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        resizeWindowToDefaultSize (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "resizeWindowToDefaultSize" $ do
+          debugPutStrLn "Plugin.SimulaServer.resizeWindowToDefaultSize"
           -- orientSpriteTowardsGaze gsvs
           defaultSizeGSVS gsvs
         resizeWindowToDefaultSize _ _ = return ()
 
         reloadConfig :: SpriteLocation -> Bool -> IO ()
-        reloadConfig _ True = do
+        reloadConfig _ True = profileScope "reloadConfig" $ do
+          debugPutStrLn "Plugin.SimulaServer.reloadConfig"
           putStrLn "Reloading Simula config.."
           configuration <- parseConfiguration
           atomically $ writeTVar (gss ^. gssConfiguration) configuration
@@ -453,12 +503,12 @@ getKeyboardAction gss keyboardShortcut =
           worldEnv@(worldEnvironment, _) <- readTVarIO (gss ^. gssWorldEnvironment)
           textures <- loadEnvironmentTextures gss worldEnvironment
           atomically $ writeTVar (gss ^. gssEnvironmentTextures) textures
-          atomically $ writeTVar (gss ^. gssAxisScrollSpeed) (configuration ^. axisScrollSpeed)
           atomically $ writeTVar (gss ^. gssMouseSensitivityScaler) (configuration ^. mouseSensitivityScaler)
         reloadConfig _ _ = return ()
 
         terminateSimula :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
-        terminateSimula gss _ True = do
+        terminateSimula gss _ True = profileScope "terminateSimula" $ do
+          debugPutStrLn "Plugin.SimulaServer.terminateSimula"
           putStrLn "Terminating Simula.."
           sceneTree <- G.get_tree gss
           G.quit sceneTree (-1)
@@ -466,7 +516,8 @@ getKeyboardAction gss keyboardShortcut =
         terminateSimula _ _ _ = return ()
 
         cycleEnvironment :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
-        cycleEnvironment gss _ True = do
+        cycleEnvironment gss _ True = profileScope "cycleEnvironment" $ do
+          debugPutStrLn "Plugin.SimulaServer.cycleEnvironment"
           putStrLn "Cycling environment.."
           cycleGSSEnvironment gss
           return ()
@@ -474,7 +525,8 @@ getKeyboardAction gss keyboardShortcut =
           return ()
 
         cycleScene :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
-        cycleScene gss _ True = do
+        cycleScene gss _ True = profileScope "cycleScene" $ do
+          debugPutStrLn "Plugin.SimulaServer.cycleScene"
           putStrLn "Cycling scene.."
           camera <- getARVRCameraOrPancakeCamera gss
           G.set_zfar camera 5000 -- Set large in case some scenes have faraway objects to render
@@ -484,7 +536,8 @@ getKeyboardAction gss keyboardShortcut =
           return ()
 
         toggleARMode :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
-        toggleARMode gss _ True = do
+        toggleARMode gss _ True = profileScope "toggleARMode" $ do
+          debugPutStrLn "Plugin.SimulaServer.toggleARMode"
           putStrLn "Toggling AR mode.."
 
           -- CanvasLayer
@@ -529,13 +582,13 @@ getKeyboardAction gss keyboardShortcut =
           return ()
 
         debugPrint :: SpriteLocation -> Bool -> IO ()
-        debugPrint _ True = do
-          putStrLn "debugPrint"
+        debugPrint _ True = profileScope "debugPrint" $ do
+          debugPutStrLn "Plugin.SimulaServer.debugPrint"
         debugPrint _ _ = return ()
 
         toggleWasdMode :: GodotSimulaServer -> SpriteLocation -> Bool -> IO ()
-        toggleWasdMode gss _ True = do
-          putStrLn "toggleWasdMode"
+        toggleWasdMode gss _ True = profileScope "toggleWasdMode" $ do
+          debugPutStrLn "Plugin.SimulaServer.toggleWasdMode"
           wasdMode <- readTVarIO (gss ^. gssWasdMode)
           case wasdMode of
             True -> atomically $ writeTVar (gss ^. gssWasdMode) False
@@ -543,7 +596,8 @@ getKeyboardAction gss keyboardShortcut =
         toggleWasdMode _ _ _ = return ()
 
         switchToWorkspace :: GodotSimulaServer -> Int -> SpriteLocation -> Bool -> IO ()
-        switchToWorkspace gss workspaceNum _ True = do
+        switchToWorkspace gss workspaceNum _ True = profileScope "switchToWorkspace" $ do
+          debugPutStrLn "Plugin.SimulaServer.switchToWorkspace"
           putStrLn $ "Switching to workspace" ++ (show workspaceNum)
           (currentWorkspace, currentWorkspaceStr) <- readTVarIO (gss ^. gssWorkspace)
           let newWorkspace = (gss ^. gssWorkspaces) V.! workspaceNum
@@ -558,7 +612,8 @@ getKeyboardAction gss keyboardShortcut =
         switchToWorkspace _ _ _ _ = return ()
 
         sendToWorkspace :: GodotSimulaServer -> Int -> SpriteLocation -> Bool -> IO ()
-        sendToWorkspace gss workspaceNum (Just (gsvs, coords@(SurfaceLocalCoordinates (sx, sy)))) True = do
+        sendToWorkspace gss workspaceNum (Just (gsvs, coords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)))) True = profileScope "sendToWorkspace" $ do
+          debugPutStrLn "Plugin.SimulaServer.sendToWorkspace"
           putStrLn $ "Sending app to workspace " ++ (show workspaceNum)
           (currentWorkspace, currentWorkspaceStr) <- readTVarIO (gss ^. gssWorkspace)
           workspacePersistent <- readTVarIO (gss ^. gssWorkspacePersistent)
@@ -575,7 +630,8 @@ getKeyboardAction gss keyboardShortcut =
         sendToWorkspace _ _ _ _ = return ()
 
         damp :: GodotSimulaServer -> Damp -> SpriteLocation -> Bool -> IO ()
-        damp gss damp _ True = do
+        damp gss damp _ True = profileScope "damp" $ do
+          debugPutStrLn "Plugin.SimulaServer.damp"
           putStrLn "damp.."
           case damp of
             (Rotation amount) -> do
@@ -673,19 +729,40 @@ instance NativeScript GodotSimulaServer where
   classSignals = []
 
 process :: GodotSimulaServer -> [GodotVariant] -> IO ()
-process gss [deltaGV] = do
+process gss gvArgs@[deltaGV] =
+  profileScope "SimulaServer.process" $ do
+    -- We choose this as the "frame boundary" point for our whole profiling system.
+    -- It rolls up the previous open frame and starts tracking the new frame.
+    profileFrameBoundary
+
+    -- Obtain cumulative GC time for the Monado Frame Timing HUD (if it's active)
+    recordDebugMonadoHudGhcGCFrame
+
+    processSimulaServer gss gvArgs
+
+processSimulaServer :: GodotSimulaServer -> [GodotVariant] -> IO ()
+processSimulaServer gss gvArgs@[deltaGV] = do
+  debugPutStrLn "Plugin.SimulaServer.process"
 
   wasdMode <- readTVarIO (gss ^. gssWasdMode)
   delta <- fromGodotVariant deltaGV :: IO Float
-  wasdMode <- readTVarIO (gss ^. gssWasdMode)
   when wasdMode $ processWASDMovement gss delta
 
   -- Update Simula HUD
+  (currentWorkspace, currentWorkspaceStr) <- readTVarIO (gss ^. gssWorkspace)
   hud <- readTVarIO (gss ^. gssHUD)
   let canvasLayer = (hud ^. hudCanvasLayer)
   let rtLabel = (hud ^. hudRtlI3)
+  let rtLabelW = (hud ^. hudRtlWorkspace)
   let dynamicFont = (hud ^. hudDynamicFont)
   let i3status = (hud ^. hudI3Status)
+  let svr = (hud ^. hudSvrTexture)
+  let rssKb = (hud ^. hudRssKb)
+  let memoryDelta = (hud ^. hudMemoryDelta)
+  screenRecorder <- readTVarIO (gss ^. gssScreenRecorder)
+  fps <- getSingleton Godot_Engine "Engine" >>= (\engine -> G.get_frames_per_second engine)
+
+  -- Render i3status HUD
   G.clear rtLabel
   G.push_font rtLabel (safeCast dynamicFont)
   G.push_align rtLabel 2
@@ -693,8 +770,31 @@ process gss [deltaGV] = do
   G.pop rtLabel
   G.pop rtLabel
 
+  -- Render Workspace HUD
+  G.clear rtLabelW
+  G.push_font rtLabelW (safeCast dynamicFont)
+  G.append_bbcode rtLabelW `withGodotString` (pack currentWorkspaceStr)
+  G.append_bbcode rtLabelW `withGodotString` " | "
+  G.add_image rtLabelW svr 19 19
+  G.append_bbcode rtLabelW `withGodotString` " "
+  G.append_bbcode rtLabelW `withGodotString` (pack $ (show $ round fps) ++ " FPS ")
+  G.append_bbcode rtLabelW `withGodotString` (pack ("| RSS: " ++ formatRssMb rssKb))
+  unless (memoryDelta == "") $
+    void $ G.append_bbcode rtLabelW `withGodotString` (pack memoryDelta)
+  case screenRecorder of
+    Nothing -> return ()
+    Just ph -> do
+      redColor <- (toLowLevel $ (rgb 1.0 0.0 0.0) `withOpacity` 1.0) :: IO GodotColor
+      G.push_color rtLabelW redColor
+      G.append_bbcode rtLabelW `withGodotString` " ⚬ "
+      G.pop rtLabelW
+  G.pop rtLabelW
+
+  mapM_ Api.godot_variant_destroy gvArgs
+
 ready :: GodotSimulaServer -> [GodotVariant] -> IO ()
-ready gss _ = do
+ready gss gvArgs = profileScope "SimulaServer.ready" $ do
+  debugPutStrLn "Plugin.SimulaServer.ready"
   debugModeMaybe <- lookupEnv "DEBUG"
   rrModeMaybe <- lookupEnv "RUNNING_UNDER_RR"
   maybeLogDir <- lookupEnv "SIMULA_LOG_DIR"
@@ -794,6 +894,7 @@ ready gss _ = do
   addChild canvasLayer rtLabel
   forkUpdateHUDRecursively gss
 
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
   where launchDefaultApps :: [String] -> String-> IO ()
@@ -820,7 +921,8 @@ ready gss _ = do
 -- | Populate the GodotSimulaServer's TVar's with Wlr types; connect some Wlr methods
 -- | to their signals. This implicitly starts the compositor.
 addWlrChildren :: GodotSimulaServer -> IO ()
-addWlrChildren gss = do
+addWlrChildren gss = profileScope "addWlrChildren" $ do
+  debugPutStrLn "Plugin.SimulaServer.addWlrChildren"
   -- putStrLn "addWlrChildren"
   -- Here we assume gss is already a node in our scene tree.
 
@@ -891,7 +993,8 @@ addWlrChildren gss = do
           G.set_socket_name waylandDisplay socketName'
 
 parseConfiguration :: IO Configuration
-parseConfiguration = do
+parseConfiguration = profileScope "parseConfiguration" $ do
+  debugPutStrLn "Plugin.SimulaServer.parseConfiguration"
   profile <- lookupEnv "PROFILE"
   maybeConfigDir <- lookupEnv "SIMULA_CONFIG_DIR"
   maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
@@ -910,7 +1013,6 @@ parseConfiguration = do
         }
     , _defaultWindowResolution = Just (900, 900)
     , _defaultWindowScale = 1.0
-    , _axisScrollSpeed = 0.03
     , _mouseSensitivityScaler = 1.00
     , _keyBindings = 
         [ KeyboardShortcut ["KEY_MASK_META", "KEY_BACKSPACE"] "terminateWindow"
@@ -978,7 +1080,8 @@ parseConfiguration = do
 -- | We first fill the TVars with dummy state, before updating them with their
 -- | real values in `ready`.
 initGodotSimulaServer :: GodotObject -> IO (GodotSimulaServer)
-initGodotSimulaServer obj = do
+initGodotSimulaServer obj = profileScope "initGodotSimulaServer" $ do
+  debugPutStrLn "Plugin.SimulaServer.initGodotSimulaServer"
   -- putStrLn "initGodotSimulaServer"
   gssWaylandDisplay'       <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar GodotWaylandDisplay)
   gssWlrBackend'           <- newTVarIO (error "Failed to initialize GodotSimulaServer") :: IO (TVar GodotWlrBackend)
@@ -1011,6 +1114,7 @@ initGodotSimulaServer obj = do
   gssOriginalEnv' <- getEnvironment
 
   gssFreeChildren' <- newTVarIO M.empty :: IO (TVar (M.Map GodotWlrXWaylandSurface GodotSimulaViewSprite))
+  gssAttachedXdgChildren' <- newTVarIO M.empty :: IO (TVar (M.Map GodotWlrXdgSurface GodotSimulaViewSprite))
 
   rec
       configuration <- parseConfiguration
@@ -1023,8 +1127,6 @@ initGodotSimulaServer obj = do
       let sApps = getStartingAppsList (configuration ^. startingApps)
       let numberOfStartingApps = length sApps
       gssStartingApps' <- newTVarIO sApps
-
-      gssAxisScrollSpeed' <- newTVarIO (configuration ^. axisScrollSpeed)
 
       gssMouseSensitivityScaler' <- newTVarIO (configuration ^. mouseSensitivityScaler)
 
@@ -1061,6 +1163,11 @@ initGodotSimulaServer obj = do
       let gssPid' = show pid
 
       gssStartingAppPids' <- newTVarIO M.empty :: IO (TVar (M.Map ProcessID [String]))
+      -- Starting apps launch placement system:
+      -- First try launchToken -> location, then fallback to launchToken -> class and class -> [...location queue...]
+      gssStartingAppLaunchTokens' <- newTVarIO M.empty :: IO (TVar (M.Map String String))
+      gssStartingAppLaunchTokenClassHints' <- newTVarIO M.empty :: IO (TVar (M.Map String String))
+      gssStartingAppWindowClassHints' <- newTVarIO M.empty :: IO (TVar (M.Map String [String]))
 
       gssGrab' <- newTVarIO Nothing
 
@@ -1096,6 +1203,8 @@ initGodotSimulaServer obj = do
       G.set_font_data dynamicFont dynamicFontData
       G.set_size dynamicFont 24
 
+      debugMemoryEnabled <- (== Just "1") <$> lookupEnv "SIMULA_DEBUG_MEMORY"
+
       let hud = HUD {
           _hudCanvasLayer = canvasLayer :: GodotCanvasLayer
         , _hudRtlWorkspace = rtLabelW   :: GodotRichTextLabel
@@ -1103,6 +1212,10 @@ initGodotSimulaServer obj = do
         , _hudSvrTexture = svr          :: GodotTexture
         , _hudDynamicFont = dynamicFont :: GodotDynamicFont
         , _hudI3Status = ""             :: String
+        , _hudDebugMemoryEnabled = debugMemoryEnabled :: Bool
+        , _hudLastRssSample = Nothing :: Maybe (UTCTime, Int)
+        , _hudRssKb         = 0       :: Int
+        , _hudMemoryDelta   = ""      :: String
       }
       gssHUD' <- newTVarIO hud
 
@@ -1146,10 +1259,10 @@ initGodotSimulaServer obj = do
       , _gssXWaylandDisplay       = gssXWaylandDisplay'       :: TVar (Maybe String)
       , _gssOriginalEnv           = gssOriginalEnv'           :: [(String, String)]
       , _gssFreeChildren          = gssFreeChildren'          :: TVar (M.Map GodotWlrXWaylandSurface GodotSimulaViewSprite)
+      , _gssAttachedXdgChildren   = gssAttachedXdgChildren'   :: TVar (M.Map GodotWlrXdgSurface GodotSimulaViewSprite)
       , _gssConfiguration         = gssConfiguration'         :: TVar Configuration
       , _gssKeyboardShortcuts     = gssKeyboardShortcuts'     :: TVar KeyboardShortcuts
       , _gssKeyboardRemappings    = gssKeyboardRemappings'    :: TVar KeyboardRemappings
-      , _gssAxisScrollSpeed       = gssAxisScrollSpeed'       :: TVar Double
       , _gssMouseSensitivityScaler = gssMouseSensitivityScaler' :: TVar Double
       , _gssStartingApps          = gssStartingApps'          :: TVar [String]
       , _gssWorldEnvironment      = gssWorldEnvironment'      :: TVar (GodotWorldEnvironment, String)
@@ -1157,6 +1270,9 @@ initGodotSimulaServer obj = do
       , _gssStartingAppTransform  = gssStartingAppTransform'  :: TVar (Maybe GodotTransform)
       , _gssPid                   = gssPid'                   :: String
       , _gssStartingAppPids       = gssStartingAppPids'       :: TVar (M.Map ProcessID [String])
+      , _gssStartingAppLaunchTokens = gssStartingAppLaunchTokens' :: TVar (M.Map String String)
+      , _gssStartingAppLaunchTokenClassHints = gssStartingAppLaunchTokenClassHints' :: TVar (M.Map String String)
+      , _gssStartingAppWindowClassHints = gssStartingAppWindowClassHints' :: TVar (M.Map String [String])
       , _gssGrab                  = gssGrab'                  :: TVar (Maybe Grab)
       , _gssDiffMap               = gssDiffMap'               :: TVar (M.Map GodotSpatial GodotTransform)
       , _gssWorkspaces            = gssWorkspaces'            :: Vector GodotSpatial
@@ -1182,20 +1298,102 @@ initGodotSimulaServer obj = do
             fmap getStartingAppsStr [(startingApps ^. center), (startingApps ^. right), (startingApps ^. bottom), (startingApps ^. left), (startingApps ^. top)]
 
 _on_WaylandDisplay_ready :: GodotSimulaServer -> [GodotVariant] -> IO ()
-_on_WaylandDisplay_ready gss _ = do
+_on_WaylandDisplay_ready gss gvArgs = profileScope "_on_WaylandDisplay_ready" $ do
+  debugPutStrLn "Plugin.SimulaServer._on_WaylandDisplay_ready"
   waylandDisplay <- atomically $ readTVar (_gssWaylandDisplay gss)
   G.run waylandDisplay
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
+debugPrintWlrSurfaceDetails :: String -> GodotWlrSurface -> IO ()
+debugPrintWlrSurfaceDetails prefix wlrSurface = profileScope "debugPrintWlrSurfaceDetails" $ do
+  debugSurfaceCreationsActive <- debugSurfaceCreationsEnabled
+  when debugSurfaceCreationsActive $ do
+    (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions wlrSurface
+    let msg =
+          prefix
+            ++ " surface="
+            ++ show wlrSurface
+            ++ " buffer="
+            ++ show bufferWidth
+            ++ "x"
+            ++ show bufferHeight
+    putStrLn msg
+    debugHudPushGlobal msg
+
+debugPrintXdgSurfaceDetails :: String -> GodotWlrXdgSurface -> IO ()
+debugPrintXdgSurfaceDetails prefix wlrXdgSurface = profileScope "debugPrintXdgSurfaceDetails" $ do
+  debugSurfaceCreationsActive <- debugSurfaceCreationsEnabled
+  when debugSurfaceCreationsActive $ do
+    roleInt <- G.get_role wlrXdgSurface
+    pid <- G.get_pid wlrXdgSurface
+    V2 (V2 posX posY) (V2 xdgWidth xdgHeight) <- G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+    withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
+      (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions wlrSurface
+      let msg =
+            prefix
+              ++ " protocol=xdg role="
+              ++ xdgRoleName roleInt
+              ++ " pid="
+              ++ show pid
+              ++ " surface="
+              ++ show wlrXdgSurface
+              ++ " geometry=("
+              ++ show posX
+              ++ ","
+              ++ show posY
+              ++ " "
+              ++ show xdgWidth
+              ++ "x"
+              ++ show xdgHeight
+              ++ ") buffer="
+              ++ show bufferWidth
+              ++ "x"
+              ++ show bufferHeight
+      putStrLn msg
+      debugHudPushGlobal msg
+ where
+  xdgRoleName 0 = "none"
+  xdgRoleName 1 = "toplevel"
+  xdgRoleName 2 = "popup"
+  xdgRoleName role = "unknown(" ++ show role ++ ")"
+
+debugPrintXWaylandSurfaceDetails :: String -> GodotWlrXWaylandSurface -> IO ()
+debugPrintXWaylandSurfaceDetails prefix wlrXWaylandSurface = profileScope "debugPrintXWaylandSurfaceDetails" $ do
+  debugSurfaceCreationsActive <- debugSurfaceCreationsEnabled
+  when debugSurfaceCreationsActive $ do
+    x <- G.get_surface_origin_x wlrXWaylandSurface
+    y <- G.get_surface_origin_y wlrXWaylandSurface
+    width <- G.get_width wlrXWaylandSurface
+    height <- G.get_height wlrXWaylandSurface
+    pid <- G.get_pid wlrXWaylandSurface
+    let msg =
+          prefix
+            ++ " protocol=xwayland pid="
+            ++ show pid
+            ++ " surface="
+            ++ show wlrXWaylandSurface
+            ++ " geometry=("
+            ++ show x
+            ++ ","
+            ++ show y
+            ++ " "
+            ++ show width
+            ++ "x"
+            ++ show height
+            ++ ")"
+    putStrLn msg
+    debugHudPushGlobal msg
+
 _on_WlrXdgShell_new_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
-_on_WlrXdgShell_new_surface gss [wlrXdgSurfaceVariant] = do
-  putStrLn "_on_WlrXdgShell_new_surface"
+_on_WlrXdgShell_new_surface gss gvArgs@[wlrXdgSurfaceVariant] = profileScope "_on_WlrXdgShell_new_surface" $ do
+  debugPutStrLn "Plugin.SimulaServer._on_WlrXdgShell_new_surface"
   wlrXdgSurface <- (fromGodotVariant wlrXdgSurfaceVariant :: IO GodotWlrXdgSurface) >>= validateSurfaceE
   roleInt <- G.get_role wlrXdgSurface
+  debugPrintXdgSurfaceDetails "Plugin.SimulaServer._on_WlrXdgShell_new_surface" wlrXdgSurface
   case roleInt of
       0 -> return () -- XDG_SURFACE_ROLE_NONE
       2 -> do -- XDG_SURFACE_ROLE_POPUP
-        wlrSurface <- G.get_wlr_surface wlrXdgSurface >>= validateSurfaceE
         maybeGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
         case maybeGSVS of
           Nothing -> putStrLn "Unable to connect xdg popup surface signals; no gssActiveCursorGSVS!"
@@ -1204,36 +1402,47 @@ _on_WlrXdgShell_new_surface gss [wlrXdgSurfaceVariant] = do
             -- connectGodotSignal wlrSurface "commit" gsvs "handle_wlr_surface_commit" []
             -- connectGodotSignal wlrSurface "destroy" gsvs "handle_wlr_surface_destroy" []  -- arguably don't need; subsumed by xdg destroy signal
             return ()
+        return ()
       1 -> do -- XDG_SURFACE_ROLE_TOPLEVEL
+              G.reference wlrXdgSurface
               wlrXdgToplevel <- G.get_xdg_toplevel wlrXdgSurface >>= validateSurfaceE
-              wlrSurface <- G.get_wlr_surface wlrXdgSurface >>= validateSurfaceE
-              G.set_tiled wlrXdgToplevel True
-              simulaView <- newSimulaView gss wlrXdgSurface
-              gsvs <- newGodotSimulaViewSprite gss simulaView
+              withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
+                wlrSurface <- validateSurfaceE wlrSurface
+                G.set_tiled wlrXdgToplevel True
+                simulaView <- newSimulaView gss wlrXdgSurface
+                gsvs <- newGodotSimulaViewSprite gss simulaView
 
-              connectGodotSignal gsvs "map" gss "handle_map_surface" []
-              connectGodotSignal wlrXdgSurface "destroy" gsvs "_handle_destroy" []
-              connectGodotSignal wlrXdgSurface "map" gsvs "_handle_map" []
-              connectGodotSignal wlrXdgSurface "unmap" gsvs "handle_unmap" []
-              connectGodotSignal wlrXdgSurface "new_popup" gsvs "handle_new_popup" []
-              connectGodotSignal wlrXdgToplevel "request_show_window_menu" gsvs "handle_window_menu" []
-              connectGodotSignal wlrSurface "new_subsurface" gsvs "handle_wlr_surface_new_subsurface" []
-              connectGodotSignal wlrSurface "commit" gsvs "handle_wlr_surface_commit" []
-              connectGodotSignal wlrSurface "destroy" gsvs "handle_wlr_surface_destroy" []
+                connectGodotSignal gsvs "map" gss "handle_map_surface" []
+                connectGodotSignal wlrXdgSurface "destroy" gsvs "_handle_destroy" []
+                connectGodotSignal wlrXdgSurface "map" gsvs "_handle_map" []
+                connectGodotSignal wlrXdgSurface "unmap" gsvs "handle_unmap" []
+                connectGodotSignal wlrXdgSurface "new_popup" gsvs "handle_new_popup" []
+                connectGodotSignal wlrXdgToplevel "request_show_window_menu" gsvs "handle_window_menu" []
+                connectGodotSignal wlrXdgToplevel "set_parent" gsvs "handle_xdg_set_parent" []
+                connectGodotSignal wlrSurface "new_subsurface" gsvs "handle_wlr_surface_new_subsurface" []
+                connectGodotSignal wlrSurface "commit" gsvs "handle_wlr_surface_commit" []
+                connectGodotSignal wlrSurface "destroy" gsvs "handle_wlr_surface_destroy" []
 
-              -- We G.set_activated early to prevent weird behavior (e.g. file pickers failing to spawn)
-              G.set_activated wlrXdgToplevel True
-              return ()
+                -- We G.set_activated early to prevent weird behavior (e.g. file pickers failing to spawn)
+                G.set_activated wlrXdgToplevel True
+                return ()
+  mapM_ Api.godot_variant_destroy gvArgs
+ where
+         xdgRoleName :: Int -> String
+         xdgRoleName 0 = "none"
+         xdgRoleName 1 = "toplevel"
+         xdgRoleName 2 = "popup"
+         xdgRoleName role = "unknown(" ++ show role ++ ")"
 
+         newSimulaView :: GodotSimulaServer -> GodotWlrXdgSurface -> IO (SimulaView)
+         newSimulaView gss wlrXdgSurface = profileScope "newSimulaView" $ do
+           debugPutStrLn "Plugin.SimulaServer.newSimulaView"
+           let gss' = gss :: GodotSimulaServer
+           svMapped' <- atomically (newTVar False) :: IO (TVar Bool)
+           let gsvsWlrXdgSurface' = wlrXdgSurface
+           gsvsUUID' <- nextUUID :: IO (Maybe UUID)
 
-   where newSimulaView :: GodotSimulaServer -> GodotWlrXdgSurface -> IO (SimulaView)
-         newSimulaView gss wlrXdgSurface = do
-          let gss' = gss :: GodotSimulaServer
-          svMapped' <- atomically (newTVar False) :: IO (TVar Bool)
-          let gsvsWlrXdgSurface' = wlrXdgSurface
-          gsvsUUID' <- nextUUID :: IO (Maybe UUID)
-
-          return SimulaView
+           return SimulaView
               { _svServer           = gss :: GodotSimulaServer
               , _svMapped           = svMapped' :: TVar Bool
               , _svWlrEitherSurface = (Left wlrXdgSurface) :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface
@@ -1241,22 +1450,33 @@ _on_WlrXdgShell_new_surface gss [wlrXdgSurfaceVariant] = do
               }
 
 _on_wlr_key :: GodotSimulaServer -> [GodotVariant] -> IO ()
-_on_wlr_key gss [keyboardGVar, eventGVar] = do
+_on_wlr_key gss gvArgs@[keyboardGVar, eventGVar] = profileScope "_on_wlr_key" $ do
+  debugPutStrLn "Plugin.SimulaServer._on_wlr_key"
   wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
   event <- fromGodotVariant eventGVar
-  G.reference event
+  debugKeyboardEventsActive <- debugKeyboardEventsEnabled
+  when debugKeyboardEventsActive $
+    debugHudPushKeyboardFocusedOrGlobal gss "KEY wlroots notify key"
   G.keyboard_notify_key wlrSeat event
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
 _on_wlr_modifiers :: GodotSimulaServer -> [GodotVariant] -> IO ()
-_on_wlr_modifiers gss [keyboardGVar] = do
+_on_wlr_modifiers gss gvArgs@[keyboardGVar] = profileScope "_on_wlr_modifiers" $ do
+  debugPutStrLn "Plugin.SimulaServer._on_wlr_modifiers"
   wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
+  debugKeyboardEventsActive <- debugKeyboardEventsEnabled
+  when debugKeyboardEventsActive $
+    debugHudPushKeyboardFocusedOrGlobal gss "KEY wlroots notify modifiers"
   G.keyboard_notify_modifiers wlrSeat
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()
 
 _on_WlrXWayland_new_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
-_on_WlrXWayland_new_surface gss [wlrXWaylandSurfaceVariant] = do
+_on_WlrXWayland_new_surface gss gvArgs@[wlrXWaylandSurfaceVariant] = profileScope "_on_WlrXWayland_new_surface" $ do
+  debugPutStrLn "Plugin.SimulaServer._on_WlrXWayland_new_surface"
   wlrXWaylandSurface <- (fromGodotVariant wlrXWaylandSurfaceVariant :: IO GodotWlrXWaylandSurface) >>= validateSurfaceE
+  debugPrintXWaylandSurfaceDetails "Plugin.SimulaServer._on_WlrXWayland_new_surface" wlrXWaylandSurface
   G.reference wlrXWaylandSurface
   simulaView <- newSimulaView gss wlrXWaylandSurface
   gsvs <- newGodotSimulaViewSprite gss simulaView
@@ -1270,6 +1490,8 @@ _on_WlrXWayland_new_surface gss [wlrXWaylandSurfaceVariant] = do
   connectGodotSignal wlrXWaylandSurface "unmap_child" gsvs "handle_unmap_child" []
   connectGodotSignal wlrXWaylandSurface "unmap_free_child" gsvs "handle_unmap_free_child" []
   connectGodotSignal wlrXWaylandSurface "set_parent" gsvs "handle_set_parent" []
+
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()
   where newSimulaView :: GodotSimulaServer -> GodotWlrXWaylandSurface -> IO (SimulaView)
         newSimulaView gss wlrXWaylandSurface = do
@@ -1288,7 +1510,8 @@ _on_WlrXWayland_new_surface gss [wlrXWaylandSurfaceVariant] = do
 -- Find the cursor-active gsvs, convert relative godot mouse movement to new
 -- mouse coordinates, and pass off to processClickEvent or pointer_notify_axis
 _input :: GodotSimulaServer -> [GodotVariant] -> IO ()
-_input gss [eventGV] = do
+_input gss gvArgs@[eventGV] = profileScope "_input" $ do
+  debugPutStrLn "Plugin.SimulaServer._input"
   event <- fromGodotVariant eventGV :: IO GodotInputEventMouseMotion
   maybeActiveGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
 
@@ -1302,23 +1525,29 @@ _input gss [eventGV] = do
        False -> case maybeActiveGSVS of
                      Nothing -> return ()
                      (Just gsvs) -> do updateCursorStateRelative gsvs (dx * (realToFrac mouseSensitivityScaler)) (dy * (realToFrac mouseSensitivityScaler))
+                                       activeGSVSCursorPos <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+                                       debugPrintPointerSeatState gsvs Motion activeGSVSCursorPos
                                        sendWlrootsMotion gsvs
   whenM (event `isClass` "InputEventMouseButton") $ do
     let event' = GodotInputEventMouseButton (coerce event)
     pressed <- G.is_pressed event'
     button <- G.get_button_index event'
-    wlrSeat <- readTVarIO (gss ^. gssWlrSeat)
-    axisScrollSpeed <- readTVarIO (gss ^. gssAxisScrollSpeed)
     case (maybeActiveGSVS, button) of
-         (Just gsvs, G.BUTTON_WHEEL_UP) -> G.pointer_notify_axis_continuous wlrSeat 0 (realToFrac axisScrollSpeed)
-         (Just gsvs, G.BUTTON_WHEEL_DOWN) -> G.pointer_notify_axis_continuous wlrSeat 0 (-1.0 * (realToFrac axisScrollSpeed))
+         (Just gsvs, G.BUTTON_WHEEL_UP) -> do
+           when pressed $ do
+             screenshotMode <- readTVarIO (gsvs ^. gsvsScreenshotMode)
+             unless screenshotMode $ do
+               processPointerButtonEvent gsvs (Button True G.BUTTON_WHEEL_UP)
+         (Just gsvs, G.BUTTON_WHEEL_DOWN) -> do
+           when pressed $ do
+             screenshotMode <- readTVarIO (gsvs ^. gsvsScreenshotMode)
+             unless screenshotMode $ do
+               processPointerButtonEvent gsvs (Button True G.BUTTON_WHEEL_DOWN)
          (Just gsvs, _) -> do
-           putStrLn $ "Mouse event button: " ++ show button
            screenshotMode <- readTVarIO (gsvs ^. gsvsScreenshotMode)
            case screenshotMode of
-             False -> do activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
-                         processClickEvent' gsvs (Button pressed button) activeGSVSCursorPos
-             True -> do activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+             False -> processPointerButtonEvent gsvs (Button pressed button)
+             True -> do activeGSVSCursorPos@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
                         case pressed of
                           True -> do atomically $ writeTVar (gsvs ^. gsvsScreenshotCoords) (Just activeGSVSCursorPos, Nothing)
                           False -> do screenshotCoords@(origin, end) <- readTVarIO (gsvs ^. gsvsScreenshotCoords)
@@ -1347,45 +1576,54 @@ _input gss [eventGV] = do
        G.BUTTON_WHEEL_LEFT  -> processKeypress gss modifiers G.KEY_BUTTON_WHEEL_LEFT pressed
        G.BUTTON_WHEEL_RIGHT -> processKeypress gss modifiers G.KEY_BUTTON_WHEEL_RIGHT pressed
        _ -> putStrLn $ "Unknown button: " ++ (show button)
-  
+
+  mapM_ Api.godot_variant_destroy gvArgs
 
 updateCursorStateRelative :: GodotSimulaViewSprite -> Float -> Float -> IO ()
-updateCursorStateRelative gsvs dx dy = do
-    activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
-    cb <- readTVarIO (gsvs ^. gsvsCanvasBase)
-    textureViewport <- readTVarIO (cb ^. cbViewport)
-    tvGV2 <- G.get_size textureViewport
-    (V2 mx my) <- fromLowLevel tvGV2
+updateCursorStateRelative gsvs dx dy = profileScope "updateCursorStateRelative" $ do
+  debugPutStrLn "Plugin.SimulaServer.updateCursorStateRelative"
+  activeGSVSCursorPos@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+  cb <- readTVarIO (gsvs ^. gsvsCanvasBase)
+  textureViewport <- readTVarIO (cb ^. cbViewport)
+  tvGV2 <- G.get_size textureViewport
+  (V2 mx my) <- fromLowLevel tvGV2
 
-    let sx' = if ((sx + dx) < mx) then (sx + dx) else mx
-    let sx'' = if (sx' > 0) then sx' else 0
-    let sy' = if ((sy + dy) < my) then (sy + dy) else my
-    let sy'' = if (sy' > 0) then sy' else 0
-    atomically $ writeTVar (gsvs ^. gsvsCursorCoordinates) (SurfaceLocalCoordinates (sx'', sy''))
+  let sx' = if ((sx + dx) < mx) then (sx + dx) else mx
+  let sx'' = if (sx' > 0) then sx' else 0
+  let sy' = if ((sy + dy) < my) then (sy + dy) else my
+  let sy'' = if (sy' > 0) then sy' else 0
+  atomically $ writeTVar (gsvs ^. gsvsCursorCoordinates) (CanvasBaseCoordinates (RightCoordinate sx'') (DownCoordinate sy''))
 
 updateCursorStateAbsolute :: GodotSimulaViewSprite -> Float -> Float -> IO ()
-updateCursorStateAbsolute gsvs sx sy = do
-    cb <- readTVarIO (gsvs ^. gsvsCanvasBase)
-    textureViewport <- readTVarIO (cb ^. cbViewport)
-    tvGV2 <- G.get_size textureViewport
-    (V2 mx my) <- fromLowLevel tvGV2
+updateCursorStateAbsolute gsvs sx sy = profileScope "updateCursorStateAbsolute" $ do
+  debugPutStrLn "Plugin.SimulaServer.updateCursorStateAbsolute"
+  cb <- readTVarIO (gsvs ^. gsvsCanvasBase)
+  textureViewport <- readTVarIO (cb ^. cbViewport)
+  tvGV2 <- G.get_size textureViewport
+  (V2 mx my) <- fromLowLevel tvGV2
 
-    let sx' = if (sx < mx) then sx else mx
-    let sx'' = if (sx' > 0) then sx' else 0
-    let sy' = if (sy < my) then sy else my
-    let sy'' = if (sy' > 0) then sy' else 0
-    atomically $ writeTVar (gsvs ^. gsvsCursorCoordinates) (SurfaceLocalCoordinates (sx'', sy''))
+  let sx' = if (sx < mx) then sx else mx
+  let sx'' = if (sx' > 0) then sx' else 0
+  let sy' = if (sy < my) then sy else my
+  let sy'' = if (sy' > 0) then sy' else 0
+  atomically $ writeTVar (gsvs ^. gsvsCursorCoordinates) (CanvasBaseCoordinates (RightCoordinate sx'') (DownCoordinate sy''))
 
 sendWlrootsMotion :: GodotSimulaViewSprite -> IO ()
-sendWlrootsMotion gsvs = do
-    screenshotModeEnabled <- readTVarIO (gsvs ^. gsvsScreenshotMode)
-    activeGSVSCursorPos@(SurfaceLocalCoordinates (sx, sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
-    case screenshotModeEnabled of
-      False -> processClickEvent' gsvs Motion activeGSVSCursorPos
-      True -> return ()
+sendWlrootsMotion gsvs =
+  profileScope "sendWlrootsMotion" $ sendWlrootsMotionImpl gsvs
 
-getHMDLookAtSprite :: GodotSimulaServer -> IO (Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates))
-getHMDLookAtSprite gss = do
+sendWlrootsMotionImpl :: GodotSimulaViewSprite -> IO ()
+sendWlrootsMotionImpl gsvs = do
+  debugPutStrLn "Plugin.SimulaServer.sendWlrootsMotion"
+  screenshotModeEnabled <- readTVarIO (gsvs ^. gsvsScreenshotMode)
+  activeGSVSCursorPos@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)) <- readTVarIO (gsvs ^. gsvsCursorCoordinates)
+  case screenshotModeEnabled of
+    False -> processClickEvent' gsvs Motion activeGSVSCursorPos
+    True -> return ()
+
+getHMDLookAtSprite :: GodotSimulaServer -> IO (Maybe (GodotSimulaViewSprite, CanvasBaseCoordinates))
+getHMDLookAtSprite gss = profileScope "getHMDLookAtSprite" $ do
+  debugPutStrLn "Plugin.SimulaServer.getHMDLookAtSprite"
   rc <- readTVarIO (gss ^.  gssHMDRayCast)
   G.force_raycast_update rc -- Necessary to avoid crashes
   hmdGlobalTransform <- getARVRCameraOrPancakeCameraTransformGlobal gss
@@ -1395,14 +1633,19 @@ getHMDLookAtSprite gss = do
   maybeSprite <- if isColliding then G.get_collider rc >>= asNativeScript :: IO (Maybe GodotSimulaViewSprite) else (return Nothing)
   ret <- case maybeSprite of
             Nothing -> return Nothing
-            Just gsvs -> do gv3 <- G.get_collision_point rc :: IO GodotVector3
-                            surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy)) <- getSurfaceLocalCoordinates gsvs gv3
+            Just gsvs -> do worldCoordinates <- G.get_collision_point rc >>= worldCoordinates3DFromGodotVector
+                            surfaceLocalCoords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy)) <- getCanvasBaseCoordinatesFromWorldHit gsvs worldCoordinates
                             return $ Just (gsvs, surfaceLocalCoords)
   return ret
 
 
 physicsProcess :: GodotSimulaServer -> [GodotVariant] -> IO ()
-physicsProcess gss _ = do
+physicsProcess gss gvArgs =
+  profileScope "physicsProcess" $ physicsProcessImpl gss gvArgs
+
+physicsProcessImpl :: GodotSimulaServer -> [GodotVariant] -> IO ()
+physicsProcessImpl gss gvArgs = do
+  debugPutStrLn "Plugin.SimulaServer.physicsProcess"
   maybeLookAtGSVS <- getHMDLookAtSprite gss
   gsvsActiveCursor <- readTVarIO (gss ^. gssActiveCursorGSVS)
   maybeGssGrab <- readTVarIO (gss ^. gssGrab)
@@ -1430,20 +1673,23 @@ physicsProcess gss _ = do
                                                    G.set_transform gss diffComposed
     Nothing -> case maybeLookAtGSVS of
                     Nothing -> return ()
-                    Just (gsvs, surfaceLocalCoords@(SurfaceLocalCoordinates (sx, sy))) -> do
+                    Just (gsvs, surfaceLocalCoords@(CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy))) -> do
                         case gsvsActiveCursor of
                               Nothing -> focus gsvs
                               Just gsvsActiveCursor' -> if (gsvs /= gsvsActiveCursor') then (focus gsvs) else return () -- (safeSetActivated gsvs True)
+  mapM_ Api.godot_variant_destroy gvArgs
 
 -- Run shell command with DISPLAY set to its original (typically :1).
 shellCmd1 :: GodotSimulaServer -> String -> IO ()
-shellCmd1 gss appStr = do
+shellCmd1 gss appStr = profileScope "shellCmd1" $ do
+  debugPutStrLn "Plugin.SimulaServer.shellCmd1"
   let originalEnv = (gss ^. gssOriginalEnv)
   createProcess (shell (appStr)) { env = Just originalEnv }
   return ()
 
 _on_simula_shortcut :: GodotSimulaServer -> [GodotVariant] -> IO ()
-_on_simula_shortcut gss [scancodeWithModifiers', isPressed'] = do
+_on_simula_shortcut gss gvArgs@[scancodeWithModifiers', isPressed'] = profileScope "_on_simula_shortcut" $ do
+  debugPutStrLn "Plugin.SimulaServer._on_simula_shortcut"
   scancodeWithModifiers <- fromGodotVariant scancodeWithModifiers' :: IO Int
   isPressed <- fromGodotVariant isPressed' :: IO Bool
   let modifiers = (foldl (.|.) 0 (extractMods scancodeWithModifiers))
@@ -1463,7 +1709,9 @@ _on_simula_shortcut gss [scancodeWithModifiers', isPressed'] = do
   -- putStrLn $ "G.KEY_BUTTON_LEFT: " ++ (show (G.KEY_BUTTON_LEFT))
   -- putStrLn $ "G.KEY_CONTROL_L: " ++ (show (G.KEY_CONTROL_L))
   -- putStrLn $ "G.KEY_MASK_CTRL: " ++ (show (G.KEY_MASK_CTRL))
-  
+
+  mapM_ Api.godot_variant_destroy gvArgs
+
   where extractIf sc mod = if (sc .&. mod) /= 0 then [mod] else []
 
         extractMods :: Int -> [Int]
@@ -1473,8 +1721,68 @@ _on_simula_shortcut gss [scancodeWithModifiers', isPressed'] = do
         extractTestKeys :: Int -> [Int]
         extractTestKeys sc = concatMap (extractIf sc) [G.KEY_A, G.KEY_B, G.KEY_MASK_ALT] 
 
+debugPrintProcessKeypress :: GodotSimulaServer
+                          -> Modifiers
+                          -> Keycode
+                          -> Keycode
+                          -> Bool
+                          -> Bool
+                          -> Maybe KeyboardAction
+                          -> Bool
+                          -> IO ()
+debugPrintProcessKeypress gss modifiers keycode keycode' isPressed wasdMode maybeKeyboardAction isMouseCode = profileScope "debugPrintProcessKeypress" $ do
+  debugKeyboardEventsActive <- debugKeyboardEventsEnabled
+  when debugKeyboardEventsActive $ do
+    maybeKeyboardFocusedGSVS <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
+    focusSummary <- case maybeKeyboardFocusedGSVS of
+      Nothing -> return "focus=nothing"
+      Just gsvs -> debugDescribeKeyboardFocus gsvs
+    let sendsWlrKey = isNothing maybeKeyboardAction && not isMouseCode && keycode' /= 0
+    let msg =
+          "Keyboard dispatch modifiers="
+            ++ show modifiers
+            ++ " keycode="
+            ++ show keycode
+            ++ " remappedKeycode="
+            ++ show keycode'
+            ++ " isPressed="
+            ++ show isPressed
+            ++ " wasdMode="
+            ++ show wasdMode
+            ++ " shortcutAction="
+            ++ show (isJust maybeKeyboardAction)
+            ++ " isMouseCode="
+            ++ show isMouseCode
+            ++ " sendsWlrKey="
+            ++ show sendsWlrKey
+            ++ " "
+            ++ focusSummary
+    putStrLn msg
+    let hudMsg =
+          "KEY dispatch key="
+            ++ show keycode
+            ++ " remap="
+            ++ show keycode'
+            ++ " pressed="
+            ++ show isPressed
+            ++ " sendsWlrKey="
+            ++ show sendsWlrKey
+            ++ " "
+            ++ focusSummary
+    case maybeKeyboardFocusedGSVS of
+      Just gsvs -> debugHudPush gsvs hudMsg
+      Nothing -> debugHudPushGlobal hudMsg
+
+debugHudPushKeyboardFocusedOrGlobal :: GodotSimulaServer -> String -> IO ()
+debugHudPushKeyboardFocusedOrGlobal gss msg = profileScope "debugHudPushKeyboardFocusedOrGlobal" $ do
+  maybeKeyboardFocusedGSVS <- readTVarIO (gss ^. gssKeyboardFocusedSprite)
+  case maybeKeyboardFocusedGSVS of
+    Just gsvs -> debugHudPush gsvs msg
+    Nothing -> debugHudPushGlobal msg
+
 processKeypress :: GodotSimulaServer -> Modifiers -> Keycode -> Bool -> IO ()
-processKeypress gss modifiers keycode isPressed = do
+processKeypress gss modifiers keycode isPressed = profileScope "processKeypress" $ do
+  debugPutStrLn "Plugin.SimulaServer.processKeypress"
   -- putStrLn $ "processKeypress"
   wlrKeyboard <- readTVarIO $ (gss ^. gssWlrKeyboard)
   keyboardShortcuts <- readTVarIO (gss ^. gssKeyboardShortcuts)
@@ -1487,11 +1795,12 @@ processKeypress gss modifiers keycode isPressed = do
         (Just remappedKeycode) -> remappedKeycode
         Nothing                -> keycode
 
-  putStrLn $ "modifiers: " ++ (show modifiers)
   -- putStrLn $ "keycode': " ++ (show keycode')
 
   wasdMode <- readTVarIO (gss ^. gssWasdMode)
   let isMouseCode = isMouseButton keycode'
+
+  debugPrintProcessKeypress gss modifiers keycode keycode' isPressed wasdMode maybeKeyboardAction isMouseCode
 
   case (maybeKeyboardAction, isMouseCode) of
     (Just action, _) -> do putStrLn $ "action detected"
@@ -1523,14 +1832,15 @@ processKeypress gss modifiers keycode isPressed = do
   atomically $ writeTVar (gss ^. gssKeyboardModifiersActive) (Just modifiers)
 
 
-  where keyboardGrabLetGo' :: GodotSimulaServer -> Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates) -> IO ()
+  where keyboardGrabLetGo' :: GodotSimulaServer -> Maybe (GodotSimulaViewSprite, CanvasBaseCoordinates) -> IO ()
         keyboardGrabLetGo' gss (Just (gsvs, _)) = do keyboardGrabLetGo gss (GrabWindow gsvs undefined)
         keyboardGrabLetGo' _ _ = return ()
 
         keyNull = 0
 
 launchXpra :: GodotSimulaServer -> IO ()
-launchXpra gss = do
+launchXpra gss = profileScope "launchXpra" $ do
+  debugPutStrLn "Plugin.SimulaServer.launchXpra"
   let originalEnv = (gss ^. gssOriginalEnv)
   maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
   case maybeXwaylandDisplay of
@@ -1561,7 +1871,8 @@ launchXpra gss = do
             True -> do putStrLn "xpra server found!"
 
 createSessionLeader :: FilePath -> [String] -> Maybe [(String, String)] -> IO (ProcessID, ProcessGroupID)
-createSessionLeader exe args env = do
+createSessionLeader exe args env = profileScope "createSessionLeader" $ do
+  debugPutStrLn "Plugin.SimulaServer.createSessionLeader"
   pid <- forkProcess $ do
     createSession
     executeFile exe True args env
@@ -1569,15 +1880,17 @@ createSessionLeader exe args env = do
   return (pid, pgid)
 
 createProcessWithGroup :: ProcessGroupID -> FilePath -> [String] -> Maybe [(String, String)] -> IO ProcessID
-createProcessWithGroup pgid exe args env =
-   forkProcess $ do
+createProcessWithGroup pgid exe args env = profileScope "createProcessWithGroup" $ do
+  debugPutStrLn "Plugin.SimulaServer.createProcessWithGroup"
+  forkProcess $ do
     joinProcessGroup pgid
     executeFile exe True args env
 
 -- | HACK: `G.set_mouse_mode` is set to toggle the grab on *both* the keyboard and
 -- | the mouse cursor.
 toggleGrabMode :: IO ()
-toggleGrabMode = do
+toggleGrabMode = profileScope "toggleGrabMode" $ do
+  debugPutStrLn "Plugin.SimulaServer.toggleGrabMode"
   getSingleton GodotInput "Input" >>= \inp -> do
     mode <- G.get_mouse_mode inp
     case mode of
@@ -1586,9 +1899,10 @@ toggleGrabMode = do
   return ()
 
 handle_wlr_compositor_new_surface :: GodotSimulaServer -> [GodotVariant] -> IO ()
-handle_wlr_compositor_new_surface gss args@[wlrSurfaceVariant] = do
-  putStrLn "handle_wlr_compositor_new_surface"
+handle_wlr_compositor_new_surface gss gvArgs@[wlrSurfaceVariant] = profileScope "handle_wlr_compositor_new_surface" $ do
+  debugPutStrLn "Plugin.SimulaServer.handle_wlr_compositor_new_surface"
   wlrSurface <- (fromGodotVariant wlrSurfaceVariant :: IO GodotWlrSurface) >>= validateSurfaceE
+  debugPrintWlrSurfaceDetails "Plugin.SimulaServer.handle_wlr_compositor_new_surface" wlrSurface
   maybeGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
   case maybeGSVS of
     Nothing -> return () -- putStrLn "Unable to handle_wlr_compositor_new_surface; no gssActiveCursorGSVS!"
@@ -1597,12 +1911,22 @@ handle_wlr_compositor_new_surface gss args@[wlrSurfaceVariant] = do
       connectGodotSignal wlrSurface "commit" gsvs "handle_wlr_surface_commit" []
       connectGodotSignal wlrSurface "destroy" gsvs "handle_wlr_surface_destroy" []
       return ()
+  mapM_ Api.godot_variant_destroy gvArgs
 
 seat_request_cursor :: GodotSimulaServer -> [GodotVariant] -> IO ()
-seat_request_cursor gss args@[wlrSurfaceCursorVariant] = do
-  wlrSurfaceCursor <- (fromGodotVariant wlrSurfaceCursorVariant :: IO GodotWlrSurface) >>= validateSurfaceE
+seat_request_cursor gss gvArgs@[wlrSurfaceCursorVariant] = profileScope "seat_request_cursor" $ do
+  debugPutStrLn "Plugin.SimulaServer.seat_request_cursor"
+  wlrSurfaceCursor <- fromGodotVariant wlrSurfaceCursorVariant :: IO GodotWlrSurface
   maybeActiveCursorGSVS <- readTVarIO (gss ^. gssActiveCursorGSVS)
   case maybeActiveCursorGSVS of
-      Nothing -> putStrLn "Unable to find active cursor gsvs; unable to load cursor texture."
-      Just gsvs -> atomically $ writeTVar (gsvs ^. gsvsCursor) ((Just wlrSurfaceCursor), Nothing)
+      Nothing -> do
+        putStrLn "Unable to find active cursor gsvs; unable to load cursor texture."
+      Just gsvs -> do
+        case validateObject wlrSurfaceCursor of
+          Nothing -> clearCursorSurface gsvs
+          Just validCursorSurface -> do
+            validCursorSurface <- validateSurfaceE validCursorSurface
+            G.reference validCursorSurface
+            replaceCursorSurface gsvs (Just validCursorSurface)
+  mapM_ Api.godot_variant_destroy gvArgs
   return ()

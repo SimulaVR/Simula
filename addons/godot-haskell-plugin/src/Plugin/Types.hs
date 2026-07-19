@@ -10,6 +10,7 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Plugin.Types where
 
@@ -20,6 +21,7 @@ import           Path.IO
 
 import           Data.Time.Clock
 import           Data.Maybe
+import qualified Data.Maybe as Maybe
 import           System.Environment (lookupEnv)
 import           Control.Concurrent
 import           Control.Monad
@@ -35,6 +37,9 @@ import           Data.Colour
 import           Data.Colour.SRGB.Linear
 
 import           Plugin.Imports
+import           Plugin.Debug.ProfileHudTypes
+import           Plugin.Debug.DamagedRegionTypes
+import           Plugin.Debug.HudTypes
 
 import           Godot.Core.GodotVisualServer          as G
 import qualified Godot.Methods               as G
@@ -45,7 +50,7 @@ import           Godot.Nativescript as NativeScript
 import qualified Godot.Core.GodotImage       as G
 import           Control.Lens                hiding (Context)
 
-import           Foreign
+import           Foreign hiding (void)
 import           Foreign.C
 import           Foreign.Ptr
 import           Foreign.Marshal.Alloc
@@ -54,18 +59,22 @@ import           Foreign.C.Types
 import qualified Language.C.Inline as C
 
 import           System.IO.Unsafe
+import           System.IO
+import           System.Mem (performGC)
 import           Data.Monoid
 import           Data.List
+import qualified Data.List as List
+import qualified Data.Char as Char
+import           Numeric (showFFloat)
 import           Data.Text.Encoding
-import           Data.Text
+import           Data.Text hiding (show)
 import qualified System.Process.ByteString as B
 import qualified Data.ByteString.Char8 as B
-
-import Data.IORef
 
 import qualified Data.Map.Strict as M
 
 import Data.UUID
+import Data.UUID.V1 (nextUUID)
 import System.Process
 import System.Process.Internals
 import System.Posix.Types
@@ -74,7 +83,7 @@ import GHC.IO.Handle
 import Godot.Core.GodotViewport as G
 
 import Data.Map.Ordered as MO
-import Dhall
+import Dhall hiding (void)
 import qualified Data.Vector as V
 import System.IO.Streams.Process
 import System.IO.Streams.Internal
@@ -84,6 +93,132 @@ import System.IO.Streams.Text
 import System.FilePath ((</>), takeExtension, takeDirectory)
 import System.IO.Streams (OutputStream, InputStream, runInteractiveProcess)
 import Path (Path, Abs, Dir, parseAbsDir, parseRelDir, toFilePath, parseRelFile, fileExtension)
+
+windowLogPath :: FilePath
+windowLogPath = "./window_logs.txt"
+
+-- Use `unsafePerformIO` to read the env once and cache the result as a Bool.
+debugOutputEnabled :: Bool
+debugOutputEnabled = unsafePerformIO $ do
+  simulaDebug <- lookupEnv "SIMULA_DEBUG"
+  runningUnderRr <- lookupEnv "RUNNING_UNDER_RR"
+  return $ simulaDebug == Just "1" || runningUnderRr == Just "1"
+{-# NOINLINE debugOutputEnabled #-}
+
+debugSurfaceCreationsEnabled :: IO Bool
+debugSurfaceCreationsEnabled = profileScope "debugSurfaceCreationsEnabled" $
+  debugHudModeActive DebugHudSurfaceCreations
+
+debugMouseEventsEnabled :: IO Bool
+debugMouseEventsEnabled = profileScope "debugMouseEventsEnabled" $
+  debugHudModeActive DebugHudMouseEvents
+
+debugKeyboardEventsEnabled :: IO Bool
+debugKeyboardEventsEnabled = profileScope "debugKeyboardEventsEnabled" $
+  debugHudModeActive DebugHudKeyboardEvents
+
+debugSurfaceBoundariesEnabled :: IO Bool
+debugSurfaceBoundariesEnabled = profileScope "debugSurfaceBoundariesEnabled" $
+  debugHudModeActive DebugHudSurfaceBoundaries
+
+debugDepthFirstThumbnailsEnabled :: IO Bool
+debugDepthFirstThumbnailsEnabled = profileScope "debugDepthFirstThumbnailsEnabled" $
+  debugHudModeActive DebugHudDepthFirstSurfaces
+
+-- Height of the part of the GSVS HUD that shows the depth-first surface thumbnails.
+debugDepthFirstThumbnailHeight :: Int
+debugDepthFirstThumbnailHeight = 220
+
+debugHudEnabled :: IO Bool
+debugHudEnabled = profileScope "debugHudEnabled" $
+  debugHudVisible
+
+debugHudMaxLines :: Int
+debugHudMaxLines = 10
+
+debugHudLineMaxChars :: Int
+debugHudLineMaxChars = 170
+
+debugHudGlobalMessages :: TVar [String]
+debugHudGlobalMessages = unsafePerformIO $ newTVarIO []
+{-# NOINLINE debugHudGlobalMessages #-}
+
+debugHudPushTo :: TVar [String] -> String -> IO ()
+debugHudPushTo messagesVar msg = profileScope "debugHudPushTo" $ do
+  enabled <- debugHudEnabled
+  when enabled $
+    atomically $ modifyTVar' messagesVar $ \messages ->
+      let messages' = List.take debugHudMaxLines $ List.drop (List.length messages + 1 - debugHudMaxLines) (messages ++ [debugHudTrimLine msg])
+      in messages'
+
+debugHudPushGlobal :: String -> IO ()
+debugHudPushGlobal msg = profileScope "debugHudPushGlobal" $
+  debugHudPushTo debugHudGlobalMessages msg
+
+debugHudPush :: GodotSimulaViewSprite -> String -> IO ()
+debugHudPush gsvs msg = profileScope "debugHudPush" $
+  debugHudPushTo (_gsvsDebugHudMessages gsvs) msg
+
+debugHudPushPointerFocus :: GodotSimulaViewSprite -> String -> IO ()
+debugHudPushPointerFocus gsvs surfaceSummary = profileScope "debugHudPushPointerFocus" $ do
+  enabled <- debugHudEnabled
+  when enabled $ do
+    shouldPush <- atomically $ do
+      lastFocus <- readTVar (_gsvsDebugHudLastPointerFocusSummary gsvs)
+      if lastFocus == Just surfaceSummary
+        then return False
+        else do
+          writeTVar (_gsvsDebugHudLastPointerFocusSummary gsvs) (Just surfaceSummary)
+          return True
+    when shouldPush $
+      debugHudPush gsvs ("MOUSE focus " ++ surfaceSummary)
+
+debugHudClearPointerFocus :: GodotSimulaViewSprite -> IO ()
+debugHudClearPointerFocus gsvs = profileScope "debugHudClearPointerFocus" $ do
+  enabled <- debugHudEnabled
+  when enabled $ do
+    shouldPush <- atomically $ do
+      lastFocus <- readTVar (_gsvsDebugHudLastPointerFocusSummary gsvs)
+      case lastFocus of
+        Nothing -> return False
+        Just _ -> do
+          writeTVar (_gsvsDebugHudLastPointerFocusSummary gsvs) Nothing
+          return True
+    when shouldPush $
+      debugHudPush gsvs "MOUSE clear pointer focus"
+
+getDebugHudVisibleMessages :: GodotSimulaViewSprite -> IO [String]
+getDebugHudVisibleMessages gsvs = profileScope "getDebugHudVisibleMessages" $ do
+  enabled <- debugHudEnabled
+  if enabled
+    then do
+      globalMessages <- readTVarIO debugHudGlobalMessages
+      localMessages <- readTVarIO (_gsvsDebugHudMessages gsvs)
+      -- Return only the most recent messages w/in our debugHudMaxLines constraint
+      return $ List.take debugHudMaxLines $ List.drop (List.length globalMessages + List.length localMessages - debugHudMaxLines) (globalMessages ++ localMessages)
+    else return []
+
+debugHudTrimLine :: String -> String
+debugHudTrimLine msg
+  | List.length msg <= debugHudLineMaxChars = msg
+  | debugHudLineMaxChars <= 3 = List.take debugHudLineMaxChars msg
+  | otherwise = List.take (debugHudLineMaxChars - 3) msg ++ "..."
+
+debugPutStrLn :: String -> IO ()
+debugPutStrLn msg = profileScope "debugPutStrLn" $ do
+  when debugOutputEnabled $
+    putStrLn msg
+
+appendWindowLog :: String -> IO ()
+appendWindowLog msg = profileScope "appendWindowLog" $ do
+  debugPutStrLn "Plugin.Types.appendWindowLog"
+  debugFlag <- lookupEnv "SIMULA_DEBUG_WINDOW_LAUNCHING"
+  let enabled = isJust debugFlag
+  when enabled $ do
+    now <- getCurrentTime
+    let line = (show now) ++ " " ++ msg ++ "\n"
+    _ <- (Control.Exception.Safe.try (appendFile windowLogPath line)) :: IO (Either SomeException ())
+    return ()
 
 deriving instance Eq GodotWlrOutput
 deriving instance Eq GodotWlrXdgSurface
@@ -104,6 +239,9 @@ instance Show GodotWlrSurface where
 instance Ord GodotWlrXWaylandSurface where
   wlrXWaylandSurface1 `compare` wlrXWaylandSurface2 = ((coerce wlrXWaylandSurface1) :: Ptr ()) `compare` ((coerce wlrXWaylandSurface2) :: Ptr ())
 
+instance Ord GodotWlrXdgSurface where
+  wlrXdgSurface1 `compare` wlrXdgSurface2 = ((coerce wlrXdgSurface1) :: Ptr ()) `compare` ((coerce wlrXdgSurface2) :: Ptr ())
+
 instance Ord GodotSpatial where
   sp1 `compare` sp2 = ((coerce sp1) :: Ptr ()) `compare` ((coerce sp2) :: Ptr ())
 
@@ -112,9 +250,119 @@ unfoldrM f b = f b >>= \case
   Just (a, b') -> return . (a :) =<< unfoldrM f b'
   _            -> return []
 
-data SurfaceLocalCoordinates    = SurfaceLocalCoordinates (Float, Float)
-data SubSurfaceLocalCoordinates = SubSurfaceLocalCoordinates (Float, Float)
+newtype RightCoordinate = RightCoordinate Float
+newtype DownCoordinate = DownCoordinate Float
+newtype OffsetRight = OffsetRight Float
+newtype OffsetDown = OffsetDown Float
+newtype Width = Width Float
+newtype Height = Height Float
+newtype WorldPositionX = WorldPositionX Float
+newtype WorldPositionY = WorldPositionY Float
+newtype WorldPositionZ = WorldPositionZ Float
+
+data CanvasBaseCoordinates =
+  CanvasBaseCoordinates RightCoordinate DownCoordinate
+
+data WorldCoordinates3D =
+  WorldCoordinates3D
+    { worldCoordinates3DPositionX :: WorldPositionX
+    , worldCoordinates3DPositionY :: WorldPositionY
+    , worldCoordinates3DPositionZ :: WorldPositionZ
+    , worldCoordinates3DGodotVector :: GodotVector3
+    }
+
+data CanvasBaseGeometry =
+  CanvasBaseGeometry
+    { canvasBaseGeometryOffsetRight :: OffsetRight
+    , canvasBaseGeometryOffsetDown  :: OffsetDown
+    , canvasBaseGeometryWidth       :: Width
+    , canvasBaseGeometryHeight      :: Height
+    }
+
+canvasBaseCoordinatesTuple :: CanvasBaseCoordinates -> (Float, Float)
+canvasBaseCoordinatesTuple (CanvasBaseCoordinates (RightCoordinate right) (DownCoordinate down)) =
+  (right, down)
+
+canvasBaseGeometryTuple :: CanvasBaseGeometry -> (Float, Float, Float, Float)
+canvasBaseGeometryTuple
+  (CanvasBaseGeometry (OffsetRight right) (OffsetDown down) (Width width) (Height height)) =
+    (right, down, width, height)
+
+canvasBaseGeometryToGodotRect2 :: CanvasBaseGeometry -> IO GodotRect2
+canvasBaseGeometryToGodotRect2 geometry =
+  let (right, down, width, height) = canvasBaseGeometryTuple geometry
+  in toLowLevel $ V2 (V2 right down) (V2 width height)
+
+worldCoordinates3DVector :: WorldCoordinates3D -> GodotVector3
+worldCoordinates3DVector =
+  worldCoordinates3DGodotVector
+
+worldCoordinates3DFromGodotVector :: GodotVector3 -> IO WorldCoordinates3D
+worldCoordinates3DFromGodotVector vector = profileScope "worldCoordinates3DFromGodotVector" $ do
+  V3 x y z <- fromLowLevel vector
+  return $
+    WorldCoordinates3D
+      { worldCoordinates3DPositionX = WorldPositionX x
+      , worldCoordinates3DPositionY = WorldPositionY y
+      , worldCoordinates3DPositionZ = WorldPositionZ z
+      , worldCoordinates3DGodotVector = vector
+      }
+
+data SubSurfaceLocalCoordinates =
+  SubSurfaceLocalCoordinates RightCoordinate DownCoordinate
 data SpriteDimensions      = SpriteDimensions (Int, Int)
+
+fullRedrawFramesStartingAmount :: Int
+fullRedrawFramesStartingAmount = 2
+
+appLaunchFullRedrawMilliseconds :: Integer
+appLaunchFullRedrawMilliseconds = 250
+
+monotonicTimeInMilliseconds :: IO Integer
+monotonicTimeInMilliseconds = profileScope "monotonicTimeInMilliseconds" $
+  (`div` 1000000) . toNanoSecs <$> getTime Monotonic
+
+markGSVSForFullRedrawsByDefaultFrameAmount :: GodotSimulaViewSprite -> IO ()
+markGSVSForFullRedrawsByDefaultFrameAmount gsvs = profileScope "markGSVSForFullRedrawsByDefaultFrameAmount" $
+  markGSVSForFullRedrawFrames gsvs fullRedrawFramesStartingAmount
+
+markGSVSForFullRedrawFrames :: GodotSimulaViewSprite -> Int -> IO ()
+markGSVSForFullRedrawFrames gsvs frameCount = profileScope "markGSVSForFullRedrawFrames" $ do
+  atomically $ writeTVar (_gsvsFullRedrawFramesRemaining gsvs) frameCount
+  atomically $ writeTVar (_gsvsIsDamaged gsvs) True
+
+markGSVSForFullRedrawMilliseconds :: GodotSimulaViewSprite -> IO ()
+markGSVSForFullRedrawMilliseconds gsvs = profileScope "markGSVSForFullRedrawMilliseconds" $ do
+  markGSVSForFullRedrawsByDefaultFrameAmount gsvs
+  now <- monotonicTimeInMilliseconds
+  atomically $ writeTVar (_gsvsFullRedrawMillisecondsDeadline gsvs) (Just (now + appLaunchFullRedrawMilliseconds))
+
+getGSVSFullRedrawMillisecondsRemaining :: GodotSimulaViewSprite -> IO Integer
+getGSVSFullRedrawMillisecondsRemaining gsvs = profileScope "getGSVSFullRedrawMillisecondsRemaining" $ do
+  maybeDeadlineMs <- readTVarIO (_gsvsFullRedrawMillisecondsDeadline gsvs)
+  case maybeDeadlineMs of
+    Nothing -> return 0
+    Just deadlineMs -> do
+      now <- monotonicTimeInMilliseconds
+      let millisecondsRemaining = max 0 (deadlineMs - now)
+      when (millisecondsRemaining == 0) $
+        atomically $ writeTVar (_gsvsFullRedrawMillisecondsDeadline gsvs) Nothing
+      return millisecondsRemaining
+
+validateObject :: GodotObject :< a => a -> Maybe a
+validateObject obj = guard (unsafeCoerce ((safeCast obj) :: GodotObject) /= nullPtr) >> return obj
+
+newEmptyRid :: IO GodotRid
+newEmptyRid = profileScope "newEmptyRid" $ do
+  let ridSize = opaqueSizeOf @GodotRid
+  ridPtr <- mallocForeignPtrBytes ridSize
+  withForeignPtr ridPtr $ \ptr -> fillBytes ptr 0 ridSize
+  return (coerce ridPtr)
+
+-- Global empty RID to share across low-level CanvasSurface draws, which require an optional RID argument
+globalEmptyRid :: GodotRid
+globalEmptyRid = unsafePerformIO newEmptyRid
+{-# NOINLINE globalEmptyRid #-}
 
 data ResizeMethod = Zoom | Horizontal | Vertical deriving (Eq)
 
@@ -154,7 +402,6 @@ data Configuration = Configuration {
 , _startingApps :: StartingApps
 , _defaultWindowResolution :: Maybe (Natural, Natural)
 , _defaultWindowScale :: Double
-, _axisScrollSpeed :: Double
 , _mouseSensitivityScaler :: Double
 , _keyBindings :: [KeyboardShortcut]
 , _keyRemappings :: [KeyboardRemapping]
@@ -171,7 +418,7 @@ instance FromDhall StartingApps
 type Scancode          = Int
 type Modifiers         = Int
 type Keycode           = Int
-type SpriteLocation    = Maybe (GodotSimulaViewSprite, SurfaceLocalCoordinates)
+type SpriteLocation    = Maybe (GodotSimulaViewSprite, CanvasBaseCoordinates)
 type KeyboardAction    = SpriteLocation -> Bool -> IO () -- `Bool` signifies whether the key is pressed down
 type KeyboardShortcuts = M.Map (Modifiers, Keycode) KeyboardAction
 type KeyboardRemappings = M.Map Scancode Scancode
@@ -191,6 +438,10 @@ data HUD = HUD
   , _hudSvrTexture   :: GodotTexture
   , _hudDynamicFont  :: GodotDynamicFont
   , _hudI3Status     :: String
+  , _hudDebugMemoryEnabled :: Bool
+  , _hudLastRssSample :: Maybe (UTCTime, Int)
+  , _hudRssKb         :: Int
+  , _hudMemoryDelta   :: String
   }
 
 data PhysicsBodyConfig = PhysicsBodyConfig
@@ -239,10 +490,10 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssXWaylandDisplay         :: TVar (Maybe String) -- For appLaunch
   , _gssOriginalEnv             :: [(String, String)]
   , _gssFreeChildren            :: TVar (M.Map GodotWlrXWaylandSurface GodotSimulaViewSprite)
+  , _gssAttachedXdgChildren     :: TVar (M.Map GodotWlrXdgSurface GodotSimulaViewSprite)
   , _gssConfiguration           :: TVar Configuration
   , _gssKeyboardShortcuts       :: TVar KeyboardShortcuts
   , _gssKeyboardRemappings      :: TVar KeyboardRemappings
-  , _gssAxisScrollSpeed         :: TVar Double
   , _gssMouseSensitivityScaler  :: TVar Double
   , _gssStartingApps            :: TVar [String]
   , _gssWorldEnvironment        :: TVar (GodotWorldEnvironment, String)
@@ -250,6 +501,12 @@ data GodotSimulaServer = GodotSimulaServer
   , _gssStartingAppTransform    :: TVar (Maybe GodotTransform)
   , _gssPid                     :: String
   , _gssStartingAppPids         :: TVar (M.Map ProcessID [String])
+  -- launchToken -> location (precise one-shot placement for token-class windows)
+  , _gssStartingAppLaunchTokens :: TVar (M.Map String String)
+  -- launchToken -> fallback app class (e.g. "google-chrome") for class-queue lookup
+  , _gssStartingAppLaunchTokenClassHints :: TVar (M.Map String String)
+  -- app class -> queued locations, consumed in launch order (e.g. center/right/...)
+  , _gssStartingAppWindowClassHints :: TVar (M.Map String [String])
   , _gssGrab                    :: TVar (Maybe Grab)
   , _gssDiffMap                 :: TVar (M.Map GodotSpatial GodotTransform)
   , _gssWorkspaces              :: Vector GodotSpatial
@@ -268,7 +525,7 @@ data GodotSimulaServer = GodotSimulaServer
 
 instance HasBaseClass GodotSimulaServer where
   type BaseClass GodotSimulaServer = GodotSpatial
-  super (GodotSimulaServer obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotSpatial obj
+  super GodotSimulaServer { _gssObj = obj } = GodotSpatial obj
 
 type SurfaceMap = OMap GodotWlrSurface CanvasSurface
 
@@ -281,48 +538,67 @@ data GodotSimulaViewSprite = GodotSimulaViewSprite
   , _gsvsView              :: TVar SimulaView
   , _gsvsCanvasBase        :: TVar CanvasBase
   , _gsvsCanvasSurface     :: TVar CanvasSurface
-  , _gsvsCursorCoordinates :: TVar SurfaceLocalCoordinates
+  , _gsvsCursorCoordinates :: TVar CanvasBaseCoordinates
   , _gsvsTargetSize        :: TVar (Maybe SpriteDimensions)
   , _gsvsFreeChildren      :: TVar [GodotWlrXWaylandSurface]
+  , _gsvsAttachedXdgChildren :: TVar [GodotWlrXdgSurface]
   , _gsvsTransparency      :: TVar Float
   , _gsvsScreenshotMode    :: TVar Bool
-  , _gsvsScreenshotCoords  :: TVar (Maybe SurfaceLocalCoordinates, Maybe SurfaceLocalCoordinates)
+  , _gsvsScreenshotCoords  :: TVar (Maybe CanvasBaseCoordinates, Maybe CanvasBaseCoordinates)
   , _gsvsActiveSurface     :: TVar (Maybe GodotWlrSurface)
   , _gsvsFrameCount        :: TVar Integer
   , _gsvsSpilloverDims     :: TVar (Maybe (Int, Int))
+  -- Encodes `Just ((width, height), stableFrameCount)` i.e. the last visible surface dimensions observed
+  -- while waiting to place the app, plus how many consecutive placement checks have seen those same dimensions.
+  -- We wait for stabilization to avoid weird placement behavior otherwise.
+  , _gsvsLaunchPlacementStableDims :: TVar (Maybe ((Int, Int), Int))
+
+  , _gsvsLaunchResizeCompensationGraceFrames :: TVar Int
   , _gsvsResizedLastFrame  :: TVar Bool
   , _gsvsCursor            :: TVar ((Maybe GodotWlrSurface), (Maybe GodotTexture))
   , _gsvsIsAtTargetDims    :: TVar Bool
+  , _gsvsFullRedrawFramesRemaining :: TVar Int
+  , _gsvsFullRedrawMillisecondsDeadline :: TVar (Maybe Integer) -- Sometimes useful to mark a gsvs for redraw in terms of time instead of frames
+  , _gsvsShaderPath        :: TVar (Maybe String)
   , _gsvsDamagedRegions    :: TVar [GodotRect2]
+  , _gsvsDebugDamagedRegionOverlays :: TVar [DebugDamagedRegionOverlay] -- A recent history of damage events, the union of which will be displayed as purple rectangles over the gsvs itself (with varying opacity depending upon how old the damaged region is)
+  , _gsvsDebugDamagedRegionHistory :: TVar [DebugDamagedRegionSnapshot] -- History of snapshots; each snapshot encodes an individual damaged region event displayed as a thumbnail in the GSVS HUD
+  , _gsvsDebugDamagedRegionPendingSnapshot :: TVar (Maybe DebugDamagedRegionSnapshot) -- Storage for fresh damage event metadata before we have a GSVS texture, so it can be finalized into _gsvsDebugDamagedRegionHistory for HUD display
   , _gsvsIsDamaged         :: TVar Bool
+  , _gsvsDebugHudMessages  :: TVar [String]
+  , _gsvsDebugHudLastPointerFocusSummary :: TVar (Maybe String)
   }
 
 instance HasBaseClass GodotSimulaViewSprite where
   type BaseClass GodotSimulaViewSprite = GodotRigidBody
-  super (GodotSimulaViewSprite obj _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _)  = GodotRigidBody obj
+  super gsvs = GodotRigidBody (_gsvsObj gsvs)
 
 data CanvasBase = CanvasBase {
-    _cbObject       :: GodotObject
-  , _cbGSVS         :: TVar GodotSimulaViewSprite
-  , _cbViewport     :: TVar GodotViewport
+    _cbObject           :: GodotObject
+  , _cbGSVS             :: TVar GodotSimulaViewSprite
+  , _cbViewport         :: TVar GodotViewport
+  , _cbDebugContentFont :: TVar GodotDynamicFont -- If we try to use the same font for different parts of the HUD (with different font sizes)
+  , _cbDebugHudTabFont  :: TVar GodotDynamicFont -- ...weird things occur, so we store them as two separate entries.
 }
 
 instance HasBaseClass CanvasBase where
   type BaseClass CanvasBase = GodotNode2D
-  super (CanvasBase obj _ _ ) = GodotNode2D obj
+  super (CanvasBase obj _ _ _ _ ) = GodotNode2D obj
 
 data CanvasSurface = CanvasSurface {
     _csObject       :: GodotObject
   , _csGSVS         :: TVar GodotSimulaViewSprite
   , _csViewport     :: TVar GodotViewport
   , _csClearShader  :: TVar GodotShaderMaterial
-  , _csPremulShader :: TVar GodotShaderMaterial
+  , _csPassthroughShader :: TVar GodotShaderMaterial
+  , _csClearCanvasItem :: TVar GodotRid
+  , _csPassthroughCanvasItem :: TVar GodotRid
   , _csFrameCounter :: TVar Integer
 }
 
 instance HasBaseClass CanvasSurface where
   type BaseClass CanvasSurface = GodotNode2D
-  super (CanvasSurface obj _ _ _ _ _) = GodotNode2D obj
+  super (CanvasSurface obj _ _ _ _ _ _ _) = GodotNode2D obj
 
 instance Eq CanvasSurface where
   (==) = (==) `on` _csObject
@@ -399,21 +675,24 @@ connectGodotSignal :: (GodotObject :< source) -- , GodotObject :< method_object)
                    -> String                  -- Name of method to attach to signal
                    -> [GodotVariant]       -- default arguments to supply to method (jammed /after/ manual arguments supplied)
                    -> IO (Int)                --
-connectGodotSignal sourceObj signalName methodObj methodName defaultArgs = do
+connectGodotSignal sourceObj signalName methodObj methodName defaultArgs = profileScope "connectGodotSignal" $ do
   -- putStrLn "connectGodotSignal"
   let sourceObj' = safeCast sourceObj      :: GodotObject
   signalName'    <- (toLowLevel (pack signalName))  :: IO GodotString
   let methodObj' =  safeCast methodObj     :: GodotObject
   methodName'    <- (toLowLevel (pack methodName))  :: IO GodotString
   defaultArgs'   <- (toLowLevel defaultArgs) :: IO GodotArray -- Wraps godot_array_new; do we have to clean this up via godot_array_destroy ?
-  G.connect sourceObj' signalName' methodObj' methodName' defaultArgs' 0
+  finally
+    (G.connect sourceObj' signalName' methodObj' methodName' defaultArgs' 0)
+    (do Api.godot_array_destroy defaultArgs'
+        mapM_ Api.godot_string_destroy [methodName', signalName'])
 
 addChild :: (GodotNode :< parent)
          => (GodotNode :< child)
          => parent
          -> child
          -> IO ()
-addChild parent child = do
+addChild parent child = profileScope "addChild" $ do
 
   -- instance Method "add_child" GodotNode (GodotNode -> Bool -> IO ())
   G.add_child ((safeCast parent) :: GodotNode )
@@ -426,7 +705,7 @@ removeChild :: (GodotNode :< parent)
                => parent
                -> child
                -> IO ()
-removeChild parent child = do
+removeChild parent child = profileScope "removeChild" $ do
   G.remove_child ((safeCast parent) :: GodotNode )
                  ((safeCast child) :: GodotNode)
 
@@ -446,10 +725,13 @@ removeChild parent child = do
 -- | classInit. If you try to use these functions with a registered type that
 -- | isn't instantiated with classInit, then it could break your program at run-time.
 regToVariant :: (GodotObject :< object) => (NativeScript object) => object -> IO (Variant 'GodotTy)
-regToVariant obj = return $ VariantObject (safeCast obj) :: IO (Variant 'GodotTy)
+regToVariant obj = profileScope "regToVariant" $ do
+  debugPutStrLn "Plugin.Types.regToVariant"
+  return $ VariantObject (safeCast obj) :: IO (Variant 'GodotTy)
 
 variantToReg :: (NativeScript a, Typeable a) => GodotVariant -> IO (Maybe a)
-variantToReg godotVariant = do
+variantToReg godotVariant = profileScope "variantToReg" $ do
+  debugPutStrLn "Plugin.Types.variantToReg"
   -- How it's done in Simula.hs:
   -- godotVariantObj <- fromGodotVariant godotVariant :: IO GodotObject
   -- Just a <- tryObjectCast godotVariantObj
@@ -469,7 +751,7 @@ emitSignal :: (GodotObject :< a)
            -> String -- Signal name
            -> [b]    -- Arguments emitted (must be registered types that inherit from GodotObject like i.e. GodotSimulaViewSprite)
            -> IO ()
-emitSignal signalEmitter signalName signalArgs = do
+emitSignal signalEmitter signalName signalArgs = profileScope "emitSignal" $ do
   -- putStrLn "emitSignal"
   let signalEmitter' = (safeCast signalEmitter) :: GodotObject
   signalName'        <- toLowLevel (pack signalName) :: IO GodotString
@@ -486,7 +768,7 @@ emitSignal signalEmitter signalName signalArgs = do
 -- | casting errors, so we revert to the old one for now.
 newNS'' :: (GodotObject :< a)
   => (GodotObject -> a) -> Text -> [Variant 'GodotTy] -> Text -> IO a
-newNS'' constr clsName args url = do
+newNS'' constr clsName args url = profileScope "newNS''" $ do
   newNSOld constr clsName args url >>= \case
     Just ns -> return ns
     Nothing -> error $ "Error" -- "Could not instance the " ++ (unpack clsName) ++ " from " ++ (unpack url)
@@ -506,7 +788,8 @@ newNS'' constr clsName args url = do
 
 -- Unused/untested.
 getGSVSFromEitherSurface :: GodotSimulaServer -> Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO (Maybe GodotSimulaViewSprite)
-getGSVSFromEitherSurface gss eitherSurface = do
+getGSVSFromEitherSurface gss eitherSurface = profileScope "getGSVSFromEitherSurface" $ do
+  debugPutStrLn "Plugin.Types.getGSVSFromEitherSurface"
   viewMap <- atomically $ readTVar (_gssViews gss) -- (M.Map SimulaView GodotSimulaViewSprite)
   case eitherSurface of
     (Left wlrXdgSurface) -> do
@@ -527,21 +810,138 @@ getGSVSFromEitherSurface gss eitherSurface = do
     containsGodotWlrXWaylandSurface wlrXWaylandSurface simulaView _ = 
       ((simulaView ^. svWlrEitherSurface) == Right wlrXWaylandSurface)
 
+-- Needed since we have to go through `wlr_xdg_toplevel`'s' to get to the parent `wlr_xdg_surface`
+getXdgParentSurface :: GodotWlrXdgSurface -> IO (Maybe GodotWlrXdgSurface)
+getXdgParentSurface wlrXdgSurface = profileScope "getXdgParentSurface" $ do
+  debugPutStrLn "Plugin.Types.getXdgParentSurface"
+  wlrXdgSurface <- validateSurfaceE wlrXdgSurface
+  wlrXdgToplevel <- G.get_xdg_toplevel wlrXdgSurface >>= validateSurfaceE
+  parentToplevel <- G.get_parent wlrXdgToplevel :: IO GodotWlrXdgToplevel
+  case validateObject parentToplevel of
+    Nothing -> return Nothing
+    Just validParentToplevel -> do
+      validParentToplevel <- validateSurfaceE validParentToplevel
+      parentSurface <- G.get_xdg_surface validParentToplevel :: IO GodotWlrXdgSurface
+      case validateObject parentSurface of
+        Nothing -> return Nothing
+        Just validParentSurface -> Just <$> validateSurfaceE validParentSurface
+
+getXdgParentGSVS :: GodotSimulaServer -> GodotWlrXdgSurface -> IO (Maybe GodotSimulaViewSprite)
+getXdgParentGSVS gss wlrXdgSurface = profileScope "getXdgParentGSVS" $ do
+  debugPutStrLn "Plugin.Types.getXdgParentGSVS"
+  maybeParentSurface <- getXdgParentSurface wlrXdgSurface
+  case maybeParentSurface of
+    Nothing -> return Nothing
+    Just parentSurface -> getGSVSFromEitherSurface gss (Left parentSurface)
+
+getVisibleSurfaceDimensions :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO (Int, Int)
+getVisibleSurfaceDimensions eitherSurface = profileScope "getVisibleSurfaceDimensions" $ do
+  debugPutStrLn "Plugin.Types.getVisibleSurfaceDimensions"
+  case eitherSurface of
+    Left wlrXdgSurface -> do
+      wlrXdgSurface <- validateSurfaceE wlrXdgSurface
+      V2 _ (V2 xdgWidth xdgHeight) <- G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+      withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
+        (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions wlrSurface
+        let width = if round xdgWidth > 0 then round xdgWidth else bufferWidth
+        let height = if round xdgHeight > 0 then round xdgHeight else bufferHeight
+        return (width, height)
+    Right wlrXWaylandSurface -> do
+      wlrXWaylandSurface <- validateSurfaceE wlrXWaylandSurface
+      width <- G.get_width wlrXWaylandSurface
+      height <- G.get_height wlrXWaylandSurface
+      withGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
+        (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions wlrSurface
+        return (if width > 0 then width else bufferWidth, if height > 0 then height else bufferHeight)
+
+getGSVSTargetDimsOrFallbackToItsCurrentEffectiveSize :: GodotSimulaViewSprite -> IO (Int, Int)
+getGSVSTargetDimsOrFallbackToItsCurrentEffectiveSize gsvs = profileScope "getGSVSTargetDimsOrFallbackToItsCurrentEffectiveSize" $ do
+  debugPutStrLn "Plugin.Types.getGSVSTargetDimsOrFallbackToItsCurrentEffectiveSize"
+  maybeTargetDims <- readTVarIO (gsvs ^. gsvsTargetSize)
+  case maybeTargetDims of
+    Just (SpriteDimensions dims@(width, height)) | width > 0 && height > 0 -> return dims
+    _ -> do
+      simulaView <- readTVarIO (gsvs ^. gsvsView)
+      getVisibleSurfaceDimensions (simulaView ^. svWlrEitherSurface)
+
+getAttachedXdgChildRootOffset :: GodotSimulaViewSprite -> GodotWlrXdgSurface -> IO (Int, Int)
+getAttachedXdgChildRootOffset parentGSVS childWlrXdgSurface = profileScope "getAttachedXdgChildRootOffset" $ do
+  debugPutStrLn "Plugin.Types.getAttachedXdgChildRootOffset"
+  (parentWidth, parentHeight) <- getGSVSTargetDimsOrFallbackToItsCurrentEffectiveSize parentGSVS
+  childWlrXdgSurface <- validateSurfaceE childWlrXdgSurface
+  V2 (V2 childGeomX childGeomY) (V2 childGeomWidth childGeomHeight) <- G.get_geometry childWlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+  withGodotRef (G.get_wlr_surface childWlrXdgSurface :: IO GodotWlrSurface) $ \childWlrSurface -> do
+    (childBufferWidth, childBufferHeight) <- getWlrSurfaceStateCurrentDimensions childWlrSurface
+    let childVisibleWidth = if round childGeomWidth > 0 then round childGeomWidth else childBufferWidth
+    let childVisibleHeight = if round childGeomHeight > 0 then round childGeomHeight else childBufferHeight
+    let childRootX = ((parentWidth - childVisibleWidth) `div` 2) - round childGeomX
+    let childRootY = ((parentHeight - childVisibleHeight) `div` 2) - round childGeomY
+    return (childRootX, childRootY)
+
+-- Check for both override_redirect=0 (the client is not asking to bypass normal
+-- window-manager/compositor management) and "_NET_WM_WINDOW_TYPE_DIALOG"/"_NET_WM_WINDOW_TYPE_POPUP_MENU".
+-- This may be too restrictive, but we'll see if it's sufficient in practice.
+xWaylandSurfaceShouldCenterOverParent :: GodotWlrXWaylandSurface -> IO Bool
+xWaylandSurfaceShouldCenterOverParent wlrXWaylandSurface = profileScope "xWaylandSurfaceShouldCenterOverParent" $ do
+  debugPutStrLn "Plugin.Types.xWaylandSurfaceShouldCenterOverParent"
+  hasParent <- G.has_parent wlrXWaylandSurface
+  overrideRedirect <- G.get_override_redirect wlrXWaylandSurface
+  isDialog <- xWaylandSurfaceHasWindowTypeName wlrXWaylandSurface "_NET_WM_WINDOW_TYPE_DIALOG"
+  isPopup <- xWaylandSurfaceHasWindowTypeName wlrXWaylandSurface "_NET_WM_WINDOW_TYPE_POPUP_MENU"
+  return (hasParent && not overrideRedirect && (isDialog || isPopup))
+
+xWaylandSurfaceHasWindowTypeName :: GodotWlrXWaylandSurface -> String -> IO Bool
+xWaylandSurfaceHasWindowTypeName wlrXWaylandSurface typeName = profileScope "xWaylandSurfaceHasWindowTypeName" $ do
+  debugPutStrLn "Plugin.Types.xWaylandSurfaceHasWindowTypeName"
+  typeNameGodotString <- toLowLevel (pack typeName) :: IO GodotString
+  G.has_window_type_name wlrXWaylandSurface typeNameGodotString
+    `finally` Api.godot_string_destroy typeNameGodotString
+
+getEffectiveXWaylandChildSurfaceCoordsRelativeToParent :: GodotWlrXWaylandSurface -> GodotWlrXWaylandSurface -> IO (Int, Int)
+getEffectiveXWaylandChildSurfaceCoordsRelativeToParent parentWlrXWaylandSurface childWlrXWaylandSurface = profileScope "getEffectiveXWaylandChildSurfaceCoordsRelativeToParent" $ do
+  debugPutStrLn "Plugin.Types.getEffectiveXWaylandChildSurfaceCoordsRelativeToParent"
+  shouldCenter <- xWaylandSurfaceShouldCenterOverParent childWlrXWaylandSurface
+  if shouldCenter
+    then getCoordsToCenterXWaylandChildRelativeToParent parentWlrXWaylandSurface childWlrXWaylandSurface
+    else do
+      surfaceX <- G.get_surface_origin_x childWlrXWaylandSurface
+      surfaceY <- G.get_surface_origin_y childWlrXWaylandSurface
+      return (surfaceX, surfaceY)
+
+getCoordsToCenterXWaylandChildRelativeToParent :: GodotWlrXWaylandSurface -> GodotWlrXWaylandSurface -> IO (Int, Int)
+getCoordsToCenterXWaylandChildRelativeToParent parentWlrXWaylandSurface childWlrXWaylandSurface = profileScope "getCoordsToCenterXWaylandChildRelativeToParent" $ do
+  debugPutStrLn "Plugin.Types.getCoordsToCenterXWaylandChildRelativeToParent"
+  (parentWidth, parentHeight) <- getVisibleSurfaceDimensions (Right parentWlrXWaylandSurface)
+  childWlrXWaylandSurface <- validateSurfaceE childWlrXWaylandSurface
+  V2 (V2 childGeomX childGeomY) (V2 childGeomWidth childGeomHeight) <- G.get_geometry childWlrXWaylandSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+  withGodotRef (G.get_wlr_surface childWlrXWaylandSurface :: IO GodotWlrSurface) $ \childWlrSurface -> do
+    (childBufferWidth, childBufferHeight) <- getWlrSurfaceStateCurrentDimensions childWlrSurface
+    -- XWayland geometry is currently always rooted at (0,0), but using the
+    -- same geometry-aware formula as xdg keeps the two paths symmetric.
+    let childVisibleWidth = if round childGeomWidth > 0 then round childGeomWidth else childBufferWidth
+    let childVisibleHeight = if round childGeomHeight > 0 then round childGeomHeight else childBufferHeight
+    let childRootX = ((parentWidth - childVisibleWidth) `div` 2) - round childGeomX
+    let childRootY = ((parentHeight - childVisibleHeight) `div` 2) - round childGeomY
+    return (childRootX, childRootY)
+
 {- Import godot-extra functions that godot-haskell still lacks. -}
 newNS :: [Variant 'GodotTy] -> Text -> IO (Maybe GodotObject)
-newNS args url = do
+newNS args url = profileScope "newNS" $ do
+  debugPutStrLn "Plugin.Types.newNS"
   load GodotNativeScript "NativeScript" url >>= \case
     Just ns -> Just <$> G.new (ns :: GodotNativeScript) args
     Nothing -> return Nothing
 
 newNS' :: [Variant 'GodotTy] -> Text -> IO GodotObject
-newNS' args url = do
+newNS' args url = profileScope "newNS'" $ do
+  debugPutStrLn "Plugin.Types.newNS"
   newNS args url >>= \case
     Just ns -> return ns
     Nothing -> error $ "Could not instance class from " ++ (Data.Text.unpack url)
 
 instance' :: (GodotObject :< a) => (GodotObject -> a) -> Text -> IO (Maybe a)
-instance' constr className = do
+instance' constr className = profileScope "instance'" $ do
+  debugPutStrLn "Plugin.Types.instance"
   classDB <- getClassDB
   vt      <- (G.instance' classDB =<< toLowLevel className) >>= fromLowLevel
   case fromVariant vt :: Maybe GodotObject of
@@ -549,26 +949,31 @@ instance' constr className = do
     Nothing  -> return Nothing
 
 unsafeInstance :: (GodotObject :< a) => (GodotObject -> a) -> Text -> IO a
-unsafeInstance constr className = instance' constr className >>= \case
-  Just a  -> return a
-  Nothing -> error $ "Could not instance " ++ (Data.Text.unpack className)
+unsafeInstance constr className = profileScope "unsafeInstance" $ do
+  debugPutStrLn "Plugin.Types.unsafeInstance"
+  instance' constr className >>= \case
+    Just a  -> return a
+    Nothing -> error $ "Could not instance " ++ (Data.Text.unpack className)
 
 asClass :: (GodotObject :< a, a :< b)
         => (GodotObject -> b)
         -> Text
         -> a
         -> IO (Maybe b)
-asClass constr clsName a = do
+asClass constr clsName a = profileScope "asClass" $ do
   isClass' <- a `isClass` clsName
   return $ if isClass' then Just $ constr $ safeCast a else Nothing
 
 asClass' :: (GodotObject :< a, a :< b) => (GodotObject -> b) -> Text -> a -> IO b
-asClass' constr clsName a = asClass constr clsName a >>= \case
-  Just a' -> return a'
-  Nothing -> error $ "Could not cast to " ++ (Data.Text.unpack clsName)
+asClass' constr clsName a = profileScope "asClass'" $ do
+  debugPutStrLn "Plugin.Types.asClass"
+  asClass constr clsName a >>= \case
+    Just a' -> return a'
+    Nothing -> error $ "Could not cast to " ++ (Data.Text.unpack clsName)
 
 load :: (GodotResource :< a) => (GodotObject -> a) -> Text -> Text -> IO (Maybe a)
-load constr clsName url = do
+load constr clsName url = profileScope "load" $ do
+  debugPutStrLn "Plugin.Types.load"
   rl       <- getSingleton Godot_ResourceLoader "ResourceLoader"
   url'     <- toLowLevel url
   clsName' <- toLowLevel clsName
@@ -582,12 +987,15 @@ load constr clsName url = do
     Nothing -> return Nothing
 
 getClassDB :: IO Godot_ClassDB
-getClassDB = Api.godot_global_get_singleton & withCString (unpack "ClassDB")
+getClassDB = profileScope "getClassDB" $ do
+  debugPutStrLn "Plugin.Types.getClassDB"
+  Api.godot_global_get_singleton & withCString (unpack "ClassDB")
   >>= asClass' Godot_ClassDB "ClassDB"
 
 -- Leaks
 getSingleton :: (GodotObject :< b) => (GodotObject -> b) -> Text -> IO b
-getSingleton constr name = do
+getSingleton constr name = profileScope "getSingleton" $ do
+  debugPutStrLn "Plugin.Types.getSingleton"
   engine <- getEngine
   name' <- toLowLevel name
   b <- G.has_singleton engine name'
@@ -597,7 +1005,8 @@ getSingleton constr name = do
   return res
 
 isClass :: GodotObject :< a => a -> Text -> IO Bool
-isClass obj clsName = do
+isClass obj clsName = profileScope "isClass" $ do
+  debugPutStrLn "Plugin.Types.isClass"
   objClass' <- G.get_class (GodotNode $ safeCast obj)
   objClass <- fromLowLevel objClass'
   let clsNameSanitized =
@@ -612,27 +1021,46 @@ isClass obj clsName = do
 
 -- Leaks
 getEngine :: IO Godot_Engine
-getEngine = Api.godot_global_get_singleton & withCString (unpack "Engine")
+getEngine = profileScope "getEngine" $ do
+  debugPutStrLn "Plugin.Types.getEngine"
+  Api.godot_global_get_singleton & withCString (unpack "Engine")
   >>= asClass' Godot_Engine "Engine"
 
 godotPrint :: Text -> IO ()
-godotPrint str = Api.godot_print =<< toLowLevel str
+godotPrint str = profileScope "godotPrint" $ do
+  debugPutStrLn "Plugin.Types.godotPrint"
+  Api.godot_print =<< toLowLevel str
 
-getWlrSurface :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO GodotWlrSurface
-getWlrSurface eitherSurface = do
+withWlrSurface
+  :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface
+  -> (GodotWlrSurface -> IO a)
+  -> IO a
+withWlrSurface eitherSurface action = profileScope "withWlrSurface" $ do
+  debugPutStrLn "Plugin.Types.withWlrSurface"
   case eitherSurface of
-    (Left wlrXdgSurface) -> do
-      validateSurfaceE wlrXdgSurface
-      G.get_wlr_surface wlrXdgSurface
-    (Right wlrXWaylandSurface) -> do
-      validateSurfaceE wlrXWaylandSurface
-      G.get_wlr_surface wlrXWaylandSurface
+    Left wlrXdgSurface -> do
+      wlrXdgSurface <- validateSurfaceE wlrXdgSurface
+      withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) action
+    Right wlrXWaylandSurface -> do
+      wlrXWaylandSurface <- validateSurfaceE wlrXWaylandSurface
+      withGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface) action
+
+
+-- The returned GodotWlrSurface will have a +1'ed reference count when this function returns it
+-- so that the caller is responsible for unreferencing it
+getWlrSurface :: Either GodotWlrXdgSurface GodotWlrXWaylandSurface -> IO GodotWlrSurface
+getWlrSurface eitherSurface = profileScope "getWlrSurface" $ do
+  debugPutStrLn "Plugin.Types.getWlrSurface"
+  withWlrSurface eitherSurface $ \wlrSurface -> do
+    G.reference wlrSurface
+    return wlrSurface
 
 
 -- | Used to supply GodotVector2 to
 -- |   G.set_size :: GodotViewport -> GodotVector2 -> IO ()
 toGodotVector2 :: (Int, Int) -> IO (GodotVector2)
-toGodotVector2 (width, height) = do
+toGodotVector2 (width, height) = profileScope "toGodotVector2" $ do
+  debugPutStrLn "Plugin.Types.toGodotVector2"
   let v2 = (V2 (fromIntegral width) (fromIntegral height))
   gv2 <- toLowLevel v2 :: IO (GodotVector2)
   return gv2
@@ -642,37 +1070,84 @@ withGodot :: (IO godot_alloc)
           -> (godot_alloc -> IO ())
           -> (godot_alloc-> IO a)
           -> IO a
-withGodot allocatedType' destr action  = do
+withGodot allocatedType' destr action  = profileScope "withGodot" $ do
+  debugPutStrLn "Plugin.Types.withGodot"
   allocatedType <- allocatedType'
   ret <- action allocatedType
   destr allocatedType
   return ret
 
 destroyMaybe :: GodotReference -> IO ()
-destroyMaybe ref =
-  whenM (G.unreference @GodotReference ref) (Api.godot_object_destroy $ safeCast ref)
+destroyMaybe ref = profileScope "destroyMaybe" $ do
+  debugPutStrLn "Plugin.Types.destroyMaybe"
+  case validateObject ref of
+    Nothing -> return ()
+    Just validRef ->
+      whenM (G.unreference @GodotReference validRef) (Api.godot_object_destroy $ safeCast validRef)
 
-getSurfaceLocalCoordinates :: GodotSimulaViewSprite -> GodotVector3 -> IO (SurfaceLocalCoordinates)
-getSurfaceLocalCoordinates gsvs clickPos = do
+withGodotRef :: (GodotReference :< a) => IO a -> (a -> IO b) -> IO b
+withGodotRef alloc action = profileScope "withGodotRef" $
+  bracket alloc (destroyMaybe . safeCast) action
+
+retainGodotRef :: (GodotReference :< a) => IO a -> IO a
+retainGodotRef alloc = profileScope "retainGodotRef" $
+  withGodotRef alloc $ \ref -> do
+    _ <- G.reference ((safeCast ref) :: GodotReference)
+    return ref
+
+destroyWlrSurfacesWithCoords :: [(GodotWlrSurface, Int, Int)] -> IO ()
+destroyWlrSurfacesWithCoords surfaces = profileScope "destroyWlrSurfacesWithCoords" $
+  mapM_ (\(wlrSurface, _, _) -> destroyMaybe (safeCast wlrSurface)) surfaces
+
+withGodotRef2
+  :: (GodotReference :< a, GodotReference :< b)
+  => IO a
+  -> IO b
+  -> (a -> b -> IO r)
+  -> IO r
+withGodotRef2 allocA allocB action =
+  withGodotRef allocA $ \a ->
+    withGodotRef allocB $ \b ->
+      action a b
+
+withGodotRef3
+  :: (GodotReference :< a, GodotReference :< b, GodotReference :< c)
+  => IO a
+  -> IO b
+  -> IO c
+  -> (a -> b -> c -> IO r)
+  -> IO r
+withGodotRef3 allocA allocB allocC action =
+  withGodotRef allocA $ \a ->
+    withGodotRef allocB $ \b ->
+      withGodotRef allocC $ \c ->
+        action a b c
+
+getCanvasBaseCoordinatesFromWorldHit :: GodotSimulaViewSprite -> WorldCoordinates3D -> IO CanvasBaseCoordinates
+getCanvasBaseCoordinatesFromWorldHit gsvs worldCoordinates = profileScope "getCanvasBaseCoordinatesFromWorldHit" $ do
+  debugPutStrLn "Plugin.Types.getCanvasBaseCoordinatesFromWorldHit"
+  let clickPos = worldCoordinates3DVector worldCoordinates
   lpos <- G.to_local gsvs clickPos >>= fromLowLevel
   meshInstance <- atomically $ readTVar (_gsvsMeshInstance gsvs)
   aabb <- G.get_aabb meshInstance
-  quadMesh <- getQuadMesh gsvs
+  aabbPosition <- godot_aabb_get_position aabb >>= fromLowLevel
   aabbSize <- godot_aabb_get_size aabb >>= fromLowLevel
-  quadMeshSize <- G.get_size quadMesh >>= fromLowLevel
+  withQuadMesh gsvs $ \quadMesh -> do
+    quadMeshSize <- G.get_size quadMesh >>= fromLowLevel
 
-  let topLeftPos =
-        V2 (aabbSize ^. _x / 2 - lpos ^. _x) (aabbSize ^. _y / 2 - lpos ^. _y)
-  let scaledPos = liftI2 (/) topLeftPos (aabbSize ^. _xy)
-  let coords = liftI2 (*) quadMeshSize scaledPos
-  -- coords = surface coordinates in pixel with (0,0) at top left
-  let sx = fromIntegral $ truncate (1000 * coords ^. _x) -- Adjust by a factor of 1000 since we are dealing with Quad Mesh
-      sy = fromIntegral $ truncate (1000 * coords ^. _y) -- "
-  clickPos' <- fromLowLevel clickPos
-  return (SurfaceLocalCoordinates (sx, sy))
+    let aabbTopLeft = V2 (aabbPosition ^. _x + aabbSize ^. _x) (aabbPosition ^. _y + aabbSize ^. _y)
+    let topLeftPos =
+          V2 (aabbTopLeft ^. _x - lpos ^. _x) (aabbTopLeft ^. _y - lpos ^. _y)
+    let scaledPos = liftI2 (/) topLeftPos (aabbSize ^. _xy)
+    let coords = liftI2 (*) quadMeshSize scaledPos
+    -- coords = surface coordinates in pixel with (0,0) at top left
+    let sx = fromIntegral $ truncate (1000 * coords ^. _x) -- Adjust by a factor of 1000 since we are dealing with Quad Mesh
+        sy = fromIntegral $ truncate (1000 * coords ^. _y) -- "
+    return (CanvasBaseCoordinates (RightCoordinate sx) (DownCoordinate sy))
 
 getARVRCameraOrPancakeCameraTransform :: GodotSimulaServer -> IO GodotTransform
-getARVRCameraOrPancakeCameraTransform gss = do
+getARVRCameraOrPancakeCameraTransform gss = profileScope "getARVRCameraOrPancakeCameraTransform" $ do
+  debugPutStrLn "Plugin.Types.getARVRCameraOrPancakeCameraTransform"
   let nodePathStr = "/root/Root/VRViewport/ARVROrigin/ARVRCamera"
   nodePath <- (toLowLevel (pack nodePathStr)) :: IO GodotNodePath
   hasNode  <- G.has_node gss (nodePath :: GodotNodePath)
@@ -691,7 +1166,8 @@ getARVRCameraOrPancakeCameraTransform gss = do
           return camera
 
 getARVRCameraOrPancakeCameraTransformGlobal :: GodotSimulaServer -> IO GodotTransform
-getARVRCameraOrPancakeCameraTransformGlobal gss = do
+getARVRCameraOrPancakeCameraTransformGlobal gss = profileScope "getARVRCameraOrPancakeCameraTransformGlobal" $ do
+  debugPutStrLn "Plugin.Types.getARVRCameraOrPancakeCameraTransformGlobal"
   let nodePathStr = "/root/Root/VRViewport/ARVROrigin/ARVRCamera"
   nodePath <- (toLowLevel (pack nodePathStr)) :: IO GodotNodePath
   hasNode  <- G.has_node gss (nodePath :: GodotNodePath)
@@ -710,7 +1186,8 @@ getARVRCameraOrPancakeCameraTransformGlobal gss = do
           return camera
 
 showGSVS :: GodotSimulaViewSprite -> IO String
-showGSVS gsvs = do
+showGSVS gsvs = profileScope "showGSVS" $ do
+  debugPutStrLn "Plugin.Types.showGSVS"
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let maybeUUID = (simulaView ^. gsvsUUID)
   let ret = case maybeUUID of
@@ -719,7 +1196,8 @@ showGSVS gsvs = do
   return ret
 
 logGSVS :: String -> GodotSimulaViewSprite -> IO ()
-logGSVS str gsvs = do
+logGSVS str gsvs = profileScope "logGSVS" $ do
+  debugPutStrLn "Plugin.Types.logGSVS"
   appendFile "log.txt" $ "Printing from " ++ (show str) ++ "\n"
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   isMapped <- readTVarIO (simulaView ^. svMapped)
@@ -730,27 +1208,31 @@ logGSVS str gsvs = do
      (Just id) -> do appendFile "log.txt" $ "  gsvs id: " ++ (show id) ++ "\n"
                      case eitherSurface of
                        Left wlrXdgSurface -> do appendFile "log.txt" $ ("  wlrXdgSurface: " ++ (show wlrXdgSurface)) ++ "\n"
-                                                wlrSurface <- G.get_wlr_surface wlrXdgSurface
-                                                appendFile "log.txt" $ ("  wlrSurface: " ++ (show wlrSurface)) ++ "\n"
+                                                withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) $ \wlrSurface ->
+                                                  appendFile "log.txt" $ ("  wlrSurface: " ++ (show wlrSurface)) ++ "\n"
                        Right wlrXWaylandSurface -> do appendFile "log.txt" $ ("  wlrXWaylandSurface: " ++ (show wlrXWaylandSurface)) ++ "\n"
-                                                      wlrSurface <- G.get_wlr_surface wlrXWaylandSurface
-                                                      appendFile "log.txt" $ ("  wlrSurface: " ++ (show wlrSurface)) ++ "\n"
+                                                      withGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface) $ \wlrSurface ->
+                                                        appendFile "log.txt" $ ("  wlrSurface: " ++ (show wlrSurface)) ++ "\n"
   appendFile "log.txt" $ "  isMapped: " ++ (show isMapped) ++ "\n"
 
 logStr :: String -> IO ()
-logStr string = do
+logStr string = profileScope "logStr" $ do
+  debugPutStrLn "Plugin.Types.logStr"
   maybeLogDir <- lookupEnv "SIMULA_LOG_DIR"
   let logDir = fromMaybe "." maybeLogDir
   appendFile (logDir ++ "/log.txt") $ string ++ "\n"
 
 logPutStrLn :: String -> IO ()
-logPutStrLn string = do
+logPutStrLn string = profileScope "logPutStrLn" $ do
+  debugPutStrLn "Plugin.Types.logPutStrLn"
   logStr string
   putStrLn string
 
 -- | returns Just pid or Nothing if process has already exited
 getPid :: ProcessHandle -> IO (Maybe ProcessID)
-getPid ph = withProcessHandle ph go
+getPid ph = profileScope "getPid" $ do
+  debugPutStrLn "Plugin.Types.getPid"
+  withProcessHandle ph go
   where
     go ph_ = case ph_ of
                OpenHandle x   -> return $ Just x
@@ -758,9 +1240,10 @@ getPid ph = withProcessHandle ph go
 
 -- Generic imports from SimulaCanvasItem.hs
 getCoordinatesFromCenter :: GodotWlrSurface -> Int -> Int -> IO GodotVector2
-getCoordinatesFromCenter wlrSurface sx sy = do
+getCoordinatesFromCenter wlrSurface sx sy = profileScope "getCoordinatesFromCenter" $ do
+  debugPutStrLn "Plugin.Types.getCoordinatesFromCenter"
   -- putStrLn "getCoordinatesFromCenter"
-  (bufferWidth', bufferHeight')    <- getBufferDimensions wlrSurface
+  (bufferWidth', bufferHeight')    <- getWlrSurfaceStateCurrentDimensions wlrSurface
   let (bufferWidth, bufferHeight)  = (fromIntegral bufferWidth', fromIntegral bufferHeight')
   let (fromTopLeftX, fromTopLeftY) = (fromIntegral sx, fromIntegral sy)
   let fromCenterX                  = -(bufferWidth/2) + fromTopLeftX
@@ -778,12 +1261,13 @@ getCoordinatesFromCenter wlrSurface sx sy = do
 data ViewportType = ViewportBase | ViewportSurface
 
 initializeRenderTarget :: GodotSimulaViewSprite -> ViewportType -> IO (GodotViewport)
-initializeRenderTarget gsvs viewportType = do
+initializeRenderTarget gsvs viewportType = profileScope "initializeRenderTarget" $ do
+  debugPutStrLn "Plugin.Types.initializeRenderTarget"
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
-  wlrSurface <- getWlrSurface eitherSurface
   renderTarget <- unsafeInstance GodotViewport "Viewport"
-  dimensions@(width, height) <- getBufferDimensions wlrSurface
+  dimensions <- withWlrSurface eitherSurface $ \wlrSurface -> do
+    getWlrSurfaceStateCurrentDimensions wlrSurface
   pixelDimensionsOfWlrSurface <- toGodotVector2 dimensions
 
   G.set_disable_input renderTarget True
@@ -793,24 +1277,30 @@ initializeRenderTarget gsvs viewportType = do
   G.set_size renderTarget pixelDimensionsOfWlrSurface
 
   case viewportType of
-    ViewportSurface -> G.set_clear_mode renderTarget G.CLEAR_MODE_NEVER
+    ViewportSurface -> G.set_clear_mode renderTarget G.CLEAR_MODE_ONLY_NEXT_FRAME
     ViewportBase -> G.set_clear_mode renderTarget G.CLEAR_MODE_ALWAYS
   G.set_transparent_background renderTarget True
 
   return renderTarget
 
-getBufferDimensions :: GodotWlrSurface -> IO (Int, Int)
-getBufferDimensions wlrSurface = do
-  dims@(bufferWidth, bufferHeight) <- withCurrentState $ getBufferDimensions'
+getWlrSurfaceStateCurrentDimensions :: GodotWlrSurface -> IO (Int, Int)
+getWlrSurfaceStateCurrentDimensions wlrSurface =
+  profileScope "getWlrSurfaceStateCurrentDimensions" $ getWlrSurfaceStateCurrentDimensionsImpl wlrSurface
+
+getWlrSurfaceStateCurrentDimensionsImpl :: GodotWlrSurface -> IO (Int, Int)
+getWlrSurfaceStateCurrentDimensionsImpl wlrSurface = do
+  debugPutStrLn "Plugin.Types.getWlrSurfaceStateCurrentDimensions"
+  dims <- withCurrentState getCurrentStateDimensions
   return dims
   where withCurrentState :: (GodotWlrSurfaceState -> IO b) -> IO b
-        withCurrentState stateAction = do
+        withCurrentState stateAction = profileScope "withCurrentState" $ do
           wlrSurfaceState <- G.alloc_current_state wlrSurface
           ret             <- stateAction wlrSurfaceState
           G.delete_state wlrSurfaceState
           return ret
-        getBufferDimensions' :: GodotWlrSurfaceState -> IO (Int, Int)
-        getBufferDimensions' wlrSurfaceState = do
+        getCurrentStateDimensions :: GodotWlrSurfaceState -> IO (Int, Int)
+        getCurrentStateDimensions wlrSurfaceState = profileScope "getCurrentStateDimensions" $ do
+          debugPutStrLn "Plugin.Types.getWlrSurfaceStateCurrentDimensions"
           -- bufferWidth <- G.get_buffer_width wlrSurfaceState
           -- bufferHeight <- G.get_buffer_height wlrSurfaceState
           -- return (bufferWidth, bufferHeight)
@@ -818,16 +1308,54 @@ getBufferDimensions wlrSurface = do
           height <-G.get_height wlrSurfaceState
           return (width, height)
 
+gsvsViewOrChildrenHaveInsetGeometry :: GodotSimulaViewSprite -> IO Bool
+gsvsViewOrChildrenHaveInsetGeometry gsvs = profileScope "gsvsViewOrChildrenHaveInsetGeometry" $ do
+  simulaView <- readTVarIO (gsvs ^. gsvsView)
+  rootHasInset <- case simulaView ^. svWlrEitherSurface of
+    Left wlrXdgSurface ->
+      xdgSurfaceHasInsetGeometry wlrXdgSurface
+    Right wlrXWaylandSurface ->
+      xWaylandSurfaceHasInsetGeometry wlrXWaylandSurface
+  attachedChildren <- readTVarIO (gsvs ^. gsvsAttachedXdgChildren)
+  attachedChildrenHaveInset <- or <$> mapM xdgSurfaceHasInsetGeometry attachedChildren
+  freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
+  freeChildrenHaveInset <- or <$> mapM xWaylandSurfaceHasInsetGeometry freeChildren
+  return (rootHasInset || attachedChildrenHaveInset || freeChildrenHaveInset)
+
+xdgSurfaceHasInsetGeometry :: GodotWlrXdgSurface -> IO Bool
+xdgSurfaceHasInsetGeometry wlrXdgSurface = profileScope "xdgSurfaceHasInsetGeometry" $ do
+  wlrXdgSurface <- validateSurfaceE wlrXdgSurface
+  V2 (V2 geomX geomY) (V2 geomWidth geomHeight) <-
+    G.get_geometry wlrXdgSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+  withGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
+    (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions wlrSurface
+    return $
+      (round geomX /= 0)
+        || (round geomY /= 0)
+        || (round geomWidth /= bufferWidth)
+        || (round geomHeight /= bufferHeight)
+
+xWaylandSurfaceHasInsetGeometry :: GodotWlrXWaylandSurface -> IO Bool
+xWaylandSurfaceHasInsetGeometry wlrXWaylandSurface = profileScope "xWaylandSurfaceHasInsetGeometry" $ do
+  wlrXWaylandSurface <- validateSurfaceE wlrXWaylandSurface
+  V2 (V2 geomX geomY) (V2 geomWidth geomHeight) <-
+    G.get_geometry wlrXWaylandSurface >>= fromLowLevel :: IO (V2 (V2 Float))
+  withGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface) $ \wlrSurface -> do
+    (bufferWidth, bufferHeight) <- getWlrSurfaceStateCurrentDimensions wlrSurface
+    return $
+      (round geomX /= 0)
+        || (round geomY /= 0)
+        || (round geomWidth /= bufferWidth)
+        || (round geomHeight /= bufferHeight)
+
 newCanvasSurface :: GodotSimulaViewSprite -> IO CanvasSurface
-newCanvasSurface gsvs = do
+newCanvasSurface gsvs = profileScope "newCanvasSurface" $ do
+  debugPutStrLn "Plugin.Types.newCanvasSurface"
   cs <- "res://addons/godot-haskell-plugin/CanvasSurface.gdns"
     & newNS' []
     >>= godot_nativescript_get_userdata
     >>= deRefStablePtr . castPtrToStablePtr :: IO CanvasSurface
   viewport <- initializeRenderTarget gsvs ViewportSurface
-
-  addChild gsvs viewport
-  addChild viewport cs
 
   atomically $ writeTVar (_csGSVS cs) gsvs
   atomically $ writeTVar (_csViewport cs) viewport
@@ -840,7 +1368,8 @@ fst3 :: (a, b, c) -> a
 fst3 (a, b, c) = a
 
 savePng :: CanvasSurface -> GodotViewportTexture -> GodotWlrSurface -> IO String
-savePng cs surfaceTexture wlrSurface = do
+savePng cs surfaceTexture wlrSurface = profileScope "savePng" $ do
+  debugPutStrLn "Plugin.Types.savePng"
   validateSurfaceE wlrSurface
   gsvs <- readTVarIO (cs ^. csGSVS)
   surfaceTextureAsImage <- G.get_data surfaceTexture
@@ -860,23 +1389,26 @@ type ScreenshotBaseName = String
 type ScreenshotFullPath = String
 
 savePngPancake :: GodotSimulaServer -> ScreenshotBaseName -> IO (ScreenshotFullPath)
-savePngPancake gss screenshotBaseName = do
+savePngPancake gss screenshotBaseName = profileScope "savePngPancake" $ do
+  debugPutStrLn "Plugin.Types.savePngPancake"
   viewport <- G.get_viewport gss :: IO GodotViewport
-  viewportTexture <- G.get_texture viewport
-  pancakeImg <- G.get_data viewportTexture
-  G.flip_y pancakeImg
-  maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
-  let dataDir = fromMaybe "." maybeDataDir
-  createDirectoryIfMissing False (dataDir ++ "/media")
-  let relativePath = (dataDir ++ "/media/" <> screenshotBaseName <> ".png")
-  fullPath <- System.Directory.canonicalizePath relativePath
-  G.save_png pancakeImg =<< toLowLevel (pack relativePath)
-  return fullPath
+  withGodotRef (G.get_texture viewport :: IO GodotViewportTexture) $ \viewportTexture -> do
+    pancakeImg <- G.get_data viewportTexture
+    G.flip_y pancakeImg
+    maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
+    let dataDir = fromMaybe "." maybeDataDir
+    createDirectoryIfMissing False (dataDir ++ "/media")
+    let relativePath = (dataDir ++ "/media/" <> screenshotBaseName <> ".png")
+    fullPath <- System.Directory.canonicalizePath relativePath
+    G.save_png pancakeImg =<< toLowLevel (pack relativePath)
+    return fullPath
 
 -- Run shell command with DISPLAY set to our XWayland server value (typically
 -- :2)
 appLaunch :: GodotSimulaServer -> String -> Maybe String -> IO ProcessID
-appLaunch gss appStr maybeLocation = do
+appLaunch gss appStr maybeLocation = profileScope "appLaunch" $ do
+  debugPutStrLn "Plugin.Types.appLaunch"
+  appendWindowLog $ "[appLaunch] command=" ++ show appStr ++ " location=" ++ show maybeLocation
   let originalEnv = (gss ^. gssOriginalEnv)
   maybeXwaylandDisplay <- readTVarIO (gss ^. gssXWaylandDisplay)
   case (appStr, maybeXwaylandDisplay) of
@@ -886,29 +1418,100 @@ appLaunch gss appStr maybeLocation = do
     ("launchUsageInstructions", _) -> appLaunch gss "midori https://github.com/SimulaVR/Simula#usage -p" maybeLocation
     (_, Nothing) -> putStrLn "No DISPLAY found!" >> (return $ fromInteger 0)
     (_, (Just xwaylandDisplay)) -> do
+      maybeLaunchToken <- case maybeLocation of
+        Nothing -> return Nothing
+        Just _ -> mkStartingAppLaunchToken
+      appendWindowLog $ "[appLaunch] maybeLaunchToken=" ++ show maybeLaunchToken
+      let maybeTokenizedCommand = do
+            launchToken <- maybeLaunchToken
+            launchCmd <- injectStartingAppLaunchToken appStr launchToken
+            return (launchToken, launchCmd)
+      let launchCmd = Maybe.maybe appStr snd maybeTokenizedCommand
+      appendWindowLog $ "[appLaunch] launchCmd=" ++ show launchCmd ++ " tokenized=" ++ show maybeTokenizedCommand
       let envMap = M.fromList originalEnv
       let envMapWithDisplay = M.insert "DISPLAY" xwaylandDisplay envMap
       let envMapWithWaylandDisplay = case maybeLocation of
             Just location -> M.insert "SIMULA_STARTING_LOCATION" location (M.insert "WAYLAND_DISPLAY" "simula-0" envMapWithDisplay)
             Nothing -> (M.insert "WAYLAND_DISPLAY" "simula-0" envMapWithDisplay)
-      let envListWithDisplays = M.toList envMapWithWaylandDisplay
-      res <- Control.Exception.Safe.try $ createProcess (shell appStr) { env = Just envListWithDisplays, new_session = True } :: IO (Either IOException (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle))
+      let envMapWithLaunchToken = case maybeTokenizedCommand of
+            Just (launchToken, _) -> M.insert "SIMULA_LAUNCH_TOKEN" launchToken envMapWithWaylandDisplay
+            Nothing -> envMapWithWaylandDisplay
+      let envListWithDisplays = M.toList envMapWithLaunchToken
+      res <- Control.Exception.Safe.try $ createProcess (shell launchCmd) { env = Just envListWithDisplays, new_session = True } :: IO (Either IOException (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle))
       pid <- case res of
-                  Left _ -> return $ fromInteger 0
+                  Left _ -> do appendWindowLog "[appLaunch] createProcess failed"
+                               return $ fromInteger 0
                   Right (_, _, _, processHandle) -> do maybePid <- System.Process.getPid processHandle
                                                        case maybePid of
-                                                            Just pid -> return pid
-                                                            Nothing -> return $ fromInteger $ 0
-      startingAppPids <- readTVarIO (gss ^. gssStartingAppPids)
-      case maybeLocation of
-        Nothing -> return ()
-        Just location -> do let startingAppPids' = M.insertWith (++) pid [location] startingAppPids
-                            atomically $ writeTVar (gss ^. gssStartingAppPids) startingAppPids'
+                                                            Just pid -> do appendWindowLog $ "[appLaunch] pid=" ++ show pid
+                                                                           return pid
+                                                            Nothing -> do appendWindowLog "[appLaunch] process has no pid"
+                                                                          return $ fromInteger $ 0
+      when (pid /= (fromInteger 0)) $ do
+        startingAppPids <- readTVarIO (gss ^. gssStartingAppPids)
+        case maybeLocation of
+          Nothing -> return ()
+          Just location -> do let startingAppPids' = M.insertWith (++) pid [location] startingAppPids
+                              atomically $ writeTVar (gss ^. gssStartingAppPids) startingAppPids'
+        case (maybeLocation, maybeTokenizedCommand) of
+          (Just location, Just (launchToken, _)) ->
+            do atomically $ modifyTVar' (gss ^. gssStartingAppLaunchTokens) (M.insert launchToken location)
+               appendWindowLog $ "[appLaunch] token-map insert token=" ++ show launchToken ++ " location=" ++ show location
+          _ -> return ()
+        case (maybeLocation, inferStartingAppWindowClassHint appStr) of
+          (Just location, Just windowClassHint) ->
+            do atomically $ modifyTVar' (gss ^. gssStartingAppWindowClassHints) (M.insertWith (\new old -> old ++ new) windowClassHint [location])
+               appendWindowLog $ "[appLaunch] class-hint enqueue class=" ++ show windowClassHint ++ " location=" ++ show location
+          _ -> return ()
+        case (maybeTokenizedCommand, inferStartingAppWindowClassHint appStr) of
+          (Just (launchToken, _), Just windowClassHint) ->
+            do atomically $ modifyTVar' (gss ^. gssStartingAppLaunchTokenClassHints) (M.insert launchToken windowClassHint)
+               appendWindowLog $ "[appLaunch] token-class-hint token=" ++ show launchToken ++ " class=" ++ show windowClassHint
+          _ -> return ()
       return pid
+
+  where mkStartingAppLaunchToken :: IO (Maybe String)
+        mkStartingAppLaunchToken = do
+          maybeUUID <- nextUUID
+          return $ fmap (\uuid -> "simula-launch-" ++ Data.List.filter (/= '-') (show uuid)) maybeUUID
+
+        injectStartingAppLaunchToken :: String -> String -> Maybe String
+        injectStartingAppLaunchToken command launchToken
+          | "--class=" `List.isInfixOf` List.map Char.toLower command = Nothing
+          | otherwise = injectChromiumClass command launchToken
+
+        injectChromiumClass :: String -> String -> Maybe String
+        injectChromiumClass command launchToken =
+          let chromiumExecutables = ["google-chrome-stable", "google-chrome", "chromium-browser", "chromium"]
+              launchArg = " --class=" ++ launchToken
+              injectAfter executable =
+                let replacement = executable ++ launchArg
+                 in unpack (replace (pack executable) (pack replacement) (pack command))
+              findInjected [] = Nothing
+              findInjected (executable:rest) =
+                if executable `List.isInfixOf` command
+                  then Just (injectAfter executable)
+                  else findInjected rest
+           in findInjected chromiumExecutables
+
+        inferStartingAppWindowClassHint :: String -> Maybe String
+        inferStartingAppWindowClassHint command =
+          let commandLower = List.map Char.toLower command
+              has needle = needle `List.isInfixOf` commandLower
+           in if has "google-chrome-stable" || has "google-chrome" || has "chromium-browser" || has "chromium"
+                 then Just "google-chrome"
+                 else if has "firefox"
+                   then Just "firefox"
+                   else if has "gvim"
+                     then Just "gvim"
+                   else if has "xfce4-terminal"
+                     then Just "xfce4-terminal"
+                     else Nothing
 
 
 launchHMDWebCam :: GodotSimulaServer -> Maybe String -> IO ProcessID
-launchHMDWebCam gss maybeLocation = do
+launchHMDWebCam gss maybeLocation = profileScope "launchHMDWebCam" $ do
+  debugPutStrLn "Plugin.Types.launchHMDWebCam"
   maybePath <- getHMDWebCamPath
   case maybePath of
     Nothing -> do putStrLn "Cannot find HMD web cam!"
@@ -927,23 +1530,26 @@ launchHMDWebCam gss maybeLocation = do
                                                                        "Etron"] -- Valve Index
                             
 terminalLaunch :: GodotSimulaServer -> Maybe String -> IO ProcessID
-terminalLaunch gss maybeLocation = do
+terminalLaunch gss maybeLocation = profileScope "terminalLaunch" $ do
+  debugPutStrLn "Plugin.Types.terminalLaunch"
   appLaunch gss ("xfce4-terminal") maybeLocation
 
 getTextureFromURL :: String -> IO (Maybe GodotTexture)
-getTextureFromURL urlStr = do
-   godotImage <- unsafeInstance GodotImage "Image" :: IO GodotImage
-   godotImageTexture <- unsafeInstance GodotImageTexture "ImageTexture"
-   pngUrl <- toLowLevel (pack urlStr) :: IO GodotString
-   exitCode <- G.load godotImage pngUrl
-   -- G.compress godotImage G.COMPRESS_ETC2 G.COMPRESS_SOURCE_GENERIC 1
-   G.create_from_image godotImageTexture godotImage G.TEXTURE_FLAGS_DEFAULT
-   Api.godot_string_destroy pngUrl
-   Api.godot_object_destroy $ safeCast godotImage
-   if (unsafeCoerce godotImageTexture == nullPtr) then (return Nothing) else (return (Just (safeCast godotImageTexture)))
+getTextureFromURL urlStr = profileScope "Types.getTextureFromURL" $ do
+  debugPutStrLn "Plugin.Types.getTextureFromURL"
+  godotImage <- unsafeInstance GodotImage "Image" :: IO GodotImage
+  godotImageTexture <- unsafeInstance GodotImageTexture "ImageTexture"
+  pngUrl <- toLowLevel (pack urlStr) :: IO GodotString
+  exitCode <- G.load godotImage pngUrl
+  -- G.compress godotImage G.COMPRESS_ETC2 G.COMPRESS_SOURCE_GENERIC 1
+  G.create_from_image godotImageTexture godotImage G.TEXTURE_FLAGS_DEFAULT
+  Api.godot_string_destroy pngUrl
+  Api.godot_object_destroy $ safeCast godotImage
+  if (unsafeCoerce godotImageTexture == nullPtr) then (return Nothing) else (return (Just (safeCast godotImageTexture)))
 
 loadEnvironmentTextures :: GodotSimulaServer -> GodotWorldEnvironment -> IO [FilePath]
-loadEnvironmentTextures gss worldEnvironment = do
+loadEnvironmentTextures gss worldEnvironment = profileScope "loadEnvironmentTextures" $ do
+  debugPutStrLn "Plugin.Types.loadEnvironmentTextures"
   maybeDataDir <- lookupEnv "SIMULA_DATA_DIR"
   maybeNixDir <- lookupEnv "SIMULA_NIX_DIR"
   
@@ -980,7 +1586,8 @@ loadEnvironmentTextures gss worldEnvironment = do
           return imageFiles
     
 getEnvironmentTexture :: GodotWorldEnvironment -> String -> IO (Maybe GodotTexture)
-getEnvironmentTexture worldEnvironment filePath = do
+getEnvironmentTexture worldEnvironment filePath = profileScope "getEnvironmentTexture" $ do
+  debugPutStrLn "Plugin.Types.getEnvironmentTexture"
   environment <- G.get_environment worldEnvironment :: IO GodotEnvironment
   sky <- G.get_sky environment :: IO GodotSky
   panoramaSky <- asClass' GodotPanoramaSky "PanoramaSky" sky
@@ -1003,7 +1610,8 @@ next (Just e) l@(x:_) = Just $ case Data.List.dropWhile (/= e) l of
 
 -- TODO: This leaks. Fix it.
 cycleGSSEnvironment :: GodotSimulaServer -> IO ()
-cycleGSSEnvironment gss = do
+cycleGSSEnvironment gss = profileScope "cycleGSSEnvironment" $ do
+  debugPutStrLn "Plugin.Types.cycleGSSEnvironment"
   (worldEnvironment, currentTextureStr) <- readTVarIO (gss ^. gssWorldEnvironment)
   texturesLst <- readTVarIO (gss ^. gssEnvironmentTextures)
   environment <- G.get_environment worldEnvironment :: IO GodotEnvironment
@@ -1025,7 +1633,8 @@ cycleGSSEnvironment gss = do
                                return ()
 
 cycleGSSScene :: GodotSimulaServer -> IO ()
-cycleGSSScene gss = do
+cycleGSSScene gss = profileScope "cycleGSSScene" $ do
+  debugPutStrLn "Plugin.Types.cycleGSSScene"
   maybeCurrentScene <- readTVarIO (gss ^. gssScene)
   scenes <- readTVarIO (gss ^. gssScenes)
   maybeNextSceneStr <- case maybeCurrentScene of
@@ -1061,7 +1670,8 @@ cycleGSSScene gss = do
         head' (x:xs) = Just x
 
 orientSpriteTowardsGaze :: GodotSimulaViewSprite -> IO ()
-orientSpriteTowardsGaze gsvs = do
+orientSpriteTowardsGaze gsvs = profileScope "orientSpriteTowardsGaze" $ do
+  debugPutStrLn "Plugin.Types.orientSpriteTowardsGaze"
   gss <- readTVarIO (gsvs ^. gsvsServer)
   isInSceneGraph <- G.is_a_parent_of ((safeCast gss) :: GodotNode ) ((safeCast gsvs) :: GodotNode)
   case isInSceneGraph of
@@ -1076,58 +1686,73 @@ orientSpriteTowardsGaze gsvs = do
                -- G.rotate_object_local gsvs rotationAxisY 3.14159  -- The positive z-axis of the gsvs looks at HMD
 
 resizeGSVS :: GodotSimulaViewSprite -> ResizeMethod -> Float -> IO ()
-resizeGSVS gsvs resizeMethod factor =
-  do maybeOldTargetDims <- readTVarIO (gsvs ^. gsvsTargetSize)
-     oldTargetDims@(SpriteDimensions (w, h)) <- case maybeOldTargetDims of
-       Just oldTargetDims' -> return oldTargetDims'
-       Nothing -> do simulaView <- readTVarIO (gsvs ^. gsvsView)
-                     let eitherSurface = (simulaView ^. svWlrEitherSurface)
-                     wlrSurface <- getWlrSurface eitherSurface
-                     (x, y) <- getBufferDimensions wlrSurface
-                     return $ SpriteDimensions (x, y)
+resizeGSVS gsvs resizeMethod factor = profileScope "resizeGSVS" $ do
+  debugPutStrLn "Plugin.Types.resizeGSVS"
+  maybeOldTargetDims <- readTVarIO (gsvs ^. gsvsTargetSize)
+  oldTargetDims@(SpriteDimensions (w, h)) <- case maybeOldTargetDims of
+    Just oldTargetDims' -> return oldTargetDims'
+    Nothing -> do simulaView <- readTVarIO (gsvs ^. gsvsView)
+                  let eitherSurface = (simulaView ^. svWlrEitherSurface)
+                  withWlrSurface eitherSurface $ \wlrSurface -> do
+                    (x, y) <- getWlrSurfaceStateCurrentDimensions wlrSurface
+                    return $ SpriteDimensions (x, y)
 
-     newTargetDims@(SpriteDimensions (wTarget, hTarget)) <- case resizeMethod of
-            Horizontal -> do
-              case (((fromIntegral w) * factor) > 500) of
-                True -> do -- orientSpriteTowardsGaze gsvs -- Avoid quadMesh rotational behavior (see `setTargetDimensions`)
-                           return $ SpriteDimensions (round $ ((fromIntegral w) * factor), round $ ((fromIntegral h)))
-                False -> return $ oldTargetDims
-            Vertical   -> do
-              case (((fromIntegral h) * factor) > 500) of
-                True -> do -- orientSpriteTowardsGaze gsvs -- Avoid quadMesh rotational behavior (see `setTargetDimensions`)
-                           return $ SpriteDimensions (round $ ((fromIntegral w)), round $ ((fromIntegral h) * factor))
-                False -> return $ oldTargetDims
-            Zoom       -> do
-              case (((fromIntegral h) * factor) > 500) && (((fromIntegral h) * factor)  < 1500) of
-                False -> return $ oldTargetDims
-                True -> do V3 1 1 1 ^* (1 + 1 * (1 - factor)) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
-                           return $ SpriteDimensions (round $ ((fromIntegral w) * factor), round $ ((fromIntegral h) * factor))
+  newTargetDims@(SpriteDimensions (wTarget, hTarget)) <- case resizeMethod of
+         Horizontal -> do
+           case (((fromIntegral w) * factor) > 500) of
+             True -> do -- orientSpriteTowardsGaze gsvs -- Avoid quadMesh rotational behavior (see `setSpilloverSizesAndKeepCentered`)
+                        return $ SpriteDimensions (round $ ((fromIntegral w) * factor), round $ ((fromIntegral h)))
+             False -> return $ oldTargetDims
+         Vertical   -> do
+           case (((fromIntegral h) * factor) > 500) of
+             True -> do -- orientSpriteTowardsGaze gsvs -- Avoid quadMesh rotational behavior (see `setSpilloverSizesAndKeepCentered`)
+                        return $ SpriteDimensions (round $ ((fromIntegral w)), round $ ((fromIntegral h) * factor))
+             False -> return $ oldTargetDims
+         Zoom       -> do
+           case (((fromIntegral h) * factor) > 500) && (((fromIntegral h) * factor)  < 1500) of
+             False -> return $ oldTargetDims
+             True -> do V3 1 1 1 ^* (1 + 1 * (1 - factor)) & toLowLevel >>= G.scale_object_local (safeCast gsvs :: GodotSpatial)
+                        return $ SpriteDimensions (round $ ((fromIntegral w) * factor), round $ ((fromIntegral h) * factor))
 
-     atomically $ do if resizeMethod == Zoom then return () else writeTVar (gsvs ^. gsvsResizedLastFrame) True
-                     writeTVar (gsvs ^. gsvsTargetSize) (Just newTargetDims)
-                     writeTVar (gsvs ^. gsvsSpilloverDims) (Just (wTarget, hTarget))
-                     writeTVar (gsvs ^. gsvsIsDamaged) True
+  atomically $ do if resizeMethod == Zoom then return () else writeTVar (gsvs ^. gsvsResizedLastFrame) True
+                  writeTVar (gsvs ^. gsvsTargetSize) (Just newTargetDims)
+                  writeTVar (gsvs ^. gsvsSpilloverDims) (Just (wTarget, hTarget))
+                  writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
+                  writeTVar (gsvs ^. gsvsIsDamaged) True
 
 defaultSizeGSVS :: GodotSimulaViewSprite -> IO ()
-defaultSizeGSVS gsvs = do
-    gss <- readTVarIO (gsvs ^. gsvsServer)
-    configuration <- readTVarIO (gss ^. gssConfiguration)
-    let windowScale = realToFrac (configuration ^. defaultWindowScale) :: Float
-    (V3 1 1 1 ^* (windowScale + 1)) & toLowLevel >>= G.set_scale (safeCast gsvs :: GodotSpatial)
+defaultSizeGSVS gsvs = profileScope "defaultSizeGSVS" $ do
+  debugPutStrLn "Plugin.Types.defaultSizeGSVS"
+  gss <- readTVarIO (gsvs ^. gsvsServer)
+  configuration <- readTVarIO (gss ^. gssConfiguration)
+  let windowScale = realToFrac (configuration ^. defaultWindowScale) :: Float
+  (V3 1 1 1 ^* (windowScale + 1)) & toLowLevel >>= G.set_scale (safeCast gsvs :: GodotSpatial)
 
-    let maybeWindowResolution = (configuration ^. defaultWindowResolution) :: Maybe (Dhall.Natural, Dhall.Natural)
-    let newTargetDims@(SpriteDimensions (x, y)) = case maybeWindowResolution of
-                                                       Just windowResolution'@(x, y) ->  SpriteDimensions (fromIntegral x, fromIntegral y)
-                                                       Nothing -> SpriteDimensions (900, 900)
+  let maybeWindowResolution = (configuration ^. defaultWindowResolution) :: Maybe (Dhall.Natural, Dhall.Natural)
+  let newTargetDims@(SpriteDimensions (x, y)) = case maybeWindowResolution of
+                                                     Just windowResolution'@(x, y) ->  SpriteDimensions (fromIntegral x, fromIntegral y)
+                                                     Nothing -> SpriteDimensions (900, 900)
 
-    atomically $ do writeTVar (gsvs ^. gsvsTargetSize) (Just newTargetDims)
-                    writeTVar (gsvs ^. gsvsIsDamaged) True
+  atomically $ do writeTVar (gsvs ^. gsvsTargetSize) (Just newTargetDims)
+                  writeTVar (gsvs ^. gsvsFullRedrawFramesRemaining) fullRedrawFramesStartingAmount
+                  writeTVar (gsvs ^. gsvsIsDamaged) True
 
-getQuadMesh :: GodotSimulaViewSprite -> IO GodotQuadMesh
-getQuadMesh gsvs = do
+withQuadMesh :: GodotSimulaViewSprite -> (GodotQuadMesh -> IO a) -> IO a
+withQuadMesh gsvs action = profileScope "withQuadMesh" $ do
+  debugPutStrLn "Plugin.Types.withQuadMesh"
   meshInstance <- readTVarIO (gsvs ^. gsvsMeshInstance)
-  quadMesh <- G.get_mesh meshInstance >>= asClass' GodotQuadMesh "QuadMesh"
-  return quadMesh
+  withGodotRef (G.get_mesh meshInstance :: IO GodotMesh) $ \mesh -> do
+    quadMesh <- asClass' GodotQuadMesh "QuadMesh" mesh
+    action quadMesh
+
+-- The returned GodotQuadMesh will have a +1'ed reference count when this function returns it,
+-- so the caller is responsible for unreferencing it.
+getRetainedQuadMesh :: GodotSimulaViewSprite -> IO GodotQuadMesh
+getRetainedQuadMesh gsvs = profileScope "getRetainedQuadMesh" $ do
+  debugPutStrLn "Plugin.Types.getRetainedQuadMesh"
+  withQuadMesh gsvs $ \quadMesh -> do
+    _ <- G.reference ((safeCast quadMesh) :: GodotReference)
+    return quadMesh
 
 constrainTransparency :: Float -> Float
 constrainTransparency input =
@@ -1137,7 +1762,8 @@ constrainTransparency input =
         _ -> input
 
 saveViewportAsPngAndLaunch :: GodotSimulaViewSprite -> GodotViewportTexture -> M22 Float -> IO ()
-saveViewportAsPngAndLaunch gsvs tex m22@(V2 (V2 ox oy) (V2 ex ey)) = do
+saveViewportAsPngAndLaunch gsvs tex m22@(V2 (V2 ox oy) (V2 ex ey)) = profileScope "saveViewportAsPngAndLaunch" $ do
+  debugPutStrLn "Plugin.Types.saveViewportAsPngAndLaunch"
   let isNull = ((unsafeCoerce tex) == nullPtr)
   case isNull of
     True -> putStrLn "Texture is null in saveViewportAsPngAndLaunch!"
@@ -1165,132 +1791,260 @@ saveViewportAsPngAndLaunch gsvs tex m22@(V2 (V2 ox oy) (V2 ex ey)) = do
       return ()
 
 fromGodotArray :: GodotArray -> IO [GodotVariant]
-fromGodotArray vs = do
+fromGodotArray vs = profileScope "fromGodotArray" $ do
+  debugPutStrLn "Plugin.Types.fromGodotArray"
   size <- fromIntegral <$> Api.godot_array_size vs
   forM [0..size-1] $ Api.godot_array_get vs
 
-getDepthFirstSurfaces :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
-getDepthFirstSurfaces gsvs = do
+getDepthFirstSurfacesRaw :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstSurfacesRaw gsvs =
+  profileScope "getDepthFirstSurfacesRaw" $ getDepthFirstSurfacesRawImpl gsvs
+
+getDepthFirstSurfacesRawImpl :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstSurfacesRawImpl gsvs = do
+  debugPutStrLn "Plugin.Types.getDepthFirstSurfacesRaw"
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
-  wlrSurfaceParent <- (getWlrSurface eitherSurface) >>= validateSurfaceE
   depthFirstBaseSurfaces <- getDepthFirstBaseSurfaces gsvs
-  depthFirstWlrSurfaces <- getDepthFirstWlrSurfaces wlrSurfaceParent
-  let depthFirstSurfaces = depthFirstBaseSurfaces ++ depthFirstWlrSurfaces
+  depthFirstSurfaces <- case eitherSurface of
+    Left _ -> do
+      depthFirstWlrSurfaces <- fmap List.concat $ forM depthFirstBaseSurfaces $ \(wlrSurface, x, y) ->
+        getDepthFirstWlrSurfacesFrom x y wlrSurface
+      dedupeDepthFirstSurfaces (depthFirstBaseSurfaces ++ depthFirstWlrSurfaces)
+    Right _ -> do
+      withWlrSurface eitherSurface $ \wlrSurfaceParent -> do
+        depthFirstWlrSurfaces <- getDepthFirstWlrSurfaces wlrSurfaceParent
+        return (depthFirstBaseSurfaces ++ depthFirstWlrSurfaces)
   return depthFirstSurfaces
+  where
+    sameWlrSurface :: GodotWlrSurface -> GodotWlrSurface -> Bool
+    sameWlrSurface surfaceA surfaceB = ((coerce surfaceA) :: Ptr ()) == ((coerce surfaceB) :: Ptr ())
+
+    dedupeDepthFirstSurfaces :: [(GodotWlrSurface, Int, Int)] -> IO [(GodotWlrSurface, Int, Int)]
+    dedupeDepthFirstSurfaces surfaces =
+      profileScope "dedupeDepthFirstSurfaces" $
+        foldM keepFirst [] surfaces
+      where
+        keepFirst acc surfaceWithCoords@(surface, _, _)
+          | List.any (\(seenSurface, _, _) -> sameWlrSurface seenSurface surface) acc = do
+              destroyMaybe (safeCast surface)
+              return acc
+          | otherwise = return (acc ++ [surfaceWithCoords])
+
+getDepthFirstSurfaces :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstSurfaces gsvs =
+  profileScope "getDepthFirstSurfaces" $ getDepthFirstSurfacesImpl gsvs
+
+getDepthFirstSurfacesImpl :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstSurfacesImpl gsvs = do
+  debugPutStrLn "Plugin.Types.getDepthFirstSurfaces"
+  rawSurfaces <- getDepthFirstSurfacesRaw gsvs
+  (offsetX, offsetY) <- getSurfacesCoordinateOffsetFromOrigin rawSurfaces
+  return $ fmap (\(wlrSurface, x, y) -> (wlrSurface, x + offsetX, y + offsetY)) rawSurfaces
+
+getSurfacesCoordinateOffsetFromOrigin :: [(GodotWlrSurface, Int, Int)] -> IO (Int, Int)
+getSurfacesCoordinateOffsetFromOrigin surfaces = profileScope "getSurfacesCoordinateOffsetFromOrigin" $ do
+  debugPutStrLn "Plugin.Types.getSurfacesCoordinateOffsetFromOrigin"
+  (minX, minY, _, _) <- getSurfacesCoordinateBounds surfaces
+  return (max 0 (-minX), max 0 (-minY))
+
+getGSVSSurfacesCoordinateOffsetFromOrigin :: GodotSimulaViewSprite -> IO (Int, Int)
+getGSVSSurfacesCoordinateOffsetFromOrigin gsvs = profileScope "getGSVSSurfacesCoordinateOffsetFromOrigin" $ do
+  debugPutStrLn "Plugin.Types.getGSVSSurfacesCoordinateOffsetFromOrigin"
+  bracket
+    (getDepthFirstSurfacesRaw gsvs)
+    destroyWlrSurfacesWithCoords
+    getSurfacesCoordinateOffsetFromOrigin
+
+getSurfacesCoordinateBounds :: [(GodotWlrSurface, Int, Int)] -> IO (Int, Int, Int, Int)
+getSurfacesCoordinateBounds surfaces = profileScope "getSurfacesCoordinateBounds" $ do
+  debugPutStrLn "Plugin.Types.getSurfacesCoordinateBounds"
+  boxes <- forM surfaces $ \(wlrSurface, x, y) -> do
+    (width, height) <- getWlrSurfaceStateCurrentDimensions wlrSurface
+    return (x, y, x + width, y + height)
+  let xs1 = 0 : fmap (\(x1, _, _, _) -> x1) boxes
+  let ys1 = 0 : fmap (\(_, y1, _, _) -> y1) boxes
+  let xs2 = 0 : fmap (\(_, _, x2, _) -> x2) boxes
+  let ys2 = 0 : fmap (\(_, _, _, y2) -> y2) boxes
+  return (Data.List.minimum xs1, Data.List.minimum ys1, Data.List.maximum xs2, Data.List.maximum ys2)
 
 getDepthFirstBaseSurfaces :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
-getDepthFirstBaseSurfaces gsvs = do
+getDepthFirstBaseSurfaces gsvs =
+  profileScope "getDepthFirstBaseSurfaces" $ getDepthFirstBaseSurfacesImpl gsvs
+
+getDepthFirstBaseSurfacesImpl :: GodotSimulaViewSprite -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstBaseSurfacesImpl gsvs = do
+  debugPutStrLn "Plugin.Types.getDepthFirstBaseSurfaces"
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
-  wlrSurfaceParent <- getWlrSurface eitherSurface
   depthFirstBaseSurfaces <- case eitherSurface of
     Left wlrXdgSurface -> do
       ret <- getDepthFirstXdgSurfaces wlrXdgSurface :: IO [(GodotWlrSurface, Int, Int)]
-      return ret
+      attachedChildren <- readTVarIO (gsvs ^. gsvsAttachedXdgChildren)
+      attachedSurfaces <- fmap List.concat $ forM attachedChildren $ \childWlrXdgSurface -> do
+        (childRootX, childRootY) <- getAttachedXdgChildRootOffset gsvs childWlrXdgSurface
+        childSurfaces <- getDepthFirstXdgSurfaces childWlrXdgSurface
+        return $ fmap (\(wlrSurface, x, y) -> (wlrSurface, childRootX + x, childRootY + y)) childSurfaces
+      return (ret ++ attachedSurfaces)
     Right wlrXWaylandSurface -> do
       freeChildren <- readTVarIO (gsvs ^. gsvsFreeChildren)
-      freeChildren' <- mapM (\wlrXWaylandSurfaceFC -> do x <- G.get_x wlrXWaylandSurfaceFC
-                                                         y <- G.get_y wlrXWaylandSurfaceFC
-                                                         wlrSurface <- G.get_wlr_surface wlrXWaylandSurfaceFC
+      freeChildren' <- mapM (\wlrXWaylandSurfaceFC -> do x <- G.get_surface_origin_x wlrXWaylandSurfaceFC
+                                                         y <- G.get_surface_origin_y wlrXWaylandSurfaceFC
+                                                         wlrSurface <- retainGodotRef (G.get_wlr_surface wlrXWaylandSurfaceFC :: IO GodotWlrSurface)
                                                          return (wlrSurface, x, y))
                             freeChildren
       depthFirstXWaylandSurfaces <- getDepthFirstXWaylandSurfaces wlrXWaylandSurface :: IO [(GodotWlrSurface, Int, Int)]
       return (depthFirstXWaylandSurfaces ++ freeChildren')
   return depthFirstBaseSurfaces
 
--- TODO: All (Int, Int) should be relative to root surface; right now,
--- subsurface coordinates are possibly relative to their immediate parent.
 getDepthFirstXWaylandSurfaces :: GodotWlrXWaylandSurface -> IO [(GodotWlrSurface, Int, Int)]
-getDepthFirstXWaylandSurfaces wlrXWaylandSurface = do
+getDepthFirstXWaylandSurfaces wlrXWaylandSurface =
+  profileScope "getDepthFirstXWaylandSurfaces" $ getDepthFirstXWaylandSurfacesImpl wlrXWaylandSurface
+
+getDepthFirstXWaylandSurfacesImpl :: GodotWlrXWaylandSurface -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstXWaylandSurfacesImpl wlrXWaylandSurface = do
+  debugPutStrLn "Plugin.Types.getDepthFirstXWaylandSurfaces"
   xwaylandMappedChildrenAndCoords <- getXWaylandMappedChildren wlrXWaylandSurface :: IO [(GodotWlrXWaylandSurface, Int, Int)]
-  wlrSurface <- G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface
+  wlrSurface <- retainGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface)
   foldM appendXWaylandSurfaceAndChildren [(wlrSurface, 0, 0)] xwaylandMappedChildrenAndCoords
   where
         appendXWaylandSurfaceAndChildren :: [(GodotWlrSurface, Int, Int)] -> (GodotWlrXWaylandSurface, Int, Int) -> IO [(GodotWlrSurface, Int, Int)]
-        appendXWaylandSurfaceAndChildren oldList arg@(wlrXWaylandSurface, x, y) = do
-           xwaylandChildSurface <- G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface
-           appendSurfaceAndChildren oldList (xwaylandChildSurface, x, y)
+        appendXWaylandSurfaceAndChildren oldList arg@(wlrXWaylandSurface, x, y) = profileScope "appendXWaylandSurfaceAndChildren" $ do
+          debugPutStrLn "Plugin.Types.appendXWaylandSurfaceAndChildren"
+          xwaylandChildSurface <- retainGodotRef (G.get_wlr_surface wlrXWaylandSurface :: IO GodotWlrSurface)
+          appendSurfaceAndChildren oldList (xwaylandChildSurface, x, y)
 
         appendSurfaceAndChildren :: [(GodotWlrSurface, Int, Int)] -> (GodotWlrSurface, Int, Int) -> IO [(GodotWlrSurface, Int, Int)]
-        appendSurfaceAndChildren oldList arg@(wlrSurface, x, y) = do
-           subsurfacesAndCoords <- getSurfaceChildren wlrSurface :: IO [(GodotWlrSurface, Int, Int)]
-           foldM appendSurfaceAndChildren (oldList ++ [(wlrSurface, x, y)]) subsurfacesAndCoords
+        appendSurfaceAndChildren oldList arg@(wlrSurface, x, y) = profileScope "getDepthFirstXWaylandSurfacesImpl.appendSurfaceAndChildren" $ do
+          debugPutStrLn "Plugin.Types.appendSurfaceAndChildren"
+          subsurfacesAndCoords <- getSurfaceChildren wlrSurface :: IO [(GodotWlrSurface, Int, Int)]
+          let rootRelativeSubsurfacesAndCoords =
+                fmap
+                  (\(subsurface, subsurfaceX, subsurfaceY) ->
+                    (subsurface, x + subsurfaceX, y + subsurfaceY))
+                  subsurfacesAndCoords
+          foldM appendSurfaceAndChildren (oldList ++ [(wlrSurface, x, y)]) rootRelativeSubsurfacesAndCoords
 
         getSurfaceChildren :: GodotWlrSurface -> IO [(GodotWlrSurface, Int, Int)]
-        getSurfaceChildren wlrSurface = do
+        getSurfaceChildren wlrSurface = profileScope "getDepthFirstXWaylandSurfacesImpl.getSurfaceChildren" $ do
+          debugPutStrLn "Plugin.Types.getSurfaceChildren"
           arrayOfChildren <- G.get_children wlrSurface :: IO GodotArray
           numChildren <- Api.godot_array_size arrayOfChildren
           arrayOfChildrenGV <- fromGodotArray arrayOfChildren
           childrenSubsurfaces <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrSubsurface]
           childrenSSX <- mapM G.get_ssx childrenSubsurfaces
           childrenSSY <- mapM G.get_ssy childrenSubsurfaces
-          children <- mapM G.getWlrSurface childrenSubsurfaces
+          children <- mapM (\childSubsurface -> retainGodotRef (G.getWlrSurface childSubsurface :: IO GodotWlrSurface)) childrenSubsurfaces
           let childrenWithCoords = zip3 children childrenSSX childrenSSY
           Api.godot_array_destroy arrayOfChildren
           mapM_ Api.godot_variant_destroy arrayOfChildrenGV
           return childrenWithCoords
 
         getXWaylandMappedChildren :: GodotWlrXWaylandSurface -> IO [(GodotWlrXWaylandSurface, Int, Int)]
-        getXWaylandMappedChildren wlrXWaylandSurface = do
+        getXWaylandMappedChildren wlrXWaylandSurface = profileScope "getXWaylandMappedChildren" $ do
+          debugPutStrLn "Plugin.Types.getXWaylandMappedChildren"
           arrayOfChildren <- G.get_children wlrXWaylandSurface :: IO GodotArray -- Doesn't return non-mapped children
           numChildren <- Api.godot_array_size arrayOfChildren
           arrayOfChildrenGV <- fromGodotArray arrayOfChildren
           children <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrXWaylandSurface]
-          childrenX <- mapM G.get_x children
-          childrenY <- mapM G.get_y children
-          let childrenWithCoords = zip3 children childrenX childrenY
+          effectiveChildCoords <- mapM (getEffectiveXWaylandChildSurfaceCoordsRelativeToParent wlrXWaylandSurface) children
+          let childrenWithCoords =
+                List.zipWith
+                  (\child (childRootX, childRootY) ->
+                    (child, childRootX, childRootY))
+                  children
+                  effectiveChildCoords
           Api.godot_array_destroy arrayOfChildren
           mapM_ Api.godot_variant_destroy arrayOfChildrenGV
           return childrenWithCoords
 
 getDepthFirstXdgSurfaces :: GodotWlrXdgSurface -> IO [(GodotWlrSurface, Int, Int)]
-getDepthFirstXdgSurfaces wlrXdgSurface = do
+getDepthFirstXdgSurfaces wlrXdgSurface =
+  profileScope "getDepthFirstXdgSurfaces" $ getDepthFirstXdgSurfacesImpl wlrXdgSurface
+
+getDepthFirstXdgSurfacesImpl :: GodotWlrXdgSurface -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstXdgSurfacesImpl wlrXdgSurface = do
+  debugPutStrLn "Plugin.Types.getDepthFirstXdgSurfaces"
   xdgPopups <- getXdgPopups wlrXdgSurface :: IO [(GodotWlrXdgSurface, Int, Int)]
   depthFirstXdgSurfaces  <- foldM appendXdgSurfaceAndChildren [(wlrXdgSurface, 0, 0)] xdgPopups
   mapM convertToWlrSurfaceDepthFirstSurfaces depthFirstXdgSurfaces
   where convertToWlrSurfaceDepthFirstSurfaces :: (GodotWlrXdgSurface, Int, Int) -> IO (GodotWlrSurface, Int, Int)
-        convertToWlrSurfaceDepthFirstSurfaces (wlrXdgSurface, x, y) = do
-          wlrSurface <- G.get_wlr_surface wlrXdgSurface
+        convertToWlrSurfaceDepthFirstSurfaces (wlrXdgSurface, x, y) = profileScope "convertToWlrSurfaceDepthFirstSurfaces" $ do
+          wlrSurface <- retainGodotRef (G.get_wlr_surface wlrXdgSurface :: IO GodotWlrSurface)
           return (wlrSurface, x, y)
 
         getXdgPopups :: GodotWlrXdgSurface -> IO [(GodotWlrXdgSurface, Int, Int)]
-        getXdgPopups wlrXdgSurface = do
+        getXdgPopups wlrXdgSurface = profileScope "getXdgPopups" $ do
+          debugPutStrLn "Plugin.Types.getXdgPopups"
           arrayOfChildren <- G.get_children wlrXdgSurface :: IO GodotArray -- Doesn't return non-mapped children
           numChildren <- Api.godot_array_size arrayOfChildren
           arrayOfChildrenGV <- fromGodotArray arrayOfChildren
           children <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrXdgSurface]
           childrenAsPopups <- mapM G.get_xdg_popup children
-          childrenX <- mapM G.get_x childrenAsPopups
-          childrenY <- mapM G.get_y childrenAsPopups
-          let childrenWithCoords = zip3 children childrenX childrenY
+          childrenX <- mapM G.get_surface_origin_x childrenAsPopups
+          childrenY <- mapM G.get_surface_origin_y childrenAsPopups
+          let childrenWithCoords =
+                zipWith3
+                  (\child childX childY ->
+                    (child, childX, childY))
+                  children
+                  childrenX
+                  childrenY
           Api.godot_array_destroy arrayOfChildren
           mapM_ Api.godot_variant_destroy arrayOfChildrenGV
           return childrenWithCoords
 
         appendXdgSurfaceAndChildren :: [(GodotWlrXdgSurface, Int, Int)] -> (GodotWlrXdgSurface, Int, Int) -> IO [(GodotWlrXdgSurface, Int, Int)]
-        appendXdgSurfaceAndChildren oldList arg@(wlrXdgSurface, x, y) = do
+        appendXdgSurfaceAndChildren oldList arg@(wlrXdgSurface, x, y) = profileScope "appendXdgSurfaceAndChildren" $ do
+          debugPutStrLn "Plugin.Types.appendXdgSurfaceAndChildren"
           subsurfacesAndCoords <- getXdgPopups wlrXdgSurface :: IO [(GodotWlrXdgSurface, Int, Int)]
           foldM appendXdgSurfaceAndChildren (oldList ++ [(wlrXdgSurface, x, y)]) subsurfacesAndCoords
 
 getDepthFirstWlrSurfaces :: GodotWlrSurface -> IO [(GodotWlrSurface, Int, Int)]
-getDepthFirstWlrSurfaces wlrSurface = do
+getDepthFirstWlrSurfaces wlrSurface =
+  profileScope "getDepthFirstWlrSurfaces" $ getDepthFirstWlrSurfacesImpl wlrSurface
+
+getDepthFirstWlrSurfacesImpl :: GodotWlrSurface -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstWlrSurfacesImpl wlrSurface = do
+  debugPutStrLn "Plugin.Types.getDepthFirstWlrSurfaces"
+  getDepthFirstWlrSurfacesFrom 0 0 wlrSurface
+
+getDepthFirstWlrSurfacesFrom :: Int -> Int -> GodotWlrSurface -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstWlrSurfacesFrom rootX rootY wlrSurface =
+  profileScope "getDepthFirstWlrSurfacesFrom" $ getDepthFirstWlrSurfacesFromImpl rootX rootY wlrSurface
+
+getDepthFirstWlrSurfacesFromImpl :: Int -> Int -> GodotWlrSurface -> IO [(GodotWlrSurface, Int, Int)]
+getDepthFirstWlrSurfacesFromImpl rootX rootY wlrSurface = do
+  debugPutStrLn "Plugin.Types.getDepthFirstWlrSurfacesFrom"
   surfaceChildrenAndCoords <- getSurfaceChildren wlrSurface
-  foldM appendSurfaceAndChildren [] surfaceChildrenAndCoords
-  where appendSurfaceAndChildren :: [(GodotWlrSurface, Int, Int)] -> (GodotWlrSurface, Int, Int) -> IO [(GodotWlrSurface, Int, Int)]
-        appendSurfaceAndChildren oldList arg@(wlrSurface, x, y) = do
-          surfacesAndCoords <- getSurfaceChildren wlrSurface :: IO [(GodotWlrSurface, Int, Int)]
-          foldM appendSurfaceAndChildren (oldList ++ [(wlrSurface, x, y)]) surfacesAndCoords
+  let rootRelativeSurfaceChildrenAndCoords = fmap (\(childSurface, childX, childY) -> (childSurface, rootX + childX, rootY + childY)) surfaceChildrenAndCoords
+  snd <$> foldM appendSurfaceAndChildren ([], []) rootRelativeSurfaceChildrenAndCoords
+  where
+        sameWlrSurface :: GodotWlrSurface -> GodotWlrSurface -> Bool
+        sameWlrSurface surfaceA surfaceB = ((coerce surfaceA) :: Ptr ()) == ((coerce surfaceB) :: Ptr ())
+
+        appendSurfaceAndChildren :: ([GodotWlrSurface], [(GodotWlrSurface, Int, Int)]) -> (GodotWlrSurface, Int, Int) -> IO ([GodotWlrSurface], [(GodotWlrSurface, Int, Int)])
+        appendSurfaceAndChildren (visited, oldList) arg@(wlrSurface, x, y) =
+          profileScope "getDepthFirstWlrSurfacesFromImpl.appendSurfaceAndChildren" $
+          if List.any (`sameWlrSurface` wlrSurface) visited
+            then do
+              destroyMaybe (safeCast wlrSurface)
+              return (visited, oldList)
+            else do
+              surfacesAndCoords <- getSurfaceChildren wlrSurface :: IO [(GodotWlrSurface, Int, Int)]
+              let rootRelativeSurfacesAndCoords = fmap (\(childSurface, childX, childY) -> (childSurface, x + childX, y + childY)) surfacesAndCoords
+              foldM appendSurfaceAndChildren (wlrSurface : visited, oldList ++ [(wlrSurface, x, y)]) rootRelativeSurfacesAndCoords
 
         getSurfaceChildren :: GodotWlrSurface -> IO [(GodotWlrSurface, Int, Int)]
-        getSurfaceChildren wlrSurface = do
+        getSurfaceChildren wlrSurface = profileScope "getDepthFirstWlrSurfacesFromImpl.getSurfaceChildren" $ do
+          debugPutStrLn "Plugin.Types.getSurfaceChildren"
           arrayOfChildren <- G.get_children wlrSurface :: IO GodotArray
           numChildren <- Api.godot_array_size arrayOfChildren
           arrayOfChildrenGV <- fromGodotArray arrayOfChildren
           childrenSubsurfaces <- mapM fromGodotVariant arrayOfChildrenGV :: IO [GodotWlrSubsurface]
           childrenSSX <- mapM G.get_ssx childrenSubsurfaces
           childrenSSY <- mapM G.get_ssy childrenSubsurfaces
-          children <- mapM G.getWlrSurface childrenSubsurfaces
+          children <- mapM (\childSubsurface -> retainGodotRef (G.getWlrSurface childSubsurface :: IO GodotWlrSurface)) childrenSubsurfaces
           let childrenWithCoords = zip3 children childrenSSX childrenSSY
           Api.godot_array_destroy arrayOfChildren
           mapM_ Api.godot_variant_destroy arrayOfChildrenGV
@@ -1299,42 +2053,174 @@ getDepthFirstWlrSurfaces wlrSurface = do
 
 -- Types.hs
 getBaseDimensions :: GodotSimulaViewSprite -> IO (Int, Int)
-getBaseDimensions gsvs = do
+getBaseDimensions gsvs = profileScope "getBaseDimensions" $ do
+  debugPutStrLn "Plugin.Types.getBaseDimensions"
   simulaView <- readTVarIO (gsvs ^. gsvsView)
   let eitherSurface = (simulaView ^. svWlrEitherSurface)
-  wlrSurfaceParent <- getWlrSurface eitherSurface
-  (parentWidth, parentHeight) <- getBufferDimensions wlrSurfaceParent
-  return (parentWidth, parentHeight)
+  withWlrSurface eitherSurface $ \wlrSurfaceParent ->
+    getWlrSurfaceStateCurrentDimensions wlrSurfaceParent
 
 getSpilloverDims :: GodotSimulaViewSprite -> IO (Int, Int)
-getSpilloverDims gsvs = do
-  depthFirstSurfaces <- getDepthFirstSurfaces gsvs :: IO [(GodotWlrSurface, Int, Int)]
-  spilloverDims <- mapM (getSpilloverDims gsvs) depthFirstSurfaces
-  let spilloverWidth = Data.List.maximum $ fmap fst spilloverDims
-  let spilloverHeight = Data.List.maximum $ fmap snd spilloverDims
-  return (spilloverWidth, spilloverHeight)
-  where getSpilloverDims :: GodotSimulaViewSprite -> (GodotWlrSurface, Int, Int) -> IO (Int, Int)
-        getSpilloverDims gsvs (wlrSurface, sx, sy) = do
-          (baseWidth, baseHeight) <- getBaseDimensions gsvs
-          (childWidth, childHeight) <- getBufferDimensions wlrSurface
-          let widthSpill = max 0 ((sx + childWidth) - baseWidth)
-          let heightSpill = max 0 ((sy + childHeight) - baseHeight)
-          return $ (baseWidth + widthSpill, baseHeight + heightSpill)
+getSpilloverDims gsvs = profileScope "getSpilloverDims" $ do
+  debugPutStrLn "Plugin.Types.getSpilloverDims"
+  bracket
+    (getDepthFirstSurfacesRaw gsvs :: IO [(GodotWlrSurface, Int, Int)])
+    destroyWlrSurfacesWithCoords
+    (\depthFirstSurfaces -> do
+      (minX, minY, maxX, maxY) <- getSurfacesCoordinateBounds depthFirstSurfaces
+      return (maxX - minX, maxY - minY))
 
 setShader :: GodotSimulaViewSprite -> String -> IO ()
-setShader gsvs tres = do
-  putStrLn $ "setShader: " ++ tres
-  quadMesh <- getQuadMesh gsvs
-  shader <- load GodotShader "Shader" (Data.Text.pack tres)
-  case shader of
-    Just shader -> do
-      shm <- unsafeInstance GodotShaderMaterial "ShaderMaterial"
-      G.set_shader shm shader
-      G.set_material quadMesh (safeCast shm)
-    Nothing -> error "couldn't fetch shader"
+setShader gsvs tres = profileScope "setShader" $ do
+  debugPutStrLn "Plugin.Types.setShader"
+  currentShaderPath <- readTVarIO (gsvs ^. gsvsShaderPath)
+  unless (currentShaderPath == Just tres) $ do
+    shader <- load GodotShader "Shader" (Data.Text.pack tres)
+    case shader of
+      Just shader ->
+        withQuadMesh gsvs $ \quadMesh -> do
+          shm <- withGodotRef (G.get_material quadMesh :: IO GodotMaterial) $ \material ->
+            case validateObject material of
+              Just validMaterial -> asClass' GodotShaderMaterial "ShaderMaterial" validMaterial
+              Nothing -> unsafeInstance GodotShaderMaterial "ShaderMaterial"
+          G.set_shader shm shader
+          G.set_material quadMesh (safeCast shm)
+          atomically $ writeTVar (gsvs ^. gsvsShaderPath) (Just tres)
+      Nothing -> error "couldn't fetch shader"
+
+getXWaylandWindowClass :: GodotWlrXWaylandSurface -> IO (Maybe String)
+getXWaylandWindowClass wlrXWaylandSurface = profileScope "getXWaylandWindowClass" $ do
+  debugPutStrLn "Plugin.Types.getXWaylandWindowClass"
+  method <- toLowLevel (pack "get_window_class") :: IO GodotString
+  classStrResult <- (Control.Exception.Safe.try $ do
+    classVariant <- G.call wlrXWaylandSurface method [] :: IO GodotVariant
+    classGodotStr <- fromGodotVariant classVariant :: IO GodotString
+    fromLowLevel classGodotStr :: IO Text) :: IO (Either SomeException Text)
+  Api.godot_string_destroy method
+  ret <- case classStrResult of
+    Left _ -> return Nothing
+    Right classTxt | Data.Text.null classTxt -> return Nothing
+    Right classTxt -> return (Just (Data.Text.unpack classTxt))
+  appendWindowLog $ "[getXWaylandWindowClass] class=" ++ show ret
+  return ret
+
+getXdgAppId :: GodotWlrXdgSurface -> IO (Maybe String)
+getXdgAppId wlrXdgSurface = profileScope "getXdgAppId" $ do
+  debugPutStrLn "Plugin.Types.getXdgAppId"
+  appIdResult <- (Control.Exception.Safe.try $ do
+    wlrXdgToplevel <- G.get_xdg_toplevel wlrXdgSurface :: IO GodotWlrXdgToplevel
+    wlrXdgToplevel <- validateSurfaceE wlrXdgToplevel
+    appIdGodotStr <- G.get_app_id wlrXdgToplevel :: IO GodotString
+    fromLowLevel appIdGodotStr :: IO Text) :: IO (Either SomeException Text)
+  ret <- case appIdResult of
+    Left _ -> return Nothing
+    Right appIdTxt | Data.Text.null appIdTxt -> return Nothing
+    Right appIdTxt -> return (Just (Data.Text.unpack appIdTxt))
+  appendWindowLog $ "[getXdgAppId] appId=" ++ show ret
+  return ret
+
+extractStartingAppLaunchToken :: String -> Maybe String
+extractStartingAppLaunchToken classStr =
+  let token = List.map Char.toLower classStr
+      prefix = "simula-launch-"
+  in if prefix `List.isPrefixOf` token then Just token else Nothing
+
+getSimulaStartingLocationByLaunchToken :: GodotSimulaServer -> String -> IO (Maybe String)
+getSimulaStartingLocationByLaunchToken gss launchToken = profileScope "getSimulaStartingLocationByLaunchToken" $ do
+  debugPutStrLn "Plugin.Types.getSimulaStartingLocationByLaunchToken"
+  (ret, maybeConsumedClassKey) <- atomically $ do
+    launchTokens <- readTVar (gss ^. gssStartingAppLaunchTokens)
+    tokenClassHints <- readTVar (gss ^. gssStartingAppLaunchTokenClassHints)
+    classHints <- readTVar (gss ^. gssStartingAppWindowClassHints)
+    case M.lookup launchToken launchTokens of
+      Nothing -> return (Nothing, Nothing)
+      Just location -> do
+        let launchTokens' = M.delete launchToken launchTokens
+        let maybeClassKey = normalizeWindowClass <$> M.lookup launchToken tokenClassHints
+        let classHints' = case maybeClassKey of
+              Nothing -> classHints
+              Just classKey -> consumeClassHintLocation classKey location classHints
+        writeTVar (gss ^. gssStartingAppLaunchTokens) launchTokens'
+        when (classHints' /= classHints) $
+          writeTVar (gss ^. gssStartingAppWindowClassHints) classHints'
+        return (Just location, maybeClassKey)
+  appendWindowLog $
+    "[token-match] token=" ++ show launchToken
+      ++ " location=" ++ show ret
+      ++ " consumedClassKey=" ++ show maybeConsumedClassKey
+  return ret
+  where
+    consumeClassHintLocation :: String -> String -> M.Map String [String] -> M.Map String [String]
+    consumeClassHintLocation classKey location hints =
+      case M.lookup classKey hints of
+        Nothing -> hints
+        Just locations ->
+          let remaining = removeFirstLocation locations
+           in if remaining == locations
+                then hints
+                else if Prelude.null remaining
+                  then M.delete classKey hints
+                  else M.insert classKey remaining hints
+      where
+        removeFirstLocation :: [String] -> [String]
+        removeFirstLocation [] = []
+        removeFirstLocation (x:xs)
+          | x == location = xs
+          | otherwise = x : removeFirstLocation xs
+
+normalizeWindowClass :: String -> String
+normalizeWindowClass classStr =
+  let trim = List.dropWhile Char.isSpace . List.reverse . List.dropWhile Char.isSpace . List.reverse
+  in trim (List.map Char.toLower classStr)
+
+getSimulaStartingLocationByWindowClass :: GodotSimulaServer -> String -> IO (Maybe String)
+getSimulaStartingLocationByWindowClass gss classStr = profileScope "getSimulaStartingLocationByWindowClass" $ do
+  debugPutStrLn "Plugin.Types.getSimulaStartingLocationByWindowClass"
+  let classKey = normalizeWindowClass classStr
+  (ret, usedClassKey, fallbackClassKey) <- atomically $ do
+    classHints <- readTVar (gss ^. gssStartingAppWindowClassHints)
+    tokenClassHints <- readTVar (gss ^. gssStartingAppLaunchTokenClassHints)
+
+    let popClassHint :: String -> M.Map String [String] -> (Maybe String, M.Map String [String])
+        popClassHint key hints =
+          case M.lookup key hints of
+            Nothing -> (Nothing, hints)
+            Just [] -> (Nothing, M.delete key hints)
+            Just (location:remaining) ->
+              let hints' =
+                    if Prelude.null remaining
+                      then M.delete key hints
+                      else M.insert key remaining hints
+              in (Just location, hints')
+
+    let (directRet, classHintsAfterDirect) = popClassHint classKey classHints
+    case directRet of
+      Just location -> do
+        when (classHintsAfterDirect /= classHints) $ writeTVar (gss ^. gssStartingAppWindowClassHints) classHintsAfterDirect
+        return (Just location, Just classKey, Nothing)
+      Nothing -> do
+        let maybeFallbackClassKey = do
+              launchToken <- extractStartingAppLaunchToken classKey
+              fallbackClass <- M.lookup launchToken tokenClassHints
+              return (normalizeWindowClass fallbackClass)
+        case maybeFallbackClassKey of
+          Nothing -> do
+            when (classHintsAfterDirect /= classHints) $ writeTVar (gss ^. gssStartingAppWindowClassHints) classHintsAfterDirect
+            return (Nothing, Nothing, Nothing)
+          Just fallbackClassKey -> do
+            let (fallbackRet, classHintsAfterFallback) = popClassHint fallbackClassKey classHintsAfterDirect
+            when (classHintsAfterFallback /= classHints) $ writeTVar (gss ^. gssStartingAppWindowClassHints) classHintsAfterFallback
+            return (fallbackRet, if isJust fallbackRet then Just fallbackClassKey else Nothing, Just fallbackClassKey)
+  appendWindowLog $
+    "[class-match] classKey=" ++ show classKey
+      ++ " fallbackClassKey=" ++ show fallbackClassKey
+      ++ " usedClassKey=" ++ show usedClassKey
+      ++ " location=" ++ show ret
+  return ret
 
 getParentPid :: ProcessID -> IO (Maybe ProcessID)
-getParentPid pid = do
+getParentPid pid = profileScope "getParentPid" $ do
+  debugPutStrLn "Plugin.Types.getParentPid"
   let fp = "/proc/" ++ show (toInteger pid) ++ "/stat"
   econtents <- Control.Exception.Safe.try $ readFile fp :: IO (Either SomeException String)
   case econtents of
@@ -1345,7 +2231,8 @@ getParentPid pid = do
     _ -> return Nothing
 
 getParentsPids :: ProcessID  -> IO [ProcessID]
-getParentsPids pid = do
+getParentsPids pid = profileScope "getParentsPids" $ do
+  debugPutStrLn "Plugin.Types.getParentsPids"
   ppid <- getParentPid pid
   case ppid of
     Just ppid' -> do
@@ -1353,8 +2240,9 @@ getParentsPids pid = do
       return (ppid':ps)
     Nothing -> return []
 
-getSimulaStartingLocationAtomically :: GodotSimulaServer -> [ProcessID] -> IO (Maybe String)
-getSimulaStartingLocationAtomically gss pids = do
+getSimulaStartingLocationByPid :: GodotSimulaServer -> [ProcessID] -> IO (Maybe String)
+getSimulaStartingLocationByPid gss pids = profileScope "getSimulaStartingLocationByPid" $ do
+  debugPutStrLn "Plugin.Types.getSimulaStartingLocationByPid"
   ret <- case pids of
               [] -> return Nothing
               pid:pids -> atomically $ do startingAppPids <- readTVar (gss ^. gssStartingAppPids)
@@ -1374,10 +2262,11 @@ getSimulaStartingLocationAtomically gss pids = do
        (_, Just ret) -> return $ Just ret
        ([], Nothing) -> return Nothing
        (pid:pids, Nothing) -> do
-         getSimulaStartingLocationAtomically gss pids
+         getSimulaStartingLocationByPid gss pids
 
 keyboardGrabInitiate :: GodotSimulaServer -> Grab -> IO ()
-keyboardGrabInitiate gss (GrabWindow gsvs _) = do
+keyboardGrabInitiate gss (GrabWindow gsvs _) = profileScope "keyboardGrabInitiate" $ do
+  debugPutStrLn "Plugin.Types.keyboardGrabInitiate"
   gss <- readTVarIO (gsvs ^. gsvsServer)
   -- TODO: Ensure that we aren't keyboard grabbing other stuff, w/o messing up diff state
   -- keyboardGrabLetGo (GrabWorkspaces gss)
@@ -1396,14 +2285,16 @@ keyboardGrabInitiate gss (GrabWindow gsvs _) = do
                -- Load state
                atomically $ writeTVar (gss ^. gssGrab) (Just (GrabWindow gsvs (-dist)))
   return ()
-keyboardGrabInitiate gss (GrabWindows _) = do
+keyboardGrabInitiate gss (GrabWindows _) = profileScope "keyboardGrabInitiate" $ do
+  debugPutStrLn "Plugin.Types.keyboardGrabInitiate"
   -- TODO: Ensure that we aren't keyboard grabbing other workspaces, w/o messing up diff state
   -- keyboardGrabLetGo gss GrabWorkspaces
 
   povTransform <- getARVRCameraOrPancakeCameraTransform gss
   atomically $ writeTVar (gss ^. gssGrab) (Just (GrabWindows povTransform))
 
-keyboardGrabInitiate gss (GrabWorkspaces _)  = do
+keyboardGrabInitiate gss (GrabWorkspaces _)  = profileScope "keyboardGrabInitiate" $ do
+  debugPutStrLn "Plugin.Types.keyboardGrabInitiate"
   -- TODO: Ensure that we aren't keyboard grabbing anything else, w/o messing up diff state
   -- keyboardGrabLetGo gss (GrabWorkspaces _)
 
@@ -1411,10 +2302,12 @@ keyboardGrabInitiate gss (GrabWorkspaces _)  = do
   atomically $ writeTVar (gss ^. gssGrab) (Just (GrabWorkspaces povTransform))
 
 keyboardGrabLetGo :: GodotSimulaServer -> Grab -> IO ()
-keyboardGrabLetGo gss (GrabWindow gsvs _)  = do
+keyboardGrabLetGo gss (GrabWindow gsvs _)  = profileScope "keyboardGrabLetGo" $ do
+  debugPutStrLn "Plugin.Types.keyboardGrabLetGo"
   gss <- readTVarIO $ (gsvs ^. gsvsServer)
   atomically $ writeTVar (gss ^. gssGrab) Nothing
-keyboardGrabLetGo gss (GrabWindows _) = do
+keyboardGrabLetGo gss (GrabWindows _) = profileScope "keyboardGrabLetGo" $ do
+  debugPutStrLn "Plugin.Types.keyboardGrabLetGo"
   (currentWorkspace, currentWorkspaceStr) <- readTVarIO (gss ^. gssWorkspace)
   workspacePersistent <- readTVarIO (gss ^. gssWorkspacePersistent)
   currentWorkspaceTransform <- G.get_transform currentWorkspace
@@ -1423,13 +2316,15 @@ keyboardGrabLetGo gss (GrabWindows _) = do
   updateDiffMap gss workspacePersistent workspacePersistentTransform
   atomically $ writeTVar (gss ^. gssGrab) Nothing
 
-keyboardGrabLetGo gss (GrabWorkspaces _) = do
+keyboardGrabLetGo gss (GrabWorkspaces _) = profileScope "keyboardGrabLetGo" $ do
+  debugPutStrLn "Plugin.Types.keyboardGrabLetGo"
   gssTransform <- G.get_transform gss
   updateDiffMap gss (safeCast gss) gssTransform
   atomically $ writeTVar (gss ^. gssGrab) Nothing
 
 getGrabDiff :: GodotSimulaServer -> IO GodotTransform
-getGrabDiff gss = do
+getGrabDiff gss = profileScope "getGrabDiff" $ do
+  debugPutStrLn "Plugin.Types.getGrabDiff"
   maybeGrab <- readTVarIO (gss ^. gssGrab)
   diffTransform  <- case maybeGrab of
                          Nothing -> do let idTransform = TF (identity :: M33 Float) (V3 0 0 0)
@@ -1444,34 +2339,43 @@ getGrabDiff gss = do
                                                                      return diffTransform
   return diffTransform
 
-validateObject :: GodotObject :< a => a -> Maybe a
-validateObject obj = guard (unsafeCoerce ((safeCast obj) :: GodotObject) /= nullPtr) >> return obj
-
 class (GodotObject :< surface) => Validatable surface where
   isValid :: surface -> IO Bool
 
 instance Validatable GodotWlrSurface where
-  isValid surf = G.is_valid surf
+  isValid surf = do
+    debugPutStrLn "Plugin.Types.isValid"
+    G.is_valid surf
 
 instance Validatable GodotWlrSubsurface where
-  isValid surf = G.is_valid surf
+  isValid surf = do
+    debugPutStrLn "Plugin.Types.isValid"
+    G.is_valid surf
 
 instance Validatable GodotWlrXWaylandSurface where
-  isValid surf = G.is_valid surf
+  isValid surf = do
+    debugPutStrLn "Plugin.Types.isValid"
+    G.is_valid surf
 
 instance Validatable GodotWlrXdgSurface where
-  isValid surf = G.is_valid surf
+  isValid surf = do
+    debugPutStrLn "Plugin.Types.isValid"
+    G.is_valid surf
 
 instance Validatable GodotWlrXdgToplevel where
-  isValid surf = G.is_valid surf
+  isValid surf = do
+    debugPutStrLn "Plugin.Types.isValid"
+    G.is_valid surf
 
 makeIdentityTransform :: IO GodotTransform
-makeIdentityTransform = do
+makeIdentityTransform = profileScope "makeIdentityTransform" $ do
+  debugPutStrLn "Plugin.Types.makeIdentityTransform"
   let idTransform = TF (identity :: M33 Float) (V3 0 0 0)
   toLowLevel idTransform
 
 initializeDiffMap :: GodotSpatial -> Vector GodotSpatial -> IO DiffMap
-initializeDiffMap gssSpatial workspaces = do
+initializeDiffMap gssSpatial workspaces = profileScope "initializeDiffMap" $ do
+  debugPutStrLn "Plugin.Types.initializeDiffMap"
   let workspacesLst = [gssSpatial] ++ (V.toList workspaces)
   transformLst <- Control.Monad.replicateM 11 makeIdentityTransform -- 10 workspaces + 1 gss parent node
   let diffLst = Data.List.zip workspacesLst transformLst
@@ -1479,7 +2383,8 @@ initializeDiffMap gssSpatial workspaces = do
   return diffMap
 
 updateDiffMap :: GodotSimulaServer -> GodotSpatial -> GodotTransform -> IO ()
-updateDiffMap gss workspaceOrGss newDiff = do
+updateDiffMap gss workspaceOrGss newDiff = profileScope "updateDiffMap" $ do
+  debugPutStrLn "Plugin.Types.updateDiffMap"
   diffMap <- readTVarIO (gss ^. gssDiffMap)
   let updatedDiffMap = M.insert workspaceOrGss newDiff diffMap
   atomically $ writeTVar (gss ^. gssDiffMap) updatedDiffMap
@@ -1488,7 +2393,8 @@ data NullPointerException = NullPointerException deriving (Eq, Show, Typeable)
 instance Exception NullPointerException
 
 validateSurfaceE :: (Validatable surface) => surface -> IO surface
-validateSurfaceE surf = do
+validateSurfaceE surf = profileScope "validateSurfaceE" $ do
+  debugPutStrLn "Plugin.Types.validateSurfaceE"
   case (validateObject surf) of
     Nothing -> (throw NullPointerException)
     Just obj -> do isValidSurface <- isValid surf
@@ -1496,14 +2402,17 @@ validateSurfaceE surf = do
                    return ret
 
 catchGodot :: (a -> [GodotVariant] -> IO ()) -> ((a -> [GodotVariant] -> IO ()))
-catchGodot func x y = catch (func x y) (\(e :: NullPointerException) -> do
+catchGodot func x y = profileScope "catchGodot" $ do
+  debugPutStrLn "Plugin.Types.catchGodot"
+  catch (func x y) (\(e :: NullPointerException) -> do
                                           -- putStrLn $ "Caught " ++ show e  -- quiet for now :)
                                           return ())
 
 data RotationMethod = Workspace | Workspaces
 
 rotateWorkspaceHorizontally :: GodotSimulaServer -> Float -> RotationMethod -> IO ()
-rotateWorkspaceHorizontally gss radians rotationMethod = do
+rotateWorkspaceHorizontally gss radians rotationMethod = profileScope "Types.rotateWorkspaceHorizontally" $ do
+  debugPutStrLn "Plugin.Types.rotateWorkspaceHorizontally"
   -- get state
   prevPovTransform <- getARVRCameraOrPancakeCameraTransform gss
   povTransform <- getARVRCameraOrPancakeCameraTransform gss
@@ -1525,7 +2434,8 @@ rotateWorkspaceHorizontally gss radians rotationMethod = do
   return ()
 
 queueFreeNodeAndChildren :: GodotNode -> IO ()
-queueFreeNodeAndChildren node = do
+queueFreeNodeAndChildren node = profileScope "queueFreeNodeAndChildren" $ do
+  debugPutStrLn "Plugin.Types.queueFreeNodeAndChildren"
   arrayOfChildren <- G.get_children node :: IO GodotArray
   numChildren <- Api.godot_array_size arrayOfChildren
   arrayOfChildrenGV <- fromGodotArray arrayOfChildren :: IO [GodotVariant]
@@ -1536,7 +2446,8 @@ queueFreeNodeAndChildren node = do
   -- G.queue_free node -- Doens't work
 
 getARVRCameraOrPancakeCamera :: GodotSimulaServer -> IO GodotCamera
-getARVRCameraOrPancakeCamera gss = do
+getARVRCameraOrPancakeCamera gss = profileScope "getARVRCameraOrPancakeCamera" $ do
+  debugPutStrLn "Plugin.Types.getARVRCameraOrPancakeCamera"
   let nodePathStr = "/root/Root/VRViewport/ARVROrigin/ARVRCamera"
   nodePath <- (toLowLevel (pack nodePathStr)) :: IO GodotNodePath
   hasNode  <- G.has_node gss (nodePath :: GodotNodePath)
@@ -1549,13 +2460,14 @@ getARVRCameraOrPancakeCamera gss = do
   Api.godot_node_path_destroy nodePath
   return camera
   where getViewportCamera :: GodotSimulaServer -> IO GodotCamera
-        getViewportCamera gss = do
+        getViewportCamera gss = profileScope "getViewportCamera" $ do
           viewport <- G.get_viewport gss :: IO GodotViewport
           camera <- G.get_camera viewport :: IO GodotCamera
           return camera
 
 rotateFPSCamera :: GodotSimulaServer -> GodotInputEventMouseMotion -> IO ()
-rotateFPSCamera gss event = do
+rotateFPSCamera gss event = profileScope "rotateFPSCamera" $ do
+  debugPutStrLn "Plugin.Types.rotateFPSCamera"
   camera <- getARVRCameraOrPancakeCamera gss
   let mouseSensitivity = 0.006
   eventRelative <- G.get_relative event
@@ -1570,7 +2482,8 @@ rotateFPSCamera gss event = do
   G.set_rotation camera =<< toLowLevel (V3 (newRotationX) (newRotationY) (rotationZ))
 
 processWASDMovement :: GodotSimulaServer -> Float -> IO ()
-processWASDMovement gss delta = do
+processWASDMovement gss delta = profileScope "processWASDMovement" $ do
+  debugPutStrLn "Plugin.Types.processWASDMovement"
   camera <- getARVRCameraOrPancakeCamera gss
   input <- getSingleton GodotInput "Input"
   moveForward <- toLowLevel "move_forward"
@@ -1621,21 +2534,24 @@ processWASDMovement gss delta = do
   Api.godot_string_destroy moveDown
 
 actionPress :: GodotSimulaServer -> String -> IO ()
-actionPress gss str = do
+actionPress gss str = profileScope "actionPress" $ do
+  debugPutStrLn "Plugin.Types.actionPress"
   input <- getSingleton GodotInput "Input"
   godotStr <- toLowLevel (pack str)
   G.action_press input godotStr 1.0
   Api.godot_string_destroy godotStr
 
 actionRelease :: GodotSimulaServer -> String -> IO ()
-actionRelease gss str = do
+actionRelease gss str = profileScope "actionRelease" $ do
+  debugPutStrLn "Plugin.Types.actionRelease"
   input <- getSingleton GodotInput "Input"
   godotStr <- toLowLevel (pack str)
   G.action_release input godotStr
   Api.godot_string_destroy godotStr
 
 logMemPid :: GodotSimulaServer -> IO Float
-logMemPid gss = do
+logMemPid gss = profileScope "logMemPid" $ do
+  debugPutStrLn "Plugin.Types.logMemPid"
   let pid = (gss ^. gssPid)
   (_, out', _) <- System.Process.readCreateProcessWithExitCode (shell $ "ps -p " ++ pid ++ " -o rss=") ""
   let pidMem = Prelude.read $ out' :: Float
@@ -1644,8 +2560,51 @@ logMemPid gss = do
   -- logMemPid gss
   return (pidMem / 1000) -- return ~MB
 
+getRssKbAfterGC :: IO Int
+getRssKbAfterGC = profileScope "getRssKbAfterGC" $ do
+  performGC -- Force GHC GC before reading RSS
+  getRssKb
+
+-- Read process RSS from /proc/self/status. Returns KB, or -1 on failure.
+getRssKb :: IO Int
+getRssKb = profileScope "getRssKb" $ do
+  result <- try (readFile "/proc/self/status") :: IO (Either SomeException String)
+  case result of
+    Left _ -> return (-1)
+    Right txt ->
+      case List.find ("VmRSS:" `List.isPrefixOf`) (List.lines txt) of
+        Nothing -> return (-1)
+        Just line ->
+          case List.words line of
+            (_ : val : _) ->
+              case reads val of
+                [(rssKb, "")] -> return rssKb
+                _ -> return (-1)
+            _ -> return (-1)
+
+formatRssMb :: Int -> String
+formatRssMb rssKb
+  | rssKb < 0 = "? MB"
+  | otherwise = show (round (fromIntegral rssKb / 1000 :: Double)) ++ " MB"
+
+formatMemoryDelta :: Maybe (UTCTime, Int) -> UTCTime -> Int -> String
+formatMemoryDelta Nothing _ _ = ""
+formatMemoryDelta _ _ rssKb | rssKb < 0 = ""
+formatMemoryDelta (Just (prevTime, prevRssKb)) now rssKb
+  | prevRssKb < 0 = ""
+  | elapsedSeconds <= 0 = ""
+  | rssKb > prevRssKb = " @ [color=red]" ++ signedRate ++ " MB/s[/color]"
+  | rssKb < prevRssKb = " @ [color=green]" ++ signedRate ++ " MB/s[/color]"
+  | otherwise = " @ " ++ signedRate ++ " MB/s"
+  where
+    elapsedSeconds = realToFrac (diffUTCTime now prevTime) :: Double
+    deltaMbPerSecond = fromIntegral (rssKb - prevRssKb) / 1000 / elapsedSeconds
+    signedRate =
+      (if deltaMbPerSecond >= 0 then "+" else "") ++ showFFloat (Just 1) deltaMbPerSecond ""
+
 forkUpdateHUDRecursively :: GodotSimulaServer -> IO ()
-forkUpdateHUDRecursively gss = do
+forkUpdateHUDRecursively gss = profileScope "forkUpdateHUDRecursively" $ do
+  debugPutStrLn "Plugin.Types.forkUpdateHUDRecursively"
   maybeConfigDir <- lookupEnv "SIMULA_CONFIG_DIR"
   maybeNixDir <- lookupEnv "SIMULA_NIX_DIR"
   
@@ -1683,44 +2642,29 @@ forkUpdateHUDRecursively gss = do
 
   where
     updateHUDRecursively :: GodotSimulaServer -> (System.IO.Streams.OutputStream B.ByteString, System.IO.Streams.InputStream B.ByteString, System.IO.Streams.InputStream B.ByteString, ProcessHandle) -> IO ()
-    updateHUDRecursively gss res@(inp,out,err,pid) = do
+    updateHUDRecursively gss res@(inp,out,err,pid) = profileScope "updateHUDRecursively" $ do
+      debugPutStrLn "Plugin.Types.updateHUDRecursively"
       updateWorkspaceHUD gss
       updatei3StatusHUD gss res
       updateHUDRecursively gss res
       
 updateWorkspaceHUD :: GodotSimulaServer -> IO ()
-updateWorkspaceHUD gss = do
-  (currentWorkspace, currentWorkspaceStr) <- readTVarIO (gss ^. gssWorkspace)
+updateWorkspaceHUD gss = profileScope "updateWorkspaceHUD" $ do
+  debugPutStrLn "Plugin.Types.updateWorkspaceHUD"
   hud <- readTVarIO (gss ^. gssHUD)
-  let canvasLayer = (hud ^. hudCanvasLayer)
-  let rtLabelW = (hud ^. hudRtlWorkspace)
-  let svr = (hud ^. hudSvrTexture)
-  let dynamicFont = (hud ^. hudDynamicFont)
-  fps <- getSingleton Godot_Engine "Engine" >>= (\engine -> G.get_frames_per_second engine)
-  simulaMemoryUsage <- logMemPid gss
-  screenRecorder <- readTVarIO (gss ^. gssScreenRecorder)
-
-  G.clear rtLabelW
-  G.push_font rtLabelW (safeCast dynamicFont)
-  G.append_bbcode rtLabelW `withGodotString` (pack currentWorkspaceStr)
-  G.append_bbcode rtLabelW `withGodotString` " | "
-  G.add_image rtLabelW svr 19 19
-  G.append_bbcode rtLabelW `withGodotString` " "
-  G.append_bbcode rtLabelW `withGodotString` (pack $ (show $ round fps) ++ " FPS ")
-  G.append_bbcode rtLabelW `withGodotString` (pack ("@ " ++ (show $ round simulaMemoryUsage) ++ " MB"))
-  G.append_bbcode rtLabelW `withGodotString` " |"
-  case screenRecorder of
-    Nothing -> return ()
-    Just ph -> do
-      redColor <- (toLowLevel $ (rgb 1.0 0.0 0.0) `withOpacity` 1.0) :: IO GodotColor
-      G.push_color rtLabelW redColor
-      G.append_bbcode rtLabelW `withGodotString` " ⚬ "
-      G.pop rtLabelW
-      return ()
-  G.pop rtLabelW
+  let debugMemoryEnabled = hud ^. hudDebugMemoryEnabled
+  rssKb <- if debugMemoryEnabled then getRssKbAfterGC else getRssKb
+  now <- getCurrentTime
+  let memoryDelta = if debugMemoryEnabled then formatMemoryDelta (hud ^. hudLastRssSample) now rssKb else ""
+  let nextRssSample =
+        if debugMemoryEnabled && rssKb >= 0
+          then Just (now, rssKb)
+          else Nothing
+  atomically $ writeTVar (gss ^. gssHUD) (hud { _hudLastRssSample = nextRssSample, _hudRssKb = rssKb, _hudMemoryDelta = memoryDelta })
 
 updatei3StatusHUD :: GodotSimulaServer -> (OutputStream B.ByteString, InputStream B.ByteString, InputStream B.ByteString, ProcessHandle) -> IO ()
-updatei3StatusHUD gss res@(inp,out,err,pid) = do
+updatei3StatusHUD gss res@(inp,out,err,pid) = profileScope "updatei3StatusHUD" $ do
+  debugPutStrLn "Plugin.Types.updatei3StatusHUD"
   hud <- readTVarIO (gss ^. gssHUD)
   out' <- System.IO.Streams.Text.decodeUtf8 out
   maybeLine <- System.IO.Streams.Internal.read out' :: IO (Maybe Text)
@@ -1735,7 +2679,8 @@ updatei3StatusHUD gss res@(inp,out,err,pid) = do
   return ()
 
 withGodotString :: (GodotString -> IO a) -> Text -> IO a
-withGodotString action text = do
+withGodotString action text = profileScope "withGodotString" $ do
+  debugPutStrLn "Plugin.Types.withGodotString"
   godotStr <- toLowLevel text
   ret <- action godotStr
   Api.godot_string_destroy godotStr
