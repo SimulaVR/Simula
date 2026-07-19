@@ -1,0 +1,19 @@
+Usage: simula [options] [-- [godot-args]]
+
+Options:
+  --local        Launch Simula using local binaries (useful for developers)
+  --rr           Launch Simula under the rr debugger
+  -h, --help     Show this help message
+
+Debug Environment Variables:
+- SIMULA_DEBUG_MEMORY=1: Shows per-second RSS memory deltas in the HUD so you can get an estimate of how various actions impact top level memory usage.
+- SIMULA_DEBUG_MEMORY_HUD=1: Shows a live object count memory HUD underneath each app.
+- SIMULA_DEBUG_PROFILE_HUD=1: Shows a live profiling HUD with the most expensive Haskell function calls from the past 10-second window. Writes more detailed output to ./HUD_profile_live.txt and ./HUD_profile_recent_missed_frames.txt.
+  - SIMULA_DEBUG_PROFILE_HUD_BUDGET_MS=<milliseconds>: Sets the missed-frame threshold in milliseconds for SIMULA_DEBUG_PROFILE_HUD. Default: 16.67.
+  - SIMULA_DEBUG_PROFILE_HUD_WINDOW_S=<seconds>: Sets the recent frame/sample retention window in seconds for SIMULA_DEBUG_PROFILE_HUD. Default: 10.0.
+- SIMULA_DEBUG_SURFACE_BOUNDARIES=1: Shows wlr_surface (red), geometry boundaries with offset x/y offset (green), and geometry boundaries without x/y offset (blue) on all surfaces. Top-level XDG boundaries are colored in yellow (for wayland surfaces), while XWayland are colored black (though since most xwayland top levels don't have borders to begin with, you often won't see the black border).
+- SIMULA_DEBUG_SURFACE_CREATIONS=1: Prints detailed surface information when they get created/mapped.
+- SIMULA_DEBUG_MOUSE_EVENTS=1: Shows detailed tracing of mouse interaction logic.
+- SIMULA_DEBUG_KEYBOARD_EVENTS=1: Shows detailed tracing of keyboard focus and key dispatch logic.
+- SIMULA_DEBUG_DEPTH_FIRST_THUMBNAILS=1: Shows a live HUD underneath each app with individual thumbnails of each of its subsurfaces (in the depth-first order in which they are being rendered).
+- SIMULA_DEBUG_DAMAGED_REGIONS=1: Shows transient purple overlays over damaged surface regions and persistent damaged-region thumbnail previews in GSVS HUDs. If you additionally set this to an existing directory path instead of 1, it will also save each damaged-region event as <your-supplied-path>/<event-number>.png.
