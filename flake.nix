@@ -359,16 +359,18 @@
               done
               shopt -u nullglob
 
-              export PATH="${lib.makeBinPath [
-                awscli
-                pkgs.openssl
-                pkgs.gnutar
-                pkgs.zstd
-                pkgs.git
-                pkgs.mercurial
-                pkgs.rr
-                pkgs.coreutils
-              ]}:$PATH"
+              export PATH="${
+                lib.makeBinPath [
+                  awscli
+                  pkgs.openssl
+                  pkgs.gnutar
+                  pkgs.zstd
+                  pkgs.git
+                  pkgs.mercurial
+                  pkgs.rr
+                  pkgs.coreutils
+                ]
+              }:$PATH"
 
               exec ${pkgs.python3}/bin/python3 "$pernosco_submit" \
                 "''${global_args[@]}" \
@@ -444,36 +446,32 @@
               set -o pipefail
             '';
 
-            mkMonadoEnvVars =
-              simulaRoot:
-              ''
-                export SIMULA_CONFIG_PATH=${simulaRoot}/opt/simula/config/simula_monado_config.json
-                export XRT_COMPOSITOR_LOG=debug
-                export XRT_COMPOSITOR_SCALE_PERCENTAGE=100
-              '';
+            mkMonadoEnvVars = simulaRoot: ''
+              export SIMULA_CONFIG_PATH=${simulaRoot}/opt/simula/config/simula_monado_config.json
+              export XRT_COMPOSITOR_LOG=debug
+              export XRT_COMPOSITOR_SCALE_PERCENTAGE=100
+            '';
 
             monadoEnvVars = mkMonadoEnvVars "@out@";
 
-            mkXdgAndSimulaEnvVars =
-              simulaRoot:
-              ''
-                export XDG_CACHE_HOME=''${XDG_CACHE_HOME:-$HOME/.cache}
-                export XDG_DATA_HOME=''${XDG_DATA_HOME:-$HOME/.local/share}
-                export XDG_CONFIG_HOME=''${XDG_CONFIG_HOME:-$HOME/.config}
+            mkXdgAndSimulaEnvVars = simulaRoot: ''
+              export XDG_CACHE_HOME=''${XDG_CACHE_HOME:-$HOME/.cache}
+              export XDG_DATA_HOME=''${XDG_DATA_HOME:-$HOME/.local/share}
+              export XDG_CONFIG_HOME=''${XDG_CONFIG_HOME:-$HOME/.config}
 
-                export SIMULA_NIX_DIR="${simulaRoot}"
-                export SIMULA_LOG_DIR="$XDG_CACHE_HOME/Simula"
-                export SIMULA_DATA_DIR="$XDG_DATA_HOME/Simula"
-                export SIMULA_CONFIG_DIR="$XDG_CONFIG_HOME/Simula"
+              export SIMULA_NIX_DIR="${simulaRoot}"
+              export SIMULA_LOG_DIR="$XDG_CACHE_HOME/Simula"
+              export SIMULA_DATA_DIR="$XDG_DATA_HOME/Simula"
+              export SIMULA_CONFIG_DIR="$XDG_CONFIG_HOME/Simula"
 
-                echo "XDG_CACHE_HOME: $XDG_CACHE_HOME"
-                echo "XDG_DATA_HOME: $XDG_DATA_HOME"
-                echo "XDG_CONFIG_HOME: $XDG_CONFIG_HOME"
-                echo "SIMULA_NIX_DIR: $SIMULA_NIX_DIR"
-                echo "SIMULA_LOG_DIR: $SIMULA_LOG_DIR"
-                echo "SIMULA_DATA_DIR: $SIMULA_DATA_DIR"
-                echo "SIMULA_CONFIG_DIR: $SIMULA_CONFIG_DIR"
-              '';
+              echo "XDG_CACHE_HOME: $XDG_CACHE_HOME"
+              echo "XDG_DATA_HOME: $XDG_DATA_HOME"
+              echo "XDG_CONFIG_HOME: $XDG_CONFIG_HOME"
+              echo "SIMULA_NIX_DIR: $SIMULA_NIX_DIR"
+              echo "SIMULA_LOG_DIR: $SIMULA_LOG_DIR"
+              echo "SIMULA_DATA_DIR: $SIMULA_DATA_DIR"
+              echo "SIMULA_CONFIG_DIR: $SIMULA_CONFIG_DIR"
+            '';
 
             xdgAndSimulaEnvVars = mkXdgAndSimulaEnvVars ''$(dirname "$(dirname "$(readlink -f "$0")")")'';
 
@@ -506,61 +504,45 @@
               fi
             '';
 
-            parseSimulaLaunchArgs = ''
-              # Support e.g. `./result/bin/simula --local --rr -- --godot --args --here`
-              LAUNCH_LOCAL=0
-              RUN_UNDER_RR=0
-              simula_args=()
+            parseSimulaLaunchArgs =
+              let
+                help-message = builtins.readFile ./utils/help_message.txt;
+              in
+              ''
+                # Support e.g. `./result/bin/simula --local --rr -- --godot --args --here`
+                LAUNCH_LOCAL=0
+                RUN_UNDER_RR=0
+                simula_args=()
 
-              while [ "$#" -gt 0 ]; do
-                case "$1" in
-                  -h|--help)
-                    cat << _EOF_HELP_
-Usage: simula [options] [-- [godot-args]]
-
-Options:
-  --local        Launch Simula using local binaries (useful for developers)
-  --rr           Launch Simula under the rr debugger
-  -h, --help     Show this help message
-
-Debug Environment Variables:
-- SIMULA_DEBUG_MEMORY=1: Shows per-second RSS memory deltas in the HUD so you can get an estimate of how various actions impact top level memory usage.
-- SIMULA_DEBUG_MEMORY_HUD=1: Shows a live object count memory HUD underneath each app.
-- SIMULA_DEBUG_PROFILE_HUD=1: Shows a live profiling HUD with the most expensive Haskell function calls from the past 10-second window. Writes more detailed output to ./HUD_profile_live.txt and ./HUD_profile_recent_missed_frames.txt.
-  - SIMULA_DEBUG_PROFILE_HUD_BUDGET_MS=<milliseconds>: Sets the missed-frame threshold in milliseconds for SIMULA_DEBUG_PROFILE_HUD. Default: 16.67.
-  - SIMULA_DEBUG_PROFILE_HUD_WINDOW_S=<seconds>: Sets the recent frame/sample retention window in seconds for SIMULA_DEBUG_PROFILE_HUD. Default: 10.0.
-- SIMULA_DEBUG_SURFACE_BOUNDARIES=1: Shows wlr_surface (red), geometry boundaries with offset x/y offset (green), and geometry boundaries without x/y offset (blue) on all surfaces. Top-level XDG boundaries are colored in yellow (for wayland surfaces), while XWayland are colored black (though since most xwayland top levels don't have borders to begin with, you often won't see the black border).
-- SIMULA_DEBUG_SURFACE_CREATIONS=1: Prints detailed surface information when they get created/mapped.
-- SIMULA_DEBUG_MOUSE_EVENTS=1: Shows detailed tracing of mouse interaction logic.
-- SIMULA_DEBUG_KEYBOARD_EVENTS=1: Shows detailed tracing of keyboard focus and key dispatch logic.
-- SIMULA_DEBUG_DEPTH_FIRST_THUMBNAILS=1: Shows a live HUD underneath each app with individual thumbnails of each of its subsurfaces (in the depth-first order in which they are being rendered).
-- SIMULA_DEBUG_DAMAGED_REGIONS=1: Shows transient purple overlays over damaged surface regions and persistent damaged-region thumbnail previews in GSVS HUDs. If you additionally set this to an existing directory path instead of 1, it will also save each damaged-region event as <your-supplied-path>/<event-number>.png.
-_EOF_HELP_
-                    exit 0
-                    ;;
-                  --local)
-                    LAUNCH_LOCAL=1
-                    ;;
-                  --rr)
-                    RUN_UNDER_RR=1
-                    ;;
-                  --)
-                    shift
-                    while [ "$#" -gt 0 ]; do
-                      simula_args+=("$1")
+                while [ "$#" -gt 0 ]; do
+                  case "$1" in
+                    -h|--help)
+                      echo -e ${lib.escapeShellArg help-message}
+                      exit 0
+                      ;;
+                    --local)
+                      LAUNCH_LOCAL=1
+                      ;;
+                    --rr)
+                      RUN_UNDER_RR=1
+                      ;;
+                    --)
                       shift
-                    done
-                    break
-                    ;;
-                  *)
-                    simula_args+=("$1")
-                    ;;
-                esac
-                shift
-              done
+                      while [ "$#" -gt 0 ]; do
+                        simula_args+=("$1")
+                        shift
+                      done
+                      break
+                      ;;
+                    *)
+                      simula_args+=("$1")
+                      ;;
+                  esac
+                  shift
+                done
 
-              set -- "''${simula_args[@]}"
-            '';
+                set -- "''${simula_args[@]}"
+              '';
 
             resolveSimulaLaunchTarget = ''
               # Use --local if you want to launch Simula locally (with godot binary from ./submodules/godot)
