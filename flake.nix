@@ -715,7 +715,12 @@
 
             treefmt = {
               projectRootFile = "project.godot";
+
+              # Nix
               programs.nixfmt.enable = true;
+
+              # Cabal - for Haskell
+              programs.cabal-gild.enable = true;
             };
 
             packages = {
