@@ -80,6 +80,27 @@ build-godot-haskell-plugin-watch:
 build-monado:
   nix develop ./submodules/monado?submodules=1#default --command bash -c "cd ./submodules/monado && just build"
 
+# Dev helper for changing which clients get monado priority when running more than one OpenXR program at a time
+build-monado-ctl:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  nix develop './submodules/monado?submodules=1#default' --command bash -euc '
+    cd ./submodules/monado
+    cmake -S . -B build \
+      -DXRT_FEATURE_SERVICE=ON \
+      -DXRT_OPENXR_INSTALL_ABSOLUTE_RUNTIME_PATH=ON \
+      -DXRT_BUILD_DRIVER_SIMULAVR=ON \
+      -DXRT_HAVE_XVISIO=ON \
+      -DXRT_HAVE_LIBUVC=OFF \
+      -DXVSDK_INCLUDE_DIR="$XVSDK_INCLUDE_DIR" \
+      -DXVSDK_LIBRARY_DIR="$XVSDK_LIBRARY_DIR" \
+      -DXRT_BUILD_DRIVER_REALSENSE=OFF \
+      -DXRT_HAVE_ONNXRUNTIME=OFF \
+      -DXRT_HAVE_OPENCV=OFF
+    cmake --build build --target monado-ctl --parallel
+  '
+  ln -sfn ./submodules/monado/build/src/xrt/targets/ctl/monado-ctl ./monado-ctl
+
 build-monado-watch:
   nix develop ./submodules/monado?submodules=1#default --command bash -c "cd ./submodules/monado && just build"
 
